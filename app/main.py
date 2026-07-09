@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.api import health, organizations
 from app.config import get_settings
 from app.infrastructure.database.session import build_sessionmaker
+from app.infrastructure.static import mount_spa
 
 
 @asynccontextmanager
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(organizations.router)
+    mount_spa(app)  # catch-all — must be registered after all API routers
     return app
 
 
