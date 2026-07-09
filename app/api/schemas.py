@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.events.entities import EventType
 from app.domain.work_items.entities import WorkItemType
 
 
@@ -70,3 +71,25 @@ class WorkItemRead(BaseModel):
     state: str
     external_id: str | None
     created_at: datetime
+
+
+class EventCreate(BaseModel):
+    work_item_id: UUID
+    type: EventType
+    occurred_at: datetime
+    from_state: str | None = None
+    to_state: str | None = None
+    external_id: str | None = None
+
+
+class EventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    work_item_id: UUID
+    type: EventType
+    occurred_at: datetime
+    from_state: str | None
+    to_state: str | None
+    external_id: str | None
+    recorded_at: datetime

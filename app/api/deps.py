@@ -4,10 +4,12 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.events.service import EventService
 from app.application.organizations.service import OrganizationService
 from app.application.projects.service import ProjectService
 from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
+from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
@@ -56,3 +58,10 @@ def get_work_item_service(session: SessionDep) -> WorkItemService:
 
 
 WorkItemServiceDep = Annotated[WorkItemService, Depends(get_work_item_service)]
+
+
+def get_event_service(session: SessionDep) -> EventService:
+    return EventService(SqlAlchemyEventRepository(session))
+
+
+EventServiceDep = Annotated[EventService, Depends(get_event_service)]
