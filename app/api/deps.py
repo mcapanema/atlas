@@ -5,7 +5,9 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.organizations.service import OrganizationService
+from app.application.teams.service import TeamService
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
+from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -29,3 +31,10 @@ def get_organization_service(session: SessionDep) -> OrganizationService:
 
 
 OrganizationServiceDep = Annotated[OrganizationService, Depends(get_organization_service)]
+
+
+def get_team_service(session: SessionDep) -> TeamService:
+    return TeamService(SqlAlchemyTeamRepository(session))
+
+
+TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
