@@ -1,0 +1,8 @@
+# Ignore oxs files.
+.DS_Store
+
+# Ignore superpowers directory
+docs/superpowers
+
+SPEC.md
+VISION.md
