@@ -25,7 +25,13 @@ Each domain concept owns:
 - `app/infrastructure/repositories/<concept>.py` (ORM model + adapter)
 - `app/api/<concept>.py` + DTOs in `app/api/schemas.py`
 
-`Organization` is the reference implementation. Future concepts (Team, Project, Work Item, Event, Metric) follow the same shape.
+`Organization` is the reference implementation. `Team`, `Project`, `Work Item`,
+and `Event` are now implemented in the same shape, forming the ownership
+hierarchy `Organization → Team → Project → Work Item → Event`: a Team owns
+Projects and Work Items, a Project groups Work Items, and each Work Item
+accumulates immutable Events (state changes, assignment, etc.) — the system
+of record that metrics will later derive from. `Metric` remains a future
+concept.
 
 ## Single-service deployment
 
