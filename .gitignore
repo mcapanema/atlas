@@ -12,3 +12,23 @@ docs/superpowers
 
 SPEC.md
 VISION.md
+
+# Ignore git worktrees
+.worktrees
+
+# Environment variables (copy .env.example to .env)
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+atlas.db
+
+# Node / frontend
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo

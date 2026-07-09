@@ -91,13 +91,6 @@ Measure the impact of every improvement and continuously evolve engineering deli
 
 # How do I run it?
 
-## Prerequisites
-
-- Python 3.13+
-- `uv`
-- Node.js LTS
-- npm
-
 ## Clone the repository
 
 ```bash
@@ -105,28 +98,86 @@ git clone <repository-url>
 cd atlas
 ```
 
-## Install dependencies
+## Configuration
+
+Copy `.env.example` to `.env` and adjust as needed — every variable is
+documented there (`make install` does this automatically if `.env` doesn't
+exist yet). Defaults work out of the box for local development; real
+environment variables (Docker Compose, your platform, etc.) always take
+precedence over `.env`.
+
+## Option 1: Docker (recommended — zero local setup)
+
+Prerequisite: Docker with Compose.
 
 ```bash
+make docker-up
+```
+
+Builds the frontend and backend into a single image, runs database migrations
+on startup, and serves Atlas at http://localhost:8000. Data persists across
+restarts in the `atlas-data` Docker volume. Stop with `make docker-down`.
+
+## Option 2: Makefile (native)
+
+Prerequisites: Python 3.13+, `uv`, Node.js LTS, npm.
+
+```bash
+make install   # install backend + frontend dependencies
+make migrate   # apply database migrations
+make dev       # run backend + frontend dev servers together (Ctrl+C stops both)
+```
+
+Backend API: http://localhost:8000 · Frontend dev server: http://localhost:5173
+(proxies `/api` and `/health` to the backend).
+
+For a single-service production-style run — builds the frontend, applies
+migrations, then serves everything from FastAPI on port 8000:
+
+```bash
+make run
+```
+
+Run `make help` for the full list of shortcuts, including `make test`,
+`make lint`, `make typecheck`, and `make check` (the full CI gate, run locally).
+
+<details>
+<summary>Equivalent commands without <code>make</code></summary>
+
+```bash
+# Install
 uv sync
-npm install
+cd web && npm install && cd ..
+cp .env.example .env
+
+# Migrate
+uv run alembic upgrade head
+
+# Development mode (two processes)
+# Terminal 1 — backend API on http://localhost:8000
+uv run uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 — Vite dev server (proxies /api and /health to the backend)
+cd web && npm run dev
+
+# Production mode (single service)
+cd web && npm run build && cd ..
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Start the backend
+</details>
 
-```bash
-uv run fastapi dev app/main.py
-```
+## Continuous Integration
 
-## Start the frontend
+Every push and pull request runs backend and frontend checks in parallel,
+each split into four phases: test suite, type check, lint, and a dependency
+security audit (`pip-audit` for the backend, `npm audit` for the frontend).
+Run the same checks locally with `make check` (or individually — `make
+test`, `make typecheck`, `make lint`, `make security`).
 
-```bash
-npm run dev
-```
-
-The frontend will be available through the Vite development server, while the backend exposes the REST API.
-
-In production, the React application is compiled and served directly by FastAPI as a single deployable application.
+[Dependabot](https://docs.github.com/en/code-security/dependabot) opens
+weekly PRs for outdated backend (`uv`), frontend (`npm`), and GitHub Actions
+dependencies — see `.github/dependabot.yml`.
 
 ---
 

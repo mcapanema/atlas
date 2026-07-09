@@ -1,0 +1,15 @@
+.git
+.worktrees
+.superpowers
+.env
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+atlas.db
+web/node_modules
+web/dist
+web/*.tsbuildinfo
+docs/superpowers
