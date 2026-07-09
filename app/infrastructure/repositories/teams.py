@@ -14,6 +14,7 @@ class TeamModel(Base):
     __tablename__ = "teams"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    # ponytail: no FK to organizations — add when organization lifecycle management lands
     organization_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)

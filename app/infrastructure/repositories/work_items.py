@@ -14,9 +14,11 @@ class WorkItemModel(Base):
     __tablename__ = "work_items"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
-    team_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("teams.id"), nullable=False)
+    team_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("teams.id"), nullable=False, index=True
+    )
     project_id: Mapped[UUID | None] = mapped_column(
-        Uuid, ForeignKey("projects.id"), nullable=True
+        Uuid, ForeignKey("projects.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
