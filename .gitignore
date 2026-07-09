@@ -4,5 +4,11 @@
 # Ignore superpowers directory
 docs/superpowers
 
+# Ignore Claude directory
+.claude
+
+# Ignore serena directory
+.serena
+
 SPEC.md
 VISION.md
