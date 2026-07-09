@@ -7,28 +7,61 @@ on:
 
 jobs:
   backend:
+    name: backend / ${{ matrix.phase }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [test, typecheck, lint, security]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
       - run: uv sync
-      - run: uv run ruff check .
-      - run: uv run mypy
-      - run: uv run pytest -v
+      - name: Test suite
+        if: matrix.phase == 'test'
+        run: uv run pytest -v
+      - name: Type check
+        if: matrix.phase == 'typecheck'
+        run: uv run mypy
+      - name: Lint
+        if: matrix.phase == 'lint'
+        run: uv run ruff check .
+      - name: Security audit
+        if: matrix.phase == 'security'
+        run: uv run --with pip-audit pip-audit
 
   frontend:
+    name: frontend / ${{ matrix.phase }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [test, typecheck, lint, security]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "lts/*"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run test
-      - run: npm run build
+      - name: Test suite
+        if: matrix.phase == 'test'
+        run: npm run test
+      - name: Build
+        if: matrix.phase == 'test'
+        run: npm run build
+      - name: Type check
+        if: matrix.phase == 'typecheck'
+        run: npm run typecheck
+      - name: Lint
+        if: matrix.phase == 'lint'
+        run: npm run lint
+      - name: Security audit
+        if: matrix.phase == 'security'
+        run: npm audit --audit-level=high

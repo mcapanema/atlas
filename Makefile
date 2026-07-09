@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install migrate dev test lint typecheck check build run clean \
+.PHONY: help install migrate dev test lint typecheck security check build run clean \
 	docker-build docker-up docker-down docker-logs
 
 help: ## Show this help
@@ -23,14 +23,19 @@ test: ## Run backend and frontend test suites
 	uv run pytest -v
 	cd web && npm run test
 
-lint: ## Lint backend code
+lint: ## Lint backend and frontend
 	uv run ruff check .
+	cd web && npm run lint
 
 typecheck: ## Type-check backend and frontend
 	uv run mypy
 	cd web && npm run typecheck
 
-check: lint typecheck test ## Run the full CI gate locally
+security: ## Audit backend and frontend dependencies for known vulnerabilities
+	uv run --with pip-audit pip-audit
+	cd web && npm audit --audit-level=high
+
+check: lint typecheck test security ## Run the full CI gate locally
 
 build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build

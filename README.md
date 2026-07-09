@@ -158,6 +158,18 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 </details>
 
+## Continuous Integration
+
+Every push and pull request runs backend and frontend checks in parallel,
+each split into four phases: test suite, type check, lint, and a dependency
+security audit (`pip-audit` for the backend, `npm audit` for the frontend).
+Run the same checks locally with `make check` (or individually — `make
+test`, `make typecheck`, `make lint`, `make security`).
+
+[Dependabot](https://docs.github.com/en/code-security/dependabot) opens
+weekly PRs for outdated backend (`uv`), frontend (`npm`), and GitHub Actions
+dependencies — see `.github/dependabot.yml`.
+
 ---
 
 For more information about the architecture, engineering principles, and domain model, see the documentation in the `docs/` directory.
