@@ -31,6 +31,10 @@ def create_app() -> FastAPI:
         # Domain entity __post_init__ invariants (e.g. blank name, tz-naive
         # datetime) raise ValueError after Pydantic's own validation passes —
         # this is the one place all 5 create endpoints route through.
+        # ponytail: this also catches ValueError from enum coercion in
+        # to_domain() on read paths (GET), which would misreport a real
+        # data-integrity bug as a 422 client error. Scope more narrowly to
+        # the create-endpoint layer if that read-path case ever fires.
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     mount_spa(app)  # catch-all — must be registered after all API routers
