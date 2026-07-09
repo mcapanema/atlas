@@ -5,8 +5,10 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.organizations.service import OrganizationService
+from app.application.projects.service import ProjectService
 from app.application.teams.service import TeamService
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
+from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 
 
@@ -38,3 +40,10 @@ def get_team_service(session: SessionDep) -> TeamService:
 
 
 TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
+
+
+def get_project_service(session: SessionDep) -> ProjectService:
+    return ProjectService(SqlAlchemyProjectRepository(session))
+
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]

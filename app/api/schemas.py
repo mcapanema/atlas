@@ -30,3 +30,19 @@ class TeamRead(BaseModel):
     name: str
     external_id: str | None
     created_at: datetime
+
+
+class ProjectCreate(BaseModel):
+    team_id: UUID
+    name: str = Field(min_length=1, max_length=255)
+    external_id: str | None = None
+
+
+class ProjectRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    team_id: UUID
+    name: str
+    external_id: str | None
+    created_at: datetime
