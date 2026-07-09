@@ -109,24 +109,31 @@ cd atlas
 
 ```bash
 uv sync
-npm install
+cd web && npm install && cd ..
 ```
 
-## Start the backend
+## Run the database migrations
 
 ```bash
+uv run alembic upgrade head
+```
+
+## Development mode (two processes)
+
+```bash
+# Terminal 1 — backend API on http://localhost:8000
 uv run fastapi dev app/main.py
+
+# Terminal 2 — Vite dev server (proxies /api and /health to the backend)
+cd web && npm run dev
 ```
 
-## Start the frontend
+## Production mode (single service)
 
 ```bash
-npm run dev
+cd web && npm run build && cd ..
+uv run fastapi run app/main.py   # FastAPI serves the API and the compiled React app
 ```
-
-The frontend will be available through the Vite development server, while the backend exposes the REST API.
-
-In production, the React application is compiled and served directly by FastAPI as a single deployable application.
 
 ---
 
