@@ -15,3 +15,16 @@ VISION.md
 
 # Ignore git worktrees
 .worktrees
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+atlas.db
+
+# Node / frontend
+web/node_modules/
+web/dist/
