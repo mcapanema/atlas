@@ -59,6 +59,17 @@ into 8 parallel checks: `{backend, frontend} × {test, typecheck, lint, security
 Dependabot (`.github/dependabot.yml`) opens weekly update PRs for `uv`, `npm`
 (`/web`), and GitHub Actions dependencies.
 
+## Configuration
+
+All runtime config is a `pydantic-settings` `Settings` model
+(`app/config.py`), `ATLAS_`-prefixed, loaded from real environment
+variables and (in dev) from a `.env` file — real env vars always win over
+`.env`. `.env.example` is the source of truth for which variables exist;
+`.env` itself is gitignored. **Adding a new `Settings` field? Add the
+matching entry to `.env.example` with a comment, in the same commit** —
+this is expected to grow as connectors are added in later phases, and an
+undocumented env var is a landmine for the next person (or session).
+
 ## Non-negotiable constraints
 
 - Domain layer: zero framework imports, stdlib only.

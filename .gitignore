@@ -16,6 +16,9 @@ VISION.md
 # Ignore git worktrees
 .worktrees
 
+# Environment variables (copy .env.example to .env)
+.env
+
 # Python
 .venv/
 __pycache__/

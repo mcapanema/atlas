@@ -98,6 +98,14 @@ git clone <repository-url>
 cd atlas
 ```
 
+## Configuration
+
+Copy `.env.example` to `.env` and adjust as needed — every variable is
+documented there (`make install` does this automatically if `.env` doesn't
+exist yet). Defaults work out of the box for local development; real
+environment variables (Docker Compose, your platform, etc.) always take
+precedence over `.env`.
+
 ## Option 1: Docker (recommended — zero local setup)
 
 Prerequisite: Docker with Compose.
@@ -140,6 +148,7 @@ Run `make help` for the full list of shortcuts, including `make test`,
 # Install
 uv sync
 cd web && npm install && cd ..
+cp .env.example .env
 
 # Migrate
 uv run alembic upgrade head

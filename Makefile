@@ -9,6 +9,7 @@ help: ## Show this help
 install: ## Install backend and frontend dependencies
 	uv sync
 	cd web && npm install
+	test -f .env || cp .env.example .env
 
 migrate: ## Apply database migrations
 	uv run alembic upgrade head
