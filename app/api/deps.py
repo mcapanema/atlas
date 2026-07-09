@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.organizations.service import OrganizationService
 from app.application.projects.service import ProjectService
 from app.application.teams.service import TeamService
+from app.application.work_items.service import WorkItemService
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
+from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -47,3 +49,10 @@ def get_project_service(session: SessionDep) -> ProjectService:
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+
+
+def get_work_item_service(session: SessionDep) -> WorkItemService:
+    return WorkItemService(SqlAlchemyWorkItemRepository(session))
+
+
+WorkItemServiceDep = Annotated[WorkItemService, Depends(get_work_item_service)]
