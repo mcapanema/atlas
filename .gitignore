@@ -28,3 +28,4 @@ atlas.db
 # Node / frontend
 web/node_modules/
 web/dist/
+web/*.tsbuildinfo
