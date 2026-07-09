@@ -12,3 +12,6 @@ docs/superpowers
 
 SPEC.md
 VISION.md
+
+# Ignore git worktrees
+.worktrees
