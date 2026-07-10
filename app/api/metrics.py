@@ -5,9 +5,11 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.api.deps import MetricsServiceDep
 from app.api.schemas import (
     DailyFlowCountRead,
+    DurationBinRead,
     DurationStatsRead,
     FlowHistoryRead,
     FlowMetricsRead,
+    LeadTimeDistributionRead,
     ThroughputBucketRead,
 )
 from app.domain.metrics.summary import DurationStats
@@ -81,5 +83,26 @@ async def get_flow_history(
         weeks=[
             ThroughputBucketRead(start=w.start, end=w.end, completed=w.completed)
             for w in history.weeks
+        ],
+    )
+
+
+@router.get("/lead-time-distribution", response_model=LeadTimeDistributionRead)
+async def get_lead_time_distribution(
+    service: MetricsServiceDep,
+    team_id: UUID | None = None,
+    project_id: UUID | None = None,
+    window_days: int = Query(default=90, ge=7, le=365),
+) -> LeadTimeDistributionRead:
+    _require_exactly_one_scope(team_id, project_id)
+    distribution = await service.get_lead_time_distribution(
+        team_id=team_id, project_id=project_id, window_days=window_days
+    )
+    return LeadTimeDistributionRead(
+        window_start=distribution.window_start,
+        window_end=distribution.window_end,
+        bins=[
+            DurationBinRead(start_days=b.start_days, end_days=b.end_days, count=b.count)
+            for b in distribution.bins
         ],
     )

@@ -171,3 +171,15 @@ class FlowHistoryRead(BaseModel):
     window_end: datetime
     days: list[DailyFlowCountRead]
     weeks: list[ThroughputBucketRead]
+
+
+class DurationBinRead(BaseModel):
+    start_days: int
+    end_days: int
+    count: int
+
+
+class LeadTimeDistributionRead(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    bins: list[DurationBinRead]

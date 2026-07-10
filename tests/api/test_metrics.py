@@ -128,3 +128,37 @@ async def test_flow_history_requires_exactly_one_scope(client: AsyncClient) -> N
     assert (
         await client.get(f"/api/metrics/history?team_id={uuid4()}&project_id={uuid4()}")
     ).status_code == 422
+
+
+async def test_lead_time_distribution_end_to_end(client: AsyncClient) -> None:
+    team_id = await _create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    now = datetime.now(UTC)
+    for type_, days_ago in (("created", 10), ("completed", 2)):
+        await client.post(
+            "/api/events",
+            json={
+                "work_item_id": item["id"],
+                "type": type_,
+                "occurred_at": (now - timedelta(days=days_ago)).isoformat(),
+            },
+        )
+
+    response = await client.get(f"/api/metrics/lead-time-distribution?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["bins"]) == 9  # bins for days 0..8
+    assert body["bins"][8] == {"start_days": 8, "end_days": 9, "count": 1}
+    assert sum(b["count"] for b in body["bins"]) == 1
+
+
+async def test_lead_time_distribution_requires_exactly_one_scope(client: AsyncClient) -> None:
+    assert (await client.get("/api/metrics/lead-time-distribution")).status_code == 422
+    assert (
+        await client.get(
+            f"/api/metrics/lead-time-distribution?team_id={uuid4()}&project_id={uuid4()}"
+        )
+    ).status_code == 422
