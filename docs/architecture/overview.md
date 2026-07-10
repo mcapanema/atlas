@@ -53,6 +53,21 @@ by team or project. The frontend's three dashboard pages consume this:
 Executive (`/`) shows a portfolio table across teams, while Team (`/teams`)
 and Project (`/projects`) chart it via Apache ECharts.
 
+Phase 5 adds *forecasting* on the same computed-on-read pattern:
+`app/domain/forecasting/monte_carlo.py` simulates completion of the scope's
+open work by resampling its historical daily throughput (seeded
+`random.Random` — deterministic by construction), and
+`app/domain/metrics/distribution.py` bins lead times into a day-width
+histogram. `ForecastService` counts the scope's open items (event-less
+backlog included) and runs the simulation; results are served from
+`GET /api/forecasts` (percentile finish dates, optional `target_date`
+delivery confidence, outcome histogram) and
+`GET /api/metrics/lead-time-distribution`, both scoped by team or project
+like `/api/metrics`. The Team and Project dashboards render them through
+the shared `FlowDashboard`: a lead-time distribution chart plus a
+`ForecastCard` with a target-date picker. Still nothing persisted — no
+snapshot tables, no new migrations.
+
 ## Connectors
 
 External delivery systems are integrated through the `DeliveryDataSource`
