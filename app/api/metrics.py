@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 def _require_exactly_one_scope(team_id: UUID | None, project_id: UUID | None) -> None:
     if (team_id is None) == (project_id is None):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Provide exactly one of team_id or project_id",
         )
 
