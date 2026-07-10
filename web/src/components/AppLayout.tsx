@@ -16,6 +16,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           selectedKeys={[location.pathname]}
           items={[
             { key: "/organizations", label: <Link to="/organizations">Organizations</Link> },
+            { key: "/connectors", label: <Link to="/connectors">Connectors</Link> },
           ]}
         />
       </Sider>
