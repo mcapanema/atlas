@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.events.service import EventService
+from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
 from app.application.projects.service import ProjectService
@@ -81,6 +82,16 @@ def get_metrics_service(session: SessionDep) -> MetricsService:
 
 
 MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
+
+
+def get_forecast_service(session: SessionDep) -> ForecastService:
+    return ForecastService(
+        SqlAlchemyWorkItemRepository(session),
+        SqlAlchemyEventRepository(session),
+    )
+
+
+ForecastServiceDep = Annotated[ForecastService, Depends(get_forecast_service)]
 
 
 def get_delivery_data_source() -> DeliveryDataSource:

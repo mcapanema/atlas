@@ -183,3 +183,25 @@ class LeadTimeDistributionRead(BaseModel):
     window_start: datetime
     window_end: datetime
     bins: list[DurationBinRead]
+
+
+class OutcomeBucketRead(BaseModel):
+    days: int
+    trials: int
+
+
+class CompletionForecastRead(BaseModel):
+    trials: int
+    p50_date: datetime
+    p75_date: datetime
+    p85_date: datetime
+    p95_date: datetime
+    outcomes: list[OutcomeBucketRead]
+
+
+class ForecastRead(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    remaining: int
+    completion: CompletionForecastRead | None
+    confidence: float | None
