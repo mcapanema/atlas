@@ -37,8 +37,8 @@ Time percentiles, Throughput, WIP, Blocked Time, Flow Efficiency — via
 `compute_team_metrics` (`summary.py`). Nothing is persisted: metrics are
 recomputed per request (`MetricsService`), served from
 `GET /api/metrics?team_id=…`, and shown on the Flow Metrics page
-(`/metrics`). This slice deliberately has no repository — persisted
-`Snapshot`s arrive when dashboards need history. The Linear connector (below) populates these slices from a real
+(`/metrics`). This slice deliberately has no repository — everything is
+recomputed on read, no snapshot tables. The Linear connector (below) populates these slices from a real
 workspace, and the Work Item Explorer (`/work-items` in the frontend) makes
 them visible: per-item event timeline plus state/blocked periods derived by
 the pure domain function `derive_timeline`
@@ -49,9 +49,9 @@ daily phase counts (Cumulative Flow Diagram data) via event replay in
 `app/domain/metrics/cfd.py`, plus weekly throughput buckets — both
 computed on read like the summary metrics, nothing persisted, no snapshot
 tables yet. `GET /api/metrics` and `GET /api/metrics/history` both scope
-by team or project. The frontend's three dashboard pages — Executive
-(`/`), Team (`/teams`), Project (`/projects`) — chart this data via
-Apache ECharts.
+by team or project. The frontend's three dashboard pages consume this:
+Executive (`/`) shows a portfolio table across teams, while Team (`/teams`)
+and Project (`/projects`) chart it via Apache ECharts.
 
 ## Connectors
 
