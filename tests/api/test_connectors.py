@@ -114,7 +114,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     assert second.json() == {"teams": 0, "projects": 0, "work_items": 0, "events": 0}
 
 
-async def test_sync_unknown_organization_is_422(
+async def test_sync_unknown_organization_is_404(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
     test_app.dependency_overrides[get_delivery_data_source] = FakeDataSource
@@ -123,7 +123,7 @@ async def test_sync_unknown_organization_is_422(
         "/api/connectors/linear/sync", json={"organization_id": str(uuid4())}
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 404
 
 
 class FailingDataSource:

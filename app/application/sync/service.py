@@ -14,6 +14,14 @@ from app.domain.work_items.entities import WorkItem
 from app.domain.work_items.repository import WorkItemRepository
 
 
+class UnknownOrganizationError(Exception):
+    """Sync was requested for an organization that doesn't exist.
+
+    Not a ValueError: the global ValueError handler answers 422 (malformed
+    input), but a missing resource is a 404 — the router maps it there.
+    """
+
+
 @dataclass(frozen=True)
 class SyncSummary:
     """Counts of entities written (created or updated) by one sync run."""
@@ -51,7 +59,7 @@ class SyncService:
 
     async def sync(self, organization_id: UUID) -> SyncSummary:
         if await self._organizations.get(organization_id) is None:
-            raise ValueError(f"Organization {organization_id} does not exist")
+            raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
         # ponytail: one get_by_external_id query per source entity (N+1).
         # Batch the lookups if syncing a large workspace ever gets slow.
         teams = await self._sync_teams(organization_id)
