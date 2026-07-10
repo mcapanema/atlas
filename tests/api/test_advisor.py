@@ -148,3 +148,25 @@ async def test_recommendations_502_when_advisor_fails(
 
     assert response.status_code == 502
     assert "OpenRouter request failed" in response.json()["detail"]
+
+
+async def test_recommendations_unknown_team_is_404_without_llm_call(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    calls: list[DeliveryContext] = []
+
+    class RecordingAdvisor:
+        async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+            calls.append(context)
+            return DeliveryAdvice(
+                generated_at=datetime(2026, 7, 10, tzinfo=UTC),
+                summary="never",
+                recommendations=[],
+            )
+
+    test_app.dependency_overrides[get_advisor_port] = lambda: RecordingAdvisor()
+
+    response = await client.get(f"/api/recommendations?team_id={uuid4()}")
+
+    assert response.status_code == 404
+    assert calls == []  # an unknown scope must not trigger a paid LLM call
