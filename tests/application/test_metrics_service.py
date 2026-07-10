@@ -1,0 +1,135 @@
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from app.application.metrics.service import MetricsService
+from app.domain.events.entities import Event, EventType
+from app.domain.work_items.entities import WorkItem
+
+NOW = datetime(2026, 7, 10, tzinfo=UTC)
+
+
+class InMemoryWorkItemRepository:
+    def __init__(self, items: list[WorkItem]) -> None:
+        self._items = items
+
+    async def add(self, work_item: WorkItem) -> None:
+        self._items.append(work_item)
+
+    async def update(self, work_item: WorkItem) -> None:
+        pass
+
+    async def list(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[WorkItem]:
+        return [
+            item
+            for item in self._items
+            if (team_id is None or item.team_id == team_id)
+            and (project_id is None or item.project_id == project_id)
+        ]
+
+    async def get(self, work_item_id: UUID) -> WorkItem | None:
+        return next((i for i in self._items if i.id == work_item_id), None)
+
+    async def get_by_external_id(self, external_id: str) -> WorkItem | None:
+        return next((i for i in self._items if i.external_id == external_id), None)
+
+
+class InMemoryEventRepository:
+    def __init__(self, events: list[Event]) -> None:
+        self._events = events
+
+    async def add(self, event: Event) -> None:
+        self._events.append(event)
+
+    async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
+        return sorted(
+            (e for e in self._events if e.work_item_id == work_item_id),
+            key=lambda e: e.occurred_at,
+        )
+
+    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+        wanted = set(work_item_ids)
+        return sorted(
+            (e for e in self._events if e.work_item_id in wanted),
+            key=lambda e: e.occurred_at,
+        )
+
+    async def get_by_external_id(self, external_id: str) -> Event | None:
+        return next((e for e in self._events if e.external_id == external_id), None)
+
+
+def _item(team_id: UUID) -> WorkItem:
+    return WorkItem(team_id=team_id, title="Item")
+
+
+def _event(item: WorkItem, type_: EventType, days_ago: int) -> Event:
+    return Event(
+        work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago)
+    )
+
+
+async def test_team_metrics_across_completed_and_in_progress_items() -> None:
+    team_id = uuid4()
+    done, doing = _item(team_id), _item(team_id)
+    service = MetricsService(
+        InMemoryWorkItemRepository([done, doing]),
+        InMemoryEventRepository(
+            [
+                _event(done, EventType.CREATED, 10),
+                _event(done, EventType.STARTED, 8),
+                _event(done, EventType.COMPLETED, 2),
+                _event(doing, EventType.CREATED, 5),
+                _event(doing, EventType.STARTED, 4),
+            ]
+        ),
+    )
+
+    metrics = await service.get_team_flow_metrics(team_id, now=NOW)
+
+    assert metrics.completed == 1
+    assert metrics.wip == 1
+    assert metrics.lead_time is not None
+    assert metrics.lead_time.p50 == timedelta(days=8)
+    assert metrics.cycle_time is not None
+    assert metrics.cycle_time.p50 == timedelta(days=6)
+    assert metrics.flow_efficiency == 1.0
+
+
+async def test_team_metrics_scope_to_the_requested_team() -> None:
+    other_teams_item = _item(uuid4())
+    service = MetricsService(
+        InMemoryWorkItemRepository([other_teams_item]),
+        InMemoryEventRepository(
+            [
+                _event(other_teams_item, EventType.CREATED, 10),
+                _event(other_teams_item, EventType.COMPLETED, 2),
+            ]
+        ),
+    )
+
+    metrics = await service.get_team_flow_metrics(uuid4(), now=NOW)
+
+    assert metrics.completed == 0
+    assert metrics.wip == 0
+    assert metrics.lead_time is None
+
+
+async def test_window_days_is_forwarded() -> None:
+    team_id = uuid4()
+    done = _item(team_id)
+    service = MetricsService(
+        InMemoryWorkItemRepository([done]),
+        InMemoryEventRepository(
+            [
+                _event(done, EventType.CREATED, 60),
+                _event(done, EventType.COMPLETED, 45),
+            ]
+        ),
+    )
+
+    narrow = await service.get_team_flow_metrics(team_id, window_days=30, now=NOW)
+    wide = await service.get_team_flow_metrics(team_id, window_days=90, now=NOW)
+
+    assert narrow.completed == 0
+    assert wide.completed == 1
