@@ -55,3 +55,27 @@ def test_wip_ignores_items_started_after_the_instant() -> None:
     future_start = _sample(10, -1, None)  # starts tomorrow relative to NOW
 
     assert wip([future_start], at=NOW) == 0
+
+
+def test_weekly_throughput_buckets_completions_oldest_first() -> None:
+    from app.domain.metrics.throughput import ThroughputBucket, weekly_throughput
+
+    end = datetime(2026, 7, 10, tzinfo=UTC)
+
+    def completed(days_ago: int) -> FlowSample:
+        return FlowSample(
+            created_at=end - timedelta(days=days_ago + 1),
+            started_at=None,
+            completed_at=end - timedelta(days=days_ago),
+            blocked_time=timedelta(0),
+        )
+
+    samples = [completed(1), completed(2), completed(10)]
+
+    buckets = weekly_throughput(samples, end=end, weeks=2)
+
+    assert [b.completed for b in buckets] == [1, 2]
+    assert buckets[0] == ThroughputBucket(
+        start=end - timedelta(days=14), end=end - timedelta(days=7), completed=1
+    )
+    assert buckets[1].end == end

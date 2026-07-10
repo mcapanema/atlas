@@ -33,3 +33,10 @@ for server state, React Router for routing.
   `tsconfig.node.json` isn't `composite: true`). Don't re-add it without
   also making `tsconfig.node.json` composite (which then needs
   `outDir`/`tsBuildInfoFile` to avoid leaking build artifacts into `web/`).
+- Charts are Apache ECharts via `src/components/EChart.tsx` (lifecycle
+  wrapper) + pure option builders in `src/lib/charts.ts`. jsdom has no
+  canvas: tests that render a page containing charts must
+  `vi.mock("../components/EChart")`; only `charts.test.ts` asserts on
+  option contents. Chart colors in `charts.ts` are palette-validated —
+  don't swap them casually, and keep the CFD's legend + end labels
+  (contrast relief for the aqua/yellow bands).
