@@ -19,6 +19,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             { key: "/organizations", label: <Link to="/organizations">Organizations</Link> },
             { key: "/work-items", label: <Link to="/work-items">Work Items</Link> },
             { key: "/teams", label: <Link to="/teams">Teams</Link> },
+            { key: "/projects", label: <Link to="/projects">Projects</Link> },
             { key: "/connectors", label: <Link to="/connectors">Connectors</Link> },
           ]}
         />
