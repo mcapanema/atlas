@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Linear personal API key; None/empty disables the Linear connector.
     linear_api_key: str | None = None
 
+    # OpenRouter API key; None/empty disables the AI advisor.
+    openrouter_api_key: str | None = None
+    # OpenRouter model slug the advisor uses.
+    advisor_model: str = "anthropic/claude-sonnet-5"
+
 
 @lru_cache
 def get_settings() -> Settings:
