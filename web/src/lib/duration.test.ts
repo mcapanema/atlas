@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { formatDuration } from "./duration";
+import { formatDuration, formatSeconds } from "./duration";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -19,5 +19,23 @@ describe("formatDuration", () => {
     vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
 
     expect(formatDuration("2026-01-01T00:00:00Z", null)).toBe("1d");
+  });
+});
+
+describe("formatSeconds", () => {
+  it("renders zero as 0m", () => {
+    expect(formatSeconds(0)).toBe("0m");
+  });
+
+  it("renders sub-minute values as < 1m", () => {
+    expect(formatSeconds(30)).toBe("< 1m");
+  });
+
+  it("renders minutes", () => {
+    expect(formatSeconds(300)).toBe("5m");
+  });
+
+  it("renders days and hours", () => {
+    expect(formatSeconds(2 * 86400 + 3 * 3600)).toBe("2d 3h");
   });
 });
