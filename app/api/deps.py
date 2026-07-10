@@ -110,7 +110,7 @@ def get_advisor_port() -> AdvisorPort:
 AdvisorPortDep = Annotated[AdvisorPort, Depends(get_advisor_port)]
 
 
-def get_advisor_service(session: SessionDep, advisor: AdvisorPortDep) -> AdvisorService:
+def get_advisor_service(session: SessionDep) -> AdvisorService:
     return AdvisorService(
         MetricsService(
             SqlAlchemyWorkItemRepository(session), SqlAlchemyEventRepository(session)
@@ -118,7 +118,6 @@ def get_advisor_service(session: SessionDep, advisor: AdvisorPortDep) -> Advisor
         ForecastService(
             SqlAlchemyWorkItemRepository(session), SqlAlchemyEventRepository(session)
         ),
-        advisor,
     )
 
 

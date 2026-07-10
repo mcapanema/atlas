@@ -17,7 +17,9 @@ class TeamModel(Base):
     # ponytail: no FK to organizations — add when organization lifecycle management lands
     organization_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def to_domain(self) -> Team:
@@ -68,5 +70,5 @@ class SqlAlchemyTeamRepository:
         result = await self._session.execute(
             select(TeamModel).where(TeamModel.external_id == external_id)
         )
-        model = result.scalars().first()
+        model = result.scalars().one_or_none()
         return model.to_domain() if model is not None else None

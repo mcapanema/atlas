@@ -2,9 +2,12 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 
+from tests.api.helpers import create_work_item
+
 
 async def test_list_events_empty(client: AsyncClient) -> None:
-    response = await client.get("/api/events", params={"work_item_id": str(uuid4())})
+    work_item_id = await create_work_item(client)
+    response = await client.get("/api/events", params={"work_item_id": work_item_id})
 
     assert response.status_code == 200
     assert response.json() == []
@@ -17,7 +20,7 @@ async def test_list_requires_work_item_id(client: AsyncClient) -> None:
 
 
 async def test_record_then_list_event(client: AsyncClient) -> None:
-    work_item_id = str(uuid4())
+    work_item_id = await create_work_item(client)
     create = await client.post(
         "/api/events",
         json={
@@ -51,13 +54,33 @@ async def test_record_rejects_unknown_type(client: AsyncClient) -> None:
     assert response.status_code == 422
 
 
-async def test_record_rejects_timezone_naive_occurred_at(client: AsyncClient) -> None:
-    """Pydantic accepts a tz-naive datetime; Event.__post_init__ then raises
-    ValueError, which the app-wide handler must turn into 422, not a 500."""
+async def test_list_events_404_for_unknown_work_item(client: AsyncClient) -> None:
+    response = await client.get("/api/events", params={"work_item_id": str(uuid4())})
+
+    assert response.status_code == 404
+
+
+async def test_record_event_404_for_unknown_work_item(client: AsyncClient) -> None:
     response = await client.post(
         "/api/events",
         json={
             "work_item_id": str(uuid4()),
+            "type": "created",
+            "occurred_at": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+async def test_record_rejects_timezone_naive_occurred_at(client: AsyncClient) -> None:
+    """Pydantic accepts a tz-naive datetime; Event.__post_init__ then raises
+    ValueError, which the app-wide handler must turn into 422, not a 500."""
+    work_item_id = await create_work_item(client)
+    response = await client.post(
+        "/api/events",
+        json={
+            "work_item_id": work_item_id,
             "type": "state_changed",
             "occurred_at": "2026-01-01T00:00:00",
             "from_state": "backlog",

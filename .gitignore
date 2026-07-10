@@ -23,7 +23,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-atlas.db
+atlas.db*
 
 # Node / frontend
 web/node_modules/

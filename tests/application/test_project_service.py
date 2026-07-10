@@ -47,3 +47,17 @@ async def test_list_projects_returns_all() -> None:
     projects = await service.list_projects()
 
     assert {p.name for p in projects} == {"Checkout", "Search"}
+
+
+async def test_get_project_returns_none_for_unknown_id() -> None:
+    service = ProjectService(InMemoryProjectRepository())
+
+    assert await service.get_project(uuid4()) is None
+
+
+async def test_get_project_returns_created_project() -> None:
+    repo = InMemoryProjectRepository()
+    service = ProjectService(repo)
+    project = await service.create_project(team_id=uuid4(), name="Checkout")
+
+    assert await service.get_project(project.id) is project

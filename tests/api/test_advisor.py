@@ -1,11 +1,13 @@
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.deps import get_advisor_port
+from app.api.deps import get_advisor_port, get_session
 from app.config import Settings
 from app.domain.advisor.entities import DeliveryAdvice, Recommendation
 from app.domain.advisor.port import DeliveryContext
@@ -91,3 +93,42 @@ async def test_recommendations_happy_path(client: AsyncClient, test_app: FastAPI
     assert body["recommendations"][0]["priority"] == "high"
     assert body["recommendations"][0]["root_cause"].startswith("Work is started")
     assert body["recommendations"][0]["evidence"] == ["wip=12", "completed=3"]
+
+
+async def test_transaction_released_before_llm_call(
+    client: AsyncClient,
+    test_app: FastAPI,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The LLM call takes up to 120s; holding the request's DB transaction
+    open for the duration blocks every other SQLite writer."""
+    sessions: list[AsyncSession] = []
+    in_transaction_during_advise: list[bool] = []
+
+    async def tracking_get_session() -> AsyncIterator[AsyncSession]:
+        async with sessionmaker() as session:
+            sessions.append(session)
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    class ProbeAdvisor:
+        async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+            in_transaction_during_advise.append(sessions[-1].in_transaction())
+            return DeliveryAdvice(
+                generated_at=datetime(2026, 7, 10, tzinfo=UTC),
+                summary="probe",
+                recommendations=[],
+            )
+
+    test_app.dependency_overrides[get_session] = tracking_get_session
+    test_app.dependency_overrides[get_advisor_port] = lambda: ProbeAdvisor()
+    team_id = await _create_team(client)
+
+    response = await client.get(f"/api/recommendations?team_id={team_id}")
+
+    assert response.status_code == 200
+    assert in_transaction_during_advise == [False]

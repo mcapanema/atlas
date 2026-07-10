@@ -2,7 +2,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import EventServiceDep, WorkItemServiceDep
+from app.api.deps import (
+    EventServiceDep,
+    ProjectServiceDep,
+    TeamServiceDep,
+    WorkItemServiceDep,
+)
 from app.api.schemas import WorkItemCreate, WorkItemRead, WorkItemTimelineRead
 
 router = APIRouter(prefix="/api/work-items", tags=["work-items"])
@@ -20,8 +25,15 @@ async def list_work_items(
 
 @router.post("", response_model=WorkItemRead, status_code=status.HTTP_201_CREATED)
 async def create_work_item(
-    payload: WorkItemCreate, service: WorkItemServiceDep
+    payload: WorkItemCreate,
+    service: WorkItemServiceDep,
+    teams: TeamServiceDep,
+    projects: ProjectServiceDep,
 ) -> WorkItemRead:
+    if await teams.get_team(payload.team_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+    if payload.project_id is not None and await projects.get_project(payload.project_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     item = await service.create_work_item(
         team_id=payload.team_id,
         title=payload.title,

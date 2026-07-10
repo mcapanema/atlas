@@ -1,21 +1,29 @@
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import EventServiceDep
+from app.api.deps import EventServiceDep, WorkItemServiceDep
 from app.api.schemas import EventCreate, EventRead
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
 @router.get("", response_model=list[EventRead])
-async def list_events(service: EventServiceDep, work_item_id: UUID) -> list[EventRead]:
+async def list_events(
+    service: EventServiceDep, work_items: WorkItemServiceDep, work_item_id: UUID
+) -> list[EventRead]:
+    if await work_items.get_work_item(work_item_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work item not found")
     events = await service.list_for_work_item(work_item_id)
     return [EventRead.model_validate(event) for event in events]
 
 
 @router.post("", response_model=EventRead, status_code=status.HTTP_201_CREATED)
-async def record_event(payload: EventCreate, service: EventServiceDep) -> EventRead:
+async def record_event(
+    payload: EventCreate, service: EventServiceDep, work_items: WorkItemServiceDep
+) -> EventRead:
+    if await work_items.get_work_item(payload.work_item_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work item not found")
     event = await service.record_event(
         work_item_id=payload.work_item_id,
         type=payload.type,

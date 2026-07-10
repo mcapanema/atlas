@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.session import enable_sqlite_pragmas
 from app.main import create_app
 
 
@@ -23,6 +24,7 @@ async def sessionmaker() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
         poolclass=StaticPool,
         connect_args={"check_same_thread": False},
     )
+    enable_sqlite_pragmas(engine)  # tests run under production FK semantics
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield async_sessionmaker(engine, expire_on_commit=False)
