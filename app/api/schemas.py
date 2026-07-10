@@ -205,3 +205,26 @@ class ForecastRead(BaseModel):
     remaining: int
     completion: CompletionForecastRead | None
     confidence: float | None
+
+
+class AdvisorStatusRead(BaseModel):
+    configured: bool
+
+
+class RecommendationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    title: str
+    priority: str
+    problem: str
+    root_cause: str
+    action: str
+    evidence: list[str]
+
+
+class DeliveryAdviceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    generated_at: datetime
+    summary: str
+    recommendations: list[RecommendationRead]

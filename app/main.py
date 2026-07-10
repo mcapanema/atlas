@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api import (
+    advisor,
     connectors,
     events,
     forecasts,
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(forecasts.router)
     app.include_router(connectors.router)
+    app.include_router(advisor.router)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

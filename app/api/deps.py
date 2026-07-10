@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.advisor.service import AdvisorService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
@@ -13,7 +14,9 @@ from app.application.sync.service import SyncService
 from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
 from app.config import get_settings
+from app.domain.advisor.port import AdvisorPort
 from app.domain.sync.port import DeliveryDataSource
+from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
@@ -92,6 +95,34 @@ def get_forecast_service(session: SessionDep) -> ForecastService:
 
 
 ForecastServiceDep = Annotated[ForecastService, Depends(get_forecast_service)]
+
+
+def get_advisor_port() -> AdvisorPort:
+    settings = get_settings()
+    if not settings.openrouter_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Advisor is not configured; set ATLAS_OPENROUTER_API_KEY",
+        )
+    return OpenRouterAdvisor(api_key=settings.openrouter_api_key, model=settings.advisor_model)
+
+
+AdvisorPortDep = Annotated[AdvisorPort, Depends(get_advisor_port)]
+
+
+def get_advisor_service(session: SessionDep, advisor: AdvisorPortDep) -> AdvisorService:
+    return AdvisorService(
+        MetricsService(
+            SqlAlchemyWorkItemRepository(session), SqlAlchemyEventRepository(session)
+        ),
+        ForecastService(
+            SqlAlchemyWorkItemRepository(session), SqlAlchemyEventRepository(session)
+        ),
+        advisor,
+    )
+
+
+AdvisorServiceDep = Annotated[AdvisorService, Depends(get_advisor_service)]
 
 
 def get_delivery_data_source() -> DeliveryDataSource:
