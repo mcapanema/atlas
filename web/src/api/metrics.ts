@@ -66,8 +66,3 @@ export function useAllTeamsFlowMetrics(teams: Team[]) {
     })),
   });
 }
-
-/** Compatibility shim for MetricsPage; deleted with it in the Team Dashboard task. */
-export function useTeamFlowMetrics(teamId?: string) {
-  return useFlowMetrics({ teamId });
-}

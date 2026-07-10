@@ -2,8 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
-import { MetricsPage } from "./pages/MetricsPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
+import { TeamDashboardPage } from "./pages/TeamDashboardPage";
 import { WorkItemPage } from "./pages/WorkItemPage";
 import { WorkItemsPage } from "./pages/WorkItemsPage";
 
@@ -15,7 +15,8 @@ export function App() {
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/work-items" element={<WorkItemsPage />} />
         <Route path="/work-items/:id" element={<WorkItemPage />} />
-        <Route path="/metrics" element={<MetricsPage />} />
+        <Route path="/teams" element={<TeamDashboardPage />} />
+        <Route path="/metrics" element={<Navigate to="/teams" replace />} />
         <Route path="/connectors" element={<ConnectorsPage />} />
       </Routes>
     </AppLayout>
