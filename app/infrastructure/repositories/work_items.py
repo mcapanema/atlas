@@ -23,7 +23,9 @@ class WorkItemModel(Base):
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     state: Mapped[str] = mapped_column(String(255), nullable=False)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def to_domain(self) -> WorkItem:
@@ -85,5 +87,5 @@ class SqlAlchemyWorkItemRepository:
         result = await self._session.execute(
             select(WorkItemModel).where(WorkItemModel.external_id == external_id)
         )
-        model = result.scalars().first()
+        model = result.scalars().one_or_none()
         return model.to_domain() if model is not None else None

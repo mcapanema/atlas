@@ -40,7 +40,9 @@ class EventModel(Base):
     occurred_at: Mapped[datetime] = mapped_column(_UTCDateTime, nullable=False)
     from_state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     to_state: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
     recorded_at: Mapped[datetime] = mapped_column(_UTCDateTime, nullable=False)
 
     def to_domain(self) -> Event:
@@ -101,5 +103,5 @@ class SqlAlchemyEventRepository:
         result = await self._session.execute(
             select(EventModel).where(EventModel.external_id == external_id)
         )
-        model = result.scalars().first()
+        model = result.scalars().one_or_none()
         return model.to_domain() if model is not None else None

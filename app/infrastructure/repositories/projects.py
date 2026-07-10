@@ -16,7 +16,9 @@ class ProjectModel(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     team_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("teams.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def to_domain(self) -> Project:
@@ -67,5 +69,5 @@ class SqlAlchemyProjectRepository:
         result = await self._session.execute(
             select(ProjectModel).where(ProjectModel.external_id == external_id)
         )
-        model = result.scalars().first()
+        model = result.scalars().one_or_none()
         return model.to_domain() if model is not None else None
