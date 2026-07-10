@@ -9,7 +9,7 @@ knowledge file grounds recommendations in named flow principles.
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -123,17 +123,16 @@ class OpenRouterAdvisor:
     def __init__(
         self, api_key: str, model: str, client: httpx.AsyncClient | None = None
     ) -> None:
-        # `client` injection exists for tests; production always constructs its own.
-        # Generation takes tens of seconds — httpx's 5s default would cut it off.
-        self._client = client if client is not None else httpx.AsyncClient(timeout=120.0)
+        # `client` injection exists for tests; production opens a fresh client
+        # per call (see advise()), same pattern as the Linear connector.
+        self._injected_client = client
         self._api_key = api_key
         self._model = model
 
     async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
-        response = await self._client.post(
-            _API_URL,
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            json={
+        request_kwargs: dict[str, Any] = {
+            "headers": {"Authorization": f"Bearer {self._api_key}"},
+            "json": {
                 "model": self._model,
                 "messages": [
                     {"role": "system", "content": _SYSTEM_PROMPT},
@@ -148,7 +147,17 @@ class OpenRouterAdvisor:
                     },
                 },
             },
-        )
+        }
+        if self._injected_client is not None:
+            response = await self._injected_client.post(_API_URL, **request_kwargs)
+        else:
+            # ponytail: a fresh connection per call, same as the Linear
+            # connector. Hold a pooled AsyncClient (with aclose() on app
+            # shutdown) if sustained-throughput latency ever matters.
+            # Generation takes tens of seconds — httpx's 5s default would
+            # cut it off.
+            async with httpx.AsyncClient(timeout=120.0) as owned_client:
+                response = await owned_client.post(_API_URL, **request_kwargs)
         # ponytail: a failed generation (bad key, model without structured-output
         # support, no credits) propagates as HTTPStatusError → a 500 from our
         # API; the UI shows its generic error alert. Map to friendlier statuses
