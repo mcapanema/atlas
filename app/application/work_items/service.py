@@ -34,3 +34,6 @@ class WorkItemService:
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[WorkItem]:
         return await self._repository.list(team_id=team_id, project_id=project_id)
+
+    async def get_work_item(self, work_item_id: UUID) -> WorkItem | None:
+        return await self._repository.get(work_item_id)
