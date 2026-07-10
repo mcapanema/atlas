@@ -68,6 +68,23 @@ the shared `FlowDashboard`: a lead-time distribution chart plus a
 `ForecastCard` with a target-date picker. Still nothing persisted — no
 snapshot tables, no new migrations.
 
+Phase 6 adds the *AI Intelligence* layer on the same compute-on-read pattern:
+the `advisor` slice defines an `AdvisorPort` (`app/domain/advisor/port.py`)
+that takes a `DeliveryContext` — the already-computed `FlowMetrics`,
+`LeadTimeDistribution`, and `DeliveryForecast` — and returns explainable
+`DeliveryAdvice` (a narrative summary plus prioritized `Recommendation`s,
+each carrying a root cause and evidence quoting the input metrics). The AI
+never calculates: `AdvisorService` assembles the context by composing
+`MetricsService` and `ForecastService`, and the OpenRouter adapter
+(`app/infrastructure/ai/advisor.py`) does the reasoning via OpenRouter's
+OpenAI-compatible chat-completions API (plain httpx, strict JSON schema —
+no provider SDK), grounded in a versioned knowledge file
+(`app/infrastructure/ai/knowledge/flow_coaching.md` — the SPEC's Knowledge
+Layer). Served from `GET /api/recommendations` (409 until
+`ATLAS_OPENROUTER_API_KEY` is set, mirroring the Linear connector) and the
+Advisor page (`/advisor`), which generates advice on demand. Nothing
+persisted — advice is regenerated per request, no migrations.
+
 ## Connectors
 
 External delivery systems are integrated through the `DeliveryDataSource`
