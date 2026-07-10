@@ -6,6 +6,7 @@ const { Header, Sider, Content } = Layout;
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const [, firstSegment = ""] = location.pathname.split("/");
   return (
     <Layout style={{ minHeight: "100vh" }}>
       <Sider>
@@ -13,9 +14,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Menu
           theme="dark"
           mode="inline"
-          selectedKeys={[location.pathname]}
+          selectedKeys={[`/${firstSegment}`]}
           items={[
             { key: "/organizations", label: <Link to="/organizations">Organizations</Link> },
+            { key: "/work-items", label: <Link to="/work-items">Work Items</Link> },
             { key: "/connectors", label: <Link to="/connectors">Connectors</Link> },
           ]}
         />
