@@ -70,3 +70,49 @@ async def test_get_by_external_id(session: AsyncSession) -> None:
     assert fetched.from_state == "backlog"
     assert fetched.to_state == "in_progress"
     assert await repo.get_by_external_id("nope") is None
+
+
+async def test_list_for_work_items_filters_and_orders(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    item_a, item_b, item_c = uuid4(), uuid4(), uuid4()
+    await repo.add(
+        Event(
+            work_item_id=item_b,
+            type=EventType.STARTED,
+            occurred_at=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+    )
+    await repo.add(
+        Event(
+            work_item_id=item_a,
+            type=EventType.CREATED,
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    await repo.add(
+        Event(
+            work_item_id=item_c,
+            type=EventType.CREATED,
+            occurred_at=datetime(2026, 1, 3, tzinfo=UTC),
+        )
+    )
+
+    events = await repo.list_for_work_items([item_a, item_b])
+
+    assert [(e.work_item_id, e.type) for e in events] == [
+        (item_a, EventType.CREATED),
+        (item_b, EventType.STARTED),
+    ]
+
+
+async def test_list_for_work_items_with_no_ids_is_empty(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    await repo.add(
+        Event(
+            work_item_id=uuid4(),
+            type=EventType.CREATED,
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    assert await repo.list_for_work_items([]) == []

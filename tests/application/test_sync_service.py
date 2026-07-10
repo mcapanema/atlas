@@ -110,6 +110,10 @@ class InMemoryEventRepository:
             key=lambda e: e.occurred_at,
         )
 
+    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+        wanted = set(work_item_ids)
+        return [e for e in self._events.values() if e.work_item_id in wanted]
+
     async def get_by_external_id(self, external_id: str) -> Event | None:
         return next(
             (e for e in self._events.values() if e.external_id == external_id), None
