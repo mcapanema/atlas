@@ -110,3 +110,25 @@ class SyncSummaryRead(BaseModel):
     projects: int
     work_items: int
     events: int
+
+
+class StatePeriodRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    state: str
+    entered_at: datetime
+    exited_at: datetime | None
+
+
+class BlockedPeriodRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    started_at: datetime
+    ended_at: datetime | None
+
+
+class WorkItemTimelineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    state_periods: list[StatePeriodRead]
+    blocked_periods: list[BlockedPeriodRead]
