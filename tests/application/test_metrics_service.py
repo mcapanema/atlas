@@ -85,7 +85,7 @@ async def test_team_metrics_across_completed_and_in_progress_items() -> None:
         ),
     )
 
-    metrics = await service.get_team_flow_metrics(team_id, now=NOW)
+    metrics = await service.get_flow_metrics(team_id=team_id, now=NOW)
 
     assert metrics.completed == 1
     assert metrics.wip == 1
@@ -108,7 +108,7 @@ async def test_team_metrics_scope_to_the_requested_team() -> None:
         ),
     )
 
-    metrics = await service.get_team_flow_metrics(uuid4(), now=NOW)
+    metrics = await service.get_flow_metrics(team_id=uuid4(), now=NOW)
 
     assert metrics.completed == 0
     assert metrics.wip == 0
@@ -128,8 +128,35 @@ async def test_window_days_is_forwarded() -> None:
         ),
     )
 
-    narrow = await service.get_team_flow_metrics(team_id, window_days=30, now=NOW)
-    wide = await service.get_team_flow_metrics(team_id, window_days=90, now=NOW)
+    narrow = await service.get_flow_metrics(team_id=team_id, window_days=30, now=NOW)
+    wide = await service.get_flow_metrics(team_id=team_id, window_days=90, now=NOW)
 
     assert narrow.completed == 0
     assert wide.completed == 1
+
+
+async def test_metrics_scoped_by_project() -> None:
+    team_id = uuid4()
+    project_id = uuid4()
+    in_project = WorkItem(team_id=team_id, title="In project", project_id=project_id)
+    outside = WorkItem(team_id=team_id, title="Outside")
+    events = [
+        Event(
+            work_item_id=in_project.id,
+            type=EventType.COMPLETED,
+            occurred_at=NOW - timedelta(days=1),
+        ),
+        Event(
+            work_item_id=outside.id,
+            type=EventType.COMPLETED,
+            occurred_at=NOW - timedelta(days=1),
+        ),
+    ]
+    service = MetricsService(
+        InMemoryWorkItemRepository([in_project, outside]),
+        InMemoryEventRepository(events),
+    )
+
+    metrics = await service.get_flow_metrics(project_id=project_id, now=NOW)
+
+    assert metrics.completed == 1

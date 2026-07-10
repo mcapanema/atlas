@@ -1,4 +1,4 @@
-"""Aggregate a team's FlowSamples into one TeamFlowMetrics snapshot.
+"""Aggregate a scope's FlowSamples into one FlowMetrics snapshot.
 
 Computed on read — nothing here is persisted. Window semantics: duration
 percentiles, blocked time, and flow efficiency cover items completed in the
@@ -31,8 +31,8 @@ class DurationStats:
 
 
 @dataclass(frozen=True)
-class TeamFlowMetrics:
-    """A team's flow metrics over a trailing window ending at window_end."""
+class FlowMetrics:
+    """Flow metrics for a scope (team or project) over a trailing window ending at window_end."""
 
     window_start: datetime
     window_end: datetime
@@ -57,15 +57,15 @@ def _duration_stats(durations: list[timedelta]) -> DurationStats | None:
     )
 
 
-def compute_team_metrics(
+def compute_flow_metrics(
     samples: list[FlowSample], *, now: datetime, window_days: int = 30
-) -> TeamFlowMetrics:
-    """Aggregate samples into TeamFlowMetrics for the window (now - window_days, now]."""
+) -> FlowMetrics:
+    """Aggregate samples into FlowMetrics for the window (now - window_days, now]."""
     window_start = now - timedelta(days=window_days)
     in_window = [
         s for s in samples if s.completed_at is not None and window_start < s.completed_at <= now
     ]
-    return TeamFlowMetrics(
+    return FlowMetrics(
         window_start=window_start,
         window_end=now,
         completed=throughput(samples, start=window_start, end=now),

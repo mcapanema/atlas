@@ -27,7 +27,7 @@ async def get_team_flow_metrics(
     team_id: UUID,
     window_days: int = Query(default=30, ge=1, le=365),
 ) -> TeamFlowMetricsRead:
-    metrics = await service.get_team_flow_metrics(team_id, window_days=window_days)
+    metrics = await service.get_flow_metrics(team_id=team_id, window_days=window_days)
     return TeamFlowMetricsRead(
         window_start=metrics.window_start,
         window_end=metrics.window_end,
