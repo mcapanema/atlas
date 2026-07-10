@@ -19,6 +19,11 @@ Each concept gets its own subpackage: `<concept>/entities.py` +
   interface only — no implementation lives here. Infrastructure implements
   it; Application depends on it.
 
+One deliberate exception to the entities+repository shape: `sync/` holds
+the platform-neutral `Source*` snapshot types (`source.py`) and the
+`DeliveryDataSource` Protocol (`port.py`) that connectors implement. Still
+stdlib-only — the same zero-framework rule applies.
+
 ## Before committing
 
 Grep your diff for `fastapi`, `sqlalchemy`, `pydantic`, `sqlite`

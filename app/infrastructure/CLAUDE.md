@@ -19,6 +19,10 @@ here — this is the only layer allowed to import SQLAlchemy, aiosqlite, or
   Alembic autogenerate and for `tests/conftest.py`'s
   `Base.metadata.create_all`. Forgetting to add the import here means your
   new table silently doesn't exist in tests or migrations.
+- `connectors/<vendor>/` — one package per external system (today:
+  `linear/`), containing the vendor API client, pure payload→`Source*`
+  mapping functions, and the `DeliveryDataSource` adapter. Vendor payloads
+  and SDK types must never leave this package.
 - `static.py` — `mount_spa(app)`, serves the compiled React build in
   production; a no-op when `web/dist` doesn't exist (dev mode). Must be the
   *last* thing registered in `create_app()` — it's a catch-all route and

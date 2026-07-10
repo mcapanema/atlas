@@ -31,7 +31,25 @@ hierarchy `Organization → Team → Project → Work Item → Event`: a Team ow
 Projects and Work Items, a Project groups Work Items, and each Work Item
 accumulates immutable Events (state changes, assignment, etc.) — the system
 of record that metrics will later derive from. `Metric` remains a future
-concept.
+concept. The Linear connector (below) populates these slices from a real
+workspace.
+
+## Connectors
+
+External delivery systems are integrated through the `DeliveryDataSource`
+port (`app/domain/sync/port.py`), which yields platform-neutral snapshots
+(`SourceTeam`, `SourceProject`, `SourceWorkItem`, `SourceEvent` — in
+`app/domain/sync/source.py`). Connector-specific code lives only in
+`app/infrastructure/connectors/<vendor>/`; vendor payloads never leave that
+package.
+
+The first connector is Linear (`app/infrastructure/connectors/linear/`):
+a small GraphQL client (httpx, personal API key via `ATLAS_LINEAR_API_KEY`),
+pure mapping functions, and a paginating `LinearDataSource`. The
+`SyncService` use case (`app/application/sync/service.py`) upserts the
+snapshots into the domain model idempotently, matching by `external_id` —
+running sync twice is a no-op. Exposed as `POST /api/connectors/linear/sync`
+and the Connectors page in the frontend.
 
 ## Single-service deployment
 
