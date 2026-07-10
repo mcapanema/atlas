@@ -4,6 +4,10 @@ from uuid import UUID
 
 from app.domain.events.entities import Event
 from app.domain.events.repository import EventRepository
+from app.domain.metrics.distribution import (
+    LeadTimeDistribution,
+    compute_lead_time_distribution,
+)
 from app.domain.metrics.history import FlowHistory, compute_flow_history
 from app.domain.metrics.samples import derive_flow_sample
 from app.domain.metrics.summary import FlowMetrics, compute_flow_metrics
@@ -56,3 +60,19 @@ class MetricsService:
         window_end = now if now is not None else datetime.now(UTC)
         streams = await self._event_streams(team_id=team_id, project_id=project_id)
         return compute_flow_history(streams, now=window_end, window_days=window_days)
+
+    async def get_lead_time_distribution(
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        window_days: int = 90,
+        now: datetime | None = None,
+    ) -> LeadTimeDistribution:
+        """Histogram of lead times for scope items completed in the trailing window."""
+        window_end = now if now is not None else datetime.now(UTC)
+        streams = await self._event_streams(team_id=team_id, project_id=project_id)
+        samples = [
+            sample for stream in streams if (sample := derive_flow_sample(stream)) is not None
+        ]
+        return compute_lead_time_distribution(samples, now=window_end, window_days=window_days)
