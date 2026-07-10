@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 
 from app.application.events.service import EventService
 from app.domain.events.entities import Event, EventType
+from app.domain.events.timeline import StatePeriod
 
 
 class InMemoryEventRepository:
@@ -49,3 +50,46 @@ async def test_list_for_work_item_scopes_by_item() -> None:
     events = await service.list_for_work_item(item_a)
 
     assert [e.work_item_id for e in events] == [item_a]
+
+
+async def test_get_timeline_derives_periods_from_recorded_events() -> None:
+    repo = InMemoryEventRepository()
+    service = EventService(repo)
+    work_item_id = uuid4()
+    await service.record_event(
+        work_item_id=work_item_id,
+        type=EventType.CREATED,
+        occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    await service.record_event(
+        work_item_id=work_item_id,
+        type=EventType.STARTED,
+        occurred_at=datetime(2026, 1, 3, tzinfo=UTC),
+        from_state="Backlog",
+        to_state="In Progress",
+    )
+
+    timeline = await service.get_timeline(work_item_id)
+
+    assert timeline.state_periods == (
+        StatePeriod(
+            state="Backlog",
+            entered_at=datetime(2026, 1, 1, tzinfo=UTC),
+            exited_at=datetime(2026, 1, 3, tzinfo=UTC),
+        ),
+        StatePeriod(
+            state="In Progress",
+            entered_at=datetime(2026, 1, 3, tzinfo=UTC),
+            exited_at=None,
+        ),
+    )
+    assert timeline.blocked_periods == ()
+
+
+async def test_get_timeline_is_empty_for_unknown_work_item() -> None:
+    service = EventService(InMemoryEventRepository())
+
+    timeline = await service.get_timeline(uuid4())
+
+    assert timeline.state_periods == ()
+    assert timeline.blocked_periods == ()

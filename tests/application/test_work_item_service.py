@@ -56,3 +56,17 @@ async def test_list_filters_by_team() -> None:
 
     assert [i.title for i in items] == ["A"]
     assert items[0].type is WorkItemType.BUG
+
+
+async def test_get_work_item_returns_created_item() -> None:
+    repo = InMemoryWorkItemRepository()
+    service = WorkItemService(repo)
+    item = await service.create_work_item(team_id=uuid4(), title="Add login")
+
+    assert await service.get_work_item(item.id) is item
+
+
+async def test_get_work_item_returns_none_for_unknown_id() -> None:
+    service = WorkItemService(InMemoryWorkItemRepository())
+
+    assert await service.get_work_item(uuid4()) is None

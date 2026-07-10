@@ -3,6 +3,7 @@ from uuid import UUID
 
 from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
+from app.domain.events.timeline import WorkItemTimeline, derive_timeline
 
 
 class EventService:
@@ -33,3 +34,7 @@ class EventService:
 
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
         return await self._repository.list_for_work_item(work_item_id)
+
+    async def get_timeline(self, work_item_id: UUID) -> WorkItemTimeline:
+        events = await self._repository.list_for_work_item(work_item_id)
+        return derive_timeline(events)
