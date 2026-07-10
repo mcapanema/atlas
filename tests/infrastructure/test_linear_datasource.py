@@ -1,11 +1,14 @@
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
 
 import httpx
+import pytest
 
 from app.domain.events.entities import EventType
-from app.infrastructure.connectors.linear.client import LinearGraphQLClient
+from app.infrastructure.connectors.linear import datasource as datasource_module
+from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 
 
@@ -88,3 +91,52 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
 
     assert items[0].external_id == "i1"
     assert [e.type for e in items[0].events] == [EventType.CREATED, EventType.STARTED]
+
+
+async def test_fetch_work_items_skips_malformed_nodes(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    good: dict[str, Any] = {
+        "id": "i1",
+        "title": "Fix login",
+        "createdAt": "2026-07-01T10:00:00.000Z",
+        "state": {"name": "In Progress", "type": "started"},
+        "team": {"id": "t1"},
+        "project": None,
+        "history": {"nodes": []},
+    }
+    bad: dict[str, Any] = {
+        "id": "i-bad",
+        "title": "No team",
+        "createdAt": "2026-07-01T10:00:00.000Z",
+        "state": {"name": "Backlog", "type": "backlog"},
+        "team": None,  # map_issue does node["team"]["id"] -> TypeError
+        "project": None,
+        "history": {"nodes": []},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _page("issues", [bad, good])
+
+    with caplog.at_level(logging.WARNING):
+        items = await _datasource(handler).fetch_work_items()
+
+    assert [i.external_id for i in items] == ["i1"]
+    assert any("i-bad" in record.getMessage() for record in caplog.records)
+
+
+async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(datasource_module, "_MAX_PAGES", 3)
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        # hasNextPage forever with a repeating cursor — without a ceiling
+        # this loops until the heat death of the workspace.
+        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor="same")
+
+    with pytest.raises(LinearAPIError, match="pagination exceeded"):
+        await _datasource(handler).fetch_teams()
+
+    assert calls == 3
