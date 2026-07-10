@@ -13,6 +13,17 @@ export interface ThroughputBucket {
   completed: number;
 }
 
+export interface DurationBin {
+  start_days: number;
+  end_days: number;
+  count: number;
+}
+
+export interface OutcomeBucket {
+  days: number;
+  trials: number;
+}
+
 // Palette validated with the dataviz six-checks script (worst adjacent CVD
 // ΔE 21.6, all in the lightness band). Aqua and yellow sit below 3:1
 // contrast on a white surface — the CFD's legend + end labels are the
@@ -105,5 +116,44 @@ export function buildWipOption(days: DailyFlowCount[]): EChartsOption {
         data: days.map((d) => d.in_progress),
       },
     ],
+  };
+}
+
+function barSeries(name: string, data: number[]): EChartsOption["series"] {
+  return [
+    {
+      name,
+      type: "bar",
+      color: BLUE,
+      barMaxWidth: 24,
+      itemStyle: { borderRadius: [4, 4, 0, 0] },
+      data,
+    },
+  ];
+}
+
+export function buildLeadTimeDistributionOption(bins: DurationBin[]): EChartsOption {
+  return {
+    tooltip: { trigger: "item" },
+    grid: { left: 48, right: 16, top: 16, bottom: 32 },
+    xAxis: dayAxis(bins.map((b) => `${b.start_days}d`)),
+    yAxis: valueAxis(),
+    series: barSeries("Completed items", bins.map((b) => b.count)),
+  };
+}
+
+export function buildForecastOption(
+  outcomes: OutcomeBucket[],
+  windowEnd: string,
+): EChartsOption {
+  const origin = new Date(windowEnd).getTime();
+  const label = (days: number) =>
+    new Date(origin + days * 86_400_000).toISOString().slice(0, 10);
+  return {
+    tooltip: { trigger: "item" },
+    grid: { left: 48, right: 16, top: 16, bottom: 32 },
+    xAxis: dayAxis(outcomes.map((o) => label(o.days))),
+    yAxis: valueAxis(),
+    series: barSeries("Trials", outcomes.map((o) => o.trials)),
   };
 }

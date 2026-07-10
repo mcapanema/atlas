@@ -1,10 +1,10 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import type { DailyFlowCount, ThroughputBucket } from "../lib/charts";
+import type { DailyFlowCount, DurationBin, ThroughputBucket } from "../lib/charts";
 import { apiFetch } from "./client";
 import type { Team } from "./teams";
 
-export type { DailyFlowCount, ThroughputBucket };
+export type { DailyFlowCount, DurationBin, ThroughputBucket };
 
 export interface DurationStats {
   p50_seconds: number;
@@ -34,7 +34,7 @@ export interface FlowHistory {
 
 export type MetricsScope = { teamId?: string; projectId?: string };
 
-function scopeParam(scope: MetricsScope): string | null {
+export function scopeParam(scope: MetricsScope): string | null {
   if (scope.teamId) return `team_id=${scope.teamId}`;
   if (scope.projectId) return `project_id=${scope.projectId}`;
   return null;
@@ -64,5 +64,21 @@ export function useAllTeamsFlowMetrics(teams: Team[]) {
       queryKey: ["metrics", "flow", { teamId: team.id }],
       queryFn: () => apiFetch<FlowMetrics>(`/api/metrics?team_id=${team.id}`),
     })),
+  });
+}
+
+export interface LeadTimeDistribution {
+  window_start: string;
+  window_end: string;
+  bins: DurationBin[];
+}
+
+export function useLeadTimeDistribution(scope: MetricsScope) {
+  const param = scopeParam(scope);
+  return useQuery({
+    queryKey: ["metrics", "lead-time-distribution", scope],
+    enabled: param !== null,
+    queryFn: () =>
+      apiFetch<LeadTimeDistribution>(`/api/metrics/lead-time-distribution?${param}`),
   });
 }
