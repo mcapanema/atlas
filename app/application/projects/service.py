@@ -19,3 +19,6 @@ class ProjectService:
 
     async def list_projects(self) -> list[Project]:
         return await self._repository.list()
+
+    async def get_project(self, project_id: UUID) -> Project | None:
+        return await self._repository.get(project_id)

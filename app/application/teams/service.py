@@ -19,3 +19,6 @@ class TeamService:
 
     async def list_teams(self) -> list[Team]:
         return await self._repository.list()
+
+    async def get_team(self, team_id: UUID) -> Team | None:
+        return await self._repository.get(team_id)

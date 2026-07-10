@@ -45,3 +45,17 @@ async def test_list_teams_returns_all() -> None:
     teams = await service.list_teams()
 
     assert {t.name for t in teams} == {"Platform", "Growth"}
+
+
+async def test_get_team_returns_none_for_unknown_id() -> None:
+    service = TeamService(InMemoryTeamRepository())
+
+    assert await service.get_team(uuid4()) is None
+
+
+async def test_get_team_returns_created_team() -> None:
+    repo = InMemoryTeamRepository()
+    service = TeamService(repo)
+    team = await service.create_team(organization_id=uuid4(), name="Platform")
+
+    assert await service.get_team(team.id) is team

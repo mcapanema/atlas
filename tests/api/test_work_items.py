@@ -2,6 +2,8 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 
+from tests.api.helpers import create_team, create_work_item
+
 
 async def test_list_work_items_empty(client: AsyncClient) -> None:
     response = await client.get("/api/work-items")
@@ -11,7 +13,7 @@ async def test_list_work_items_empty(client: AsyncClient) -> None:
 
 
 async def test_create_then_list_work_item(client: AsyncClient) -> None:
-    team_id = str(uuid4())
+    team_id = await create_team(client)
     create = await client.post(
         "/api/work-items",
         json={"team_id": team_id, "title": "Add login", "type": "bug"},
@@ -29,7 +31,7 @@ async def test_create_then_list_work_item(client: AsyncClient) -> None:
 
 
 async def test_list_filters_by_team(client: AsyncClient) -> None:
-    team_a, team_b = str(uuid4()), str(uuid4())
+    team_a, team_b = await create_team(client), await create_team(client)
     await client.post("/api/work-items", json={"team_id": team_a, "title": "A"})
     await client.post("/api/work-items", json={"team_id": team_b, "title": "B"})
 
@@ -55,16 +57,26 @@ async def test_create_rejects_unknown_type(client: AsyncClient) -> None:
     assert response.status_code == 422
 
 
-async def _create_work_item(client: AsyncClient) -> str:
+async def test_create_work_item_404_for_unknown_team(client: AsyncClient) -> None:
     response = await client.post(
-        "/api/work-items", json={"team_id": str(uuid4()), "title": "Ship it"}
+        "/api/work-items", json={"team_id": str(uuid4()), "title": "X"}
     )
-    assert response.status_code == 201
-    return str(response.json()["id"])
+
+    assert response.status_code == 404
+
+
+async def test_create_work_item_404_for_unknown_project(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.post(
+        "/api/work-items",
+        json={"team_id": team_id, "title": "X", "project_id": str(uuid4())},
+    )
+
+    assert response.status_code == 404
 
 
 async def test_get_work_item_by_id(client: AsyncClient) -> None:
-    work_item_id = await _create_work_item(client)
+    work_item_id = await create_work_item(client)
 
     response = await client.get(f"/api/work-items/{work_item_id}")
 
@@ -79,7 +91,7 @@ async def test_get_work_item_404_for_unknown_id(client: AsyncClient) -> None:
 
 
 async def test_timeline_derives_periods_from_events(client: AsyncClient) -> None:
-    work_item_id = await _create_work_item(client)
+    work_item_id = await create_work_item(client)
     for payload in [
         {"type": "created", "occurred_at": "2026-01-01T00:00:00Z"},
         {
