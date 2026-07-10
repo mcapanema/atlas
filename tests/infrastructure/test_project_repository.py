@@ -38,3 +38,16 @@ async def test_list_returns_all(session: AsyncSession) -> None:
     projects = await repo.list()
 
     assert {p.name for p in projects} == {"Checkout", "Search"}
+
+
+async def test_update_persists_changed_fields(session: AsyncSession) -> None:
+    repo = SqlAlchemyProjectRepository(session)
+    project = Project(team_id=uuid4(), name="Checkout", external_id="lin_p1")
+    await repo.add(project)
+
+    project.name = "Checkout v2"
+    await repo.update(project)
+
+    fetched = await repo.get(project.id)
+    assert fetched is not None
+    assert fetched.name == "Checkout v2"

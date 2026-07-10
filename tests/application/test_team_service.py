@@ -11,6 +11,9 @@ class InMemoryTeamRepository:
     async def add(self, team: Team) -> None:
         self._teams[team.id] = team
 
+    async def update(self, team: Team) -> None:
+        self._teams[team.id] = team
+
     async def list(self) -> list[Team]:
         return list(self._teams.values())
 

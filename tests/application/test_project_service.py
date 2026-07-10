@@ -11,6 +11,9 @@ class InMemoryProjectRepository:
     async def add(self, project: Project) -> None:
         self._projects[project.id] = project
 
+    async def update(self, project: Project) -> None:
+        self._projects[project.id] = project
+
     async def list(self) -> list[Project]:
         return list(self._projects.values())
 

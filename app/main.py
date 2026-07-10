@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import events, health, organizations, projects, teams, work_items
+from app.api import connectors, events, health, organizations, projects, teams, work_items
 from app.config import get_settings
 from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.static import mount_spa
@@ -25,6 +25,7 @@ def create_app() -> FastAPI:
     app.include_router(projects.router)
     app.include_router(work_items.router)
     app.include_router(events.router)
+    app.include_router(connectors.router)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

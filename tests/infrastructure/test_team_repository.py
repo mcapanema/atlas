@@ -44,3 +44,16 @@ async def test_list_returns_all(session: AsyncSession) -> None:
     teams = await repo.list()
 
     assert {t.name for t in teams} == {"Platform", "Growth"}
+
+
+async def test_update_persists_changed_fields(session: AsyncSession) -> None:
+    repo = SqlAlchemyTeamRepository(session)
+    team = Team(organization_id=uuid4(), name="Platform", external_id="lin_1")
+    await repo.add(team)
+
+    team.name = "Platform Engineering"
+    await repo.update(team)
+
+    fetched = await repo.get(team.id)
+    assert fetched is not None
+    assert fetched.name == "Platform Engineering"

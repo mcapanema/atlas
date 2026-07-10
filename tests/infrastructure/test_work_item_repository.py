@@ -42,3 +42,19 @@ async def test_list_filters_by_team_and_project(session: AsyncSession) -> None:
     assert {i.title for i in await repo.list(team_id=team_a)} == {"A", "B"}
     assert {i.title for i in await repo.list(project_id=project)} == {"A"}
     assert {i.title for i in await repo.list()} == {"A", "B", "C"}
+
+
+async def test_update_persists_changed_fields(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=uuid4(), title="Add login", state="backlog")
+    await repo.add(item)
+
+    new_project_id = uuid4()
+    item.state = "In Progress"
+    item.project_id = new_project_id
+    await repo.update(item)
+
+    fetched = await repo.get(item.id)
+    assert fetched is not None
+    assert fetched.state == "In Progress"
+    assert fetched.project_id == new_project_id

@@ -1,14 +1,19 @@
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.events.service import EventService
 from app.application.organizations.service import OrganizationService
 from app.application.projects.service import ProjectService
+from app.application.sync.service import SyncService
 from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
+from app.config import get_settings
+from app.domain.sync.port import DeliveryDataSource
+from app.infrastructure.connectors.linear.client import LinearGraphQLClient
+from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
@@ -65,3 +70,30 @@ def get_event_service(session: SessionDep) -> EventService:
 
 
 EventServiceDep = Annotated[EventService, Depends(get_event_service)]
+
+
+def get_delivery_data_source() -> DeliveryDataSource:
+    settings = get_settings()
+    if not settings.linear_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Linear connector is not configured; set ATLAS_LINEAR_API_KEY",
+        )
+    return LinearDataSource(LinearGraphQLClient(settings.linear_api_key))
+
+
+DeliveryDataSourceDep = Annotated[DeliveryDataSource, Depends(get_delivery_data_source)]
+
+
+def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> SyncService:
+    return SyncService(
+        source,
+        SqlAlchemyOrganizationRepository(session),
+        SqlAlchemyTeamRepository(session),
+        SqlAlchemyProjectRepository(session),
+        SqlAlchemyWorkItemRepository(session),
+        SqlAlchemyEventRepository(session),
+    )
+
+
+SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]

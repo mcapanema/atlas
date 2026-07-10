@@ -1,5 +1,6 @@
-export async function apiFetch<T>(path: string): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
+    ...init,
     headers: { "Content-Type": "application/json" },
   });
   if (!response.ok) {

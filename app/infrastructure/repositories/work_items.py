@@ -62,6 +62,10 @@ class SqlAlchemyWorkItemRepository:
         self._session.add(WorkItemModel.from_domain(work_item))
         await self._session.flush()
 
+    async def update(self, work_item: WorkItem) -> None:
+        await self._session.merge(WorkItemModel.from_domain(work_item))
+        await self._session.flush()
+
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[WorkItem]:
