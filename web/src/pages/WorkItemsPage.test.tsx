@@ -67,4 +67,12 @@ describe("WorkItemsPage", () => {
       "/work-items/11111111-1111-1111-1111-111111111111",
     );
   });
+
+  it("renders an error alert when teams fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 500 }));
+
+    renderWithProviders(<WorkItemsPage />);
+
+    await waitFor(() => expect(screen.getByText("Failed to load teams")).toBeInTheDocument());
+  });
 });

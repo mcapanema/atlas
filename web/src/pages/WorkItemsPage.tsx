@@ -1,4 +1,4 @@
-import { Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, Select, Space, Table, Tag, Typography } from "antd";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -9,6 +9,13 @@ export function WorkItemsPage() {
   const [teamId, setTeamId] = useState<string>();
   const teams = useTeams();
   const workItems = useWorkItems(teamId);
+
+  if (teams.isError) {
+    return <Alert type="error" message="Failed to load teams" />;
+  }
+  if (workItems.isError) {
+    return <Alert type="error" message="Failed to load work items" />;
+  }
 
   return (
     <>
