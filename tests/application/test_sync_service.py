@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -388,3 +389,15 @@ async def test_unknown_organization_raises_unknown_organization_error() -> None:
 
     with pytest.raises(UnknownOrganizationError, match="does not exist"):
         await harness.service.sync(uuid4())
+
+
+async def test_sync_logs_start_and_summary(caplog: pytest.LogCaptureFixture) -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+
+    with caplog.at_level(logging.INFO, logger="app.application.sync.service"):
+        await harness.service.sync(org_id)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Sync started" in m and str(org_id) in m for m in messages)
+    assert any("Sync finished" in m and "teams=1" in m for m in messages)

@@ -61,6 +61,9 @@ def create_app() -> FastAPI:
         # to_domain() on read paths (GET), which would misreport a real
         # data-integrity bug as a 422 client error. Scope more narrowly to
         # the create-endpoint layer if that read-path case ever fires.
+        logger.warning(
+            "ValueError handled as 422 on %s %s: %s", request.method, request.url.path, exc
+        )
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     @app.exception_handler(IntegrityError)
