@@ -49,6 +49,10 @@ class SqlAlchemyProjectRepository:
         self._session.add(ProjectModel.from_domain(project))
         await self._session.flush()
 
+    async def update(self, project: Project) -> None:
+        await self._session.merge(ProjectModel.from_domain(project))
+        await self._session.flush()
+
     async def list(self) -> list[Project]:
         result = await self._session.execute(
             select(ProjectModel).order_by(ProjectModel.created_at)

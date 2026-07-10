@@ -50,6 +50,10 @@ class SqlAlchemyTeamRepository:
         self._session.add(TeamModel.from_domain(team))
         await self._session.flush()
 
+    async def update(self, team: Team) -> None:
+        await self._session.merge(TeamModel.from_domain(team))
+        await self._session.flush()
+
     async def list(self) -> list[Team]:
         result = await self._session.execute(
             select(TeamModel).order_by(TeamModel.created_at)
