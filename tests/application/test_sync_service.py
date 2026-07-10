@@ -112,7 +112,10 @@ class InMemoryEventRepository:
 
     async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
         wanted = set(work_item_ids)
-        return [e for e in self._events.values() if e.work_item_id in wanted]
+        return sorted(
+            (e for e in self._events.values() if e.work_item_id in wanted),
+            key=lambda e: e.occurred_at,
+        )
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
         return next(
