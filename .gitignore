@@ -10,9 +10,6 @@ docs/superpowers
 # Ignore serena directory
 .serena
 
-SPEC.md
-VISION.md
-
 # Ignore git worktrees
 .worktrees
 
@@ -32,3 +29,10 @@ atlas.db
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo
+
+# Ignore graphify directories
+.tokensave
+graphify-out
+
+SPEC.md
+VISION.md
