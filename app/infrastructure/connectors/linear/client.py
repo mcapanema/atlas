@@ -8,10 +8,12 @@ from typing import Any
 
 import httpx
 
+from app.domain.sync.port import DataSourceError
+
 LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 
 
-class LinearAPIError(Exception):
+class LinearAPIError(DataSourceError):
     """The Linear API returned an HTTP or GraphQL-level error."""
 
 

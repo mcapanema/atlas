@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.deps import get_advisor_port, get_session
 from app.config import Settings
 from app.domain.advisor.entities import DeliveryAdvice, Recommendation
-from app.domain.advisor.port import DeliveryContext
+from app.domain.advisor.port import AdvisorError, DeliveryContext
 
 
 class FakeAdvisor:
@@ -132,3 +132,19 @@ async def test_transaction_released_before_llm_call(
 
     assert response.status_code == 200
     assert in_transaction_during_advise == [False]
+
+
+async def test_recommendations_502_when_advisor_fails(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    class FailingAdvisor:
+        async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+            raise AdvisorError("OpenRouter request failed")
+
+    test_app.dependency_overrides[get_advisor_port] = lambda: FailingAdvisor()
+    team_id = await _create_team(client)
+
+    response = await client.get(f"/api/recommendations?team_id={team_id}")
+
+    assert response.status_code == 502
+    assert "OpenRouter request failed" in response.json()["detail"]

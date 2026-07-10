@@ -4,6 +4,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
+from app.domain.sync.port import DataSourceError
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 
 
@@ -38,3 +39,9 @@ async def test_execute_raises_on_graphql_errors() -> None:
 
     with pytest.raises(LinearAPIError, match="bad query"):
         await _client(handler).execute("{ nope }")
+
+
+def test_linear_api_error_is_a_data_source_error() -> None:
+    # The 502 handler in create_app() catches DataSourceError; Linear failures
+    # must be members of that family to reach it.
+    assert issubclass(LinearAPIError, DataSourceError)
