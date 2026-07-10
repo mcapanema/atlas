@@ -284,6 +284,82 @@ async def test_state_change_updates_work_item_and_appends_event() -> None:
     assert len(await harness.events.list_for_work_item(item.id)) == 3
 
 
+async def test_project_reassigned_to_different_team_is_updated() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Growth")]
+    await harness.service.sync(org_id)
+
+    source.projects = [SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt2")]
+    source.work_items = []
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.projects == 1
+    new_team = await harness.teams.get_by_external_id("lt2")
+    project = await harness.projects.get_by_external_id("lp1")
+    assert new_team is not None and project is not None
+    assert project.team_id == new_team.id
+
+
+async def test_work_item_reassigned_to_different_team_is_updated() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Growth")]
+    await harness.service.sync(org_id)
+
+    item_source = source.work_items[0]
+    source.work_items = [
+        SourceWorkItem(
+            external_id=item_source.external_id,
+            title=item_source.title,
+            type=item_source.type,
+            state=item_source.state,
+            team_external_id="lt2",
+            project_external_id=item_source.project_external_id,
+            created_at=item_source.created_at,
+            events=item_source.events,
+        )
+    ]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    new_team = await harness.teams.get_by_external_id("lt2")
+    item = await harness.work_items.get_by_external_id("li1")
+    assert new_team is not None and item is not None
+    assert item.team_id == new_team.id
+
+
+async def test_work_item_type_change_is_updated() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+
+    item_source = source.work_items[0]
+    source.work_items = [
+        SourceWorkItem(
+            external_id=item_source.external_id,
+            title=item_source.title,
+            type=WorkItemType.BUG,
+            state=item_source.state,
+            team_external_id=item_source.team_external_id,
+            project_external_id=item_source.project_external_id,
+            created_at=item_source.created_at,
+            events=item_source.events,
+        )
+    ]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None and item.type == WorkItemType.BUG
+
+
 async def test_project_with_unknown_team_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(

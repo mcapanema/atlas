@@ -72,8 +72,14 @@ class SyncService:
                 await self._teams.add(team)
                 written += 1
             elif existing.name != source.name:
-                existing.name = source.name
-                await self._teams.update(existing)
+                updated = Team(
+                    organization_id=existing.organization_id,
+                    name=source.name,
+                    external_id=existing.external_id,
+                    id=existing.id,
+                    created_at=existing.created_at,
+                )
+                await self._teams.update(updated)
                 written += 1
         return written
 
@@ -92,9 +98,15 @@ class SyncService:
                 )
                 await self._projects.add(project)
                 written += 1
-            elif existing.name != source.name:
-                existing.name = source.name
-                await self._projects.update(existing)
+            elif (existing.name, existing.team_id) != (source.name, team.id):
+                updated = Project(
+                    team_id=team.id,
+                    name=source.name,
+                    external_id=existing.external_id,
+                    id=existing.id,
+                    created_at=existing.created_at,
+                )
+                await self._projects.update(updated)
                 written += 1
         return written
 
@@ -121,16 +133,25 @@ class SyncService:
                 items_written += 1
             else:
                 work_item = existing
-                changed = (existing.title, existing.state, existing.project_id) != (
-                    source.title,
-                    source.state,
-                    project_id,
-                )
+                changed = (
+                    existing.title,
+                    existing.state,
+                    existing.project_id,
+                    existing.team_id,
+                    existing.type,
+                ) != (source.title, source.state, project_id, team.id, source.type)
                 if changed:
-                    existing.title = source.title
-                    existing.state = source.state
-                    existing.project_id = project_id
-                    await self._work_items.update(existing)
+                    work_item = WorkItem(
+                        team_id=team.id,
+                        title=source.title,
+                        type=source.type,
+                        state=source.state,
+                        project_id=project_id,
+                        external_id=existing.external_id,
+                        id=existing.id,
+                        created_at=existing.created_at,
+                    )
+                    await self._work_items.update(work_item)
                     items_written += 1
             events_written += await self._sync_events(work_item.id, source)
         return items_written, events_written
