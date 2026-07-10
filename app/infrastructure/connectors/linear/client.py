@@ -38,7 +38,12 @@ def _retry_delay(retry_after: str | None, attempt: int) -> float:
 def _parse(response: httpx.Response) -> dict[str, Any]:
     if response.status_code != 200:
         raise LinearAPIError(f"Linear API returned HTTP {response.status_code}")
-    payload: dict[str, Any] = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise LinearAPIError("Linear response is not JSON") from exc
+    if not isinstance(payload, dict):
+        raise LinearAPIError("Linear response is not an object")
     if payload.get("errors"):
         raise LinearAPIError(f"Linear GraphQL errors: {payload['errors']}")
     data: dict[str, Any] | None = payload.get("data")

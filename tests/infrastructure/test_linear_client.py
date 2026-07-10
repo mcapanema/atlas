@@ -42,6 +42,22 @@ async def test_execute_raises_on_graphql_errors() -> None:
         await _client(handler).execute("{ nope }")
 
 
+async def test_execute_raises_linear_api_error_on_non_json_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="not json")
+
+    with pytest.raises(LinearAPIError, match="not JSON"):
+        await _client(handler).execute("{ viewer { id } }")
+
+
+async def test_execute_raises_linear_api_error_on_non_object_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=["not", "a", "dict"])
+
+    with pytest.raises(LinearAPIError, match="not an object"):
+        await _client(handler).execute("{ viewer { id } }")
+
+
 def test_linear_api_error_is_a_data_source_error() -> None:
     # The 502 handler in create_app() catches DataSourceError; Linear failures
     # must be members of that family to reach it.
