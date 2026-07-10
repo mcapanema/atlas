@@ -132,3 +132,22 @@ class WorkItemTimelineRead(BaseModel):
 
     state_periods: list[StatePeriodRead]
     blocked_periods: list[BlockedPeriodRead]
+
+
+class DurationStatsRead(BaseModel):
+    p50_seconds: float
+    p75_seconds: float
+    p85_seconds: float
+    p95_seconds: float
+    mean_seconds: float
+
+
+class TeamFlowMetricsRead(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    completed: int
+    wip: int
+    lead_time: DurationStatsRead | None
+    cycle_time: DurationStatsRead | None
+    blocked_seconds: float
+    flow_efficiency: float | None

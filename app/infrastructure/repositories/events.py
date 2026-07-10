@@ -87,6 +87,16 @@ class SqlAlchemyEventRepository:
         )
         return [model.to_domain() for model in result.scalars()]
 
+    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+        if not work_item_ids:
+            return []
+        result = await self._session.execute(
+            select(EventModel)
+            .where(EventModel.work_item_id.in_(work_item_ids))
+            .order_by(EventModel.occurred_at)
+        )
+        return [model.to_domain() for model in result.scalars()]
+
     async def get_by_external_id(self, external_id: str) -> Event | None:
         result = await self._session.execute(
             select(EventModel).where(EventModel.external_id == external_id)
