@@ -124,3 +124,13 @@ async def test_timeline_404_for_unknown_work_item(client: AsyncClient) -> None:
     response = await client.get(f"/api/work-items/{uuid4()}/timeline")
 
     assert response.status_code == 404
+
+
+async def test_create_duplicate_external_id_returns_409(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    payload = {"team_id": team_id, "title": "A", "external_id": "lin_dup"}
+    assert (await client.post("/api/work-items", json=payload)).status_code == 201
+
+    duplicate = await client.post("/api/work-items", json={**payload, "title": "B"})
+
+    assert duplicate.status_code == 409
