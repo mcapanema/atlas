@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./atlas.db"
     db_echo: bool = False
 
+    # Linear personal API key; None/empty disables the Linear connector.
+    linear_api_key: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

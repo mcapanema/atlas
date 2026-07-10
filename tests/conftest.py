@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -37,11 +38,14 @@ async def session(
 
 
 @pytest_asyncio.fixture
-async def client(
-    sessionmaker: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncClient]:
-    app = create_app()
-    app.state.sessionmaker = sessionmaker  # override the real DB with the in-memory test factory
-    transport = ASGITransport(app=app)
+async def test_app(sessionmaker: async_sessionmaker[AsyncSession]) -> FastAPI:
+    application = create_app()
+    application.state.sessionmaker = sessionmaker  # in-memory test DB
+    return application
+
+
+@pytest_asyncio.fixture
+async def client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=test_app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client

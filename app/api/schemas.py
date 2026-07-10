@@ -93,3 +93,20 @@ class EventRead(BaseModel):
     to_state: str | None
     external_id: str | None
     recorded_at: datetime
+
+
+class ConnectorStatusRead(BaseModel):
+    configured: bool
+
+
+class SyncRequest(BaseModel):
+    organization_id: UUID
+
+
+class SyncSummaryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    teams: int
+    projects: int
+    work_items: int
+    events: int
