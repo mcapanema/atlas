@@ -1,9 +1,10 @@
+import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
 
-from app.application.sync.service import SyncService
+from app.application.sync.service import SyncService, UnknownOrganizationError
 from app.domain.events.entities import Event, EventType
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
@@ -383,8 +384,20 @@ async def test_project_with_unknown_team_is_skipped() -> None:
     assert await harness.projects.get_by_external_id("lp9") is None
 
 
-async def test_unknown_organization_raises_value_error() -> None:
+async def test_unknown_organization_raises_unknown_organization_error() -> None:
     harness = Harness(full_source())
 
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises(UnknownOrganizationError, match="does not exist"):
         await harness.service.sync(uuid4())
+
+
+async def test_sync_logs_start_and_summary(caplog: pytest.LogCaptureFixture) -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+
+    with caplog.at_level(logging.INFO, logger="app.application.sync.service"):
+        await harness.service.sync(org_id)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Sync started" in m and str(org_id) in m for m in messages)
+    assert any("Sync finished" in m and "teams=1" in m for m in messages)

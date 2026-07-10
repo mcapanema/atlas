@@ -9,6 +9,14 @@ from app.domain.metrics.distribution import LeadTimeDistribution
 from app.domain.metrics.summary import FlowMetrics
 
 
+class AdvisorError(Exception):
+    """The reasoning adapter failed (API error, malformed or off-schema reply).
+
+    Raised by AdvisorPort implementations; Presentation maps it to 502.
+    Deliberately not a ValueError (see DataSourceError in app.domain.sync.port).
+    """
+
+
 @dataclass(frozen=True)
 class DeliveryContext:
     """Everything the advisor may reason about — all computed, never raw records."""

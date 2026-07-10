@@ -1,3 +1,6 @@
+import logging
+
+import pytest
 from httpx import AsyncClient
 
 
@@ -24,3 +27,15 @@ async def test_create_rejects_empty_name(client: AsyncClient) -> None:
     response = await client.post("/api/organizations", json={"name": ""})
 
     assert response.status_code == 422
+
+
+async def test_value_error_422_is_logged(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    # "   " passes Pydantic (it's a string) but the domain entity's
+    # __post_init__ rejects it — the global ValueError handler's path.
+    with caplog.at_level(logging.WARNING, logger="app.main"):
+        response = await client.post("/api/organizations", json={"name": "   "})
+
+    assert response.status_code == 422
+    assert any("ValueError handled as 422" in r.getMessage() for r in caplog.records)

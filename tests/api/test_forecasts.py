@@ -96,9 +96,16 @@ async def test_forecast_requires_exactly_one_scope(client: AsyncClient) -> None:
 
 
 async def test_forecast_validates_query_params(client: AsyncClient) -> None:
+    team_id = await _create_team(client)
     assert (
-        await client.get(f"/api/forecasts?team_id={uuid4()}&window_days=1")
+        await client.get(f"/api/forecasts?team_id={team_id}&window_days=1")
     ).status_code == 422
     assert (
-        await client.get(f"/api/forecasts?team_id={uuid4()}&remaining=-1")
+        await client.get(f"/api/forecasts?team_id={team_id}&remaining=-1")
     ).status_code == 422
+
+
+async def test_forecast_for_unknown_team_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/forecasts?team_id={uuid4()}")
+
+    assert response.status_code == 404

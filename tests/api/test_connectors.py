@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from app.api.deps import get_delivery_data_source
 from app.config import get_settings
 from app.domain.events.entities import EventType
+from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import WorkItemType
 
@@ -113,7 +114,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     assert second.json() == {"teams": 0, "projects": 0, "work_items": 0, "events": 0}
 
 
-async def test_sync_unknown_organization_is_422(
+async def test_sync_unknown_organization_is_404(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
     test_app.dependency_overrides[get_delivery_data_source] = FakeDataSource
@@ -122,4 +123,29 @@ async def test_sync_unknown_organization_is_422(
         "/api/connectors/linear/sync", json={"organization_id": str(uuid4())}
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 404
+
+
+class FailingDataSource:
+    async def fetch_teams(self) -> list[SourceTeam]:
+        raise DataSourceError("Linear API returned HTTP 500")
+
+    async def fetch_projects(self) -> list[SourceProject]:
+        return []
+
+    async def fetch_work_items(self) -> list[SourceWorkItem]:
+        return []
+
+
+async def test_sync_returns_502_when_source_fails(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = FailingDataSource
+    org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
+
+    response = await client.post(
+        "/api/connectors/linear/sync", json={"organization_id": org["id"]}
+    )
+
+    assert response.status_code == 502
+    assert "Linear API returned HTTP 500" in response.json()["detail"]

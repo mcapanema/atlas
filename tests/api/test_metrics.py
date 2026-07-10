@@ -44,20 +44,29 @@ async def test_team_flow_metrics_end_to_end(client: AsyncClient) -> None:
     assert body["flow_efficiency"] == 1.0
 
 
-async def test_metrics_for_unknown_team_are_empty(client: AsyncClient) -> None:
+async def test_metrics_for_unknown_team_is_404(client: AsyncClient) -> None:
     response = await client.get(f"/api/metrics?team_id={uuid4()}")
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["completed"] == 0
-    assert body["wip"] == 0
-    assert body["lead_time"] is None
-    assert body["cycle_time"] is None
-    assert body["flow_efficiency"] is None
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"]
+
+
+async def test_metrics_for_unknown_project_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/metrics?project_id={uuid4()}")
+
+    assert response.status_code == 404
+
+
+async def test_flow_history_for_unknown_team_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/metrics/history?team_id={uuid4()}")
+
+    assert response.status_code == 404
 
 
 async def test_window_days_is_validated(client: AsyncClient) -> None:
-    assert (await client.get(f"/api/metrics?team_id={uuid4()}&window_days=0")).status_code == 422
+    team_id = await _create_team(client)
+    response = await client.get(f"/api/metrics?team_id={team_id}&window_days=0")
+    assert response.status_code == 422
     assert (await client.get("/api/metrics")).status_code == 422  # a scope is required
 
 

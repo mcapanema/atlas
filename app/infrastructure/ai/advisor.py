@@ -7,17 +7,21 @@ connector); a strict JSON schema guarantees a parseable shape, and the
 knowledge file grounds recommendations in named flow principles.
 """
 
+import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.domain.advisor.entities import DeliveryAdvice, Recommendation
-from app.domain.advisor.port import DeliveryContext
+from app.domain.advisor.port import AdvisorError, DeliveryContext
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+logger = logging.getLogger(__name__)
 
 _KNOWLEDGE = (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
 
@@ -117,15 +121,42 @@ def _render_context(context: DeliveryContext) -> str:
     return "\n".join(lines)
 
 
+def _message_content(response: httpx.Response) -> str:
+    """Validate the chat-completions envelope before indexing into it."""
+    try:
+        envelope = response.json()
+    except ValueError as exc:
+        raise AdvisorError("OpenRouter response is not JSON") from exc
+    try:
+        content = envelope["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise AdvisorError(
+            "OpenRouter response missing choices[0].message.content"
+        ) from exc
+    if not isinstance(content, str):
+        raise AdvisorError("OpenRouter message content is not a string")
+    return content
+
+
 class OpenRouterAdvisor:
     """AdvisorPort adapter backed by OpenRouter's chat-completions API."""
 
     def __init__(
-        self, api_key: str, model: str, client: httpx.AsyncClient | None = None
+        self,
+        api_key: str,
+        model: str,
+        client_factory: Callable[[], httpx.AsyncClient] | None = None,
     ) -> None:
-        # `client` injection exists for tests; production opens a fresh client
-        # per call (see advise()), same pattern as the Linear connector.
-        self._injected_client = client
+        # One code path serves tests and production: tests inject a factory
+        # returning a MockTransport-backed client; production builds a real
+        # one per call. Generation takes tens of seconds — httpx's 5s default
+        # timeout would cut it off.
+        # ponytail: a fresh connection per call, same as the Linear connector.
+        # Hold a pooled AsyncClient (with aclose() on app shutdown) if
+        # sustained-throughput latency ever matters.
+        self._client_factory = client_factory or (
+            lambda: httpx.AsyncClient(timeout=120.0)
+        )
         self._api_key = api_key
         self._model = model
 
@@ -148,23 +179,21 @@ class OpenRouterAdvisor:
                 },
             },
         }
-        if self._injected_client is not None:
-            response = await self._injected_client.post(_API_URL, **request_kwargs)
-        else:
-            # ponytail: a fresh connection per call, same as the Linear
-            # connector. Hold a pooled AsyncClient (with aclose() on app
-            # shutdown) if sustained-throughput latency ever matters.
-            # Generation takes tens of seconds — httpx's 5s default would
-            # cut it off.
-            async with httpx.AsyncClient(timeout=120.0) as owned_client:
-                response = await owned_client.post(_API_URL, **request_kwargs)
-        # ponytail: a failed generation (bad key, model without structured-output
-        # support, no credits) propagates as HTTPStatusError → a 500 from our
-        # API; the UI shows its generic error alert. Map to friendlier statuses
-        # only if that ever matters.
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        parsed = AdviceOut.model_validate_json(content)
+        try:
+            async with self._client_factory() as client:
+                response = await client.post(_API_URL, **request_kwargs)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.error("OpenRouter request failed: %s", exc)
+            raise AdvisorError(f"OpenRouter request failed: {exc}") from exc
+        content = _message_content(response)
+        try:
+            parsed = AdviceOut.model_validate_json(content)
+        except ValidationError as exc:
+            # ValidationError is a ValueError; letting it escape would hit the
+            # global ValueError handler and blame the client with a 422.
+            logger.error("OpenRouter reply did not match the advice schema: %s", exc)
+            raise AdvisorError("OpenRouter returned advice in an unexpected shape") from exc
         return DeliveryAdvice(
             generated_at=datetime.now(UTC),
             summary=parsed.summary,

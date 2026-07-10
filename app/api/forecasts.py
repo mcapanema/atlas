@@ -1,11 +1,10 @@
 from datetime import date, datetime, timedelta
-from uuid import UUID
 
 from fastapi import APIRouter, Query
 
 from app.api.deps import ForecastServiceDep
-from app.api.metrics import _require_exactly_one_scope
 from app.api.schemas import CompletionForecastRead, ForecastRead, OutcomeBucketRead
+from app.api.scope import ScopeDep
 from app.domain.forecasting.monte_carlo import CompletionForecast
 
 router = APIRouter(prefix="/api/forecasts", tags=["forecasts"])
@@ -31,16 +30,14 @@ def _completion_read(
 @router.get("", response_model=ForecastRead)
 async def get_forecast(
     service: ForecastServiceDep,
-    team_id: UUID | None = None,
-    project_id: UUID | None = None,
+    scope: ScopeDep,
     window_days: int = Query(default=90, ge=7, le=365),
     remaining: int | None = Query(default=None, ge=0),
     target_date: date | None = None,
 ) -> ForecastRead:
-    _require_exactly_one_scope(team_id, project_id)
     forecast = await service.get_forecast(
-        team_id=team_id,
-        project_id=project_id,
+        team_id=scope.team_id,
+        project_id=scope.project_id,
         window_days=window_days,
         remaining=remaining,
         target_date=target_date,

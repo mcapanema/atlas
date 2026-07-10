@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -18,8 +19,12 @@ from app.api import (
     work_items,
 )
 from app.config import get_settings
+from app.domain.advisor.port import AdvisorError
+from app.domain.sync.port import DataSourceError
 from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.static import mount_spa
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -30,6 +35,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    # Stdlib logging only (review H3). basicConfig is a no-op if the root
+    # logger already has handlers, so embedders/tests keep their own config.
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
     app.include_router(health.router)
     app.include_router(organizations.router)
@@ -51,6 +61,9 @@ def create_app() -> FastAPI:
         # to_domain() on read paths (GET), which would misreport a real
         # data-integrity bug as a 422 client error. Scope more narrowly to
         # the create-endpoint layer if that read-path case ever fires.
+        logger.warning(
+            "ValueError handled as 422 on %s %s: %s", request.method, request.url.path, exc
+        )
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     @app.exception_handler(IntegrityError)
@@ -64,6 +77,23 @@ def create_app() -> FastAPI:
             status_code=409,
             content={"detail": "Conflicting write: resource already exists"},
         )
+
+    @app.exception_handler(DataSourceError)
+    async def data_source_error_handler(
+        request: Request, exc: DataSourceError
+    ) -> JSONResponse:
+        # An upstream delivery system (Linear) failed — our fault to report,
+        # not the client's: 502, never 500 or 422.
+        logger.error("Data source failure on %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse(
+            status_code=502, content={"detail": f"Upstream data source error: {exc}"}
+        )
+
+    @app.exception_handler(AdvisorError)
+    async def advisor_error_handler(request: Request, exc: AdvisorError) -> JSONResponse:
+        # The LLM adapter failed (API error, off-schema reply) — 502.
+        logger.error("Advisor failure on %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse(status_code=502, content={"detail": f"Advisor error: {exc}"})
 
     mount_spa(app)  # catch-all — must be registered after all API routers
     return app

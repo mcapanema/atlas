@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -12,6 +13,16 @@ from app.domain.teams.entities import Team
 from app.domain.teams.repository import TeamRepository
 from app.domain.work_items.entities import WorkItem
 from app.domain.work_items.repository import WorkItemRepository
+
+logger = logging.getLogger(__name__)
+
+
+class UnknownOrganizationError(Exception):
+    """Sync was requested for an organization that doesn't exist.
+
+    Not a ValueError: the global ValueError handler answers 422 (malformed
+    input), but a missing resource is a 404 — the router maps it there.
+    """
 
 
 @dataclass(frozen=True)
@@ -51,13 +62,25 @@ class SyncService:
 
     async def sync(self, organization_id: UUID) -> SyncSummary:
         if await self._organizations.get(organization_id) is None:
-            raise ValueError(f"Organization {organization_id} does not exist")
+            raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
+        logger.info("Sync started for organization %s", organization_id)
         # ponytail: one get_by_external_id query per source entity (N+1).
         # Batch the lookups if syncing a large workspace ever gets slow.
         teams = await self._sync_teams(organization_id)
         projects = await self._sync_projects()
         work_items, events = await self._sync_work_items()
-        return SyncSummary(teams=teams, projects=projects, work_items=work_items, events=events)
+        summary = SyncSummary(
+            teams=teams, projects=projects, work_items=work_items, events=events
+        )
+        logger.info(
+            "Sync finished for organization %s: teams=%d projects=%d work_items=%d events=%d",
+            organization_id,
+            summary.teams,
+            summary.projects,
+            summary.work_items,
+            summary.events,
+        )
+        return summary
 
     async def _sync_teams(self, organization_id: UUID) -> int:
         written = 0
