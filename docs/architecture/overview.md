@@ -32,7 +32,12 @@ Projects and Work Items, a Project groups Work Items, and each Work Item
 accumulates immutable Events (state changes, assignment, etc.) — the system
 of record that metrics will later derive from. `Metric` remains a future
 concept. The Linear connector (below) populates these slices from a real
-workspace.
+workspace, and the Work Item Explorer (`/work-items` in the frontend) makes
+them visible: per-item event timeline plus state/blocked periods derived by
+the pure domain function `derive_timeline`
+(`app/domain/events/timeline.py`) and served from
+`GET /api/work-items/{id}/timeline`. Phase 3's flow metrics will build on
+the same derivation.
 
 ## Connectors
 
