@@ -4,8 +4,6 @@ from uuid import UUID, uuid4
 from app.application.advisor.service import AdvisorService
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
-from app.domain.advisor.entities import DeliveryAdvice
-from app.domain.advisor.port import DeliveryContext
 from app.domain.events.entities import Event
 from app.domain.work_items.entities import WorkItem
 
@@ -47,35 +45,16 @@ class InMemoryEvents:
         return None
 
 
-class FakeAdvisor:
-    def __init__(self, advice: DeliveryAdvice) -> None:
-        self.advice = advice
-        self.contexts: list[DeliveryContext] = []
-
-    async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
-        self.contexts.append(context)
-        return self.advice
-
-
-def _service(advisor: FakeAdvisor) -> AdvisorService:
+async def test_build_context_assembles_scope_metrics() -> None:
+    now = datetime(2026, 7, 10, tzinfo=UTC)
     work_items = InMemoryWorkItems()
     events = InMemoryEvents()
-    return AdvisorService(
-        MetricsService(work_items, events),
-        ForecastService(work_items, events),
-        advisor,
+    service = AdvisorService(
+        MetricsService(work_items, events), ForecastService(work_items, events)
     )
 
+    context = await service.build_context(team_id=uuid4(), window_days=7, now=now)
 
-async def test_get_advice_assembles_context_and_delegates() -> None:
-    now = datetime(2026, 7, 10, tzinfo=UTC)
-    advice = DeliveryAdvice(generated_at=now, summary="All quiet.", recommendations=[])
-    advisor = FakeAdvisor(advice)
-
-    result = await _service(advisor).get_advice(team_id=uuid4(), window_days=7, now=now)
-
-    assert result is advice
-    (context,) = advisor.contexts
     # flow summary covers the requested window …
     assert context.flow.window_end == now
     assert context.flow.window_start == now - timedelta(days=7)
