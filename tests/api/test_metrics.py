@@ -94,3 +94,37 @@ async def test_metrics_requires_exactly_one_scope(client: AsyncClient) -> None:
     assert (
         await client.get(f"/api/metrics?team_id={uuid4()}&project_id={uuid4()}")
     ).status_code == 422
+
+
+async def test_flow_history_end_to_end(client: AsyncClient) -> None:
+    team_id = await _create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    now = datetime.now(UTC)
+    for type_, days_ago in (("created", 10), ("started", 6), ("completed", 2)):
+        await client.post(
+            "/api/events",
+            json={
+                "work_item_id": item["id"],
+                "type": type_,
+                "occurred_at": (now - timedelta(days=days_ago)).isoformat(),
+            },
+        )
+
+    response = await client.get(f"/api/metrics/history?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["days"]) == 91  # default 90-day window, inclusive
+    assert body["days"][-1]["done"] == 1
+    assert body["days"][-1]["in_progress"] == 0
+    assert len(body["weeks"]) == 12
+    assert sum(w["completed"] for w in body["weeks"]) == 1
+
+
+async def test_flow_history_requires_exactly_one_scope(client: AsyncClient) -> None:
+    assert (await client.get("/api/metrics/history")).status_code == 422
+    assert (
+        await client.get(f"/api/metrics/history?team_id={uuid4()}&project_id={uuid4()}")
+    ).status_code == 422

@@ -3,7 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import MetricsServiceDep
-from app.api.schemas import DurationStatsRead, FlowMetricsRead
+from app.api.schemas import (
+    DailyFlowCountRead,
+    DurationStatsRead,
+    FlowHistoryRead,
+    FlowMetricsRead,
+    ThroughputBucketRead,
+)
 from app.domain.metrics.summary import DurationStats
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -49,4 +55,31 @@ async def get_flow_metrics(
         cycle_time=_stats_read(metrics.cycle_time),
         blocked_seconds=metrics.blocked_time.total_seconds(),
         flow_efficiency=metrics.flow_efficiency,
+    )
+
+
+@router.get("/history", response_model=FlowHistoryRead)
+async def get_flow_history(
+    service: MetricsServiceDep,
+    team_id: UUID | None = None,
+    project_id: UUID | None = None,
+    window_days: int = Query(default=90, ge=7, le=365),
+) -> FlowHistoryRead:
+    _require_exactly_one_scope(team_id, project_id)
+    history = await service.get_flow_history(
+        team_id=team_id, project_id=project_id, window_days=window_days
+    )
+    return FlowHistoryRead(
+        window_start=history.window_start,
+        window_end=history.window_end,
+        days=[
+            DailyFlowCountRead(
+                day=d.day, todo=d.todo, in_progress=d.in_progress, done=d.done
+            )
+            for d in history.days
+        ],
+        weeks=[
+            ThroughputBucketRead(start=w.start, end=w.end, completed=w.completed)
+            for w in history.weeks
+        ],
     )

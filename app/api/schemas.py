@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -151,3 +151,23 @@ class FlowMetricsRead(BaseModel):
     cycle_time: DurationStatsRead | None
     blocked_seconds: float
     flow_efficiency: float | None
+
+
+class DailyFlowCountRead(BaseModel):
+    day: date
+    todo: int
+    in_progress: int
+    done: int
+
+
+class ThroughputBucketRead(BaseModel):
+    start: datetime
+    end: datetime
+    completed: int
+
+
+class FlowHistoryRead(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    days: list[DailyFlowCountRead]
+    weeks: list[ThroughputBucketRead]
