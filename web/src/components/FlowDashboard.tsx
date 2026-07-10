@@ -1,34 +1,33 @@
-import { Alert, Card, Col, Row, Statistic } from "antd";
+import { Alert, Card, Col, Row } from "antd";
 
 import {
   useFlowHistory,
   useFlowMetrics,
+  useLeadTimeDistribution,
   type DurationStats,
   type MetricsScope,
 } from "../api/metrics";
-import { buildCfdOption, buildThroughputOption, buildWipOption } from "../lib/charts";
+import {
+  buildCfdOption,
+  buildLeadTimeDistributionOption,
+  buildThroughputOption,
+  buildWipOption,
+} from "../lib/charts";
 import { formatSeconds } from "../lib/duration";
 import { EChart } from "./EChart";
+import { ForecastCard } from "./ForecastCard";
+import { StatCard } from "./StatCard";
 
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
 }
 
-function StatCard({ title, value }: { title: string; value: string | number }) {
-  return (
-    <Col xs={12} lg={6}>
-      <Card>
-        <Statistic title={title} value={value} />
-      </Card>
-    </Col>
-  );
-}
-
 export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const metrics = useFlowMetrics(scope);
   const history = useFlowHistory(scope);
+  const distribution = useLeadTimeDistribution(scope);
 
-  if (metrics.isError || history.isError) {
+  if (metrics.isError || history.isError || distribution.isError) {
     return <Alert type="error" message="Failed to load metrics" />;
   }
 
@@ -69,8 +68,16 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
               <EChart option={buildWipOption(history.data.days)} />
             </Card>
           </Col>
+          {distribution.data && (
+            <Col xs={24} lg={12}>
+              <Card title="Lead time distribution (90d)">
+                <EChart option={buildLeadTimeDistributionOption(distribution.data.bins)} />
+              </Card>
+            </Col>
+          )}
         </Row>
       )}
+      <ForecastCard scope={scope} />
     </>
   );
 }

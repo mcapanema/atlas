@@ -7,7 +7,13 @@ vi.mock("../components/EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { historyFixture, jsonResponse, metricsFixture } from "../test/fixtures";
+import {
+  distributionFixture,
+  forecastFixture,
+  historyFixture,
+  jsonResponse,
+  metricsFixture,
+} from "../test/fixtures";
 import { TeamDashboardPage } from "./TeamDashboardPage";
 
 const team = {
@@ -22,8 +28,14 @@ function mockFetch() {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
     if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([team]));
+    if (url.startsWith("/api/metrics/lead-time-distribution")) {
+      return Promise.resolve(jsonResponse(distributionFixture));
+    }
     if (url.startsWith("/api/metrics/history")) {
       return Promise.resolve(jsonResponse(historyFixture));
+    }
+    if (url.startsWith("/api/forecasts")) {
+      return Promise.resolve(jsonResponse(forecastFixture));
     }
     if (url.startsWith("/api/metrics")) return Promise.resolve(jsonResponse(metricsFixture));
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
@@ -55,7 +67,7 @@ describe("TeamDashboardPage", () => {
     fireEvent.click(await screen.findByTitle("Platform"));
 
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    expect(screen.getAllByTestId("echart")).toHaveLength(3);
+    expect(screen.getAllByTestId("echart")).toHaveLength(5);
   });
 
   it("deep-links a team via the ?team= search param", async () => {

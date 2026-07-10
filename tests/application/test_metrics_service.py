@@ -187,3 +187,23 @@ async def test_flow_history_for_team() -> None:
     assert len(history.days) == 15
     assert history.days[-1].done == 1
     assert sum(b.completed for b in history.weeks) == 1
+
+
+async def test_lead_time_distribution_for_team() -> None:
+    team_id = uuid4()
+    done = _item(team_id)
+    service = MetricsService(
+        InMemoryWorkItemRepository([done]),
+        InMemoryEventRepository(
+            [
+                _event(done, EventType.CREATED, 10),
+                _event(done, EventType.COMPLETED, 2),
+            ]
+        ),
+    )
+
+    dist = await service.get_lead_time_distribution(team_id=team_id, now=NOW)
+
+    assert dist.window_end == NOW
+    assert sum(b.count for b in dist.bins) == 1
+    assert dist.bins[8].count == 1  # 8-day lead time

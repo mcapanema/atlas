@@ -29,11 +29,15 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
     expect(screen.getByText("Weekly throughput (90d)")).toBeInTheDocument();
     expect(screen.getByText("WIP over time (90d)")).toBeInTheDocument();
-    expect(screen.getAllByTestId("echart")).toHaveLength(3);
+    expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
+    expect(screen.getByText("Completion forecast")).toBeInTheDocument();
+    expect(screen.getAllByTestId("echart")).toHaveLength(5);
 
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
     expect(urls).toContain("/api/metrics?team_id=team-1");
     expect(urls).toContain("/api/metrics/history?team_id=team-1");
+    expect(urls).toContain("/api/metrics/lead-time-distribution?team_id=team-1");
+    expect(urls).toContain("/api/forecasts?team_id=team-1");
   });
 
   it("scopes requests by project", async () => {

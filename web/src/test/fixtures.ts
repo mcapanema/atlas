@@ -40,11 +40,46 @@ export const historyFixture = {
   weeks: [{ start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 4 }],
 };
 
+export const distributionFixture = {
+  window_start: "2026-04-11T00:00:00Z",
+  window_end: "2026-07-10T00:00:00Z",
+  bins: [
+    { start_days: 0, end_days: 1, count: 0 },
+    { start_days: 1, end_days: 2, count: 2 },
+    { start_days: 2, end_days: 3, count: 1 },
+  ],
+};
+
+export const forecastFixture = {
+  window_start: "2026-04-11T00:00:00Z",
+  window_end: "2026-07-10T00:00:00Z",
+  remaining: 12,
+  completion: {
+    trials: 2000,
+    p50_date: "2026-07-22T00:00:00Z",
+    p75_date: "2026-07-26T00:00:00Z",
+    p85_date: "2026-07-29T00:00:00Z",
+    p95_date: "2026-08-04T00:00:00Z",
+    outcomes: [
+      { days: 10, trials: 400 },
+      { days: 12, trials: 1200 },
+      { days: 19, trials: 400 },
+    ],
+  },
+  confidence: null,
+};
+
 export function mockMetricsFetch() {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
+    if (url.startsWith("/api/metrics/lead-time-distribution")) {
+      return Promise.resolve(jsonResponse(distributionFixture));
+    }
     if (url.startsWith("/api/metrics/history")) {
       return Promise.resolve(jsonResponse(historyFixture));
+    }
+    if (url.startsWith("/api/forecasts")) {
+      return Promise.resolve(jsonResponse(forecastFixture));
     }
     if (url.startsWith("/api/metrics")) {
       return Promise.resolve(jsonResponse(metricsFixture));
