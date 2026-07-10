@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.domain.advisor.port import DeliveryContext
+from app.domain.advisor.port import AdvisorError, DeliveryContext
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
     DeliveryForecast,
@@ -135,7 +135,7 @@ async def test_advise_maps_structured_output_to_domain() -> None:
     advisor = OpenRouterAdvisor(
         api_key="test-key",
         model="anthropic/claude-sonnet-5",
-        client=_mock_client(httpx.Response(200, json=payload), captured),
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
     )
 
     advice = await advisor.advise(_context())
@@ -155,16 +155,55 @@ async def test_advise_maps_structured_output_to_domain() -> None:
     assert schema["additionalProperties"] is False
 
 
-async def test_advise_raises_on_api_error() -> None:
-    captured: list[httpx.Request] = []
+async def test_advise_raises_advisor_error_on_api_error() -> None:
     advisor = OpenRouterAdvisor(
         api_key="test-key",
         model="anthropic/claude-sonnet-5",
-        client=_mock_client(
-            httpx.Response(402, json={"error": {"message": "insufficient credits"}}),
-            captured,
+        client_factory=lambda: _mock_client(
+            httpx.Response(402, json={"error": {"message": "insufficient credits"}}), []
         ),
     )
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(AdvisorError, match="request failed"):
+        await advisor.advise(_context())
+
+
+def _advisor_returning(response: httpx.Response) -> OpenRouterAdvisor:
+    return OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(response, []),
+    )
+
+
+async def test_advise_raises_advisor_error_on_empty_choices() -> None:
+    advisor = _advisor_returning(httpx.Response(200, json={"choices": []}))
+
+    with pytest.raises(AdvisorError, match="choices"):
+        await advisor.advise(_context())
+
+
+async def test_advise_raises_advisor_error_on_missing_content() -> None:
+    advisor = _advisor_returning(
+        httpx.Response(200, json={"choices": [{"message": {}}]})
+    )
+
+    with pytest.raises(AdvisorError, match="choices"):
+        await advisor.advise(_context())
+
+
+async def test_advise_raises_advisor_error_when_model_ignores_schema() -> None:
+    # A model that ignores the JSON schema must NOT surface as a pydantic
+    # ValidationError (a ValueError → global handler blames the client, 422).
+    payload = {"choices": [{"message": {"content": json.dumps({"nope": 1})}}]}
+    advisor = _advisor_returning(httpx.Response(200, json=payload))
+
+    with pytest.raises(AdvisorError, match="unexpected shape"):
+        await advisor.advise(_context())
+
+
+async def test_advise_raises_advisor_error_on_non_json_body() -> None:
+    advisor = _advisor_returning(httpx.Response(200, text="<html>gateway</html>"))
+
+    with pytest.raises(AdvisorError, match="not JSON"):
         await advisor.advise(_context())
