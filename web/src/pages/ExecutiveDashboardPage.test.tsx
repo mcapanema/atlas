@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -29,10 +29,19 @@ afterEach(() => {
 
 describe("ExecutiveDashboardPage", () => {
   it("lists every team with its flow metrics, linking to its dashboard", async () => {
+    // Distinct completed counts per team so the test can catch a metrics/team
+    // mismatch (e.g. an off-by-one indexing metrics[index] against teams).
+    const platformMetrics = { ...metricsFixture, completed: 4 };
+    const growthMetrics = { ...metricsFixture, completed: 9 };
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
-      if (url.startsWith("/api/metrics")) return Promise.resolve(jsonResponse(metricsFixture));
+      if (url.startsWith(`/api/metrics?team_id=${teams[0].id}`)) {
+        return Promise.resolve(jsonResponse(platformMetrics));
+      }
+      if (url.startsWith(`/api/metrics?team_id=${teams[1].id}`)) {
+        return Promise.resolve(jsonResponse(growthMetrics));
+      }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -47,8 +56,14 @@ describe("ExecutiveDashboardPage", () => {
 
     await waitFor(() => expect(screen.getByText("Platform")).toBeInTheDocument());
     expect(screen.getByText("Growth")).toBeInTheDocument();
-    expect(screen.getAllByText("4")).toHaveLength(2); // completed per team
-    expect(screen.getAllByText("75%")).toHaveLength(2); // flow efficiency
+
+    const platformRow = screen.getByText("Platform").closest("tr");
+    const growthRow = screen.getByText("Growth").closest("tr");
+    if (!platformRow || !growthRow) throw new Error("Expected team rows to render");
+    await waitFor(() => expect(within(platformRow).getByText("4")).toBeInTheDocument());
+    expect(within(growthRow).getByText("9")).toBeInTheDocument();
+    expect(within(platformRow).getByText("75%")).toBeInTheDocument();
+    expect(within(growthRow).getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("Platform").closest("a")).toHaveAttribute(
       "href",
       `/teams?team=${teams[0].id}`,
