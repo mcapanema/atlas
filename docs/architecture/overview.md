@@ -44,7 +44,14 @@ them visible: per-item event timeline plus state/blocked periods derived by
 the pure domain function `derive_timeline`
 (`app/domain/events/timeline.py`) and served from
 `GET /api/work-items/{id}/timeline`. Phase 3's metrics engine builds on
-the same derivation.
+the same derivation. Phase 4 adds flow *history* alongside the summary:
+daily phase counts (Cumulative Flow Diagram data) via event replay in
+`app/domain/metrics/cfd.py`, plus weekly throughput buckets — both
+computed on read like the summary metrics, nothing persisted, no snapshot
+tables yet. `GET /api/metrics` and `GET /api/metrics/history` both scope
+by team or project. The frontend's three dashboard pages — Executive
+(`/`), Team (`/teams`), Project (`/projects`) — chart this data via
+Apache ECharts.
 
 ## Connectors
 
