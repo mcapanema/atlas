@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "./components/AppLayout";
+import { AdvisorPage } from "./pages/AdvisorPage";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
 import { ExecutiveDashboardPage } from "./pages/ExecutiveDashboardPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/work-items/:id" element={<WorkItemPage />} />
         <Route path="/teams" element={<TeamDashboardPage />} />
         <Route path="/projects" element={<ProjectDashboardPage />} />
+        <Route path="/advisor" element={<AdvisorPage />} />
         <Route path="/metrics" element={<Navigate to="/teams" replace />} />
         <Route path="/connectors" element={<ConnectorsPage />} />
       </Routes>
