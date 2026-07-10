@@ -30,13 +30,20 @@ and `Event` are now implemented in the same shape, forming the ownership
 hierarchy `Organization → Team → Project → Work Item → Event`: a Team owns
 Projects and Work Items, a Project groups Work Items, and each Work Item
 accumulates immutable Events (state changes, assignment, etc.) — the system
-of record that metrics will later derive from. `Metric` remains a future
-concept. The Linear connector (below) populates these slices from a real
+of record that metrics will later derive from. `Metric` is now real as a *computed* concept: the metrics engine
+(`app/domain/metrics/`) derives per-item `FlowSample`s from events
+(`derive_flow_sample`) and folds them into `TeamFlowMetrics` — Lead/Cycle
+Time percentiles, Throughput, WIP, Blocked Time, Flow Efficiency — via
+`compute_team_metrics` (`summary.py`). Nothing is persisted: metrics are
+recomputed per request (`MetricsService`), served from
+`GET /api/metrics?team_id=…`, and shown on the Flow Metrics page
+(`/metrics`). This slice deliberately has no repository — persisted
+`Snapshot`s arrive when dashboards need history. The Linear connector (below) populates these slices from a real
 workspace, and the Work Item Explorer (`/work-items` in the frontend) makes
 them visible: per-item event timeline plus state/blocked periods derived by
 the pure domain function `derive_timeline`
 (`app/domain/events/timeline.py`) and served from
-`GET /api/work-items/{id}/timeline`. Phase 3's flow metrics will build on
+`GET /api/work-items/{id}/timeline`. Phase 3's metrics engine builds on
 the same derivation.
 
 ## Connectors
