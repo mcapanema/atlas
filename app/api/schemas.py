@@ -142,7 +142,7 @@ class DurationStatsRead(BaseModel):
     mean_seconds: float
 
 
-class TeamFlowMetricsRead(BaseModel):
+class FlowMetricsRead(BaseModel):
     window_start: datetime
     window_end: datetime
     completed: int
