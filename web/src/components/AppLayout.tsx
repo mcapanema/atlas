@@ -16,6 +16,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           mode="inline"
           selectedKeys={[`/${firstSegment}`]}
           items={[
+            { key: "/", label: <Link to="/">Executive</Link> },
             { key: "/organizations", label: <Link to="/organizations">Organizations</Link> },
             { key: "/work-items", label: <Link to="/work-items">Work Items</Link> },
             { key: "/teams", label: <Link to="/teams">Teams</Link> },
