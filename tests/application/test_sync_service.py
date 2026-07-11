@@ -401,3 +401,110 @@ async def test_sync_logs_start_and_summary(caplog: pytest.LogCaptureFixture) -> 
     messages = [record.getMessage() for record in caplog.records]
     assert any("Sync started" in m and str(org_id) in m for m in messages)
     assert any("Sync finished" in m and "teams=1" in m for m in messages)
+
+
+COMPLETED_AT = datetime(2026, 7, 5, 12, 0, tzinfo=UTC)
+
+
+def done_without_completion_source() -> FakeDataSource:
+    """State says done, but the (truncated) history never recorded a completion."""
+    return FakeDataSource(
+        teams=[SourceTeam(external_id="lt1", name="Platform")],
+        work_items=[
+            SourceWorkItem(
+                external_id="li2",
+                title="Ship report",
+                type=WorkItemType.TASK,
+                state="Done",
+                team_external_id="lt1",
+                project_external_id=None,
+                created_at=CREATED_AT,
+                completed_at=COMPLETED_AT,
+                events=(
+                    SourceEvent(
+                        external_id="li2:created",
+                        type=EventType.CREATED,
+                        occurred_at=CREATED_AT,
+                    ),
+                ),
+            )
+        ],
+    )
+
+
+async def test_done_item_without_completion_event_gets_one_synthesized() -> None:
+    harness = Harness(done_without_completion_source())
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.divergences == 1
+    assert summary.events == 2  # created + synthesized completion
+    item = await harness.work_items.get_by_external_id("li2")
+    assert item is not None
+    completions = [
+        e
+        for e in await harness.events.list_for_work_item(item.id)
+        if e.type is EventType.COMPLETED
+    ]
+    assert len(completions) == 1
+    assert completions[0].occurred_at == COMPLETED_AT
+    assert completions[0].external_id == "li2:completed"
+    assert completions[0].to_state == "Done"
+
+
+async def test_synthesized_completion_is_idempotent_across_syncs() -> None:
+    harness = Harness(done_without_completion_source())
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.events == 0  # nothing new written
+    assert summary.divergences == 1  # the divergence still exists at the source
+    item = await harness.work_items.get_by_external_id("li2")
+    assert item is not None
+    events = await harness.events.list_for_work_item(item.id)
+    assert sum(1 for e in events if e.type is EventType.COMPLETED) == 1
+
+
+async def test_done_item_with_real_completion_event_is_not_a_divergence() -> None:
+    source = done_without_completion_source()
+    item_source = source.work_items[0]
+    source.work_items = [
+        SourceWorkItem(
+            external_id=item_source.external_id,
+            title=item_source.title,
+            type=item_source.type,
+            state=item_source.state,
+            team_external_id=item_source.team_external_id,
+            project_external_id=None,
+            created_at=item_source.created_at,
+            completed_at=item_source.completed_at,
+            events=item_source.events
+            + (
+                SourceEvent(
+                    external_id="lh9",
+                    type=EventType.COMPLETED,
+                    occurred_at=COMPLETED_AT,
+                    from_state="In Progress",
+                    to_state="Done",
+                ),
+            ),
+        )
+    ]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.divergences == 0
+    assert await harness.events.get_by_external_id("li2:completed") is None
+
+
+async def test_open_item_is_not_a_divergence() -> None:
+    harness = Harness(full_source())  # completed_at is None throughout
+
+    summary = await harness.service.sync(await seed_org(harness))
+
+    assert summary.divergences == 0
