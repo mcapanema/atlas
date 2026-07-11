@@ -47,6 +47,7 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | Command | What it does |
 |---|---|
 | `make install` | install backend + frontend dependencies |
+| `make hooks` | install git pre-commit hooks (ruff + eslint on staged changes) |
 | `make dev` | run backend + frontend dev servers together (Ctrl+C stops both) |
 | `make test` / `make lint` / `make typecheck` / `make security` | run one phase, both sides |
 | `make check` | full local CI gate — mirrors `.github/workflows/ci.yml` |

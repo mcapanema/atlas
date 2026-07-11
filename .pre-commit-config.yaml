@@ -1,0 +1,21 @@
+# Fast commit-time gate: ruff + eslint only — the checks that have actually
+# bitten us (a migration once shipped with 5 unnoticed lint violations).
+# mypy/pytest deliberately stay out: they belong in `make check`, not in a
+# hook that must stay near-instant. Install with `make hooks`.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check
+        entry: uv run ruff check --force-exclude
+        language: system
+        types: [python]
+      - id: eslint
+        name: eslint (web)
+        # eslint resolves paths relative to web/, so staged repo-relative
+        # filenames can't be passed through — run the whole web lint instead
+        # (a few seconds) whenever any web TS file is staged.
+        entry: npm --prefix web run lint
+        language: system
+        files: ^web/.*\.(ts|tsx)$
+        pass_filenames: false

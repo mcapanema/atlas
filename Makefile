@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install migrate dev test lint typecheck security check build run clean \
+.PHONY: help install hooks migrate dev test lint typecheck security check build run clean \
 	docker-build docker-up docker-down docker-logs
 
 help: ## Show this help
@@ -10,6 +10,9 @@ install: ## Install backend and frontend dependencies
 	uv sync
 	cd web && npm ci
 	test -f .env || cp .env.example .env
+
+hooks: ## Install git pre-commit hooks (ruff + eslint on staged changes)
+	uv run pre-commit install
 
 migrate: ## Apply database migrations
 	uv run alembic upgrade head
