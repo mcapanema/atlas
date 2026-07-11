@@ -4,10 +4,11 @@ from uuid import UUID
 from sqlalchemy import String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import DateTime, Uuid
+from sqlalchemy.types import Uuid
 
 from app.domain.teams.entities import Team
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.types import UTCDateTime
 
 
 class TeamModel(Base):
@@ -20,7 +21,7 @@ class TeamModel(Base):
     external_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     def to_domain(self) -> Team:
         return Team(

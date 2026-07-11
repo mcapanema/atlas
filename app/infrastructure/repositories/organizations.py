@@ -4,10 +4,11 @@ from uuid import UUID
 from sqlalchemy import String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import DateTime, Uuid
+from sqlalchemy.types import Uuid
 
 from app.domain.organizations.entities import Organization
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.types import UTCDateTime
 
 
 class OrganizationModel(Base):
@@ -16,7 +17,7 @@ class OrganizationModel(Base):
     # Uuid renders as native uuid on PostgreSQL and CHAR(32) on SQLite — portable.
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     def to_domain(self) -> Organization:
         return Organization(id=self.id, name=self.name, created_at=self.created_at)
