@@ -1,4 +1,3 @@
-# app/infrastructure/connectors/linear/mapping.py
 """Translate Linear GraphQL payloads into platform-neutral Source* types.
 
 Linear specifics (field names, workflow-state `type` values) stop here —

@@ -1,10 +1,11 @@
 from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import WorkItemType
+from app.domain.work_items.entities import DEFAULT_STATE, WorkItemType
 
 
 class OrganizationCreate(BaseModel):
@@ -55,7 +56,7 @@ class WorkItemCreate(BaseModel):
     team_id: UUID
     title: str = Field(min_length=1, max_length=1024)
     type: WorkItemType = WorkItemType.TASK
-    state: str = Field(default="backlog", min_length=1, max_length=255)
+    state: str = Field(default=DEFAULT_STATE, min_length=1, max_length=255)
     project_id: UUID | None = None
     external_id: str | None = None
 
@@ -102,7 +103,9 @@ class EventRead(BaseModel):
     recorded_at: datetime
 
 
-class ConnectorStatusRead(BaseModel):
+class IntegrationStatusRead(BaseModel):
+    """Configured-or-not status for an external integration (connector, advisor)."""
+
     configured: bool
 
 
@@ -162,6 +165,8 @@ class FlowMetricsRead(BaseModel):
 
 
 class DailyFlowCountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     day: date
     todo: int
     in_progress: int
@@ -169,12 +174,16 @@ class DailyFlowCountRead(BaseModel):
 
 
 class ThroughputBucketRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     start: datetime
     end: datetime
     completed: int
 
 
 class FlowHistoryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     window_start: datetime
     window_end: datetime
     days: list[DailyFlowCountRead]
@@ -182,12 +191,16 @@ class FlowHistoryRead(BaseModel):
 
 
 class DurationBinRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     start_days: int
     end_days: int
     count: int
 
 
 class LeadTimeDistributionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     window_start: datetime
     window_end: datetime
     bins: list[DurationBinRead]
@@ -215,15 +228,11 @@ class ForecastRead(BaseModel):
     confidence: float | None
 
 
-class AdvisorStatusRead(BaseModel):
-    configured: bool
-
-
 class RecommendationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     title: str
-    priority: str
+    priority: Literal["high", "medium", "low"]
     problem: str
     root_cause: str
     action: str

@@ -12,7 +12,7 @@ def _recommendation(**overrides: object) -> Recommendation:
         "problem": "WIP is 12 while weekly throughput is 3",
         "root_cause": "Work is started faster than it finishes",
         "action": "Introduce a WIP limit of 6 on In Progress",
-        "evidence": ["wip=12", "completed=3"],
+        "evidence": ("wip=12", "completed=3"),
     }
     values.update(overrides)
     return Recommendation(**values)  # type: ignore[arg-type]
@@ -21,7 +21,7 @@ def _recommendation(**overrides: object) -> Recommendation:
 def test_recommendation_holds_fields() -> None:
     rec = _recommendation()
     assert rec.title == "Lower WIP"
-    assert rec.evidence == ["wip=12", "completed=3"]
+    assert rec.evidence == ("wip=12", "completed=3")
 
 
 def test_recommendation_rejects_blank_title() -> None:
@@ -39,7 +39,7 @@ def test_advice_rejects_naive_generated_at() -> None:
         DeliveryAdvice(
             generated_at=datetime(2026, 7, 10),  # naive — no tzinfo
             summary="ok",
-            recommendations=[],
+            recommendations=(),
         )
 
 
@@ -48,5 +48,5 @@ def test_advice_rejects_blank_summary() -> None:
         DeliveryAdvice(
             generated_at=datetime(2026, 7, 10, tzinfo=UTC),
             summary="  ",
-            recommendations=[],
+            recommendations=(),
         )

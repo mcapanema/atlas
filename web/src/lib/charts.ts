@@ -85,16 +85,7 @@ export function buildThroughputOption(weeks: ThroughputBucket[]): EChartsOption 
     grid: { left: 48, right: 16, top: 16, bottom: 32 },
     xAxis: dayAxis(weeks.map((w) => w.end.slice(0, 10))),
     yAxis: valueAxis(),
-    series: [
-      {
-        name: "Completed",
-        type: "bar",
-        color: BLUE,
-        barMaxWidth: 24,
-        itemStyle: { borderRadius: [4, 4, 0, 0] },
-        data: weeks.map((w) => w.completed),
-      },
-    ],
+    series: barSeries("Completed", weeks.map((w) => w.completed)),
   };
 }
 

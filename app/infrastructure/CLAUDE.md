@@ -10,6 +10,9 @@ here — this is the only layer allowed to import SQLAlchemy, aiosqlite, or
   one source of truth Alembic and tests build from).
 - `database/session.py` — `build_sessionmaker(database_url, echo)`, built
   once per app lifecycle (in `app/main.py`'s lifespan), not per-request.
+- `database/types.py` — cross-dialect column types. `UTCDateTime` wraps
+  `DateTime(timezone=True)` to reattach UTC after SQLite's naive read;
+  every persisted timestamp column uses it.
 - `repositories/<concept>.py` — the ORM model (`<Concept>Model`) + the
   adapter class implementing the Domain `Protocol`. Include
   `to_domain()`/`from_domain()` mappers — an ORM instance must never leak

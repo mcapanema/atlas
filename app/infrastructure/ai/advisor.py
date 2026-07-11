@@ -10,6 +10,7 @@ knowledge file grounds recommendations in named flow principles.
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,9 +24,11 @@ _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 logger = logging.getLogger(__name__)
 
-_KNOWLEDGE = (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
-
-_SYSTEM_PROMPT = f"""You are Atlas's Agile Coach and Engineering Advisor. You help \
+@lru_cache(maxsize=1)
+def _system_prompt() -> str:
+    """Build the system prompt on first use; the knowledge file is read once."""
+    knowledge = (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
+    return f"""You are Atlas's Agile Coach and Engineering Advisor. You help \
 Engineering Managers improve software delivery using Lean and Kanban flow thinking.
 
 Ground every claim in the knowledge base below and in the metrics provided by \
@@ -44,7 +47,7 @@ and return fewer (or zero) recommendations rather than speculating.
 
 Knowledge base:
 
-{_KNOWLEDGE}"""
+{knowledge}"""
 
 
 class RecommendationOut(BaseModel):
@@ -166,7 +169,7 @@ class OpenRouterAdvisor:
             "json": {
                 "model": self._model,
                 "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": _system_prompt()},
                     {"role": "user", "content": _render_context(context)},
                 ],
                 "response_format": {
@@ -197,15 +200,15 @@ class OpenRouterAdvisor:
         return DeliveryAdvice(
             generated_at=datetime.now(UTC),
             summary=parsed.summary,
-            recommendations=[
+            recommendations=tuple(
                 Recommendation(
                     title=r.title,
                     priority=r.priority,
                     problem=r.problem,
                     root_cause=r.root_cause,
                     action=r.action,
-                    evidence=r.evidence,
+                    evidence=tuple(r.evidence),
                 )
                 for r in parsed.recommendations
-            ],
+            ),
         )

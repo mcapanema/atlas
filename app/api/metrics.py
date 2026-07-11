@@ -2,13 +2,10 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import MetricsServiceDep
 from app.api.schemas import (
-    DailyFlowCountRead,
-    DurationBinRead,
     DurationStatsRead,
     FlowHistoryRead,
     FlowMetricsRead,
     LeadTimeDistributionRead,
-    ThroughputBucketRead,
 )
 from app.api.scope import ScopeDep
 from app.domain.metrics.summary import DurationStats
@@ -58,20 +55,7 @@ async def get_flow_history(
     history = await service.get_flow_history(
         team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
     )
-    return FlowHistoryRead(
-        window_start=history.window_start,
-        window_end=history.window_end,
-        days=[
-            DailyFlowCountRead(
-                day=d.day, todo=d.todo, in_progress=d.in_progress, done=d.done
-            )
-            for d in history.days
-        ],
-        weeks=[
-            ThroughputBucketRead(start=w.start, end=w.end, completed=w.completed)
-            for w in history.weeks
-        ],
-    )
+    return FlowHistoryRead.model_validate(history)
 
 
 @router.get("/lead-time-distribution", response_model=LeadTimeDistributionRead)
@@ -83,11 +67,4 @@ async def get_lead_time_distribution(
     distribution = await service.get_lead_time_distribution(
         team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
     )
-    return LeadTimeDistributionRead(
-        window_start=distribution.window_start,
-        window_end=distribution.window_end,
-        bins=[
-            DurationBinRead(start_days=b.start_days, end_days=b.end_days, count=b.count)
-            for b in distribution.bins
-        ],
-    )
+    return LeadTimeDistributionRead.model_validate(distribution)

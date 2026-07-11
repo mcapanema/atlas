@@ -1,10 +1,8 @@
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID, uuid4
 
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
+from app.domain._time import utcnow
 
 
 @dataclass
@@ -13,7 +11,7 @@ class Organization:
 
     name: str
     id: UUID = field(default_factory=uuid4)
-    created_at: datetime = field(default_factory=_utcnow)
+    created_at: datetime = field(default_factory=utcnow)
 
     def __post_init__(self) -> None:
         stripped = self.name.strip()

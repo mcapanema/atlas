@@ -96,8 +96,8 @@ export function AdvisorPage() {
                       <b>Evidence:</b>
                     </Typography.Paragraph>
                     <ul>
-                      {rec.evidence.map((item) => (
-                        <li key={item}>{item}</li>
+                      {rec.evidence.map((item, i) => (
+                        <li key={i}>{item}</li>
                       ))}
                     </ul>
                   </Card>
