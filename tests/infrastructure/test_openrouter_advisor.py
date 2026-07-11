@@ -207,3 +207,12 @@ async def test_advise_raises_advisor_error_on_non_json_body() -> None:
 
     with pytest.raises(AdvisorError, match="not JSON"):
         await advisor.advise(_context())
+
+
+def test_system_prompt_is_lazy_and_cached() -> None:
+    from app.infrastructure.ai.advisor import _system_prompt
+
+    _system_prompt.cache_clear()
+    prompt = _system_prompt()
+    assert "Little's Law" in prompt  # knowledge base is embedded
+    assert _system_prompt() is prompt  # read once, cached
