@@ -1,43 +1,17 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { jsonResponse, teamFixture } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { WorkItemsPage } from "./WorkItemsPage";
 
-function renderWithProviders(ui: React.ReactElement, initialEntries = ["/work-items"]) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
-    </QueryClientProvider>,
-  );
-}
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-const TEAM_ID = "22222222-2222-2222-2222-222222222222";
+const TEAM_ID = teamFixture.id;
 
 function mockApi() {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
     if (url.startsWith("/api/teams")) {
-      return Promise.resolve(
-        jsonResponse([
-          {
-            id: TEAM_ID,
-            organization_id: "33333333-3333-3333-3333-333333333333",
-            name: "Platform",
-            external_id: null,
-            created_at: "2026-07-01T00:00:00Z",
-          },
-        ]),
-      );
+      return Promise.resolve(jsonResponse([teamFixture]));
     }
     return Promise.resolve(
       jsonResponse({
@@ -67,7 +41,7 @@ describe("WorkItemsPage", () => {
   it("renders work items returned by the API", async () => {
     mockApi();
 
-    renderWithProviders(<WorkItemsPage />);
+    renderWithClient(<WorkItemsPage />, ["/work-items"]);
 
     await waitFor(() => expect(screen.getByText("Fix login flow")).toBeInTheDocument());
     expect(screen.getByText("In Progress")).toBeInTheDocument();
@@ -85,7 +59,7 @@ describe("WorkItemsPage", () => {
   it("reads the team filter and page from the URL", async () => {
     mockApi();
 
-    renderWithProviders(<WorkItemsPage />, [`/work-items?team=${TEAM_ID}&page=2`]);
+    renderWithClient(<WorkItemsPage />, [`/work-items?team=${TEAM_ID}&page=2`]);
 
     await waitFor(() => {
       const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
@@ -98,7 +72,7 @@ describe("WorkItemsPage", () => {
   it("renders an error alert when teams fail to load", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 500 }));
 
-    renderWithProviders(<WorkItemsPage />);
+    renderWithClient(<WorkItemsPage />, ["/work-items"]);
 
     await waitFor(() => expect(screen.getByText("Failed to load teams")).toBeInTheDocument());
   });

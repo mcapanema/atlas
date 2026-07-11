@@ -29,9 +29,12 @@ for server state, React Router for routing.
   fast local loops. If the gate trips, add tests; only lower a threshold
   with a reviewed justification.
 - Tests use Vitest + React Testing Library. Any component using
-  `useQuery`/`useMutation` needs a `QueryClientProvider` wrapper in its
-  test (see `OrganizationsPage.test.tsx`'s `renderWithClient` helper) — a
-  bare `render()` throws "No QueryClient set". Ant Design's `Table` needs
+  `useQuery`/`useMutation` needs a provider wrapper in
+  its test — use `renderWithClient(ui, initialEntries?)` from
+  `src/test/render.tsx` (fresh QueryClient with retries off + MemoryRouter);
+  a bare `render()` throws "No QueryClient set". Shared response fixtures
+  (`jsonResponse`, `teamFixture`, `mockMetricsFetch(extraRoutes?)`) live in
+  `src/test/fixtures.ts` — don't re-declare them per file. Ant Design's `Table` needs
   `window.matchMedia`, polyfilled once in `src/test/setup.ts` — don't
   re-polyfill per test file.
 - `tsconfig.json` intentionally has no `references` entry to
