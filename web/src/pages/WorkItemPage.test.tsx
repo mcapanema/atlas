@@ -97,4 +97,22 @@ describe("WorkItemPage", () => {
 
     await waitFor(() => expect(screen.getByText("Work item not found")).toBeInTheDocument());
   });
+
+  it("shows per-section errors instead of false empty states when secondary queries fail", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/timeline") || url.startsWith("/api/events")) {
+        return Promise.resolve(jsonResponse({ detail: "database is locked" }, 500));
+      }
+      return Promise.resolve(jsonResponse(workItem));
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Failed to load events")).toBeInTheDocument());
+    expect(screen.getAllByText("Failed to load timeline")).toHaveLength(2);
+    expect(screen.getAllByText("database is locked").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No events recorded yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Never blocked.")).not.toBeInTheDocument();
+  });
 });

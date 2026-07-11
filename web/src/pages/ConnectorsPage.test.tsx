@@ -65,4 +65,26 @@ describe("ConnectorsPage", () => {
     );
     expect(screen.getByRole("button", { name: "Sync now" })).toBeDisabled();
   });
+
+  it("shows an error instead of 'Not configured' when the status fetch fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/connectors/linear") {
+        return new Response(JSON.stringify({ detail: "boom" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url === "/api/organizations") return jsonResponse([]);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    renderWithClient(<ConnectorsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Failed to load connector status")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("boom")).toBeInTheDocument();
+    expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
+  });
 });
