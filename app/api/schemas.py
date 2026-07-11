@@ -110,6 +110,7 @@ class SyncSummaryRead(BaseModel):
     projects: int
     work_items: int
     events: int
+    divergences: int
 
 
 class StatePeriodRead(BaseModel):

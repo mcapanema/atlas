@@ -51,11 +51,14 @@ export function ConnectorsPage() {
           </Space>
           {sync.isError && <Alert type="error" message="Sync failed" />}
           {sync.data && (
-            <Descriptions column={4} bordered size="small">
+            <Descriptions column={5} bordered size="small">
               <Descriptions.Item label="Teams">{sync.data.teams}</Descriptions.Item>
               <Descriptions.Item label="Projects">{sync.data.projects}</Descriptions.Item>
               <Descriptions.Item label="Work items">{sync.data.work_items}</Descriptions.Item>
               <Descriptions.Item label="Events">{sync.data.events}</Descriptions.Item>
+              <Descriptions.Item label="Divergences">
+                {sync.data.divergences}
+              </Descriptions.Item>
             </Descriptions>
           )}
         </Space>

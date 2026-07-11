@@ -103,7 +103,13 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     )
 
     assert first.status_code == 200
-    assert first.json() == {"teams": 1, "projects": 1, "work_items": 1, "events": 1}
+    assert first.json() == {
+        "teams": 1,
+        "projects": 1,
+        "work_items": 1,
+        "events": 1,
+        "divergences": 0,
+    }
     teams = (await client.get("/api/teams")).json()
     assert teams[0]["external_id"] == "lt1"
 
@@ -111,7 +117,13 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
         "/api/connectors/linear/sync", json={"organization_id": org["id"]}
     )
 
-    assert second.json() == {"teams": 0, "projects": 0, "work_items": 0, "events": 0}
+    assert second.json() == {
+        "teams": 0,
+        "projects": 0,
+        "work_items": 0,
+        "events": 0,
+        "divergences": 0,
+    }
 
 
 async def test_sync_unknown_organization_is_404(
