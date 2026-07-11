@@ -6,7 +6,11 @@ import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
 
-const queryClient = new QueryClient();
+// Dashboards refetch on every window focus with the default staleTime of 0;
+// 30s keeps tab-switching cheap while staying fresh enough for delivery data.
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 30_000 } },
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

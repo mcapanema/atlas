@@ -1,9 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const captured = vi.hoisted(() => ({ options: [] as unknown[] }));
 vi.mock("./EChart", () => ({
-  EChart: () => <div data-testid="echart" />,
+  EChart: ({ option }: { option: unknown }) => {
+    captured.options.push(option);
+    return <div data-testid="echart" />;
+  },
 }));
 
 import { mockMetricsFetch } from "../test/fixtures";
@@ -11,8 +15,16 @@ import { FlowDashboard } from "./FlowDashboard";
 
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
 }
+
+beforeEach(() => {
+  captured.options.length = 0;
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -24,7 +36,11 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
+    // Wait for the full render (all 5 charts), not just the stat tiles: FlowDashboard's
+    // loading skeleton gates ForecastCard's mount on metrics/history, so ForecastCard's
+    // own forecast fetch only starts once they resolve — it lags behind metrics text.
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument(); // flow efficiency
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
     expect(screen.getByText("Weekly throughput (90d)")).toBeInTheDocument();
@@ -50,5 +66,27 @@ describe("FlowDashboard", () => {
         vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
       ).toContain("/api/metrics?project_id=proj-1"),
     );
+  });
+
+  it("shows a skeleton while metrics load", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise(() => {}));
+
+    const { container } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(container.querySelector(".ant-skeleton")).not.toBeNull();
+  });
+
+  it("reuses chart option objects across re-renders", async () => {
+    mockMetricsFetch();
+
+    const { rerender } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+
+    const firstRender = [...captured.options];
+    captured.options.length = 0;
+    rerender(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(captured.options).toHaveLength(5);
+    captured.options.forEach((option, i) => expect(option).toBe(firstRender[i]));
   });
 });

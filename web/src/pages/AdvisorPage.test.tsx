@@ -90,4 +90,24 @@ describe("AdvisorPage", () => {
     expect(screen.getByText(/Work is started faster/)).toBeInTheDocument();
     expect(screen.getByText("wip=12")).toBeInTheDocument();
   });
+
+  it("surfaces an advisor status failure instead of silently disabling the button", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([team]));
+      return Promise.resolve(
+        new Response(JSON.stringify({ detail: "boom" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText("Failed to load advisor status")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("boom")).toBeInTheDocument();
+  });
 });

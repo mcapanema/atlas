@@ -66,8 +66,11 @@ describe("TeamDashboardPage", () => {
     fireEvent.mouseDown(await screen.findByRole("combobox"));
     fireEvent.click(await screen.findByTitle("Platform"));
 
-    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    expect(screen.getAllByTestId("echart")).toHaveLength(5);
+    // Wait for the full render (all 5 charts): FlowDashboard's loading skeleton gates
+    // ForecastCard's mount on metrics/history, so its own forecast fetch starts later
+    // and can still be pending when just the stat tiles have appeared.
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
   });
 
   it("deep-links a team via the ?team= search param", async () => {

@@ -31,6 +31,13 @@ export function AdvisorPage() {
             message="Advisor is not configured. Set ATLAS_OPENROUTER_API_KEY to enable AI coaching."
           />
         )}
+        {status.isError && (
+          <Alert
+            type="error"
+            message="Failed to load advisor status"
+            description={status.error.message}
+          />
+        )}
         <Space>
           <Select
             style={{ width: 260 }}
@@ -50,7 +57,13 @@ export function AdvisorPage() {
           </Button>
         </Space>
         {!teamId && <Alert type="info" message="Select a team to get delivery advice." />}
-        {advice.isError && <Alert type="error" message="Failed to generate advice" />}
+        {advice.isError && (
+          <Alert
+            type="error"
+            message="Failed to generate advice"
+            description={advice.error.message}
+          />
+        )}
         {advice.data && (
           <>
             <Card title="Delivery summary">

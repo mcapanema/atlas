@@ -1,4 +1,5 @@
-import { Alert, Card, Col, Row } from "antd";
+import { Alert, Card, Col, Row, Skeleton } from "antd";
+import { useMemo } from "react";
 
 import {
   useFlowHistory,
@@ -27,8 +28,28 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const history = useFlowHistory(scope);
   const distribution = useLeadTimeDistribution(scope);
 
+  const cfdOption = useMemo(
+    () => (history.data ? buildCfdOption(history.data.days) : null),
+    [history.data],
+  );
+  const throughputOption = useMemo(
+    () => (history.data ? buildThroughputOption(history.data.weeks) : null),
+    [history.data],
+  );
+  const wipOption = useMemo(
+    () => (history.data ? buildWipOption(history.data.days) : null),
+    [history.data],
+  );
+  const distributionOption = useMemo(
+    () => (distribution.data ? buildLeadTimeDistributionOption(distribution.data.bins) : null),
+    [distribution.data],
+  );
+
   if (metrics.isError || history.isError || distribution.isError) {
     return <Alert type="error" message="Failed to load metrics" />;
+  }
+  if (metrics.isPending || history.isPending) {
+    return <Skeleton active />;
   }
 
   const data = metrics.data;
@@ -51,27 +72,27 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
           />
         </Row>
       )}
-      {history.data && (
+      {cfdOption && throughputOption && wipOption && (
         <Row gutter={[16, 16]}>
           <Col xs={24}>
             <Card title="Cumulative flow (90d)">
-              <EChart option={buildCfdOption(history.data.days)} height={300} />
+              <EChart option={cfdOption} height={300} />
             </Card>
           </Col>
           <Col xs={24} lg={12}>
             <Card title="Weekly throughput (90d)">
-              <EChart option={buildThroughputOption(history.data.weeks)} />
+              <EChart option={throughputOption} />
             </Card>
           </Col>
           <Col xs={24} lg={12}>
             <Card title="WIP over time (90d)">
-              <EChart option={buildWipOption(history.data.days)} />
+              <EChart option={wipOption} />
             </Card>
           </Col>
-          {distribution.data && (
+          {distributionOption && (
             <Col xs={24} lg={12}>
               <Card title="Lead time distribution (90d)">
-                <EChart option={buildLeadTimeDistributionOption(distribution.data.bins)} />
+                <EChart option={distributionOption} />
               </Card>
             </Col>
           )}

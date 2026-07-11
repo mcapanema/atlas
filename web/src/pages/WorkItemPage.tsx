@@ -52,7 +52,9 @@ export function WorkItemPage() {
         )}
       </div>
       <Card title="Event timeline" loading={events.isLoading}>
-        {events.data?.length ? (
+        {events.isError ? (
+          <Alert type="error" message="Failed to load events" description={events.error.message} />
+        ) : events.data?.length ? (
           <Timeline
             items={events.data.map((event) => ({
               children: `${new Date(event.occurred_at).toLocaleString()} — ${eventLabel(event)}`,
@@ -63,33 +65,47 @@ export function WorkItemPage() {
         )}
       </Card>
       <Card title="Time in state" loading={timeline.isLoading}>
-        <Table
-          rowKey={(period: StatePeriod) => `${period.state}-${period.entered_at}`}
-          pagination={false}
-          dataSource={timeline.data?.state_periods ?? []}
-          columns={[
-            { title: "State", dataIndex: "state" },
-            {
-              title: "Entered",
-              dataIndex: "entered_at",
-              render: (enteredAt: string) => new Date(enteredAt).toLocaleString(),
-            },
-            {
-              title: "Exited",
-              dataIndex: "exited_at",
-              render: (exitedAt: string | null) =>
-                exitedAt ? new Date(exitedAt).toLocaleString() : "current",
-            },
-            {
-              title: "Duration",
-              render: (_: unknown, period: StatePeriod) =>
-                formatDuration(period.entered_at, period.exited_at),
-            },
-          ]}
-        />
+        {timeline.isError ? (
+          <Alert
+            type="error"
+            message="Failed to load timeline"
+            description={timeline.error.message}
+          />
+        ) : (
+          <Table
+            rowKey={(period: StatePeriod) => `${period.state}-${period.entered_at}`}
+            pagination={false}
+            dataSource={timeline.data?.state_periods ?? []}
+            columns={[
+              { title: "State", dataIndex: "state" },
+              {
+                title: "Entered",
+                dataIndex: "entered_at",
+                render: (enteredAt: string) => new Date(enteredAt).toLocaleString(),
+              },
+              {
+                title: "Exited",
+                dataIndex: "exited_at",
+                render: (exitedAt: string | null) =>
+                  exitedAt ? new Date(exitedAt).toLocaleString() : "current",
+              },
+              {
+                title: "Duration",
+                render: (_: unknown, period: StatePeriod) =>
+                  formatDuration(period.entered_at, period.exited_at),
+              },
+            ]}
+          />
+        )}
       </Card>
       <Card title="Blocked periods" loading={timeline.isLoading}>
-        {timeline.data?.blocked_periods.length ? (
+        {timeline.isError ? (
+          <Alert
+            type="error"
+            message="Failed to load timeline"
+            description={timeline.error.message}
+          />
+        ) : timeline.data?.blocked_periods.length ? (
           <Table
             rowKey={(period: BlockedPeriod) => period.started_at}
             pagination={false}

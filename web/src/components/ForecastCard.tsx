@@ -1,5 +1,5 @@
 import { Alert, Card, DatePicker, Row, Space, Statistic } from "antd";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useForecast } from "../api/forecasts";
 import type { MetricsScope } from "../api/metrics";
@@ -10,11 +10,16 @@ import { StatCard } from "./StatCard";
 export function ForecastCard({ scope }: { scope: MetricsScope }) {
   const [targetDate, setTargetDate] = useState<string>();
   const forecast = useForecast(scope, targetDate);
+  const data = forecast.data;
+  const outcomesOption = useMemo(
+    () =>
+      data?.completion ? buildForecastOption(data.completion.outcomes, data.window_end) : null,
+    [data],
+  );
 
   if (forecast.isError) {
     return <Alert type="error" message="Failed to load forecast" />;
   }
-  const data = forecast.data;
   if (!data) return null;
   if (!data.completion) {
     return (
@@ -41,7 +46,7 @@ export function ForecastCard({ scope }: { scope: MetricsScope }) {
             <Statistic value={`${Math.round(data.confidence * 100)}%`} />
           )}
         </Space>
-        <EChart option={buildForecastOption(data.completion.outcomes, data.window_end)} />
+        {outcomesOption && <EChart option={outcomesOption} />}
       </Space>
     </Card>
   );
