@@ -23,6 +23,14 @@ class InMemoryEventRepository:
     async def get_by_external_id(self, external_id: str) -> Event | None:
         return next((e for e in self._events if e.external_id == external_id), None)
 
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        wanted = set(external_ids)
+        return {
+            e.external_id
+            for e in self._events
+            if e.external_id is not None and e.external_id in wanted
+        }
+
 
 async def test_record_event_persists_and_returns() -> None:
     repo = InMemoryEventRepository()

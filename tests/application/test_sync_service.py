@@ -80,14 +80,25 @@ class InMemoryWorkItemRepository:
         self._items[work_item.id] = work_item
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
         items = list(self._items.values())
         if team_id is not None:
             items = [i for i in items if i.team_id == team_id]
         if project_id is not None:
             items = [i for i in items if i.project_id == project_id]
-        return items
+        items = items[offset:]
+        return items if limit is None else items[:limit]
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        return len(await self.list(team_id=team_id, project_id=project_id))
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return self._items.get(work_item_id)
@@ -101,6 +112,8 @@ class InMemoryWorkItemRepository:
 class InMemoryEventRepository:
     def __init__(self) -> None:
         self._events: dict[UUID, Event] = {}
+        self.single_lookup_calls = 0
+        self.batch_lookup_calls = 0
 
     async def add(self, event: Event) -> None:
         self._events[event.id] = event
@@ -119,9 +132,19 @@ class InMemoryEventRepository:
         )
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
+        self.single_lookup_calls += 1
         return next(
             (e for e in self._events.values() if e.external_id == external_id), None
         )
+
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        self.batch_lookup_calls += 1
+        wanted = set(external_ids)
+        return {
+            e.external_id
+            for e in self._events.values()
+            if e.external_id is not None and e.external_id in wanted
+        }
 
 
 class FakeDataSource:
@@ -508,3 +531,53 @@ async def test_open_item_is_not_a_divergence() -> None:
     summary = await harness.service.sync(await seed_org(harness))
 
     assert summary.divergences == 0
+
+
+async def test_sync_batches_event_lookups() -> None:
+    # Two work items (each with events) so a regression to "once per work
+    # item" would push batch_lookup_calls to 2, not just 1.
+    source = FakeDataSource(
+        teams=[SourceTeam(external_id="lt1", name="Platform")],
+        work_items=[
+            SourceWorkItem(
+                external_id="li1",
+                title="Fix login",
+                type=WorkItemType.TASK,
+                state="In Progress",
+                team_external_id="lt1",
+                project_external_id=None,
+                created_at=CREATED_AT,
+                events=(
+                    SourceEvent(
+                        external_id="li1:created",
+                        type=EventType.CREATED,
+                        occurred_at=CREATED_AT,
+                    ),
+                ),
+            ),
+            SourceWorkItem(
+                external_id="li2",
+                title="Ship report",
+                type=WorkItemType.TASK,
+                state="In Progress",
+                team_external_id="lt1",
+                project_external_id=None,
+                created_at=CREATED_AT,
+                events=(
+                    SourceEvent(
+                        external_id="li2:created",
+                        type=EventType.CREATED,
+                        occurred_at=CREATED_AT,
+                    ),
+                ),
+            ),
+        ],
+    )
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    await harness.service.sync(org_id)
+
+    # One batched existence query for the whole run, zero per-event SELECTs.
+    assert harness.events.single_lookup_calls == 0
+    assert harness.events.batch_lookup_calls == 1

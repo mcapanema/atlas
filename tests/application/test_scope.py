@@ -19,14 +19,26 @@ class InMemoryWorkItemRepository:
         pass
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
-        return [
+        items = [
             item
             for item in self._items
             if (team_id is None or item.team_id == team_id)
             and (project_id is None or item.project_id == project_id)
         ]
+        items = items[offset:]
+        return items if limit is None else items[:limit]
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        return len(await self.list(team_id=team_id, project_id=project_id))
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return next((i for i in self._items if i.id == work_item_id), None)
@@ -57,6 +69,14 @@ class InMemoryEventRepository:
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
         return next((e for e in self._events if e.external_id == external_id), None)
+
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        wanted = set(external_ids)
+        return {
+            e.external_id
+            for e in self._events
+            if e.external_id is not None and e.external_id in wanted
+        }
 
 
 def _item(team_id: UUID) -> WorkItem:

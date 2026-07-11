@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
@@ -47,7 +48,12 @@ class ForecastService:
         )
 
         daily = daily_throughput_samples(scope.samples, end=window_end, days=window_days)
-        trial_days = simulate_days_to_complete(daily, remaining=scope_remaining)
+        # ponytail: the 2k-trial simulation is pure CPU (~0.9s worst case) —
+        # run it in a worker thread so the event loop (incl. /health) stays
+        # responsive. Cache or precompute forecasts if it ever needs more.
+        trial_days = await asyncio.to_thread(
+            simulate_days_to_complete, daily, remaining=scope_remaining
+        )
         completion: CompletionForecast | None = None
         confidence: float | None = None
         if trial_days is not None:

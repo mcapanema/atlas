@@ -67,3 +67,52 @@ def test_no_streams_yields_zero_rows_for_every_day() -> None:
 
     assert len(counts) == 3
     assert all(c.todo == c.in_progress == c.done == 0 for c in counts)
+
+
+def test_events_before_window_set_the_phase_on_day_one() -> None:
+    a = uuid4()
+    stream = [_event(EventType.CREATED, 1, a), _event(EventType.STARTED, 2, a)]
+
+    counts = daily_flow_counts(
+        [stream],
+        start=datetime(2026, 7, 10, tzinfo=UTC),
+        end=datetime(2026, 7, 11, 23, 0, tzinfo=UTC),
+    )
+
+    assert counts[0] == DailyFlowCount(
+        day=date(2026, 7, 10), todo=0, in_progress=1, done=0
+    )
+
+
+def test_same_day_transitions_land_on_end_of_day_phase() -> None:
+    a = uuid4()
+    stream = [
+        _event(EventType.CREATED, 1, a),
+        _event(EventType.STARTED, 1, a),
+        _event(EventType.COMPLETED, 1, a),
+    ]
+
+    counts = daily_flow_counts(
+        [stream],
+        start=datetime(2026, 7, 1, tzinfo=UTC),
+        end=datetime(2026, 7, 1, 23, 0, tzinfo=UTC),
+    )
+
+    assert counts == [DailyFlowCount(day=date(2026, 7, 1), todo=0, in_progress=0, done=1)]
+
+
+def test_unsorted_stream_input_is_sorted_before_replay() -> None:
+    a = uuid4()
+    stream = [
+        _event(EventType.COMPLETED, 3, a),
+        _event(EventType.CREATED, 1, a),
+        _event(EventType.STARTED, 2, a),
+    ]
+
+    counts = daily_flow_counts(
+        [stream],
+        start=datetime(2026, 7, 1, tzinfo=UTC),
+        end=datetime(2026, 7, 3, 23, 0, tzinfo=UTC),
+    )
+
+    assert counts[2] == DailyFlowCount(day=date(2026, 7, 3), todo=0, in_progress=0, done=1)

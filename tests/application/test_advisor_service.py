@@ -18,9 +18,19 @@ class InMemoryWorkItems:
         raise NotImplementedError
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
         return []
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        return 0
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return None
@@ -43,6 +53,9 @@ class InMemoryEvents:
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
         return None
+
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        return set()
 
 
 async def test_build_context_assembles_scope_metrics() -> None:
@@ -69,7 +82,12 @@ class CountingWorkItems(InMemoryWorkItems):
         self.list_calls = 0
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
         self.list_calls += 1
         return []

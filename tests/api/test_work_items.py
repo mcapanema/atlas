@@ -9,7 +9,7 @@ async def test_list_work_items_empty(client: AsyncClient) -> None:
     response = await client.get("/api/work-items")
 
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {"items": [], "total": 0}
 
 
 async def test_create_then_list_work_item(client: AsyncClient) -> None:
@@ -27,7 +27,8 @@ async def test_create_then_list_work_item(client: AsyncClient) -> None:
     assert body["project_id"] is None
 
     listed = await client.get("/api/work-items")
-    assert [i["title"] for i in listed.json()] == ["Add login"]
+    assert [i["title"] for i in listed.json()["items"]] == ["Add login"]
+    assert listed.json()["total"] == 1
 
 
 async def test_list_filters_by_team(client: AsyncClient) -> None:
@@ -37,7 +38,7 @@ async def test_list_filters_by_team(client: AsyncClient) -> None:
 
     response = await client.get("/api/work-items", params={"team_id": team_a})
 
-    assert [i["title"] for i in response.json()] == ["A"]
+    assert [i["title"] for i in response.json()["items"]] == ["A"]
 
 
 async def test_create_rejects_empty_title(client: AsyncClient) -> None:
@@ -134,3 +135,21 @@ async def test_create_duplicate_external_id_returns_409(client: AsyncClient) -> 
     duplicate = await client.post("/api/work-items", json={**payload, "title": "B"})
 
     assert duplicate.status_code == 409
+
+
+async def test_list_paginates_with_limit_and_offset(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    for title in ["A", "B", "C"]:
+        await client.post("/api/work-items", json={"team_id": team_id, "title": title})
+
+    page = await client.get("/api/work-items", params={"limit": 2, "offset": 1})
+
+    body = page.json()
+    assert body["total"] == 3
+    assert len(body["items"]) == 2
+
+
+async def test_list_rejects_out_of_range_limit(client: AsyncClient) -> None:
+    assert (await client.get("/api/work-items", params={"limit": 0})).status_code == 422
+    assert (await client.get("/api/work-items", params={"limit": 501})).status_code == 422
+    assert (await client.get("/api/work-items", params={"offset": -1})).status_code == 422

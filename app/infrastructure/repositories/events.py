@@ -9,6 +9,7 @@ from sqlalchemy.types import DateTime, TypeDecorator, Uuid
 
 from app.domain.events.entities import Event, EventType
 from app.infrastructure.database.base import Base
+from app.infrastructure.repositories.batching import chunked
 
 
 class _UTCDateTime(TypeDecorator[datetime]):
@@ -90,14 +91,15 @@ class SqlAlchemyEventRepository:
         return [model.to_domain() for model in result.scalars()]
 
     async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
-        if not work_item_ids:
-            return []
-        result = await self._session.execute(
-            select(EventModel)
-            .where(EventModel.work_item_id.in_(work_item_ids))
-            .order_by(EventModel.occurred_at)
-        )
-        return [model.to_domain() for model in result.scalars()]
+        events: list[Event] = []
+        for chunk in chunked(work_item_ids):
+            result = await self._session.execute(
+                select(EventModel).where(EventModel.work_item_id.in_(chunk))
+            )
+            events.extend(model.to_domain() for model in result.scalars())
+        # per-chunk ORDER BY can't order across chunks — sort the merged list
+        events.sort(key=lambda event: event.occurred_at)
+        return events
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
         result = await self._session.execute(
@@ -105,3 +107,14 @@ class SqlAlchemyEventRepository:
         )
         model = result.scalars().one_or_none()
         return model.to_domain() if model is not None else None
+
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        found: set[str] = set()
+        for chunk in chunked(external_ids):
+            result = await self._session.execute(
+                select(EventModel.external_id).where(EventModel.external_id.in_(chunk))
+            )
+            for external_id in result.scalars():
+                if external_id is not None:
+                    found.add(external_id)
+        return found

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,3 +81,22 @@ async def test_update_persists_changed_fields(session: AsyncSession) -> None:
     assert fetched is not None
     assert fetched.state == "In Progress"
     assert fetched.project_id == new_project_id
+
+
+async def test_list_paginates_in_created_order(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    for day, title in [(3, "C"), (1, "A"), (2, "B")]:
+        await repo.add(
+            WorkItem(
+                team_id=team_id,
+                title=title,
+                created_at=datetime(2026, 7, day, tzinfo=UTC),
+            )
+        )
+
+    page = await repo.list(team_id=team_id, limit=2, offset=1)
+
+    assert [i.title for i in page] == ["B", "C"]
+    assert await repo.count(team_id=team_id) == 3
+    assert await repo.count() == 3

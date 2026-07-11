@@ -31,9 +31,21 @@ class WorkItemService:
         return work_item
 
     async def list_work_items(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
-        return await self._repository.list(team_id=team_id, project_id=project_id)
+        return await self._repository.list(
+            team_id=team_id, project_id=project_id, limit=limit, offset=offset
+        )
+
+    async def count_work_items(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        return await self._repository.count(team_id=team_id, project_id=project_id)
 
     async def get_work_item(self, work_item_id: UUID) -> WorkItem | None:
         return await self._repository.get(work_item_id)

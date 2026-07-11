@@ -73,6 +73,13 @@ class WorkItemRead(BaseModel):
     created_at: datetime
 
 
+class WorkItemPageRead(BaseModel):
+    """One page of the work-items list plus the scope's total row count."""
+
+    items: list[WorkItemRead]
+    total: int
+
+
 class EventCreate(BaseModel):
     work_item_id: UUID
     type: EventType

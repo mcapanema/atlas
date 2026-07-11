@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import (
     EventServiceDep,
@@ -8,19 +8,31 @@ from app.api.deps import (
     TeamServiceDep,
     WorkItemServiceDep,
 )
-from app.api.schemas import WorkItemCreate, WorkItemRead, WorkItemTimelineRead
+from app.api.schemas import (
+    WorkItemCreate,
+    WorkItemPageRead,
+    WorkItemRead,
+    WorkItemTimelineRead,
+)
 
 router = APIRouter(prefix="/api/work-items", tags=["work-items"])
 
 
-@router.get("", response_model=list[WorkItemRead])
+@router.get("", response_model=WorkItemPageRead)
 async def list_work_items(
     service: WorkItemServiceDep,
     team_id: UUID | None = None,
     project_id: UUID | None = None,
-) -> list[WorkItemRead]:
-    items = await service.list_work_items(team_id=team_id, project_id=project_id)
-    return [WorkItemRead.model_validate(item) for item in items]
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> WorkItemPageRead:
+    items = await service.list_work_items(
+        team_id=team_id, project_id=project_id, limit=limit, offset=offset
+    )
+    total = await service.count_work_items(team_id=team_id, project_id=project_id)
+    return WorkItemPageRead(
+        items=[WorkItemRead.model_validate(item) for item in items], total=total
+    )
 
 
 @router.post("", response_model=WorkItemRead, status_code=status.HTTP_201_CREATED)
