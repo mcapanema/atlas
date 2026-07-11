@@ -8,9 +8,9 @@ const chart = vi.hoisted(() => ({
   resize: vi.fn(),
   dispose: vi.fn(),
 }));
-vi.mock("echarts", () => ({ init: vi.fn(() => chart) }));
+vi.mock("echarts/core", () => ({ init: vi.fn(() => chart), use: vi.fn() }));
 
-import * as echarts from "echarts";
+import * as echarts from "echarts/core";
 
 import { EChart } from "./EChart";
 

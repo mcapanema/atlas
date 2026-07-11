@@ -34,7 +34,12 @@ for server state, React Router for routing.
   also making `tsconfig.node.json` composite (which then needs
   `outDir`/`tsBuildInfoFile` to avoid leaking build artifacts into `web/`).
 - Charts are Apache ECharts via `src/components/EChart.tsx` (lifecycle
-  wrapper) + pure option builders in `src/lib/charts.ts`. jsdom has no
+  wrapper) + pure option builders in `src/lib/charts.ts`. `EChart.tsx`
+  imports from `echarts/core` and registers only the modules the builders
+  use — a new chart/component type in `charts.ts` needs its module
+  registered in `EChart.tsx` (missing registration fails at runtime, not
+  in jsdom tests). Type-only imports from `"echarts"` are fine; runtime
+  imports of the full `"echarts"` package are not. jsdom has no
   canvas: tests that render a page containing charts must
   `vi.mock("../components/EChart")`; only `charts.test.ts` asserts on
   option contents. Chart colors in `charts.ts` are palette-validated —

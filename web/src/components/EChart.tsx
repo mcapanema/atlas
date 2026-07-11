@@ -1,10 +1,29 @@
-import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
+import { BarChart, LineChart } from "echarts/charts";
+import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import * as echarts from "echarts/core";
+import type { EChartsType } from "echarts/core";
+import { LabelLayout } from "echarts/features";
+import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef } from "react";
+
+// Exactly what the option builders in ../lib/charts.ts use. LabelLayout backs
+// the CFD's endLabel. Adding a new chart/component type to charts.ts requires
+// registering its module here — a missing registration fails at runtime, not
+// in tests (jsdom mocks EChart).
+echarts.use([
+  LineChart,
+  BarChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  LabelLayout,
+  CanvasRenderer,
+]);
 
 export function EChart({ option, height = 260 }: { option: EChartsOption; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<echarts.ECharts | null>(null);
+  const chartRef = useRef<EChartsType | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
