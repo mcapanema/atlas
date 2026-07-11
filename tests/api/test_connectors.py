@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.api.deps import get_delivery_data_source
-from app.config import get_settings
 from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
@@ -41,25 +40,14 @@ def _fake_source() -> FakeDataSource:
     )
 
 
-# get_settings is lru_cached; clear around each env change so the request
-# under test re-reads the environment (and clear again on teardown so later
-# tests aren't poisoned). monkeypatch undoes the env var itself.
 @pytest.fixture
-def linear_configured(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("ATLAS_LINEAR_API_KEY", "lin_api_test")
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
+def linear_configured(settings_env: Callable[..., None]) -> None:
+    settings_env(linear_api_key="lin_api_test")
 
 
-# Empty string (falsy) rather than delenv: a real env var always beats .env,
-# so this stays hermetic even when the developer's .env sets a key.
 @pytest.fixture
-def linear_unconfigured(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("ATLAS_LINEAR_API_KEY", "")
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
+def linear_unconfigured(settings_env: Callable[..., None]) -> None:
+    settings_env(linear_api_key="")
 
 
 async def test_status_reports_unconfigured(

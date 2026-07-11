@@ -1,14 +1,12 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_advisor_port, get_session
-from app.config import Settings
 from app.domain.advisor.entities import DeliveryAdvice, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 
@@ -42,32 +40,26 @@ async def _create_team(client: AsyncClient) -> str:
 
 
 async def test_status_reports_unconfigured(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    client: AsyncClient, settings_env: Callable[..., None]
 ) -> None:
-    monkeypatch.setattr(
-        "app.api.advisor.get_settings", lambda: Settings(openrouter_api_key=None)
-    )
+    settings_env(openrouter_api_key="")
     response = await client.get("/api/recommendations/status")
     assert response.status_code == 200
     assert response.json() == {"configured": False}
 
 
 async def test_status_reports_configured(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    client: AsyncClient, settings_env: Callable[..., None]
 ) -> None:
-    monkeypatch.setattr(
-        "app.api.advisor.get_settings", lambda: Settings(openrouter_api_key="sk-test")
-    )
+    settings_env(openrouter_api_key="sk-test")
     response = await client.get("/api/recommendations/status")
     assert response.json() == {"configured": True}
 
 
 async def test_recommendations_409_when_unconfigured(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    client: AsyncClient, settings_env: Callable[..., None]
 ) -> None:
-    monkeypatch.setattr(
-        "app.api.deps.get_settings", lambda: Settings(openrouter_api_key=None)
-    )
+    settings_env(openrouter_api_key="")
     response = await client.get(f"/api/recommendations?team_id={uuid4()}")
     assert response.status_code == 409
 

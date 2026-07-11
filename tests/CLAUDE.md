@@ -15,6 +15,11 @@ right reason, then implement.
   instance with `app.state.sessionmaker` overridden to the in-memory
   factory. Use this for `tests/api/` tests; don't stand up a separate app
   instance per test file.
+- `settings_env` — the one way to override settings in a test:
+  `settings_env(linear_api_key="x")` sets `ATLAS_LINEAR_API_KEY` and clears
+  the `get_settings` cache (cleared again on teardown). Pass `""` to
+  disable a key hermetically (a real env var beats `.env`). Never
+  `monkeypatch.setattr` `get_settings` at an import site.
 
 ## What belongs where
 

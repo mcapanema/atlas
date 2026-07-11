@@ -1,5 +1,6 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Iterator
 
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import StaticPool
 
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
+from app.config import get_settings
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.session import enable_sqlite_pragmas
 from app.main import create_app
@@ -51,3 +53,25 @@ async def client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=test_app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client
+
+
+@pytest.fixture
+def settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
+    """The one way tests override settings.
+
+    Sets ``ATLAS_<FIELD>`` env vars and clears the ``get_settings`` cache
+    (cleared again on teardown so later tests re-read a clean environment).
+    Exercises the real Settings loading path — and because a real env var
+    always beats ``.env``, passing ``""`` disables a key hermetically even
+    when the developer's ``.env`` sets it. Don't ``monkeypatch.setattr``
+    ``get_settings`` at import sites; that bypasses the cache and breaks
+    silently when imports move.
+    """
+
+    def _set(**overrides: str) -> None:
+        for field, value in overrides.items():
+            monkeypatch.setenv(f"ATLAS_{field.upper()}", value)
+        get_settings.cache_clear()
+
+    yield _set
+    get_settings.cache_clear()
