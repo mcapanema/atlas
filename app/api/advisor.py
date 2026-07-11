@@ -1,16 +1,16 @@
 from fastapi import APIRouter, Query
 
 from app.api.deps import AdvisorPortDep, AdvisorServiceDep, SessionDep
-from app.api.schemas import AdvisorStatusRead, DeliveryAdviceRead
+from app.api.schemas import DeliveryAdviceRead, IntegrationStatusRead
 from app.api.scope import ScopeDep
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
 
-@router.get("/status", response_model=AdvisorStatusRead)
-async def advisor_status() -> AdvisorStatusRead:
-    return AdvisorStatusRead(configured=bool(get_settings().openrouter_api_key))
+@router.get("/status", response_model=IntegrationStatusRead)
+async def advisor_status() -> IntegrationStatusRead:
+    return IntegrationStatusRead(configured=bool(get_settings().openrouter_api_key))
 
 
 # ponytail: synchronous LLM call on GET (tens of seconds) — fine for one EM

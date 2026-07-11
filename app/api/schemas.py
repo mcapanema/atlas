@@ -102,7 +102,9 @@ class EventRead(BaseModel):
     recorded_at: datetime
 
 
-class ConnectorStatusRead(BaseModel):
+class IntegrationStatusRead(BaseModel):
+    """Configured-or-not status for an external integration (connector, advisor)."""
+
     configured: bool
 
 
@@ -213,10 +215,6 @@ class ForecastRead(BaseModel):
     remaining: int
     completion: CompletionForecastRead | None
     confidence: float | None
-
-
-class AdvisorStatusRead(BaseModel):
-    configured: bool
 
 
 class RecommendationRead(BaseModel):
