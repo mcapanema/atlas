@@ -47,4 +47,4 @@ def test_distribution_only_counts_window_completions() -> None:
 def test_distribution_of_empty_scope_has_no_bins() -> None:
     dist = compute_lead_time_distribution([], now=NOW)
 
-    assert dist.bins == []
+    assert dist.bins == ()

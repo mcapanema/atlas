@@ -44,7 +44,7 @@ def _context() -> DeliveryContext:
     distribution = LeadTimeDistribution(
         window_start=_NOW - timedelta(days=90),
         window_end=_NOW,
-        bins=[DurationBin(start_days=0, end_days=1, count=3)],
+        bins=(DurationBin(start_days=0, end_days=1, count=3),),
     )
     forecast = DeliveryForecast(
         window_start=_NOW - timedelta(days=90),
@@ -57,7 +57,7 @@ def _context() -> DeliveryContext:
             p75_days=14,
             p85_days=17,
             p95_days=23,
-            outcomes=[OutcomeBucket(days=10, trials=250)],
+            outcomes=(OutcomeBucket(days=10, trials=250),),
         ),
         confidence=0.72,
     )
@@ -86,7 +86,7 @@ def test_render_context_handles_empty_scope() -> None:
             flow_efficiency=None,
         ),
         distribution=LeadTimeDistribution(
-            window_start=_NOW - timedelta(days=90), window_end=_NOW, bins=[]
+            window_start=_NOW - timedelta(days=90), window_end=_NOW, bins=()
         ),
         forecast=DeliveryForecast(
             window_start=_NOW - timedelta(days=90),

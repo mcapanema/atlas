@@ -200,15 +200,15 @@ class OpenRouterAdvisor:
         return DeliveryAdvice(
             generated_at=datetime.now(UTC),
             summary=parsed.summary,
-            recommendations=[
+            recommendations=tuple(
                 Recommendation(
                     title=r.title,
                     priority=r.priority,
                     problem=r.problem,
                     root_cause=r.root_cause,
                     action=r.action,
-                    evidence=r.evidence,
+                    evidence=tuple(r.evidence),
                 )
                 for r in parsed.recommendations
-            ],
+            ),
         )
