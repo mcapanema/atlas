@@ -8,7 +8,7 @@ help: ## Show this help
 
 install: ## Install backend and frontend dependencies
 	uv sync
-	cd web && npm install
+	cd web && npm ci
 	test -f .env || cp .env.example .env
 
 migrate: ## Apply database migrations
@@ -36,7 +36,7 @@ security: ## Audit backend and frontend dependencies for known vulnerabilities
 	uv run --with pip-audit pip-audit
 	cd web && npm audit --audit-level=high
 
-check: lint typecheck test security ## Run the full CI gate locally
+check: lint typecheck test build security ## Run the full CI gate locally
 
 build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build
