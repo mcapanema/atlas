@@ -1,5 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({ options: [] as unknown[] }));
@@ -11,16 +10,8 @@ vi.mock("./EChart", () => ({
 }));
 
 import { mockMetricsFetch } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
-
-function renderWithClient(ui: React.ReactElement) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(ui, {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
-}
 
 beforeEach(() => {
   captured.options.length = 0;

@@ -1,5 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./EChart", () => ({
@@ -7,12 +6,8 @@ vi.mock("./EChart", () => ({
 }));
 
 import { forecastFixture, jsonResponse } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { ForecastCard } from "./ForecastCard";
-
-function renderWithClient(ui: React.ReactElement) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
-}
 
 afterEach(() => {
   vi.restoreAllMocks();
