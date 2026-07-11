@@ -3,6 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import { Link } from "react-router-dom";
 
 import { useAllTeamsFlowMetrics, type FlowMetrics } from "../api/metrics";
+import { useAllTeamsForecastAccuracy, type ForecastAccuracy } from "../api/snapshots";
 import { useTeams, type Team } from "../api/teams";
 import { formatSeconds } from "../lib/duration";
 
@@ -10,6 +11,7 @@ interface TeamRow {
   key: string;
   team: Team;
   metrics: FlowMetrics | undefined;
+  accuracy: ForecastAccuracy | undefined;
 }
 
 const columns: ColumnsType<TeamRow> = [
@@ -35,6 +37,13 @@ const columns: ColumnsType<TeamRow> = [
     title: "Blocked (30d)",
     render: (_, row) => (row.metrics ? formatSeconds(row.metrics.blocked_seconds) : "—"),
   },
+  {
+    title: "Forecast accuracy (P85)",
+    render: (_, row) =>
+      row.accuracy && row.accuracy.evaluated > 0 && row.accuracy.p85_hit_rate != null
+        ? `${Math.round(row.accuracy.p85_hit_rate * 100)}%`
+        : "—",
+  },
 ];
 
 export function ExecutiveDashboardPage() {
@@ -42,6 +51,7 @@ export function ExecutiveDashboardPage() {
   // ponytail: one /api/metrics call per team; add a portfolio endpoint when
   // team count makes N round trips slow.
   const metrics = useAllTeamsFlowMetrics(teams.data ?? []);
+  const accuracy = useAllTeamsForecastAccuracy(teams.data ?? []);
 
   if (teams.isError) {
     return <Alert type="error" message="Failed to load teams" />;
@@ -50,6 +60,7 @@ export function ExecutiveDashboardPage() {
     key: team.id,
     team,
     metrics: metrics[index]?.data,
+    accuracy: accuracy[index]?.data,
   }));
   const failedCount = metrics.filter((m) => m.isError).length;
   return (
