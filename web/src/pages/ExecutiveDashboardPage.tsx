@@ -51,9 +51,17 @@ export function ExecutiveDashboardPage() {
     team,
     metrics: metrics[index]?.data,
   }));
+  const failedCount = metrics.filter((m) => m.isError).length;
   return (
     <>
       <Typography.Title level={3}>Executive Dashboard</Typography.Title>
+      {failedCount > 0 && (
+        <Alert
+          type="warning"
+          style={{ marginBottom: 16 }}
+          message={`Metrics failed to load for ${failedCount} team${failedCount === 1 ? "" : "s"}`}
+        />
+      )}
       <Table columns={columns} dataSource={rows} loading={teams.isLoading} pagination={false} />
     </>
   );
