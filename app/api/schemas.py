@@ -245,3 +245,28 @@ class DeliveryAdviceRead(BaseModel):
     generated_at: datetime
     summary: str
     recommendations: list[RecommendationRead]
+
+
+class MetricSnapshotRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    captured_on: date
+    window_days: int
+    completed: int
+    wip: int
+    lead_time_p50_seconds: float | None
+    lead_time_p85_seconds: float | None
+    cycle_time_p50_seconds: float | None
+    cycle_time_p85_seconds: float | None
+    blocked_seconds: float
+    flow_efficiency: float | None
+
+
+class ForecastAccuracyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    evaluated: int
+    pending: int
+    p50_hit_rate: float | None
+    p85_hit_rate: float | None
+    mean_abs_error_days: float | None

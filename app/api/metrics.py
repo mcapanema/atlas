@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Query
 
-from app.api.deps import MetricsServiceDep
+from app.api.deps import MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
     DurationStatsRead,
     FlowHistoryRead,
     FlowMetricsRead,
     LeadTimeDistributionRead,
+    MetricSnapshotRead,
 )
 from app.api.scope import ScopeDep
 from app.domain.metrics.summary import DurationStats
@@ -68,3 +69,13 @@ async def get_lead_time_distribution(
         team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
     )
     return LeadTimeDistributionRead.model_validate(distribution)
+
+
+@router.get("/snapshots", response_model=list[MetricSnapshotRead])
+async def get_metric_snapshots(
+    service: SnapshotServiceDep, scope: ScopeDep
+) -> list[MetricSnapshotRead]:
+    snapshots = await service.get_metric_history(
+        team_id=scope.team_id, project_id=scope.project_id
+    )
+    return [MetricSnapshotRead.model_validate(s) for s in snapshots]
