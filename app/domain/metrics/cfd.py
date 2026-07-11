@@ -1,8 +1,8 @@
 """Cumulative flow: per-day counts of work items in each flow phase.
 
-Replays each item's event stream to get its phase at an instant, so past
-days stay correct even when an item is later reopened (FlowSample voids
-completed_at on reopen, which would rewrite history — see wip.py).
+Replays every item's events in one chronological pass, so past days stay
+correct even when an item is later reopened (FlowSample voids completed_at
+on reopen, which would rewrite history — see wip.py).
 """
 
 from dataclasses import dataclass
@@ -21,19 +21,13 @@ class DailyFlowCount:
     done: int
 
 
-def _phase_at(ordered: list[Event], at: datetime) -> str | None:
-    """The item's phase at `at`, or None if it has no events yet."""
-    phase: str | None = None
-    for event in ordered:
-        if event.occurred_at > at:
-            break
-        if phase is None:
-            phase = "todo"
-        if event.type is EventType.STARTED:
-            phase = "in_progress"
-        elif event.type is EventType.COMPLETED:
-            phase = "done"
-    return phase
+def _advance(phase: str | None, event: Event) -> str:
+    """The item's phase after `event`, given its phase before it."""
+    if event.type is EventType.STARTED:
+        return "in_progress"
+    if event.type is EventType.COMPLETED:
+        return "done"
+    return phase if phase is not None else "todo"
 
 
 def daily_flow_counts(
@@ -42,29 +36,45 @@ def daily_flow_counts(
     """One DailyFlowCount per UTC calendar day from start to end, inclusive.
 
     Each day is measured at end-of-day (23:59:59.999999 UTC), clamped to
-    `end` for the final day.
+    `end` for the final day. One chronological pass over all events carries
+    each item's phase forward — O(events·log(events) + days), replacing the
+    per-day replay that was O(days × events).
 
     ponytail: three phases derived from event types (not per-Workflow-State
-    bands) and an O(days x events) replay — add stage-level bands and a
-    precomputed transition index if teams want per-state CFDs.
+    bands) — add stage-level bands if teams want per-state CFDs.
     """
-    ordered_streams = [
-        sorted(stream, key=lambda e: e.occurred_at) for stream in event_streams if stream
-    ]
+    ordered = sorted(
+        (
+            (event.occurred_at, item_index, event)
+            for item_index, stream in enumerate(event_streams)
+            for event in stream
+        ),
+        key=lambda entry: (entry[0], entry[1]),
+    )
+    phases: dict[int, str] = {}
+    tally = {"todo": 0, "in_progress": 0, "done": 0}
     counts: list[DailyFlowCount] = []
+    pointer = 0
     day = start.astimezone(UTC).date()
     last = end.astimezone(UTC).date()
     while day <= last:
         instant = min(end, datetime.combine(day, time.max, tzinfo=UTC))
-        todo = in_progress = done = 0
-        for stream in ordered_streams:
-            phase = _phase_at(stream, instant)
-            if phase == "todo":
-                todo += 1
-            elif phase == "in_progress":
-                in_progress += 1
-            elif phase == "done":
-                done += 1
-        counts.append(DailyFlowCount(day=day, todo=todo, in_progress=in_progress, done=done))
+        while pointer < len(ordered) and ordered[pointer][0] <= instant:
+            _, item_index, event = ordered[pointer]
+            before = phases.get(item_index)
+            after = _advance(before, event)
+            if before is not None:
+                tally[before] -= 1
+            tally[after] += 1
+            phases[item_index] = after
+            pointer += 1
+        counts.append(
+            DailyFlowCount(
+                day=day,
+                todo=tally["todo"],
+                in_progress=tally["in_progress"],
+                done=tally["done"],
+            )
+        )
         day += timedelta(days=1)
     return counts
