@@ -21,7 +21,7 @@ jobs:
       - run: uv sync
       - name: Test suite
         if: matrix.phase == 'test'
-        run: uv run pytest -v
+        run: uv run pytest --cov -v
       - name: Type check
         if: matrix.phase == 'typecheck'
         run: uv run mypy
@@ -52,7 +52,7 @@ jobs:
       - run: npm ci
       - name: Test suite
         if: matrix.phase == 'test'
-        run: npm run test
+        run: npm run test:coverage
       - name: Build
         if: matrix.phase == 'test'
         run: npm run build

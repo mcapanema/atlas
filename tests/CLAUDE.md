@@ -29,3 +29,11 @@ right reason, then implement.
 
 `asyncio_mode = "auto"` is set in `pyproject.toml`, so `async def
 test_...` functions need no `@pytest.mark.asyncio` decorator.
+
+## Coverage
+
+`make test` and CI run `uv run pytest --cov` (branch coverage over `app/`,
+`fail_under = 94`, configured in `pyproject.toml`). Plain
+`uv run pytest <path>` skips coverage entirely — keep using it for TDD
+loops; the gate would false-fail on partial runs anyway. If the gate
+trips, add tests; only lower `fail_under` with a reviewed justification.

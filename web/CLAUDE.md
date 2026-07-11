@@ -5,8 +5,8 @@ for server state, React Router for routing.
 
 ## Commands (run from `web/`, or via `make <target>` from the repo root)
 
-`npm run dev` · `npm run build` · `npm run test` · `npm run typecheck` ·
-`npm run lint`
+`npm run dev` · `npm run build` · `npm run test` · `npm run test:coverage` ·
+`npm run typecheck` · `npm run lint`
 
 ## Shape
 
@@ -22,6 +22,12 @@ for server state, React Router for routing.
 - ESLint (flat config, `eslint.config.js`) + `tsc --noEmit` both gate CI —
   run `npm run lint` and `npm run typecheck` before committing (`make
   check` runs both, both sides).
+- `npm run test:coverage` is what `make test` and CI run — v8 coverage
+  with thresholds (95% lines/statements, 91% branches, 94% functions,
+  configured in `vite.config.ts`; `src/main.tsx` and `src/test/` helpers
+  excluded as non-product code). Plain `npm run test` skips coverage for
+  fast local loops. If the gate trips, add tests; only lower a threshold
+  with a reviewed justification.
 - Tests use Vitest + React Testing Library. Any component using
   `useQuery`/`useMutation` needs a `QueryClientProvider` wrapper in its
   test (see `OrganizationsPage.test.tsx`'s `renderWithClient` helper) — a
