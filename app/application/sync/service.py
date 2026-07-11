@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.organizations.repository import OrganizationRepository
 from app.domain.projects.entities import Project
@@ -33,6 +33,9 @@ class SyncSummary:
     projects: int
     work_items: int
     events: int
+    # Items whose source state said done while their history had no
+    # completion event; sync synthesized the terminal event for them.
+    divergences: int
 
 
 class SyncService:
@@ -68,17 +71,23 @@ class SyncService:
         # Batch the lookups if syncing a large workspace ever gets slow.
         teams = await self._sync_teams(organization_id)
         projects = await self._sync_projects()
-        work_items, events = await self._sync_work_items()
+        work_items, events, divergences = await self._sync_work_items()
         summary = SyncSummary(
-            teams=teams, projects=projects, work_items=work_items, events=events
+            teams=teams,
+            projects=projects,
+            work_items=work_items,
+            events=events,
+            divergences=divergences,
         )
         logger.info(
-            "Sync finished for organization %s: teams=%d projects=%d work_items=%d events=%d",
+            "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
+            "events=%d divergences=%d",
             organization_id,
             summary.teams,
             summary.projects,
             summary.work_items,
             summary.events,
+            summary.divergences,
         )
         return summary
 
@@ -133,9 +142,10 @@ class SyncService:
                 written += 1
         return written
 
-    async def _sync_work_items(self) -> tuple[int, int]:
+    async def _sync_work_items(self) -> tuple[int, int, int]:
         items_written = 0
         events_written = 0
+        divergences = 0
         for source in await self._source.fetch_work_items():
             team = await self._teams.get_by_external_id(source.team_external_id)
             if team is None:
@@ -176,8 +186,10 @@ class SyncService:
                     )
                     await self._work_items.update(work_item)
                     items_written += 1
-            events_written += await self._sync_events(work_item.id, source)
-        return items_written, events_written
+            written, diverged = await self._sync_events(work_item.id, source)
+            events_written += written
+            divergences += diverged
+        return items_written, events_written, divergences
 
     async def _resolve_project_id(self, project_external_id: str | None) -> UUID | None:
         if project_external_id is None:
@@ -185,7 +197,18 @@ class SyncService:
         project = await self._projects.get_by_external_id(project_external_id)
         return project.id if project is not None else None
 
-    async def _sync_events(self, work_item_id: UUID, source: SourceWorkItem) -> int:
+    async def _sync_events(
+        self, work_item_id: UUID, source: SourceWorkItem
+    ) -> tuple[int, int]:
+        """Insert missing events; returns (events written, divergences found).
+
+        A divergence is an item whose source state says done while its
+        history shows no completion event (truncated history, changelog-less
+        source). Metrics and forecasts count completion from events, so
+        without reconciliation the item stays "remaining" forever — the
+        terminal event is synthesized with a deterministic external_id, so
+        re-syncs stay idempotent.
+        """
         written = 0
         for source_event in source.events:
             if await self._events.get_by_external_id(source_event.external_id) is not None:
@@ -200,4 +223,20 @@ class SyncService:
             )
             await self._events.add(event)
             written += 1
-        return written
+
+        has_completion = any(e.type is EventType.COMPLETED for e in source.events)
+        if source.completed_at is None or has_completion:
+            return written, 0
+        external_id = f"{source.external_id}:completed"
+        if await self._events.get_by_external_id(external_id) is None:
+            await self._events.add(
+                Event(
+                    work_item_id=work_item_id,
+                    type=EventType.COMPLETED,
+                    occurred_at=source.completed_at,
+                    to_state=source.state,
+                    external_id=external_id,
+                )
+            )
+            written += 1
+        return written, 1

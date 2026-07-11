@@ -1,9 +1,13 @@
 # tests/infrastructure/test_linear_mapping.py
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from app.domain.events.entities import EventType
 from app.infrastructure.connectors.linear.mapping import (
+    HISTORY_PAGE_SIZE,
     map_history_entry,
     map_issue,
     map_project,
@@ -123,3 +127,45 @@ def test_map_issue_with_project() -> None:
     node = {**ISSUE_NODE, "project": {"id": "p1"}}
 
     assert map_issue(node).project_external_id == "p1"
+
+
+def test_map_issue_parses_completed_at() -> None:
+    node = {**ISSUE_NODE, "completedAt": "2026-07-03T09:00:00.000Z"}
+
+    assert map_issue(node).completed_at == datetime(2026, 7, 3, 9, 0, tzinfo=UTC)
+
+
+def test_map_issue_without_completed_at_is_open() -> None:
+    assert map_issue(ISSUE_NODE).completed_at is None  # key absent entirely
+    assert map_issue({**ISSUE_NODE, "completedAt": None}).completed_at is None
+
+
+def test_map_issue_at_history_cap_logs_truncation_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    entries = [
+        {**_entry("backlog", "started"), "id": f"h{i}"}
+        for i in range(HISTORY_PAGE_SIZE)
+    ]
+    node = {**ISSUE_NODE, "history": {"nodes": entries}}
+
+    with caplog.at_level(
+        logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"
+    ):
+        map_issue(node)
+
+    assert any(
+        "history hit" in r.getMessage() and "i1" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_map_issue_below_history_cap_does_not_warn(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(
+        logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"
+    ):
+        map_issue(ISSUE_NODE)
+
+    assert not caplog.records

@@ -47,4 +47,8 @@ class SourceWorkItem:
     team_external_id: str
     project_external_id: str | None
     created_at: datetime
+    # When the source system says the item reached a done state — set even
+    # when the event history (e.g. a truncated changelog) never recorded a
+    # completion. Sync uses the mismatch to synthesize the terminal event.
+    completed_at: datetime | None = None
     events: tuple[SourceEvent, ...] = ()

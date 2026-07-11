@@ -14,6 +14,12 @@ Protocol and whose methods are the use cases (`create_organization`,
 `list_organizations`, ...). No FastAPI/Pydantic here either — services
 operate on Domain entities, not DTOs.
 
+One shared exception: `scope.py` holds `ScopeSampleLoader`/`ScopeSamples`,
+the single scope-load assembler the metrics, forecasting, and advisor
+services share. Extend it rather than re-implementing the items+events
+loading loop inside a service — a semantic drift between two copies of
+that loop is how remaining-count bugs hide.
+
 ## Testing
 
 Test services against a hand-written in-memory fake implementing the same

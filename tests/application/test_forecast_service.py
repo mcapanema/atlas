@@ -2,7 +2,9 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.application.forecasting.service import ForecastService
+from app.application.scope import ScopeSamples
 from app.domain.events.entities import Event, EventType
+from app.domain.metrics.samples import derive_flow_sample
 from app.domain.work_items.entities import WorkItem
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
@@ -151,3 +153,19 @@ async def test_no_history_yields_no_forecast() -> None:
     assert forecast.remaining == 1
     assert forecast.completion is None
     assert forecast.confidence is None
+
+
+async def test_precomputed_scope_skips_repository_loading() -> None:
+    # Repositories are empty — remaining must come from the passed-in scope.
+    service = ForecastService(
+        InMemoryWorkItemRepository([]), InMemoryEventRepository([])
+    )
+    item = _item(uuid4())
+    stream = [_event(item, EventType.COMPLETED, 1)]
+    sample = derive_flow_sample(stream)
+    assert sample is not None
+    scope = ScopeSamples(streams=[stream], samples=[sample], item_count=3)
+
+    forecast = await service.get_forecast(now=NOW, scope=scope)
+
+    assert forecast.remaining == 2  # 3 in scope, 1 completed — all from `scope`

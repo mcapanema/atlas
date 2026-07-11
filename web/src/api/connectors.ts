@@ -11,6 +11,7 @@ export interface SyncSummary {
   projects: number;
   work_items: number;
   events: number;
+  divergences: number;
 }
 
 export function useLinearStatus() {

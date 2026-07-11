@@ -2,7 +2,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.application.metrics.service import MetricsService
+from app.application.scope import ScopeSamples
 from app.domain.events.entities import Event, EventType
+from app.domain.metrics.samples import derive_flow_sample
 from app.domain.work_items.entities import WorkItem
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
@@ -207,3 +209,22 @@ async def test_lead_time_distribution_for_team() -> None:
     assert dist.window_end == NOW
     assert sum(b.count for b in dist.bins) == 1
     assert dist.bins[8].count == 1  # 8-day lead time
+
+
+async def test_precomputed_scope_skips_repository_loading() -> None:
+    # Repositories are empty — if the result reflects the passed-in scope,
+    # the service used it instead of loading.
+    service = MetricsService(InMemoryWorkItemRepository([]), InMemoryEventRepository([]))
+    item = _item(uuid4())
+    stream = [_event(item, EventType.CREATED, 10), _event(item, EventType.COMPLETED, 2)]
+    sample = derive_flow_sample(stream)
+    assert sample is not None
+    scope = ScopeSamples(streams=[stream], samples=[sample], item_count=1)
+
+    metrics = await service.get_flow_metrics(now=NOW, scope=scope)
+    history = await service.get_flow_history(now=NOW, scope=scope)
+    distribution = await service.get_lead_time_distribution(now=NOW, scope=scope)
+
+    assert metrics.completed == 1
+    assert sum(b.completed for b in history.weeks) == 1
+    assert sum(b.count for b in distribution.bins) == 1
