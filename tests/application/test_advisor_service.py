@@ -62,3 +62,28 @@ async def test_build_context_assembles_scope_metrics() -> None:
     assert context.distribution.window_start == now - timedelta(days=90)
     assert context.forecast.window_end == now
     assert context.forecast.remaining == 0
+
+
+class CountingWorkItems(InMemoryWorkItems):
+    def __init__(self) -> None:
+        self.list_calls = 0
+
+    async def list(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[WorkItem]:
+        self.list_calls += 1
+        return []
+
+
+async def test_build_context_loads_the_scope_once() -> None:
+    now = datetime(2026, 7, 10, tzinfo=UTC)
+    work_items = CountingWorkItems()
+    events = InMemoryEvents()
+    service = AdvisorService(
+        MetricsService(work_items, events), ForecastService(work_items, events)
+    )
+
+    await service.build_context(team_id=uuid4(), now=now)
+
+    # One shared load for flow + distribution + forecast (was three).
+    assert work_items.list_calls == 1
