@@ -12,8 +12,17 @@ class WorkItemRepository(Protocol):
     async def update(self, work_item: WorkItem) -> None: ...
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]: ...
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int: ...
 
     async def get(self, work_item_id: UUID) -> WorkItem | None: ...
 

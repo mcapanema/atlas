@@ -80,14 +80,25 @@ class InMemoryWorkItemRepository:
         self._items[work_item.id] = work_item
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
         items = list(self._items.values())
         if team_id is not None:
             items = [i for i in items if i.team_id == team_id]
         if project_id is not None:
             items = [i for i in items if i.project_id == project_id]
-        return items
+        items = items[offset:]
+        return items if limit is None else items[:limit]
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        return len(await self.list(team_id=team_id, project_id=project_id))
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return self._items.get(work_item_id)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, select
+from sqlalchemy import ForeignKey, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DateTime, Uuid
@@ -69,15 +69,37 @@ class SqlAlchemyWorkItemRepository:
         await self._session.flush()
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
         query = select(WorkItemModel)
         if team_id is not None:
             query = query.where(WorkItemModel.team_id == team_id)
         if project_id is not None:
             query = query.where(WorkItemModel.project_id == project_id)
-        result = await self._session.execute(query.order_by(WorkItemModel.created_at))
+        # id tiebreak keeps pages stable when created_at collides
+        query = query.order_by(WorkItemModel.created_at, WorkItemModel.id)
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self._session.execute(query)
         return [model.to_domain() for model in result.scalars()]
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        query = select(func.count()).select_from(WorkItemModel)
+        if team_id is not None:
+            query = query.where(WorkItemModel.team_id == team_id)
+        if project_id is not None:
+            query = query.where(WorkItemModel.project_id == project_id)
+        result = await self._session.execute(query)
+        return int(result.scalar_one())
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         model = await self._session.get(WorkItemModel, work_item_id)

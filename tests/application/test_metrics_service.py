@@ -21,14 +21,26 @@ class InMemoryWorkItemRepository:
         pass
 
     async def list(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[WorkItem]:
-        return [
+        items = [
             item
             for item in self._items
             if (team_id is None or item.team_id == team_id)
             and (project_id is None or item.project_id == project_id)
         ]
+        items = items[offset:]
+        return items if limit is None else items[:limit]
+
+    async def count(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        return len(await self.list(team_id=team_id, project_id=project_id))
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return next((i for i in self._items if i.id == work_item_id), None)
