@@ -36,6 +36,8 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(await screen.findByText("Team Dashboard")).toBeInTheDocument();
+    // The lazy import + FlowDashboard render chain can exceed Testing
+    // Library's default 1000ms findByText timeout under load.
+    expect(await screen.findByText("Team Dashboard", {}, { timeout: 5000 })).toBeInTheDocument();
   });
 });
