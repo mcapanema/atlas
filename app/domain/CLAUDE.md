@@ -36,6 +36,10 @@ beside it (`DataSourceError`, `AdvisorError`) — adapters translate vendor
 exceptions into these, so nothing above Infrastructure ever sees an httpx
 error.
 
+**Shared helpers**: `_time.py` — `utcnow()`, the single timezone-aware
+"now" used by entity `created_at`/`recorded_at` defaults. Don't redefine
+a local `_utcnow` in a new slice.
+
 ## Before committing
 
 Grep your diff for `fastapi`, `sqlalchemy`, `pydantic`, `sqlite`
