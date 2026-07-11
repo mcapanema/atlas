@@ -1,13 +1,13 @@
 import { Alert, Select, Space, Table, Tag, Typography } from "antd";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useTeams } from "../api/teams";
 import { useWorkItems, WORK_ITEMS_PAGE_SIZE, type WorkItem } from "../api/workItems";
 
 export function WorkItemsPage() {
-  const [teamId, setTeamId] = useState<string>();
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const teamId = searchParams.get("team") ?? undefined;
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const teams = useTeams();
   const workItems = useWorkItems(teamId, page);
 
@@ -27,10 +27,7 @@ export function WorkItemsPage() {
           placeholder="All teams"
           allowClear
           value={teamId}
-          onChange={(value) => {
-            setTeamId(value);
-            setPage(1);
-          }}
+          onChange={(value) => setSearchParams(value ? { team: value } : {})}
           options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
         />
         <Table
@@ -41,7 +38,12 @@ export function WorkItemsPage() {
             current: page,
             pageSize: WORK_ITEMS_PAGE_SIZE,
             total: workItems.data?.total ?? 0,
-            onChange: setPage,
+            onChange: (nextPage) =>
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set("page", String(nextPage));
+                return next;
+              }),
             showSizeChanger: false,
           }}
           columns={[
