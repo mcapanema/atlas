@@ -1,6 +1,8 @@
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
@@ -54,6 +56,46 @@ async def test_metric_snapshot_exists_on(session: AsyncSession) -> None:
     assert await repo.exists_on(date(2026, 7, 11), team_id=TEAM)
     assert not await repo.exists_on(date(2026, 7, 12), team_id=TEAM)
     assert not await repo.exists_on(date(2026, 7, 11), team_id=uuid4())
+
+
+async def test_metric_snapshot_rejects_duplicate_team_day_at_db_level(
+    session: AsyncSession,
+) -> None:
+    """DB-level guard behind the app-level exists_on check (concurrent syncs)."""
+    repo = SqlAlchemyMetricSnapshotRepository(session)
+    await repo.add(_metric(date(2026, 7, 11), team_id=TEAM))
+
+    with pytest.raises(IntegrityError):
+        await repo.add(_metric(date(2026, 7, 11), team_id=TEAM))
+
+
+async def test_forecast_snapshot_rejects_duplicate_team_day_at_db_level(
+    session: AsyncSession,
+) -> None:
+    repo = SqlAlchemyForecastSnapshotRepository(session)
+    team = uuid4()
+    await repo.add(
+        ForecastSnapshot(
+            captured_on=date(2026, 7, 11),
+            window_days=90,
+            remaining=12,
+            p50_days=10,
+            p85_days=19,
+            team_id=team,
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        await repo.add(
+            ForecastSnapshot(
+                captured_on=date(2026, 7, 11),
+                window_days=90,
+                remaining=5,
+                p50_days=3,
+                p85_days=8,
+                team_id=team,
+            )
+        )
 
 
 async def test_forecast_snapshot_roundtrip(session: AsyncSession) -> None:

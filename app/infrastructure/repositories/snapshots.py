@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import Date, Float, Integer, select
+from sqlalchemy import Date, Float, Index, Integer, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -13,10 +13,24 @@ from app.infrastructure.database.types import UTCDateTime
 
 class MetricSnapshotModel(Base):
     __tablename__ = "metric_snapshots"
+    __table_args__ = (
+        # NULLs are distinct from each other in both SQLite and PostgreSQL, so
+        # a project-scoped row (team_id NULL) never collides on the team index
+        # and vice versa — each index only guards its own scope's rows.
+        Index(
+            "ix_metric_snapshots_team_captured_on", "team_id", "captured_on", unique=True
+        ),
+        Index(
+            "ix_metric_snapshots_project_captured_on",
+            "project_id",
+            "captured_on",
+            unique=True,
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
-    team_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True, index=True)
-    project_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    team_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    project_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     captured_on: Mapped[date] = mapped_column(Date, nullable=False)
     window_days: Mapped[int] = mapped_column(Integer, nullable=False)
     completed: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -69,10 +83,21 @@ class MetricSnapshotModel(Base):
 
 class ForecastSnapshotModel(Base):
     __tablename__ = "forecast_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_forecast_snapshots_team_captured_on", "team_id", "captured_on", unique=True
+        ),
+        Index(
+            "ix_forecast_snapshots_project_captured_on",
+            "project_id",
+            "captured_on",
+            unique=True,
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
-    team_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True, index=True)
-    project_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    team_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    project_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     captured_on: Mapped[date] = mapped_column(Date, nullable=False)
     window_days: Mapped[int] = mapped_column(Integer, nullable=False)
     remaining: Mapped[int] = mapped_column(Integer, nullable=False)

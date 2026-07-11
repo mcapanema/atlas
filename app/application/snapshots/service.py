@@ -52,6 +52,13 @@ class SnapshotService:
 
         Idempotent per UTC day — a scope already captured today is skipped,
         so re-syncing is a no-op here too.
+
+        ponytail: runs one Monte Carlo forecast (~1s, off-thread) per team
+        plus per project on every sync, so added sync latency scales
+        linearly with team count + project count — fine for today's
+        workspace sizes. Once that's slow enough to matter, move capture to
+        a background task after the sync response, or batch/reuse forecasts
+        instead of re-simulating per scope.
         """
         at = now if now is not None else datetime.now(UTC)
         captured = 0
