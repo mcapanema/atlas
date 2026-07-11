@@ -523,7 +523,46 @@ async def test_open_item_is_not_a_divergence() -> None:
 
 
 async def test_sync_batches_event_lookups() -> None:
-    harness = Harness(full_source())
+    # Two work items (each with events) so a regression to "once per work
+    # item" would push batch_lookup_calls to 2, not just 1.
+    source = FakeDataSource(
+        teams=[SourceTeam(external_id="lt1", name="Platform")],
+        work_items=[
+            SourceWorkItem(
+                external_id="li1",
+                title="Fix login",
+                type=WorkItemType.TASK,
+                state="In Progress",
+                team_external_id="lt1",
+                project_external_id=None,
+                created_at=CREATED_AT,
+                events=(
+                    SourceEvent(
+                        external_id="li1:created",
+                        type=EventType.CREATED,
+                        occurred_at=CREATED_AT,
+                    ),
+                ),
+            ),
+            SourceWorkItem(
+                external_id="li2",
+                title="Ship report",
+                type=WorkItemType.TASK,
+                state="In Progress",
+                team_external_id="lt1",
+                project_external_id=None,
+                created_at=CREATED_AT,
+                events=(
+                    SourceEvent(
+                        external_id="li2:created",
+                        type=EventType.CREATED,
+                        occurred_at=CREATED_AT,
+                    ),
+                ),
+            ),
+        ],
+    )
+    harness = Harness(source)
     org_id = await seed_org(harness)
 
     await harness.service.sync(org_id)
