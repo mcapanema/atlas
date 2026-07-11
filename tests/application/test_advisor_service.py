@@ -44,6 +44,9 @@ class InMemoryEvents:
     async def get_by_external_id(self, external_id: str) -> Event | None:
         return None
 
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        return set()
+
 
 async def test_build_context_assembles_scope_metrics() -> None:
     now = datetime(2026, 7, 10, tzinfo=UTC)

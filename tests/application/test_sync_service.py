@@ -123,6 +123,14 @@ class InMemoryEventRepository:
             (e for e in self._events.values() if e.external_id == external_id), None
         )
 
+    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        wanted = set(external_ids)
+        return {
+            e.external_id
+            for e in self._events.values()
+            if e.external_id is not None and e.external_id in wanted
+        }
+
 
 class FakeDataSource:
     def __init__(

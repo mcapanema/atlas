@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.events.entities import Event, EventType
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem
+from app.infrastructure.repositories import batching
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
@@ -133,3 +135,56 @@ async def test_list_for_work_items_with_no_ids_is_empty(session: AsyncSession) -
     )
 
     assert await repo.list_for_work_items([]) == []
+
+
+async def test_existing_external_ids_returns_only_found(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    await repo.add(
+        Event(
+            work_item_id=await _work_item_id(session),
+            type=EventType.CREATED,
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            external_id="lin_e1",
+        )
+    )
+
+    found = await repo.existing_external_ids(["lin_e1", "missing"])
+
+    assert found == {"lin_e1"}
+
+
+async def test_list_for_work_items_survives_sqlite_bind_param_limit(
+    session: AsyncSession,
+) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    # SQLite's bind-parameter ceiling is 32766; an unchunked IN(...) with
+    # 33k ids raises OperationalError("too many SQL variables").
+    ids = [uuid4() for _ in range(33_000)]
+
+    assert await repo.list_for_work_items(ids) == []
+
+
+async def test_list_for_work_items_orders_across_chunks(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching, "BATCH_SIZE", 1)  # force one id per chunk
+    repo = SqlAlchemyEventRepository(session)
+    item_a, item_b = await _work_item_id(session), await _work_item_id(session)
+    await repo.add(
+        Event(
+            work_item_id=item_a,
+            type=EventType.STARTED,
+            occurred_at=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+    )
+    await repo.add(
+        Event(
+            work_item_id=item_b,
+            type=EventType.CREATED,
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    events = await repo.list_for_work_items([item_a, item_b])
+
+    assert [e.type for e in events] == [EventType.CREATED, EventType.STARTED]
