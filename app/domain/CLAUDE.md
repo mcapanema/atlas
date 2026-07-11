@@ -4,35 +4,49 @@ Pure Python. Zero framework imports — no FastAPI, SQLAlchemy, Pydantic,
 aiosqlite, or connector-specific code (Linear, GitHub, Slack, etc.), ever.
 This is the one rule in this repo that isn't negotiable.
 
-## Shape
+## Three slice shapes
 
-Each concept gets its own subpackage: `<concept>/entities.py` +
-`<concept>/repository.py`.
+**Persisted aggregates** (`organizations/`, `teams/`, `projects/`,
+`work_items/`, `events/`): `entities.py` + `repository.py`.
 
-- `entities.py` — a plain `@dataclass` per aggregate/entity. Invariants live
-  in `__post_init__` and raise `ValueError` on violation (see
+- `entities.py` — a plain `@dataclass` per aggregate/entity. Invariants
+  live in `__post_init__` and raise `ValueError` on violation (see
   `organizations/entities.py`'s stripped/non-empty `name` check). IDs are
-  `uuid4()`-generated `UUID`s, timestamps are timezone-aware UTC `datetime`s
-  via a small `_utcnow()` helper.
+  `uuid4()`-generated `UUID`s, timestamps timezone-aware UTC `datetime`s.
 - `repository.py` — a `typing.Protocol` per aggregate describing the
-  persistence port (`add`, `list`, `get`, ...), all `async`. This is an
-  interface only — no implementation lives here. Infrastructure implements
-  it; Application depends on it.
+  persistence port (`add`, `list`, `get`, ...), all `async`. Interface
+  only — Infrastructure implements it, Application depends on it.
+- `events/` additionally holds `timeline.py`, a pure function deriving
+  state/blocked periods from an item's events. A derivation that belongs
+  to an aggregate's data lives beside the aggregate, not in a service.
 
-One deliberate exception to the entities+repository shape: `sync/` holds
-the platform-neutral `Source*` snapshot types (`source.py`) and the
-`DeliveryDataSource` Protocol (`port.py`) that connectors implement. Still
-stdlib-only — the same zero-framework rule applies.
+**Pure-function analytics** (`metrics/`, `forecasting/`): no repository,
+no persistence — frozen dataclasses for results plus deterministic
+functions (`derive_flow_sample`, `compute_team_metrics`, the CFD replay,
+the Monte Carlo simulation, ...). Anything random takes a seeded
+`random.Random` argument. These modules compute; they never load —
+Application assembles their inputs.
+
+**Port slices** (`sync/`, `advisor/`): a `Protocol` port for an external
+capability plus the stdlib types that cross it — `sync/source.py`'s
+platform-neutral `Source*` snapshots with `sync/port.py`'s
+`DeliveryDataSource`; `advisor/entities.py`'s
+`DeliveryContext`/`DeliveryAdvice`/`Recommendation` with
+`advisor/port.py`'s `AdvisorPort`. Each port defines its failure type
+beside it (`DataSourceError`, `AdvisorError`) — adapters translate vendor
+exceptions into these, so nothing above Infrastructure ever sees an httpx
+error.
 
 ## Before committing
 
 Grep your diff for `fastapi`, `sqlalchemy`, `pydantic`, `sqlite`
-(case-insensitive) — none should match. `tests/domain/` mirrors this
-package 1:1 and asserts on entity behavior only (no DB, no HTTP).
+(case-insensitive) — none should match. `tests/domain/` asserts on entity
+and pure-function behavior only (no DB, no HTTP).
 
 ## Adding a new concept
 
-Copy the `organizations/` shape: `entities.py` with the dataclass +
-invariants, `repository.py` with the Protocol. Nothing here should ever
-need to change when Infrastructure or Presentation changes — if it does,
-the dependency is pointing the wrong way.
+Copy the shape that matches the kind: `organizations/` for a persisted
+aggregate, `metrics/` for pure computation, `sync/` for an
+external-system port. Nothing here should ever need to change when
+Infrastructure or Presentation changes — if it does, the dependency is
+pointing the wrong way.
