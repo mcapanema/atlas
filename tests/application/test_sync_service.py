@@ -101,6 +101,8 @@ class InMemoryWorkItemRepository:
 class InMemoryEventRepository:
     def __init__(self) -> None:
         self._events: dict[UUID, Event] = {}
+        self.single_lookup_calls = 0
+        self.batch_lookup_calls = 0
 
     async def add(self, event: Event) -> None:
         self._events[event.id] = event
@@ -119,11 +121,13 @@ class InMemoryEventRepository:
         )
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
+        self.single_lookup_calls += 1
         return next(
             (e for e in self._events.values() if e.external_id == external_id), None
         )
 
     async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
+        self.batch_lookup_calls += 1
         wanted = set(external_ids)
         return {
             e.external_id
@@ -516,3 +520,14 @@ async def test_open_item_is_not_a_divergence() -> None:
     summary = await harness.service.sync(await seed_org(harness))
 
     assert summary.divergences == 0
+
+
+async def test_sync_batches_event_lookups() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+
+    await harness.service.sync(org_id)
+
+    # One batched existence query for the whole run, zero per-event SELECTs.
+    assert harness.events.single_lookup_calls == 0
+    assert harness.events.batch_lookup_calls == 1
