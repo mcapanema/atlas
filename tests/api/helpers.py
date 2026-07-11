@@ -1,5 +1,7 @@
 """Shared builders for API-level tests: create real parent chains via the API."""
 
+from datetime import UTC, datetime, timedelta
+
 from httpx import AsyncClient
 
 
@@ -25,3 +27,16 @@ async def create_work_item(
     assert response.status_code == 201
     work_item_id: str = response.json()["id"]
     return work_item_id
+
+
+def days_ago(days: int) -> str:
+    """ISO timestamp ``days`` days ago, pinned to 12:00 UTC (mid-bucket).
+
+    API endpoints window against the server's wall clock, so tests must
+    seed relative to now — but an event exactly N days ago sits on the
+    same instant boundary the server buckets by. Anchoring mid-day keeps
+    date-bucket assertions (history days, lead-time bins) 12 hours from
+    any midnight flip between seeding and the request under test.
+    """
+    noon = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    return (noon - timedelta(days=days)).isoformat()

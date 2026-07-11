@@ -1,35 +1,10 @@
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.application.events.service import EventService
-from app.domain.events.entities import Event, EventType
+from app.domain.events.entities import EventType
 from app.domain.events.timeline import StatePeriod
-
-
-class InMemoryEventRepository:
-    def __init__(self) -> None:
-        self._events: list[Event] = []
-
-    async def add(self, event: Event) -> None:
-        self._events.append(event)
-
-    async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
-        return [e for e in self._events if e.work_item_id == work_item_id]
-
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
-        wanted = set(work_item_ids)
-        return [e for e in self._events if e.work_item_id in wanted]
-
-    async def get_by_external_id(self, external_id: str) -> Event | None:
-        return next((e for e in self._events if e.external_id == external_id), None)
-
-    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
-        wanted = set(external_ids)
-        return {
-            e.external_id
-            for e in self._events
-            if e.external_id is not None and e.external_id in wanted
-        }
+from tests.fakes import InMemoryEventRepository
 
 
 async def test_record_event_persists_and_returns() -> None:

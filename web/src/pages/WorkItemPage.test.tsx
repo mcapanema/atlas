@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { jsonResponse } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { WorkItemPage } from "./WorkItemPage";
 
 const WORK_ITEM_ID = "11111111-1111-1111-1111-111111111111";
@@ -49,23 +50,12 @@ const timeline = {
   blocked_periods: [{ started_at: "2026-01-04T00:00:00Z", ended_at: null }],
 };
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/work-items/${WORK_ITEM_ID}`]}>
-        <Routes>
-          <Route path="/work-items/:id" element={<WorkItemPage />} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
+  return renderWithClient(
+    <Routes>
+      <Route path="/work-items/:id" element={<WorkItemPage />} />
+    </Routes>,
+    [`/work-items/${WORK_ITEM_ID}`],
   );
 }
 

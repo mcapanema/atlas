@@ -24,11 +24,14 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 atlas.db*
+.coverage
+htmlcov/
 
 # Node / frontend
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo
+web/coverage/
 
 # Ignore graphify directories
 .tokensave

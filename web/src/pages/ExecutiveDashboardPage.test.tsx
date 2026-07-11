@@ -1,26 +1,13 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, metricsFixture } from "../test/fixtures";
+import { metricsFixture, mockMetricsFetch, teamFixture } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { ExecutiveDashboardPage } from "./ExecutiveDashboardPage";
 
 const teams = [
-  {
-    id: "22222222-2222-2222-2222-222222222222",
-    organization_id: "33333333-3333-3333-3333-333333333333",
-    name: "Platform",
-    external_id: null,
-    created_at: "2026-07-01T00:00:00Z",
-  },
-  {
-    id: "55555555-5555-5555-5555-555555555555",
-    organization_id: "33333333-3333-3333-3333-333333333333",
-    name: "Growth",
-    external_id: null,
-    created_at: "2026-07-01T00:00:00Z",
-  },
+  teamFixture,
+  { ...teamFixture, id: "55555555-5555-5555-5555-555555555555", name: "Growth" },
 ];
 
 afterEach(() => {
@@ -33,26 +20,13 @@ describe("ExecutiveDashboardPage", () => {
     // mismatch (e.g. an off-by-one indexing metrics[index] against teams).
     const platformMetrics = { ...metricsFixture, completed: 4 };
     const growthMetrics = { ...metricsFixture, completed: 9 };
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
-      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
-      if (url.startsWith(`/api/metrics?team_id=${teams[0].id}`)) {
-        return Promise.resolve(jsonResponse(platformMetrics));
-      }
-      if (url.startsWith(`/api/metrics?team_id=${teams[1].id}`)) {
-        return Promise.resolve(jsonResponse(growthMetrics));
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics?team_id=${teams[0].id}`]: platformMetrics,
+      [`/api/metrics?team_id=${teams[1].id}`]: growthMetrics,
     });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <ExecutiveDashboardPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderWithClient(<ExecutiveDashboardPage />);
 
     await waitFor(() => expect(screen.getByText("Platform")).toBeInTheDocument());
     expect(screen.getByText("Growth")).toBeInTheDocument();

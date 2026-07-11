@@ -4,64 +4,14 @@ from uuid import UUID, uuid4
 from app.application.advisor.service import AdvisorService
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
-from app.domain.events.entities import Event
 from app.domain.work_items.entities import WorkItem
-
-
-class InMemoryWorkItems:
-    """Structurally satisfies the full WorkItemRepository Protocol (mypy strict)."""
-
-    async def add(self, work_item: WorkItem) -> None:
-        raise NotImplementedError
-
-    async def update(self, work_item: WorkItem) -> None:
-        raise NotImplementedError
-
-    async def list(
-        self,
-        *,
-        team_id: UUID | None = None,
-        project_id: UUID | None = None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[WorkItem]:
-        return []
-
-    async def count(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
-    ) -> int:
-        return 0
-
-    async def get(self, work_item_id: UUID) -> WorkItem | None:
-        return None
-
-    async def get_by_external_id(self, external_id: str) -> WorkItem | None:
-        return None
-
-
-class InMemoryEvents:
-    """Structurally satisfies the full EventRepository Protocol (mypy strict)."""
-
-    async def add(self, event: Event) -> None:
-        raise NotImplementedError
-
-    async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
-        return []
-
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
-        return []
-
-    async def get_by_external_id(self, external_id: str) -> Event | None:
-        return None
-
-    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
-        return set()
+from tests.fakes import InMemoryEventRepository, InMemoryWorkItemRepository
 
 
 async def test_build_context_assembles_scope_metrics() -> None:
     now = datetime(2026, 7, 10, tzinfo=UTC)
-    work_items = InMemoryWorkItems()
-    events = InMemoryEvents()
+    work_items = InMemoryWorkItemRepository()
+    events = InMemoryEventRepository()
     service = AdvisorService(
         MetricsService(work_items, events), ForecastService(work_items, events)
     )
@@ -77,8 +27,9 @@ async def test_build_context_assembles_scope_metrics() -> None:
     assert context.forecast.remaining == 0
 
 
-class CountingWorkItems(InMemoryWorkItems):
+class CountingWorkItems(InMemoryWorkItemRepository):
     def __init__(self) -> None:
+        super().__init__()
         self.list_calls = 0
 
     async def list(
@@ -90,13 +41,15 @@ class CountingWorkItems(InMemoryWorkItems):
         offset: int = 0,
     ) -> list[WorkItem]:
         self.list_calls += 1
-        return []
+        return await super().list(
+            team_id=team_id, project_id=project_id, limit=limit, offset=offset
+        )
 
 
 async def test_build_context_loads_the_scope_once() -> None:
     now = datetime(2026, 7, 10, tzinfo=UTC)
     work_items = CountingWorkItems()
-    events = InMemoryEvents()
+    events = InMemoryEventRepository()
     service = AdvisorService(
         MetricsService(work_items, events), ForecastService(work_items, events)
     )

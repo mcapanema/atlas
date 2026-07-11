@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 
-export function jsonResponse(body: unknown) {
+export function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -69,9 +69,20 @@ export const forecastFixture = {
   confidence: null,
 };
 
-export function mockMetricsFetch() {
+export const teamFixture = {
+  id: "22222222-2222-2222-2222-222222222222",
+  organization_id: "33333333-3333-3333-3333-333333333333",
+  name: "Platform",
+  external_id: null,
+  created_at: "2026-07-01T00:00:00Z",
+};
+
+export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
+    for (const [prefix, body] of Object.entries(extraRoutes)) {
+      if (url.startsWith(prefix)) return Promise.resolve(jsonResponse(body));
+    }
     if (url.startsWith("/api/metrics/lead-time-distribution")) {
       return Promise.resolve(jsonResponse(distributionFixture));
     }

@@ -1,19 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../components/EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import {
-  distributionFixture,
-  forecastFixture,
-  historyFixture,
-  jsonResponse,
-  metricsFixture,
-} from "../test/fixtures";
+import { mockMetricsFetch } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { ProjectDashboardPage } from "./ProjectDashboardPage";
 
 const project = {
@@ -30,30 +23,9 @@ afterEach(() => {
 
 describe("ProjectDashboardPage", () => {
   it("shows the dashboard scoped to the selected project", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
-      if (url.startsWith("/api/projects")) return Promise.resolve(jsonResponse([project]));
-      if (url.startsWith("/api/metrics/lead-time-distribution")) {
-        return Promise.resolve(jsonResponse(distributionFixture));
-      }
-      if (url.startsWith("/api/metrics/history")) {
-        return Promise.resolve(jsonResponse(historyFixture));
-      }
-      if (url.startsWith("/api/forecasts")) {
-        return Promise.resolve(jsonResponse(forecastFixture));
-      }
-      if (url.startsWith("/api/metrics")) return Promise.resolve(jsonResponse(metricsFixture));
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mockMetricsFetch({ "/api/projects": [project] });
 
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/projects"]}>
-          <ProjectDashboardPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderWithClient(<ProjectDashboardPage />, ["/projects"]);
 
     fireEvent.mouseDown(await screen.findByRole("combobox"));
     fireEvent.click(await screen.findByTitle("Apollo"));

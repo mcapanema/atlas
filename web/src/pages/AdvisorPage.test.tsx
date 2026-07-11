@@ -1,18 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse } from "../test/fixtures";
+import { jsonResponse, teamFixture } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { AdvisorPage } from "./AdvisorPage";
-
-const team = {
-  id: "22222222-2222-2222-2222-222222222222",
-  organization_id: "33333333-3333-3333-3333-333333333333",
-  name: "Platform",
-  external_id: null,
-  created_at: "2026-07-01T00:00:00Z",
-};
 
 const advice = {
   generated_at: "2026-07-10T00:00:00Z",
@@ -32,7 +23,7 @@ const advice = {
 function mockFetch({ configured = true } = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
-    if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([team]));
+    if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
     if (url.startsWith("/api/recommendations/status")) {
       return Promise.resolve(jsonResponse({ configured }));
     }
@@ -42,14 +33,7 @@ function mockFetch({ configured = true } = {}) {
 }
 
 function renderPage(initialEntry = "/advisor") {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <AdvisorPage />
-      </MemoryRouter>
-    </QueryClientProvider>,
-  );
+  return renderWithClient(<AdvisorPage />, [initialEntry]);
 }
 
 afterEach(() => {
@@ -70,7 +54,7 @@ describe("AdvisorPage", () => {
   it("does not fetch advice until the button is clicked", async () => {
     mockFetch();
 
-    renderPage(`/advisor?team=${team.id}`);
+    renderPage(`/advisor?team=${teamFixture.id}`);
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
@@ -80,7 +64,7 @@ describe("AdvisorPage", () => {
   it("renders summary and recommendations after clicking Get advice", async () => {
     mockFetch();
 
-    renderPage(`/advisor?team=${team.id}`);
+    renderPage(`/advisor?team=${teamFixture.id}`);
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
@@ -94,13 +78,8 @@ describe("AdvisorPage", () => {
   it("surfaces an advisor status failure instead of silently disabling the button", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
-      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([team]));
-      return Promise.resolve(
-        new Response(JSON.stringify({ detail: "boom" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
     });
 
     renderPage();

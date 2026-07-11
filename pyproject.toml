@@ -21,6 +21,7 @@ dev = [
     "hypothesis>=6.120",
     "ruff>=0.9",
     "mypy>=1.14",
+    "pytest-cov>=7.1.0",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.
@@ -31,6 +32,17 @@ package = false
 pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# Coverage only engages when pytest is passed --cov (make test / CI);
+# bare `uv run pytest <path>` TDD runs skip it and the fail_under gate.
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 94
+skip_covered = true
+show_missing = true
 
 [tool.ruff]
 line-length = 100
@@ -44,3 +56,11 @@ python_version = "3.13"
 strict = true
 files = ["app", "tests"]
 exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+# pydantic-settings' mypy plugin synthesizes Settings.__init__ from declared
+# model fields only, so it doesn't know about BaseSettings's private
+# _env_file kwarg — a stub gap, not a real type error. Scoped here instead
+# of ignore comments on every call site.
+module = "tests.test_config"
+disable_error_code = ["call-arg"]

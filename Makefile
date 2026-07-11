@@ -20,9 +20,9 @@ dev: ## Run backend + frontend dev servers together (Ctrl+C stops both)
 	(cd web && npm run dev) & \
 	wait
 
-test: ## Run backend and frontend test suites
-	uv run pytest -v
-	cd web && npm run test
+test: ## Run backend and frontend test suites (with coverage gates)
+	uv run pytest --cov -v
+	cd web && npm run test:coverage
 
 lint: ## Lint backend and frontend
 	uv run ruff check .

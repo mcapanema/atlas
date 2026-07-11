@@ -1,20 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, screen, render, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { jsonResponse } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { ConnectorsPage } from "./ConnectorsPage";
-
-function renderWithClient(ui: React.ReactElement) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
-}
-
-function jsonResponse(body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 function mockApi({ configured }: { configured: boolean }) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -70,10 +59,7 @@ describe("ConnectorsPage", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url === "/api/connectors/linear") {
-        return new Response(JSON.stringify({ detail: "boom" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        });
+        return jsonResponse({ detail: "boom" }, 500);
       }
       if (url === "/api/organizations") return jsonResponse([]);
       throw new Error(`Unexpected fetch: ${url}`);

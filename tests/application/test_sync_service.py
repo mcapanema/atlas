@@ -5,167 +5,18 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.application.sync.service import SyncService, UnknownOrganizationError
-from app.domain.events.entities import Event, EventType
+from app.domain.events.entities import EventType
 from app.domain.organizations.entities import Organization
-from app.domain.projects.entities import Project
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
-from app.domain.teams.entities import Team
-from app.domain.work_items.entities import WorkItem, WorkItemType
-
-
-class InMemoryOrganizationRepository:
-    def __init__(self) -> None:
-        self._orgs: dict[UUID, Organization] = {}
-
-    async def add(self, organization: Organization) -> None:
-        self._orgs[organization.id] = organization
-
-    async def list(self) -> list[Organization]:
-        return list(self._orgs.values())
-
-    async def get(self, organization_id: UUID) -> Organization | None:
-        return self._orgs.get(organization_id)
-
-
-class InMemoryTeamRepository:
-    def __init__(self) -> None:
-        self._teams: dict[UUID, Team] = {}
-
-    async def add(self, team: Team) -> None:
-        self._teams[team.id] = team
-
-    async def update(self, team: Team) -> None:
-        self._teams[team.id] = team
-
-    async def list(self) -> list[Team]:
-        return list(self._teams.values())
-
-    async def get(self, team_id: UUID) -> Team | None:
-        return self._teams.get(team_id)
-
-    async def get_by_external_id(self, external_id: str) -> Team | None:
-        return next((t for t in self._teams.values() if t.external_id == external_id), None)
-
-
-class InMemoryProjectRepository:
-    def __init__(self) -> None:
-        self._projects: dict[UUID, Project] = {}
-
-    async def add(self, project: Project) -> None:
-        self._projects[project.id] = project
-
-    async def update(self, project: Project) -> None:
-        self._projects[project.id] = project
-
-    async def list(self) -> list[Project]:
-        return list(self._projects.values())
-
-    async def get(self, project_id: UUID) -> Project | None:
-        return self._projects.get(project_id)
-
-    async def get_by_external_id(self, external_id: str) -> Project | None:
-        return next(
-            (p for p in self._projects.values() if p.external_id == external_id), None
-        )
-
-
-class InMemoryWorkItemRepository:
-    def __init__(self) -> None:
-        self._items: dict[UUID, WorkItem] = {}
-
-    async def add(self, work_item: WorkItem) -> None:
-        self._items[work_item.id] = work_item
-
-    async def update(self, work_item: WorkItem) -> None:
-        self._items[work_item.id] = work_item
-
-    async def list(
-        self,
-        *,
-        team_id: UUID | None = None,
-        project_id: UUID | None = None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[WorkItem]:
-        items = list(self._items.values())
-        if team_id is not None:
-            items = [i for i in items if i.team_id == team_id]
-        if project_id is not None:
-            items = [i for i in items if i.project_id == project_id]
-        items = items[offset:]
-        return items if limit is None else items[:limit]
-
-    async def count(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
-    ) -> int:
-        return len(await self.list(team_id=team_id, project_id=project_id))
-
-    async def get(self, work_item_id: UUID) -> WorkItem | None:
-        return self._items.get(work_item_id)
-
-    async def get_by_external_id(self, external_id: str) -> WorkItem | None:
-        return next(
-            (i for i in self._items.values() if i.external_id == external_id), None
-        )
-
-
-class InMemoryEventRepository:
-    def __init__(self) -> None:
-        self._events: dict[UUID, Event] = {}
-        self.single_lookup_calls = 0
-        self.batch_lookup_calls = 0
-
-    async def add(self, event: Event) -> None:
-        self._events[event.id] = event
-
-    async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
-        return sorted(
-            (e for e in self._events.values() if e.work_item_id == work_item_id),
-            key=lambda e: e.occurred_at,
-        )
-
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
-        wanted = set(work_item_ids)
-        return sorted(
-            (e for e in self._events.values() if e.work_item_id in wanted),
-            key=lambda e: e.occurred_at,
-        )
-
-    async def get_by_external_id(self, external_id: str) -> Event | None:
-        self.single_lookup_calls += 1
-        return next(
-            (e for e in self._events.values() if e.external_id == external_id), None
-        )
-
-    async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
-        self.batch_lookup_calls += 1
-        wanted = set(external_ids)
-        return {
-            e.external_id
-            for e in self._events.values()
-            if e.external_id is not None and e.external_id in wanted
-        }
-
-
-class FakeDataSource:
-    def __init__(
-        self,
-        teams: list[SourceTeam] | None = None,
-        projects: list[SourceProject] | None = None,
-        work_items: list[SourceWorkItem] | None = None,
-    ) -> None:
-        self.teams = teams or []
-        self.projects = projects or []
-        self.work_items = work_items or []
-
-    async def fetch_teams(self) -> list[SourceTeam]:
-        return self.teams
-
-    async def fetch_projects(self) -> list[SourceProject]:
-        return self.projects
-
-    async def fetch_work_items(self) -> list[SourceWorkItem]:
-        return self.work_items
+from app.domain.work_items.entities import WorkItemType
+from tests.fakes import (
+    FakeDataSource,
+    InMemoryEventRepository,
+    InMemoryOrganizationRepository,
+    InMemoryProjectRepository,
+    InMemoryTeamRepository,
+    InMemoryWorkItemRepository,
+)
 
 
 class Harness:
@@ -397,6 +248,70 @@ async def test_project_with_unknown_team_is_skipped() -> None:
             projects=[
                 SourceProject(external_id="lp9", name="Orphan", team_external_id="missing")
             ]
+        )
+    )
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.projects == 0
+    assert await harness.projects.get_by_external_id("lp9") is None
+
+
+async def test_work_item_with_unknown_team_is_skipped() -> None:
+    harness = Harness(
+        FakeDataSource(
+            work_items=[
+                SourceWorkItem(
+                    external_id="li9",
+                    title="Orphan",
+                    type=WorkItemType.TASK,
+                    state="Backlog",
+                    team_external_id="missing",
+                    project_external_id=None,
+                    created_at=CREATED_AT,
+                    events=(
+                        SourceEvent(
+                            external_id="li9:created",
+                            type=EventType.CREATED,
+                            occurred_at=CREATED_AT,
+                        ),
+                    ),
+                )
+            ]
+        )
+    )
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 0
+    assert summary.events == 0  # skipping the item must skip its events too
+    assert await harness.work_items.get_by_external_id("li9") is None
+
+
+async def test_work_item_with_unknown_project_is_created_without_project() -> None:
+    source = full_source()
+    source.projects = []  # "lp1" on the item now resolves to nothing
+
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.project_id is None
+
+
+async def test_project_with_null_team_external_id_is_skipped() -> None:
+    harness = Harness(
+        FakeDataSource(
+            teams=[SourceTeam(external_id="lt1", name="Platform")],
+            projects=[
+                SourceProject(external_id="lp9", name="Teamless", team_external_id=None)
+            ],
         )
     )
     org_id = await seed_org(harness)

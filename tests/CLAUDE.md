@@ -15,13 +15,21 @@ right reason, then implement.
   instance with `app.state.sessionmaker` overridden to the in-memory
   factory. Use this for `tests/api/` tests; don't stand up a separate app
   instance per test file.
+- `settings_env` — the one way to override settings in a test:
+  `settings_env(linear_api_key="x")` sets `ATLAS_LINEAR_API_KEY` and clears
+  the `get_settings` cache (cleared again on teardown). Pass `""` to
+  disable a key hermetically (a real env var beats `.env`). Never
+  `monkeypatch.setattr` `get_settings` at an import site.
 
 ## What belongs where
 
 - `tests/domain/` — entity/invariant tests only, no DB, no fixtures beyond
   plain pytest.
-- `tests/application/` — services tested against a hand-written in-memory
-  fake Protocol implementation, not the real repository.
+- `tests/application/` — services tested against the shared in-memory
+  fakes in `tests/fakes.py` (one canonical fake per repository port,
+  optionally seeded). Don't re-declare a fake in a test file; extend
+  `tests/fakes.py` if a port grows. One-off doubles that exist to fail or
+  record for a single test stay local to that test.
 - `tests/infrastructure/` — adapters tested against the real (in-memory)
   SQLite `session` fixture.
 - `tests/api/` — HTTP-level tests via the `client` fixture, asserting on
@@ -29,3 +37,21 @@ right reason, then implement.
 
 `asyncio_mode = "auto"` is set in `pyproject.toml`, so `async def
 test_...` functions need no `@pytest.mark.asyncio` decorator.
+
+## API-test conventions
+
+- Parent chains (`org → team → work item`) come from
+  `tests/api/helpers.py` (`create_team`, `create_work_item`) — don't
+  re-declare a private `_create_team`.
+- Seeding events relative to the wall clock uses `helpers.days_ago(n)`
+  (pinned to 12:00 UTC). Never `datetime.now(UTC) - timedelta(...)`
+  directly — exact offsets put date-bucket assertions one midnight away
+  from flaking.
+
+## Coverage
+
+`make test` and CI run `uv run pytest --cov` (branch coverage over `app/`,
+`fail_under = 94`, configured in `pyproject.toml`). Plain
+`uv run pytest <path>` skips coverage entirely — keep using it for TDD
+loops; the gate would false-fail on partial runs anyway. If the gate
+trips, add tests; only lower `fail_under` with a reviewed justification.
