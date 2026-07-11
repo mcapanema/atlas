@@ -12,18 +12,15 @@ from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import WorkItemType
+from tests.fakes import FakeDataSource
 
 
-class FakeDataSource:
-    async def fetch_teams(self) -> list[SourceTeam]:
-        return [SourceTeam(external_id="lt1", name="Platform")]
-
-    async def fetch_projects(self) -> list[SourceProject]:
-        return [SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt1")]
-
-    async def fetch_work_items(self) -> list[SourceWorkItem]:
-        occurred = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
-        return [
+def _fake_source() -> FakeDataSource:
+    occurred = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
+    return FakeDataSource(
+        teams=[SourceTeam(external_id="lt1", name="Platform")],
+        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt1")],
+        work_items=[
             SourceWorkItem(
                 external_id="li1",
                 title="Fix login",
@@ -40,7 +37,8 @@ class FakeDataSource:
                     ),
                 ),
             )
-        ]
+        ],
+    )
 
 
 # get_settings is lru_cached; clear around each env change so the request
@@ -95,7 +93,7 @@ async def test_sync_returns_409_when_unconfigured(
 async def test_sync_pulls_source_into_domain_and_is_idempotent(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
-    test_app.dependency_overrides[get_delivery_data_source] = FakeDataSource
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
 
     first = await client.post(
@@ -129,7 +127,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
 async def test_sync_unknown_organization_is_404(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
-    test_app.dependency_overrides[get_delivery_data_source] = FakeDataSource
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
 
     response = await client.post(
         "/api/connectors/linear/sync", json={"organization_id": str(uuid4())}

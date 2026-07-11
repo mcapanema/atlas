@@ -1,27 +1,7 @@
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.application.teams.service import TeamService
-from app.domain.teams.entities import Team
-
-
-class InMemoryTeamRepository:
-    def __init__(self) -> None:
-        self._teams: dict[UUID, Team] = {}
-
-    async def add(self, team: Team) -> None:
-        self._teams[team.id] = team
-
-    async def update(self, team: Team) -> None:
-        self._teams[team.id] = team
-
-    async def list(self) -> list[Team]:
-        return list(self._teams.values())
-
-    async def get(self, team_id: UUID) -> Team | None:
-        return self._teams.get(team_id)
-
-    async def get_by_external_id(self, external_id: str) -> Team | None:
-        return next((t for t in self._teams.values() if t.external_id == external_id), None)
+from tests.fakes import InMemoryTeamRepository
 
 
 async def test_create_team_persists_and_returns() -> None:

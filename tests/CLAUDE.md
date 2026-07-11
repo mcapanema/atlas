@@ -20,8 +20,11 @@ right reason, then implement.
 
 - `tests/domain/` — entity/invariant tests only, no DB, no fixtures beyond
   plain pytest.
-- `tests/application/` — services tested against a hand-written in-memory
-  fake Protocol implementation, not the real repository.
+- `tests/application/` — services tested against the shared in-memory
+  fakes in `tests/fakes.py` (one canonical fake per repository port,
+  optionally seeded). Don't re-declare a fake in a test file; extend
+  `tests/fakes.py` if a port grows. One-off doubles that exist to fail or
+  record for a single test stay local to that test.
 - `tests/infrastructure/` — adapters tested against the real (in-memory)
   SQLite `session` fixture.
 - `tests/api/` — HTTP-level tests via the `client` fixture, asserting on

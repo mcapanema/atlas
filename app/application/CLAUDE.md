@@ -23,7 +23,6 @@ that loop is how remaining-count bugs hide.
 ## Testing
 
 Test services against a hand-written in-memory fake implementing the same
-Protocol (see `tests/application/test_organization_service.py`'s
-`InMemoryOrganizationRepository`) — never against the real SQLAlchemy
-adapter or a live DB. That's what proves this layer doesn't secretly depend
-on Infrastructure.
+Protocol (the shared fakes live in tests/fakes.py) — never against the real
+SQLAlchemy adapter or a live DB. That's what proves this layer doesn't
+secretly depend on Infrastructure.
