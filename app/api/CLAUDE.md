@@ -13,16 +13,33 @@ Presentation is allowed to know a concrete adapter exists).
   `<Concept>Read` (output, `from_attributes=True`) pair per concept.
 - `deps.py` holds the FastAPI `Depends` chain: `get_session`
   (commit-on-success / rollback-on-error, request-scoped) →
-  `get_<concept>_service` (constructs the service with the concrete
-  repository). See the `ponytail:` comment on `get_session` for the
-  deliberate scope boundary (no explicit Unit-of-Work yet, only needed once
-  a single request must coordinate writes across multiple repositories) —
-  read it before "fixing" it.
+  `get_<concept>_service` (constructs the service with its concrete
+  adapters). See the `ponytail:` comment on `get_session` for the
+  deliberate transaction-scope boundary — read it before "fixing" it.
+- **409-until-configured**: a dependency backed by an external integration
+  (`get_delivery_data_source`, `get_advisor_port`) raises `409 Conflict`
+  with a human-readable detail while its `ATLAS_*` key is unset
+  (ADR-0005). A new integration follows the same pattern — never a 500,
+  never a silent fallback.
+- **Analytics scope**: metrics/forecasts/recommendations endpoints take
+  `ScopeDep` from `scope.py` — exactly one of `team_id`/`project_id`
+  (422 otherwise) and the scope must exist (404). A new scoped endpoint
+  reuses it; fabricating empty analytics for an unknown id is a bug (it
+  once meant paying for an LLM call on a typo'd UUID).
+- **Error semantics belong to `create_app()`'s exception handlers**
+  (`app/main.py`): `ValueError` → 422 (domain invariants surfacing after
+  Pydantic validation — see the ponytail comment there),
+  `IntegrityError` → 409, `DataSourceError` / `AdvisorError` → 502.
+  Routers don't try/except these — raise the Domain/port error and let
+  the handler translate.
 - One router per concept (`<concept>.py`,
   `APIRouter(prefix="/api/<concept>", tags=[...])`), registered in
-  `app/main.py`'s `create_app()`. Router registration order matters:
-  `mount_spa()` (in `app/infrastructure/static.py`) must be registered
-  last, after every API router, or its catch-all swallows API routes.
+  `app/main.py`'s `create_app()`. Deliberate exceptions: `health.py`
+  serves bare `/health`; `advisor.py` mounts at `/api/recommendations`
+  (named for what it returns); `connectors.py` nests actions per vendor
+  (`POST /api/connectors/linear/sync`).
+- `mount_spa()` must be registered last in `create_app()` — the rule and
+  its reason are owned by `app/infrastructure/CLAUDE.md`.
 
 ## Testing
 
