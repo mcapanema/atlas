@@ -56,3 +56,11 @@ python_version = "3.13"
 strict = true
 files = ["app", "tests"]
 exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+# pydantic-settings' mypy plugin synthesizes Settings.__init__ from declared
+# model fields only, so it doesn't know about BaseSettings's private
+# _env_file kwarg — a stub gap, not a real type error. Scoped here instead
+# of ignore comments on every call site.
+module = "tests.test_config"
+disable_error_code = ["call-arg"]

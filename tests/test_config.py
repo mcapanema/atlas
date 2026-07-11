@@ -16,7 +16,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_defaults_apply_without_env() -> None:
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)
 
     assert settings.database_url == "sqlite+aiosqlite:///./atlas.db"
     assert settings.db_echo is False
@@ -26,20 +26,20 @@ def test_defaults_apply_without_env() -> None:
 def test_prefixed_env_var_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_DB_ECHO", "true")
 
-    assert Settings(_env_file=None).db_echo is True  # type: ignore[call-arg]
+    assert Settings(_env_file=None).db_echo is True
 
 
 def test_unprefixed_env_var_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DB_ECHO", "true")
 
-    assert Settings(_env_file=None).db_echo is False  # type: ignore[call-arg]
+    assert Settings(_env_file=None).db_echo is False
 
 
 def test_env_file_is_read(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text("ATLAS_ADVISOR_MODEL=model-from-dotenv\n")
 
-    assert Settings(_env_file=env_file).advisor_model == "model-from-dotenv"  # type: ignore[call-arg]
+    assert Settings(_env_file=env_file).advisor_model == "model-from-dotenv"
 
 
 def test_real_env_var_beats_env_file(
@@ -51,4 +51,4 @@ def test_real_env_var_beats_env_file(
     env_file.write_text("ATLAS_ADVISOR_MODEL=model-from-dotenv\n")
     monkeypatch.setenv("ATLAS_ADVISOR_MODEL", "model-from-env")
 
-    assert Settings(_env_file=env_file).advisor_model == "model-from-env"  # type: ignore[call-arg]
+    assert Settings(_env_file=env_file).advisor_model == "model-from-env"
