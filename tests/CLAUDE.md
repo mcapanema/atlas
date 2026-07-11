@@ -38,6 +38,16 @@ right reason, then implement.
 `asyncio_mode = "auto"` is set in `pyproject.toml`, so `async def
 test_...` functions need no `@pytest.mark.asyncio` decorator.
 
+## API-test conventions
+
+- Parent chains (`org → team → work item`) come from
+  `tests/api/helpers.py` (`create_team`, `create_work_item`) — don't
+  re-declare a private `_create_team`.
+- Seeding events relative to the wall clock uses `helpers.days_ago(n)`
+  (pinned to 12:00 UTC). Never `datetime.now(UTC) - timedelta(...)`
+  directly — exact offsets put date-bucket assertions one midnight away
+  from flaking.
+
 ## Coverage
 
 `make test` and CI run `uv run pytest --cov` (branch coverage over `app/`,

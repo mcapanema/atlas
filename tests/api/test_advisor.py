@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.deps import get_advisor_port, get_session
 from app.domain.advisor.entities import DeliveryAdvice, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
+from tests.api.helpers import create_team
 
 
 class FakeAdvisor:
@@ -27,16 +28,6 @@ class FakeAdvisor:
                 )
             ],
         )
-
-
-async def _create_team(client: AsyncClient) -> str:
-    org = await client.post("/api/organizations", json={"name": "Acme"})
-    team = await client.post(
-        "/api/teams", json={"organization_id": org.json()["id"], "name": "Platform"}
-    )
-    assert team.status_code in (200, 201)
-    team_id: str = team.json()["id"]
-    return team_id
 
 
 async def test_status_reports_unconfigured(
@@ -74,7 +65,7 @@ async def test_recommendations_requires_exactly_one_scope(
 
 async def test_recommendations_happy_path(client: AsyncClient, test_app: FastAPI) -> None:
     test_app.dependency_overrides[get_advisor_port] = lambda: FakeAdvisor()
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
 
     response = await client.get(f"/api/recommendations?team_id={team_id}")
 
@@ -118,7 +109,7 @@ async def test_transaction_released_before_llm_call(
 
     test_app.dependency_overrides[get_session] = tracking_get_session
     test_app.dependency_overrides[get_advisor_port] = lambda: ProbeAdvisor()
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
 
     response = await client.get(f"/api/recommendations?team_id={team_id}")
 
@@ -134,7 +125,7 @@ async def test_recommendations_502_when_advisor_fails(
             raise AdvisorError("OpenRouter request failed")
 
     test_app.dependency_overrides[get_advisor_port] = lambda: FailingAdvisor()
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
 
     response = await client.get(f"/api/recommendations?team_id={team_id}")
 

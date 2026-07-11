@@ -3,24 +3,15 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 
-
-async def _create_team(client: AsyncClient) -> str:
-    org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
-    team = (
-        await client.post(
-            "/api/teams", json={"organization_id": org["id"], "name": "Platform"}
-        )
-    ).json()
-    return str(team["id"])
+from tests.api.helpers import create_team, days_ago
 
 
 async def _seed_history(client: AsyncClient, team_id: str) -> None:
     """Three completed items on recent distinct days, plus one open item."""
-    now = datetime.now(UTC)
-    for days_ago in (1, 2, 3):
+    for days in (1, 2, 3):
         item = (
             await client.post(
-                "/api/work-items", json={"team_id": team_id, "title": f"Done {days_ago}"}
+                "/api/work-items", json={"team_id": team_id, "title": f"Done {days}"}
             )
         ).json()
         response = await client.post(
@@ -28,7 +19,7 @@ async def _seed_history(client: AsyncClient, team_id: str) -> None:
             json={
                 "work_item_id": item["id"],
                 "type": "completed",
-                "occurred_at": (now - timedelta(days=days_ago)).isoformat(),
+                "occurred_at": days_ago(days),
             },
         )
         assert response.status_code == 201
@@ -36,7 +27,7 @@ async def _seed_history(client: AsyncClient, team_id: str) -> None:
 
 
 async def test_forecast_end_to_end(client: AsyncClient) -> None:
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
     await _seed_history(client, team_id)
 
     response = await client.get(f"/api/forecasts?team_id={team_id}")
@@ -53,7 +44,7 @@ async def test_forecast_end_to_end(client: AsyncClient) -> None:
 
 
 async def test_forecast_confidence_with_target_date(client: AsyncClient) -> None:
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
     await _seed_history(client, team_id)
     target = (datetime.now(UTC) + timedelta(days=365)).date().isoformat()
 
@@ -66,7 +57,7 @@ async def test_forecast_confidence_with_target_date(client: AsyncClient) -> None
 
 
 async def test_forecast_is_deterministic_across_requests(client: AsyncClient) -> None:
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
     await _seed_history(client, team_id)
 
     first = (await client.get(f"/api/forecasts?team_id={team_id}")).json()
@@ -76,7 +67,7 @@ async def test_forecast_is_deterministic_across_requests(client: AsyncClient) ->
 
 
 async def test_forecast_without_history_has_no_completion(client: AsyncClient) -> None:
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
     await client.post("/api/work-items", json={"team_id": team_id, "title": "Open"})
 
     response = await client.get(f"/api/forecasts?team_id={team_id}")
@@ -96,7 +87,7 @@ async def test_forecast_requires_exactly_one_scope(client: AsyncClient) -> None:
 
 
 async def test_forecast_validates_query_params(client: AsyncClient) -> None:
-    team_id = await _create_team(client)
+    team_id = await create_team(client)
     assert (
         await client.get(f"/api/forecasts?team_id={team_id}&window_days=1")
     ).status_code == 422
