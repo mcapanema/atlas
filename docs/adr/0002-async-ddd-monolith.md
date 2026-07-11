@@ -8,8 +8,10 @@ Accepted
 
 ## Context
 
-Atlas is a Delivery Intelligence Platform (see `SPEC.md`). Phase 1 establishes the
-foundation. Two decisions shape every later task: concurrency model and layering.
+Atlas is a Delivery Intelligence Platform — it syncs delivery data from external
+engineering systems, derives flow metrics and forecasts from it, and explains them
+with an AI advisor. Phase 1 establishes the foundation. Two decisions shape every
+later task: concurrency model and layering.
 
 The platform is IO-bound by nature — it will call external connector APIs (Linear,
 GitHub) and LLM providers. `pytest-asyncio` is already in the required stack.
