@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import WorkItemType
+from app.domain.work_items.entities import DEFAULT_STATE, WorkItemType
 
 
 class OrganizationCreate(BaseModel):
@@ -55,7 +55,7 @@ class WorkItemCreate(BaseModel):
     team_id: UUID
     title: str = Field(min_length=1, max_length=1024)
     type: WorkItemType = WorkItemType.TASK
-    state: str = Field(default="backlog", min_length=1, max_length=255)
+    state: str = Field(default=DEFAULT_STATE, min_length=1, max_length=255)
     project_id: UUID | None = None
     external_id: str | None = None
 
