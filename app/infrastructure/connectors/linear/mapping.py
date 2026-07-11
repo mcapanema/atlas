@@ -5,12 +5,20 @@ Linear specifics (field names, workflow-state `type` values) stop here —
 nothing outside this package sees a Linear payload.
 """
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from app.domain.events.entities import EventType
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import WorkItemType
+
+logger = logging.getLogger(__name__)
+
+# History page size the issues query requests per issue (the datasource
+# interpolates it). A history of exactly this length has likely been
+# truncated by the cap — older events are silently missing.
+HISTORY_PAGE_SIZE = 250
 
 
 def map_team(node: dict[str, Any]) -> SourceTeam:
@@ -30,6 +38,14 @@ def map_project(node: dict[str, Any]) -> SourceProject:
 
 def map_issue(node: dict[str, Any]) -> SourceWorkItem:
     created_at = datetime.fromisoformat(node["createdAt"])
+    history_nodes = node["history"]["nodes"]
+    if len(history_nodes) >= HISTORY_PAGE_SIZE:
+        logger.warning(
+            "Linear issue %s history hit the %d-entry page cap; "
+            "older events may be missing",
+            node["id"],
+            HISTORY_PAGE_SIZE,
+        )
     events = [
         # Linear's history doesn't include creation — synthesize it, with a
         # deterministic external_id so re-syncs stay idempotent.
@@ -39,11 +55,15 @@ def map_issue(node: dict[str, Any]) -> SourceWorkItem:
             occurred_at=created_at,
         )
     ]
-    for entry in node["history"]["nodes"]:
+    for entry in history_nodes:
         event = map_history_entry(entry)
         if event is not None:
             events.append(event)
     project = node.get("project")
+    # ponytail: only completedAt feeds completed_at — a canceled issue
+    # (canceledAt) is neither delivered throughput nor open work; exclude
+    # canceled items from scope counts if they ever skew forecasts.
+    completed_at = node.get("completedAt")
     return SourceWorkItem(
         external_id=node["id"],
         title=node["title"],
@@ -54,6 +74,7 @@ def map_issue(node: dict[str, Any]) -> SourceWorkItem:
         team_external_id=node["team"]["id"],
         project_external_id=project["id"] if project else None,
         created_at=created_at,
+        completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
         events=tuple(events),
     )
 

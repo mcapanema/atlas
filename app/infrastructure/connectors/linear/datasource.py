@@ -7,7 +7,12 @@ from typing import Any
 
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
-from app.infrastructure.connectors.linear.mapping import map_issue, map_project, map_team
+from app.infrastructure.connectors.linear.mapping import (
+    HISTORY_PAGE_SIZE,
+    map_issue,
+    map_project,
+    map_team,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,30 +65,32 @@ query Projects($after: String) {
 }
 """
 
-# ponytail: nested history capped at 250 entries per issue — enough for any
-# sane issue. Paginate history per-issue if one ever exceeds it.
-_ISSUES_QUERY = """
-query Issues($after: String) {
-  issues(first: 50, after: $after) {
-    nodes {
+# ponytail: nested history capped at HISTORY_PAGE_SIZE entries per issue —
+# enough for any sane issue; map_issue logs a warning when the cap is hit.
+# Paginate history per-issue if one ever exceeds it.
+_ISSUES_QUERY = f"""
+query Issues($after: String) {{
+  issues(first: 50, after: $after) {{
+    nodes {{
       id
       title
       createdAt
-      state { name type }
-      team { id }
-      project { id }
-      history(first: 250) {
-        nodes {
+      completedAt
+      state {{ name type }}
+      team {{ id }}
+      project {{ id }}
+      history(first: {HISTORY_PAGE_SIZE}) {{
+        nodes {{
           id
           createdAt
-          fromState { name type }
-          toState { name type }
-        }
-      }
-    }
-    pageInfo { hasNextPage endCursor }
-  }
-}
+          fromState {{ name type }}
+          toState {{ name type }}
+        }}
+      }}
+    }}
+    pageInfo {{ hasNextPage endCursor }}
+  }}
+}}
 """
 
 

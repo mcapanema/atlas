@@ -10,6 +10,7 @@ from app.domain.events.entities import EventType
 from app.infrastructure.connectors.linear import datasource as datasource_module
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
+from app.infrastructure.connectors.linear.mapping import HISTORY_PAGE_SIZE
 
 
 def _page(
@@ -85,12 +86,16 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "completedAt" in body["query"]
+        assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
         return _page("issues", [issue_node])
 
     items = await _datasource(handler).fetch_work_items()
 
     assert items[0].external_id == "i1"
     assert [e.type for e in items[0].events] == [EventType.CREATED, EventType.STARTED]
+    assert items[0].completed_at is None  # node carries no completedAt
 
 
 async def test_fetch_work_items_skips_malformed_nodes(
