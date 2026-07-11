@@ -258,6 +258,70 @@ async def test_project_with_unknown_team_is_skipped() -> None:
     assert await harness.projects.get_by_external_id("lp9") is None
 
 
+async def test_work_item_with_unknown_team_is_skipped() -> None:
+    harness = Harness(
+        FakeDataSource(
+            work_items=[
+                SourceWorkItem(
+                    external_id="li9",
+                    title="Orphan",
+                    type=WorkItemType.TASK,
+                    state="Backlog",
+                    team_external_id="missing",
+                    project_external_id=None,
+                    created_at=CREATED_AT,
+                    events=(
+                        SourceEvent(
+                            external_id="li9:created",
+                            type=EventType.CREATED,
+                            occurred_at=CREATED_AT,
+                        ),
+                    ),
+                )
+            ]
+        )
+    )
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 0
+    assert summary.events == 0  # skipping the item must skip its events too
+    assert await harness.work_items.get_by_external_id("li9") is None
+
+
+async def test_work_item_with_unknown_project_is_created_without_project() -> None:
+    source = full_source()
+    source.projects = []  # "lp1" on the item now resolves to nothing
+
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.project_id is None
+
+
+async def test_project_with_null_team_external_id_is_skipped() -> None:
+    harness = Harness(
+        FakeDataSource(
+            teams=[SourceTeam(external_id="lt1", name="Platform")],
+            projects=[
+                SourceProject(external_id="lp9", name="Teamless", team_external_id=None)
+            ],
+        )
+    )
+    org_id = await seed_org(harness)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.projects == 0
+    assert await harness.projects.get_by_external_id("lp9") is None
+
+
 async def test_unknown_organization_raises_unknown_organization_error() -> None:
     harness = Harness(full_source())
 
