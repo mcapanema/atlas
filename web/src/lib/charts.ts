@@ -133,6 +133,40 @@ export function buildLeadTimeDistributionOption(bins: DurationBin[]): EChartsOpt
   };
 }
 
+export interface LeadTimeTrendPoint {
+  captured_on: string;
+  lead_time_p50_seconds: number | null;
+  lead_time_p85_seconds: number | null;
+}
+
+export function buildLeadTimeTrendOption(points: LeadTimeTrendPoint[]): EChartsOption {
+  const toDays = (seconds: number | null) =>
+    seconds == null ? null : Math.round((seconds / 86_400) * 10) / 10;
+  const line = (name: string, color: string, data: (number | null)[]) => ({
+    name,
+    type: "line" as const,
+    color,
+    symbol: "none" as const,
+    lineStyle: { width: 2 },
+    data,
+  });
+  return {
+    tooltip: { trigger: "axis" },
+    legend: { bottom: 0, textStyle: { color: INK_SECONDARY } },
+    grid: { left: 48, right: 16, top: 16, bottom: 48 },
+    xAxis: dayAxis(points.map((p) => p.captured_on)),
+    yAxis: valueAxis(),
+    series: [
+      line("Lead time P50 (d)", BLUE, points.map((p) => toDays(p.lead_time_p50_seconds))),
+      line(
+        "Lead time P85 (d)",
+        SERIES.inProgress,
+        points.map((p) => toDays(p.lead_time_p85_seconds)),
+      ),
+    ],
+  };
+}
+
 export function buildForecastOption(
   outcomes: OutcomeBucket[],
   windowEnd: string,

@@ -8,9 +8,11 @@ import {
   type DurationStats,
   type MetricsScope,
 } from "../api/metrics";
+import { useMetricSnapshots } from "../api/snapshots";
 import {
   buildCfdOption,
   buildLeadTimeDistributionOption,
+  buildLeadTimeTrendOption,
   buildThroughputOption,
   buildWipOption,
 } from "../lib/charts";
@@ -27,6 +29,7 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const metrics = useFlowMetrics(scope);
   const history = useFlowHistory(scope);
   const distribution = useLeadTimeDistribution(scope);
+  const snapshots = useMetricSnapshots(scope);
 
   const cfdOption = useMemo(
     () => (history.data ? buildCfdOption(history.data.days) : null),
@@ -43,6 +46,13 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const distributionOption = useMemo(
     () => (distribution.data ? buildLeadTimeDistributionOption(distribution.data.bins) : null),
     [distribution.data],
+  );
+  const trendOption = useMemo(
+    () =>
+      snapshots.data && snapshots.data.length > 0
+        ? buildLeadTimeTrendOption(snapshots.data)
+        : null,
+    [snapshots.data],
   );
 
   if (metrics.isError || history.isError || distribution.isError) {
@@ -93,6 +103,13 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
             <Col xs={24} lg={12}>
               <Card title="Lead time distribution (90d)">
                 <EChart option={distributionOption} />
+              </Card>
+            </Col>
+          )}
+          {trendOption && (
+            <Col xs={24} lg={12}>
+              <Card title="Lead time trend">
+                <EChart option={trendOption} />
               </Card>
             </Col>
           )}
