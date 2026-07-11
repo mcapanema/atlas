@@ -1,4 +1,3 @@
-# app/infrastructure/connectors/linear/datasource.py
 """DeliveryDataSource adapter backed by Linear's GraphQL API."""
 
 import logging

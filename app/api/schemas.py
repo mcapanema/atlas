@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -164,6 +165,8 @@ class FlowMetricsRead(BaseModel):
 
 
 class DailyFlowCountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     day: date
     todo: int
     in_progress: int
@@ -171,12 +174,16 @@ class DailyFlowCountRead(BaseModel):
 
 
 class ThroughputBucketRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     start: datetime
     end: datetime
     completed: int
 
 
 class FlowHistoryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     window_start: datetime
     window_end: datetime
     days: list[DailyFlowCountRead]
@@ -184,12 +191,16 @@ class FlowHistoryRead(BaseModel):
 
 
 class DurationBinRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     start_days: int
     end_days: int
     count: int
 
 
 class LeadTimeDistributionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     window_start: datetime
     window_end: datetime
     bins: list[DurationBinRead]
@@ -221,7 +232,7 @@ class RecommendationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     title: str
-    priority: str
+    priority: Literal["high", "medium", "low"]
     problem: str
     root_cause: str
     action: str
