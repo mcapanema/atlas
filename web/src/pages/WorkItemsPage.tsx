@@ -3,12 +3,13 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useTeams } from "../api/teams";
-import { useWorkItems, type WorkItem } from "../api/workItems";
+import { useWorkItems, WORK_ITEMS_PAGE_SIZE, type WorkItem } from "../api/workItems";
 
 export function WorkItemsPage() {
   const [teamId, setTeamId] = useState<string>();
+  const [page, setPage] = useState(1);
   const teams = useTeams();
-  const workItems = useWorkItems(teamId);
+  const workItems = useWorkItems(teamId, page);
 
   if (teams.isError) {
     return <Alert type="error" message="Failed to load teams" />;
@@ -26,13 +27,23 @@ export function WorkItemsPage() {
           placeholder="All teams"
           allowClear
           value={teamId}
-          onChange={setTeamId}
+          onChange={(value) => {
+            setTeamId(value);
+            setPage(1);
+          }}
           options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
         />
         <Table
           rowKey="id"
           loading={workItems.isLoading}
-          dataSource={workItems.data ?? []}
+          dataSource={workItems.data?.items ?? []}
+          pagination={{
+            current: page,
+            pageSize: WORK_ITEMS_PAGE_SIZE,
+            total: workItems.data?.total ?? 0,
+            onChange: setPage,
+            showSizeChanger: false,
+          }}
           columns={[
             {
               title: "Title",

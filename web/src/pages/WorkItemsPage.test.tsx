@@ -43,18 +43,21 @@ describe("WorkItemsPage", () => {
         );
       }
       return Promise.resolve(
-        jsonResponse([
-          {
-            id: "11111111-1111-1111-1111-111111111111",
-            team_id: "22222222-2222-2222-2222-222222222222",
-            project_id: null,
-            title: "Fix login flow",
-            type: "bug",
-            state: "In Progress",
-            external_id: null,
-            created_at: "2026-07-01T00:00:00Z",
-          },
-        ]),
+        jsonResponse({
+          items: [
+            {
+              id: "11111111-1111-1111-1111-111111111111",
+              team_id: "22222222-2222-2222-2222-222222222222",
+              project_id: null,
+              title: "Fix login flow",
+              type: "bug",
+              state: "In Progress",
+              external_id: null,
+              created_at: "2026-07-01T00:00:00Z",
+            },
+          ],
+          total: 1,
+        }),
       );
     });
 
@@ -66,6 +69,11 @@ describe("WorkItemsPage", () => {
       "href",
       "/work-items/11111111-1111-1111-1111-111111111111",
     );
+
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map((call) => String(call[0]));
+    expect(
+      calls.some((url) => url.includes("limit=50") && url.includes("offset=0")),
+    ).toBe(true);
   });
 
   it("renders an error alert when teams fail to load", async () => {

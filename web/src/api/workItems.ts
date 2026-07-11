@@ -29,11 +29,22 @@ export interface WorkItemTimeline {
   blocked_periods: BlockedPeriod[];
 }
 
-export function useWorkItems(teamId?: string) {
+export interface PagedWorkItems {
+  items: WorkItem[];
+  total: number;
+}
+
+export const WORK_ITEMS_PAGE_SIZE = 50;
+
+export function useWorkItems(teamId?: string, page = 1) {
+  const params = new URLSearchParams({
+    limit: String(WORK_ITEMS_PAGE_SIZE),
+    offset: String((page - 1) * WORK_ITEMS_PAGE_SIZE),
+  });
+  if (teamId) params.set("team_id", teamId);
   return useQuery({
-    queryKey: ["work-items", teamId ?? "all"],
-    queryFn: () =>
-      apiFetch<WorkItem[]>(teamId ? `/api/work-items?team_id=${teamId}` : "/api/work-items"),
+    queryKey: ["work-items", teamId ?? "all", page],
+    queryFn: () => apiFetch<PagedWorkItems>(`/api/work-items?${params.toString()}`),
   });
 }
 
