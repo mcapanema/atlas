@@ -30,9 +30,8 @@ Application assembles their inputs.
 **Port slices** (`sync/`, `advisor/`): a `Protocol` port for an external
 capability plus the stdlib types that cross it — `sync/source.py`'s
 platform-neutral `Source*` snapshots with `sync/port.py`'s
-`DeliveryDataSource`; `advisor/entities.py`'s
-`DeliveryContext`/`DeliveryAdvice`/`Recommendation` with
-`advisor/port.py`'s `AdvisorPort`. Each port defines its failure type
+`DeliveryDataSource`; `advisor/entities.py`'s `DeliveryAdvice`/`Recommendation` with
+`advisor/port.py`'s `DeliveryContext`/`AdvisorPort`. Each port defines its failure type
 beside it (`DataSourceError`, `AdvisorError`) — adapters translate vendor
 exceptions into these, so nothing above Infrastructure ever sees an httpx
 error.
