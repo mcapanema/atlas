@@ -134,7 +134,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.10" },
     { name = "pydantic-settings", specifier = ">=2.7" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.51" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
 ]
 
 [package.metadata.requires-dev]
