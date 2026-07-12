@@ -36,6 +36,26 @@ describe("buildCfdOption", () => {
     expect(series[2].data).toEqual([2, 1]);
     expect(option.legend).toBeDefined(); // relief: aqua/yellow are sub-3:1 on white
   });
+
+  it("nudges overlapping end labels apart instead of letting them collide", () => {
+    const option = buildCfdOption(days);
+    const series = option.series as { labelLayout?: { moveOverlap?: string } }[];
+
+    for (const s of series) {
+      expect(s.labelLayout).toEqual({ moveOverlap: "shiftY" });
+    }
+  });
+
+  it("keeps series colors fixed but swaps neutral furniture per theme mode", () => {
+    const light = buildCfdOption(days);
+    const dark = buildCfdOption(days, "dark");
+    const seriesColor = (o: typeof light) => (o.series as { color: string }[])[0].color;
+    const axisLabelColor = (o: typeof light) =>
+      (o.xAxis as { axisLabel: { color: string } }).axisLabel.color;
+
+    expect(seriesColor(dark)).toBe(seriesColor(light)); // validated palette, both modes
+    expect(axisLabelColor(dark)).not.toBe(axisLabelColor(light));
+  });
 });
 
 describe("buildThroughputOption", () => {

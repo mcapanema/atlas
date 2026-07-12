@@ -1,4 +1,4 @@
-import { Alert, Card, Col, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
+import { Alert, Card, Col, Row, Skeleton, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 
@@ -9,6 +9,7 @@ import {
   useFlowMetrics,
   useLeadTimeDistribution,
   type AgingItem,
+  type DeliveryHealth,
   type DurationStats,
   type MetricsScope,
 } from "../api/metrics";
@@ -20,15 +21,18 @@ import {
   buildThroughputOption,
   buildWipOption,
 } from "../lib/charts";
+import { formatDay } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
+import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
+import { HealthBadge } from "./HealthBadge";
 import { StatCard } from "./StatCard";
 
 const agingColumns: ColumnsType<AgingItem> = [
   { title: "Title", dataIndex: "title" },
   { title: "State", dataIndex: "state" },
-  { title: "Age", render: (_, item) => formatSeconds(item.age_seconds) },
+  { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
   {
     title: "",
     render: (_, item) => (item.over_p85 ? <Tag color="red">over P85</Tag> : null),
@@ -39,7 +43,46 @@ function duration(stats: DurationStats | null, key: keyof DurationStats): string
   return stats ? formatSeconds(stats[key]) : "—";
 }
 
-const bandColor: Record<string, string> = { healthy: "green", warning: "orange", critical: "red" };
+/**
+ * Health leads the page — same vocabulary as the executive dashboard:
+ * quiet badge + window when healthy, tinted attention card with the two
+ * weakest component reasons when at risk.
+ */
+function HealthStrip({
+  health,
+  window: metricsWindow,
+}: {
+  health: DeliveryHealth;
+  window: { start: string; end: string } | null;
+}) {
+  const atRisk = health.band === "critical" || health.band === "warning";
+  const reasons = atRisk
+    ? [...health.components].sort((a, b) => a.score - b.score).slice(0, 2)
+    : [];
+  return (
+    <section aria-label="Delivery health" className="health-strip">
+      <div className="health-strip__row">
+        <HealthBadge health={health} />
+        {metricsWindow && (
+          <span className="page-asof">
+            Last 30 days · {formatDay(metricsWindow.start)} – {formatDay(metricsWindow.end)}
+          </span>
+        )}
+      </div>
+      {atRisk && (
+        <div className={`attention-card attention-card--${health.band}`}>
+          <ul className="attention-card__reasons">
+            {reasons.map((component) => (
+              <li key={component.name}>
+                <strong>{component.name}</strong> {component.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const metrics = useFlowMetrics(scope);
@@ -48,29 +91,31 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const snapshots = useMetricSnapshots(scope);
   const aging = useAgingWip(scope);
   const health = useDeliveryHealth(scope);
+  const { mode } = useThemeMode();
 
   const cfdOption = useMemo(
-    () => (history.data ? buildCfdOption(history.data.days) : null),
-    [history.data],
+    () => (history.data ? buildCfdOption(history.data.days, mode) : null),
+    [history.data, mode],
   );
   const throughputOption = useMemo(
-    () => (history.data ? buildThroughputOption(history.data.weeks) : null),
-    [history.data],
+    () => (history.data ? buildThroughputOption(history.data.weeks, mode) : null),
+    [history.data, mode],
   );
   const wipOption = useMemo(
-    () => (history.data ? buildWipOption(history.data.days) : null),
-    [history.data],
+    () => (history.data ? buildWipOption(history.data.days, mode) : null),
+    [history.data, mode],
   );
   const distributionOption = useMemo(
-    () => (distribution.data ? buildLeadTimeDistributionOption(distribution.data.bins) : null),
-    [distribution.data],
+    () =>
+      distribution.data ? buildLeadTimeDistributionOption(distribution.data.bins, mode) : null,
+    [distribution.data, mode],
   );
   const trendOption = useMemo(
     () =>
       snapshots.data && snapshots.data.length > 0
-        ? buildLeadTimeTrendOption(snapshots.data)
+        ? buildLeadTimeTrendOption(snapshots.data, mode)
         : null,
-    [snapshots.data],
+    [snapshots.data, mode],
   );
 
   if (metrics.isError || history.isError || distribution.isError) {
@@ -83,6 +128,12 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const data = metrics.data;
   return (
     <>
+      {health.data && health.data.score != null && health.data.band != null && (
+        <HealthStrip
+          health={health.data}
+          window={data ? { start: data.window_start, end: data.window_end } : null}
+        />
+      )}
       {data && (
         <Row gutter={[16, 16]}>
           <StatCard title="Throughput (30d)" value={data.completed} />
@@ -134,25 +185,6 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
             </Col>
           )}
         </Row>
-      )}
-      {health.data && health.data.score != null && health.data.band != null && (
-        <Card title="Delivery health">
-          <Space direction="vertical" style={{ width: "100%" }}>
-            <Space>
-              <Tag color={bandColor[health.data.band]}>{health.data.band}</Tag>
-              <Typography.Text strong style={{ fontSize: 24 }}>
-                {health.data.score}
-              </Typography.Text>
-            </Space>
-            <ul style={{ marginBottom: 0 }}>
-              {health.data.components.map((c) => (
-                <li key={c.name}>
-                  <b>{c.name}</b> {c.score} — {c.reason}
-                </li>
-              ))}
-            </ul>
-          </Space>
-        </Card>
       )}
       {aging.data && aging.data.items.length > 0 && (
         <Card title="Aging WIP">

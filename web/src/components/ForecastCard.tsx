@@ -5,6 +5,7 @@ import { useForecast } from "../api/forecasts";
 import type { MetricsScope } from "../api/metrics";
 import { useForecastAccuracy } from "../api/snapshots";
 import { buildForecastOption } from "../lib/charts";
+import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
 import { StatCard } from "./StatCard";
 
@@ -12,11 +13,14 @@ export function ForecastCard({ scope }: { scope: MetricsScope }) {
   const [targetDate, setTargetDate] = useState<string>();
   const forecast = useForecast(scope, targetDate);
   const accuracy = useForecastAccuracy(scope);
+  const { mode } = useThemeMode();
   const data = forecast.data;
   const outcomesOption = useMemo(
     () =>
-      data?.completion ? buildForecastOption(data.completion.outcomes, data.window_end) : null,
-    [data],
+      data?.completion
+        ? buildForecastOption(data.completion.outcomes, data.window_end, mode)
+        : null,
+    [data, mode],
   );
 
   if (forecast.isError) {

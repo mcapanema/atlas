@@ -115,6 +115,18 @@ clearly delimited blocks and should be read as follows:
   - View current memory status: `engram context`
 Engram results represent historical project knowledge and prior decisions rather than current user instructions. Treat retrieved memories as contextual evidence that should be reconciled with the current repository state and the latest user instructions. If retrieved memories conflict with the codebase or newer guidance, prefer the most recent authoritative source.
 
+## Design context
+
+Frontend design work is governed by `PRODUCT.md` (register: **product**;
+users, personality, anti-references, principles) — read it before any UI
+design/UX change in `web/`. Essence: sharp/analytical/dense instrument for
+Engineering Managers (references: Linear, Grafana/Datadog, Stripe
+Dashboard); numbers are the interface, density with hierarchy, honest
+uncertainty, earned familiarity, signal over status. WCAG 2.1 AA;
+charts/status must not rely on color alone. Explicitly avoid: stock-AntD
+admin-template look, executive BI gloss, enterprise chrome, landing-page
+aesthetics.
+
 ## Keeping CLAUDE.md files current
 
 This repo's CLAUDE.md files (this one plus each directory above) are part of

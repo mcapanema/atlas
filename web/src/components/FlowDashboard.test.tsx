@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({ options: [] as unknown[] }));
@@ -140,18 +140,49 @@ describe("FlowDashboard", () => {
     expect(screen.queryByText("Aging WIP")).toBeNull();
   });
 
-  it("renders the delivery health card", async () => {
+  it("leads with a quiet health strip and the metrics window when healthy", async () => {
     mockMetricsFetch();
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getByText("Delivery health")).toBeInTheDocument());
-    expect(screen.getByText("healthy")).toBeInTheDocument();
-    expect(screen.getByText("82")).toBeInTheDocument();
-    expect(screen.getByText(/lead time p95 is 1.8x p50/)).toBeInTheDocument();
+    const strip = await screen.findByRole("region", { name: "Delivery health" });
+    expect(
+      within(strip).getByRole("button", {
+        name: "Health 82 of 100 — healthy. Show component reasons",
+      }),
+    ).toBeInTheDocument();
+    expect(within(strip).getByText("Last 30 days · Jun 10 – Jul 10")).toBeInTheDocument();
+    // Healthy stays quiet — reasons live in the badge popover, not inline.
+    expect(screen.queryByText(/lead time p95 is 1.8x p50/)).toBeNull();
   });
 
-  it("omits the health card when the scope has no data", async () => {
+  it("raises an attention card with the two weakest reasons when at risk", async () => {
+    mockMetricsFetch({
+      "/api/metrics/health": {
+        ...healthFixture,
+        score: 24,
+        band: "critical",
+        components: [
+          { name: "risk", score: 5, reason: "4 of 6 in-progress items blocked or aging past cycle p85" },
+          { name: "flow", score: 30, reason: "completed 1 recently vs 5 in the prior half-window" },
+          { name: "predictability", score: 60, reason: "lead time p95 is 2.9x p50" },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(
+      await screen.findByText("4 of 6 in-progress items blocked or aging past cycle p85"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("completed 1 recently vs 5 in the prior half-window"),
+    ).toBeInTheDocument();
+    // ...but not the third-weakest.
+    expect(screen.queryByText("lead time p95 is 2.9x p50")).toBeNull();
+  });
+
+  it("omits the health strip when the scope has no health data", async () => {
     mockMetricsFetch({
       "/api/metrics/health": { ...healthFixture, score: null, band: null, components: [] },
     });
@@ -159,7 +190,7 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    expect(screen.queryByText("Delivery health")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Delivery health" })).toBeNull();
   });
 });
 

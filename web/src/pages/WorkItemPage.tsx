@@ -91,6 +91,7 @@ export function WorkItemPage() {
               },
               {
                 title: "Duration",
+                className: "fig",
                 render: (_: unknown, period: StatePeriod) =>
                   formatDuration(period.entered_at, period.exited_at),
               },
@@ -124,6 +125,7 @@ export function WorkItemPage() {
               },
               {
                 title: "Duration",
+                className: "fig",
                 render: (_: unknown, period: BlockedPeriod) =>
                   formatDuration(period.started_at, period.ended_at),
               },
