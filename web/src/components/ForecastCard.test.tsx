@@ -5,7 +5,7 @@ vi.mock("./EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { forecastFixture, jsonResponse, mockMetricsFetch } from "../test/fixtures";
+import { accuracyFixture, forecastFixture, jsonResponse, mockMetricsFetch } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ForecastCard } from "./ForecastCard";
 
@@ -63,6 +63,14 @@ describe("ForecastCard", () => {
 
     await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
   });
+
+  it("shows an error when the forecast fails to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Failed to load forecast")).toBeInTheDocument());
+  });
 });
 
 test("shows forecast accuracy once past forecasts resolved", async () => {
@@ -71,4 +79,14 @@ test("shows forecast accuracy once past forecasts resolved", async () => {
 
   expect(await screen.findByText("Past forecasts within P85")).toBeInTheDocument();
   expect(screen.getByText("90%")).toBeInTheDocument();
+});
+
+test("shows a placeholder when accuracy has no evaluated hit rate yet", async () => {
+  mockMetricsFetch({
+    "/api/forecasts/accuracy": { ...accuracyFixture, p85_hit_rate: null },
+  });
+  renderWithClient(<ForecastCard scope={{ teamId: "t-1" }} />);
+
+  expect(await screen.findByText("Past forecasts within P85")).toBeInTheDocument();
+  expect(screen.getByText("—")).toBeInTheDocument();
 });

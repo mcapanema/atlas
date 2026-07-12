@@ -65,6 +65,28 @@ describe("ExecutiveDashboardPage", () => {
     );
   });
 
+  it("pluralizes the failed-metrics message for more than one team", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+    });
+
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Metrics failed to load for 2 teams")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows an error when teams fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(() => expect(screen.getByText("Failed to load teams")).toBeInTheDocument());
+  });
+
   it("shows per-team forecast accuracy", async () => {
     mockMetricsFetch({ "/api/teams": [teamFixture] });
     renderWithClient(<ExecutiveDashboardPage />);

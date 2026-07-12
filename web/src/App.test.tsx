@@ -43,4 +43,17 @@ describe("App", () => {
     // Library's default 1000ms findByText timeout under load.
     expect(await screen.findByText("Team Dashboard", {}, { timeout: 5000 })).toBeInTheDocument();
   });
+
+  it("renders the (lazy-loaded) project dashboard route", async () => {
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter initialEntries={["/projects"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByText("Project Dashboard", {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+  });
 });

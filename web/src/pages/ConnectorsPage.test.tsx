@@ -55,6 +55,32 @@ describe("ConnectorsPage", () => {
     expect(screen.getByRole("button", { name: "Sync now" })).toBeDisabled();
   });
 
+  it("shows an error when sync fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/connectors/linear") return jsonResponse({ configured: true });
+      if (url === "/api/organizations")
+        return jsonResponse([
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            name: "Acme",
+            created_at: "2026-07-01T00:00:00Z",
+          },
+        ]);
+      if (url === "/api/connectors/linear/sync") return jsonResponse({ detail: "boom" }, 500);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    renderWithClient(<ConnectorsPage />);
+
+    const button = await screen.findByRole("button", { name: "Sync now" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    await waitFor(() => expect(screen.getByText("Sync failed")).toBeInTheDocument());
+    expect(screen.getByText("boom")).toBeInTheDocument();
+  });
+
   it("shows an error instead of 'Not configured' when the status fetch fails", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);

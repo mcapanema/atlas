@@ -98,3 +98,13 @@ test("lead time trend charts P50/P85 in days per snapshot day", () => {
   const xAxis = option.xAxis as { data: string[] };
   expect(xAxis.data).toEqual(["2026-07-09", "2026-07-10"]);
 });
+
+test("lead time trend passes through null percentiles for snapshots with no data yet", () => {
+  const option = buildLeadTimeTrendOption([
+    { captured_on: "2026-07-09", lead_time_p50_seconds: null, lead_time_p85_seconds: null },
+  ]);
+
+  const series = option.series as { data: (number | null)[] }[];
+  expect(series[0].data).toEqual([null]);
+  expect(series[1].data).toEqual([null]);
+});

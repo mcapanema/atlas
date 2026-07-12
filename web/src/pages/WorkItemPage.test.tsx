@@ -40,6 +40,16 @@ const events = [
     external_id: null,
     recorded_at: "2026-01-03T00:00:00Z",
   },
+  {
+    id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    work_item_id: WORK_ITEM_ID,
+    type: "synced",
+    occurred_at: "2026-01-04T00:00:00Z",
+    from_state: null,
+    to_state: "In Progress",
+    external_id: null,
+    recorded_at: "2026-01-04T00:00:00Z",
+  },
 ];
 
 const timeline = {
@@ -47,7 +57,10 @@ const timeline = {
     { state: "Backlog", entered_at: "2026-01-01T00:00:00Z", exited_at: "2026-01-03T00:00:00Z" },
     { state: "In Progress", entered_at: "2026-01-03T00:00:00Z", exited_at: null },
   ],
-  blocked_periods: [{ started_at: "2026-01-04T00:00:00Z", ended_at: null }],
+  blocked_periods: [
+    { started_at: "2026-01-04T00:00:00Z", ended_at: null },
+    { started_at: "2026-01-02T00:00:00Z", ended_at: "2026-01-02T12:00:00Z" },
+  ],
 };
 
 function renderPage() {
@@ -76,6 +89,7 @@ describe("WorkItemPage", () => {
 
     await waitFor(() => expect(screen.getByText("Fix login flow")).toBeInTheDocument());
     expect(screen.getByText(/started: Backlog → In Progress/)).toBeInTheDocument();
+    expect(screen.getByText(/synced → In Progress/)).toBeInTheDocument();
     expect(screen.getAllByText("Backlog").length).toBeGreaterThan(0);
     expect(screen.getByText("still blocked")).toBeInTheDocument();
   });

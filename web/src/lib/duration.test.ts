@@ -14,6 +14,10 @@ describe("formatDuration", () => {
     expect(formatDuration("2026-01-01T00:00:00Z", "2026-01-01T00:00:30Z")).toBe("< 1m");
   });
 
+  it("omits minutes when a whole number of hours has elapsed", () => {
+    expect(formatDuration("2026-01-01T00:00:00Z", "2026-01-01T02:00:00Z")).toBe("2h");
+  });
+
   it("measures open periods against the current time", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
