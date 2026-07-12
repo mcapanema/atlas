@@ -2,8 +2,9 @@
 
 Delivery Intelligence Platform for Engineering Managers — observes delivery
 data (issues, deployments), understands what's actually happening, predicts
-risk, and advises on improvements. See `README.md` for the product framing
-and `docs/architecture/overview.md` + `docs/adr/` for the technical record.
+risk, and advises on improvements. See `README.md` for the product framing,
+`docs/VISION.md` for the full product vision, and
+`docs/architecture/overview.md` + `docs/adr/` for the technical record.
 
 ## Architecture
 
