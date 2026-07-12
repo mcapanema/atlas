@@ -15,7 +15,7 @@ jobs:
         phase: [test, typecheck, lint, security]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
       - run: uv sync
