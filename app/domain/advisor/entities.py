@@ -7,8 +7,18 @@ advice; the LLM adapter lives in Infrastructure.
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 
 PRIORITIES = ("high", "medium", "low")
+
+
+class Persona(StrEnum):
+    """The advisory lens the AI answers through (VISION: AI Personas)."""
+
+    AGILE_COACH = "agile_coach"
+    ENGINEERING_ADVISOR = "engineering_advisor"
+    PROJECT_ADVISOR = "project_advisor"
+    DELIVERY_ANALYST = "delivery_analyst"
 
 
 @dataclass(frozen=True)

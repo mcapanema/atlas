@@ -7,13 +7,15 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_advisor_port, get_session
-from app.domain.advisor.entities import DeliveryAdvice, Recommendation
+from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 from tests.api.helpers import create_team
 
 
 class FakeAdvisor:
-    async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+    async def advise(
+        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+    ) -> DeliveryAdvice:
         return DeliveryAdvice(
             generated_at=datetime(2026, 7, 10, tzinfo=UTC),
             summary="Flow is healthy.",
@@ -99,7 +101,9 @@ async def test_transaction_released_before_llm_call(
                 raise
 
     class ProbeAdvisor:
-        async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+        async def advise(
+            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        ) -> DeliveryAdvice:
             in_transaction_during_advise.append(sessions[-1].in_transaction())
             return DeliveryAdvice(
                 generated_at=datetime(2026, 7, 10, tzinfo=UTC),
@@ -121,7 +125,9 @@ async def test_recommendations_502_when_advisor_fails(
     client: AsyncClient, test_app: FastAPI
 ) -> None:
     class FailingAdvisor:
-        async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+        async def advise(
+            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        ) -> DeliveryAdvice:
             raise AdvisorError("OpenRouter request failed")
 
     test_app.dependency_overrides[get_advisor_port] = lambda: FailingAdvisor()
@@ -139,7 +145,9 @@ async def test_recommendations_unknown_team_is_404_without_llm_call(
     calls: list[DeliveryContext] = []
 
     class RecordingAdvisor:
-        async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+        async def advise(
+            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        ) -> DeliveryAdvice:
             calls.append(context)
             return DeliveryAdvice(
                 generated_at=datetime(2026, 7, 10, tzinfo=UTC),
@@ -153,3 +161,41 @@ async def test_recommendations_unknown_team_is_404_without_llm_call(
 
     assert response.status_code == 404
     assert calls == []  # an unknown scope must not trigger a paid LLM call
+
+
+async def test_persona_is_forwarded_to_the_advisor(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    personas: list[Persona] = []
+
+    class RecordingPersonaAdvisor:
+        async def advise(
+            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        ) -> DeliveryAdvice:
+            personas.append(persona)
+            return DeliveryAdvice(
+                generated_at=datetime(2026, 7, 10, tzinfo=UTC),
+                summary="ok",
+                recommendations=(),
+            )
+
+    test_app.dependency_overrides[get_advisor_port] = lambda: RecordingPersonaAdvisor()
+    team_id = await create_team(client)
+
+    response = await client.get(
+        f"/api/recommendations?team_id={team_id}&persona=delivery_analyst"
+    )
+
+    assert response.status_code == 200
+    assert personas == [Persona.DELIVERY_ANALYST]
+
+
+async def test_unknown_persona_is_422(client: AsyncClient, test_app: FastAPI) -> None:
+    test_app.dependency_overrides[get_advisor_port] = lambda: FakeAdvisor()
+    team_id = await create_team(client)
+
+    response = await client.get(
+        f"/api/recommendations?team_id={team_id}&persona=fortune_teller"
+    )
+
+    assert response.status_code == 422

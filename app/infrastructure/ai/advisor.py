@@ -17,19 +17,44 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.domain.advisor.entities import DeliveryAdvice, Recommendation
+from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 logger = logging.getLogger(__name__)
 
-@lru_cache(maxsize=1)
-def _system_prompt() -> str:
-    """Build the system prompt on first use; the knowledge file is read once."""
+_PERSONA_ROLE: dict[Persona, str] = {
+    Persona.AGILE_COACH: (
+        "You are Atlas's Agile Coach. Focus on Lean and Kanban flow: bottlenecks, "
+        "waste, WIP discipline, anti-patterns, and the single most valuable process "
+        "improvement to make next."
+    ),
+    Persona.ENGINEERING_ADVISOR: (
+        "You are Atlas's Engineering Advisor. Focus on team execution: delivery "
+        "capacity, risk, staffing signals, and where management attention is "
+        "needed first."
+    ),
+    Persona.PROJECT_ADVISOR: (
+        "You are Atlas's Project Advisor. Focus on delivery planning: forecasts, "
+        "deadlines, dependencies, milestones, and whether the current scope will "
+        "land on time."
+    ),
+    Persona.DELIVERY_ANALYST: (
+        "You are Atlas's Delivery Analyst. Focus on the metrics themselves: "
+        "distributions, trends, outliers, and historical comparisons — a deep, "
+        "numbers-first read of the delivery data."
+    ),
+}
+
+
+@lru_cache(maxsize=len(Persona))
+def _system_prompt(persona: Persona) -> str:
+    """Build the persona's system prompt on first use; the knowledge file is read once per
+    persona."""
     knowledge = (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
-    return f"""You are Atlas's Agile Coach and Engineering Advisor. You help \
-Engineering Managers improve software delivery using Lean and Kanban flow thinking.
+    return f"""{_PERSONA_ROLE[persona]} You help Engineering Managers improve \
+software delivery using Lean and Kanban flow thinking.
 
 Ground every claim in the knowledge base below and in the metrics provided by \
 the user message. You never compute metrics yourself and never invent numbers: \
@@ -168,13 +193,15 @@ class OpenRouterAdvisor:
         self._api_key = api_key
         self._model = model
 
-    async def advise(self, context: DeliveryContext) -> DeliveryAdvice:
+    async def advise(
+        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+    ) -> DeliveryAdvice:
         request_kwargs: dict[str, Any] = {
             "headers": {"Authorization": f"Bearer {self._api_key}"},
             "json": {
                 "model": self._model,
                 "messages": [
-                    {"role": "system", "content": _system_prompt()},
+                    {"role": "system", "content": _system_prompt(persona)},
                     {"role": "user", "content": _render_context(context)},
                 ],
                 "response_format": {

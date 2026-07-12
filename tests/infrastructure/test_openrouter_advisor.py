@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
+from app.domain.advisor.entities import Persona
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
@@ -18,6 +19,7 @@ from app.infrastructure.ai.advisor import (
     OpenRouterAdvisor,
     RecommendationOut,
     _render_context,
+    _system_prompt,
 )
 
 _NOW = datetime(2026, 7, 10, tzinfo=UTC)
@@ -210,12 +212,21 @@ async def test_advise_raises_advisor_error_on_non_json_body() -> None:
 
 
 def test_system_prompt_is_lazy_and_cached() -> None:
-    from app.infrastructure.ai.advisor import _system_prompt
-
     _system_prompt.cache_clear()
-    prompt = _system_prompt()
+    prompt = _system_prompt(Persona.AGILE_COACH)
     assert "Little's Law" in prompt  # knowledge base is embedded
-    assert _system_prompt() is prompt  # read once, cached
+    assert _system_prompt(Persona.AGILE_COACH) is prompt  # read once, cached
+
+
+def test_system_prompt_varies_by_persona() -> None:
+    coach = _system_prompt(Persona.AGILE_COACH)
+    analyst = _system_prompt(Persona.DELIVERY_ANALYST)
+
+    assert "Agile Coach" in coach
+    assert "Delivery Analyst" in analyst
+    assert coach != analyst
+    # the shared grounding rules survive in every persona
+    assert "never invent numbers" in coach and "never invent numbers" in analyst
 
 
 def test_render_context_includes_queue_and_touch_time() -> None:

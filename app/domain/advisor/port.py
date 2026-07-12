@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.domain.advisor.entities import DeliveryAdvice
+from app.domain.advisor.entities import DeliveryAdvice, Persona
 from app.domain.forecasting.monte_carlo import DeliveryForecast
 from app.domain.metrics.distribution import LeadTimeDistribution
 from app.domain.metrics.summary import FlowMetrics
@@ -29,4 +29,6 @@ class DeliveryContext:
 class AdvisorPort(Protocol):
     """Reasoning adapter (an LLM). Explains metrics; never computes them."""
 
-    async def advise(self, context: DeliveryContext) -> DeliveryAdvice: ...
+    async def advise(
+        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+    ) -> DeliveryAdvice: ...
