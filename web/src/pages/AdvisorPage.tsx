@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAdvice, useAdvisorStatus, type Persona } from "../api/advisor";
 import { useSendFeedback } from "../api/personas";
 import { useTeams } from "../api/teams";
+import { PersonaLearningCard } from "../components/PersonaLearningCard";
 
 const priorityColor: Record<string, string> = {
   high: "red",
@@ -93,6 +94,7 @@ export function AdvisorPage() {
             Get advice
           </Button>
         </Space>
+        <PersonaLearningCard persona={persona} />
         {!teamId && <Alert type="info" message="Select a team to get delivery advice." />}
         {advice.isError && (
           <Alert

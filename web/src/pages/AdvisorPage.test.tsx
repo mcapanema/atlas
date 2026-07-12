@@ -27,6 +27,9 @@ function mockFetch({ configured = true } = {}) {
     if (url.startsWith("/api/recommendations/status")) {
       return Promise.resolve(jsonResponse({ configured }));
     }
+    if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+      return Promise.resolve(jsonResponse([]));
+    }
     if (url.startsWith("/api/personas") && url.endsWith("/feedback")) {
       return Promise.resolve(
         jsonResponse(
@@ -97,6 +100,9 @@ describe("AdvisorPage", () => {
       if (url.startsWith("/api/recommendations/status")) {
         return Promise.resolve(jsonResponse({ configured: true }));
       }
+      if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+        return Promise.resolve(jsonResponse([]));
+      }
       if (url.startsWith("/api/recommendations")) {
         return Promise.resolve(jsonResponse({ detail: "LLM unavailable" }, 500));
       }
@@ -152,6 +158,9 @@ describe("AdvisorPage", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+        return Promise.resolve(jsonResponse([]));
+      }
       return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
     });
 
@@ -222,6 +231,9 @@ describe("AdvisorPage", () => {
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
         return Promise.resolve(jsonResponse({ configured: true }));
+      }
+      if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.endsWith("/feedback")) {
         return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
