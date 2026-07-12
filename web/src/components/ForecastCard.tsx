@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 
 import { useForecast } from "../api/forecasts";
 import type { MetricsScope } from "../api/metrics";
+import { useForecastAccuracy } from "../api/snapshots";
 import { buildForecastOption } from "../lib/charts";
 import { EChart } from "./EChart";
 import { StatCard } from "./StatCard";
@@ -10,6 +11,7 @@ import { StatCard } from "./StatCard";
 export function ForecastCard({ scope }: { scope: MetricsScope }) {
   const [targetDate, setTargetDate] = useState<string>();
   const forecast = useForecast(scope, targetDate);
+  const accuracy = useForecastAccuracy(scope);
   const data = forecast.data;
   const outcomesOption = useMemo(
     () =>
@@ -47,6 +49,19 @@ export function ForecastCard({ scope }: { scope: MetricsScope }) {
           )}
         </Space>
         {outcomesOption && <EChart option={outcomesOption} />}
+        {accuracy.data && accuracy.data.evaluated > 0 && (
+          <Row gutter={[16, 16]}>
+            <StatCard
+              title="Past forecasts within P85"
+              value={
+                accuracy.data.p85_hit_rate != null
+                  ? `${Math.round(accuracy.data.p85_hit_rate * 100)}%`
+                  : "—"
+              }
+            />
+            <StatCard title="Forecasts evaluated" value={accuracy.data.evaluated} />
+          </Row>
+        )}
       </Space>
     </Card>
   );

@@ -10,6 +10,7 @@ from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
 from app.application.projects.service import ProjectService
+from app.application.snapshots.service import SnapshotService
 from app.application.sync.service import SyncService
 from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
@@ -22,6 +23,10 @@ from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
+from app.infrastructure.repositories.snapshots import (
+    SqlAlchemyForecastSnapshotRepository,
+    SqlAlchemyMetricSnapshotRepository,
+)
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
 
@@ -144,3 +149,19 @@ def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> Sync
 
 
 SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
+
+
+def get_snapshot_service(session: SessionDep) -> SnapshotService:
+    work_items = SqlAlchemyWorkItemRepository(session)
+    events = SqlAlchemyEventRepository(session)
+    return SnapshotService(
+        MetricsService(work_items, events),
+        ForecastService(work_items, events),
+        SqlAlchemyTeamRepository(session),
+        SqlAlchemyProjectRepository(session),
+        SqlAlchemyMetricSnapshotRepository(session),
+        SqlAlchemyForecastSnapshotRepository(session),
+    )
+
+
+SnapshotServiceDep = Annotated[SnapshotService, Depends(get_snapshot_service)]

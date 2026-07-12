@@ -64,4 +64,12 @@ describe("ExecutiveDashboardPage", () => {
       expect(screen.getByText("Metrics failed to load for 1 team")).toBeInTheDocument(),
     );
   });
+
+  it("shows per-team forecast accuracy", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    expect(await screen.findByText("Forecast accuracy (P85)")).toBeInTheDocument();
+    expect(await screen.findByText("90%")).toBeInTheDocument();
+  });
 });

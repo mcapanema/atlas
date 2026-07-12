@@ -26,7 +26,7 @@ Each domain concept spans all four layers in the same shape:
 - `app/infrastructure/…` — the adapter side (ORM repository, connector, LLM client)
 - `app/api/<concept>.py` — router, with DTOs in `app/api/schemas.py`
 
-The slices come in three kinds.
+The slices come in four kinds.
 
 ### Persisted aggregates — the system of record
 
@@ -41,7 +41,7 @@ derivation lives beside its aggregate: `derive_timeline`
 state/blocked periods for `GET /api/work-items/{id}/timeline` and the Work
 Item Explorer (`/work-items`).
 
-### Computed-on-read analytics — nothing persisted (ADR-0003)
+### Computed-on-read analytics (ADR-0003, amended by ADR-0008)
 
 Metrics, forecasts, and AI advice are recomputed per request from the
 persisted events; these slices have no tables and no migrations.
@@ -72,6 +72,18 @@ on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
 dashboards — charted with Apache ECharts (ADR-0007) — plus the Flow
 Metrics (`/metrics`) and Advisor (`/advisor`) pages.
 
+### Persisted analytics snapshots (ADR-0008)
+
+The one write-side projection: `app/domain/snapshots/` holds
+`MetricSnapshot` and `ForecastSnapshot` (one immutable row per scope per
+UTC day) with repository ports, `SnapshotService`
+(`app/application/snapshots/service.py`) captures them for every team and
+project inside the sync request, and `evaluate_forecast_accuracy`
+(`app/domain/forecasting/accuracy.py`) scores past forecast snapshots
+against actual completions. Served from `GET /api/metrics/snapshots`
+(lead-time trend on the dashboards) and `GET /api/forecasts/accuracy`
+(forecast calibration on the forecast card and Executive Dashboard).
+
 ### Ports to external systems
 
 - **Sync** (`app/domain/sync/`): the `DeliveryDataSource` port (`port.py`)
@@ -96,7 +108,10 @@ that package. The first connector is Linear
 personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
 mapping functions, and a paginating `LinearDataSource`. Exposed as
 `POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
-and the Connectors page in the frontend.
+and the Connectors page in the frontend. Blocked work is inferred from the
+workspace's blocked label: the datasource resolves label ids whose name
+contains "block" and the mapper turns label add/remove history into
+BLOCKED/UNBLOCKED events, which feed blocked time and flow efficiency.
 
 ## AI adapter
 

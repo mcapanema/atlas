@@ -77,11 +77,54 @@ export const teamFixture = {
   created_at: "2026-07-01T00:00:00Z",
 };
 
+export const snapshotsFixture = [
+  {
+    captured_on: "2026-07-09",
+    window_days: 30,
+    completed: 3,
+    wip: 2,
+    lead_time_p50_seconds: 172800,
+    lead_time_p85_seconds: 345600,
+    cycle_time_p50_seconds: 86400,
+    cycle_time_p85_seconds: 259200,
+    blocked_seconds: 0,
+    flow_efficiency: 0.8,
+  },
+  {
+    captured_on: "2026-07-10",
+    window_days: 30,
+    completed: 4,
+    wip: 2,
+    lead_time_p50_seconds: 172800,
+    lead_time_p85_seconds: 432000,
+    cycle_time_p50_seconds: 86400,
+    cycle_time_p85_seconds: 259200,
+    blocked_seconds: 3600,
+    flow_efficiency: 0.75,
+  },
+];
+
+export const accuracyFixture = {
+  evaluated: 4,
+  pending: 1,
+  p50_hit_rate: 0.5,
+  // 0.9 (not 0.75) so tests can findByText("90%") without colliding with
+  // metricsFixture.flow_efficiency's rendered "75%".
+  p85_hit_rate: 0.9,
+  mean_abs_error_days: 2.5,
+};
+
 export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
     for (const [prefix, body] of Object.entries(extraRoutes)) {
       if (url.startsWith(prefix)) return Promise.resolve(jsonResponse(body));
+    }
+    if (url.startsWith("/api/metrics/snapshots")) {
+      return Promise.resolve(jsonResponse(snapshotsFixture));
+    }
+    if (url.startsWith("/api/forecasts/accuracy")) {
+      return Promise.resolve(jsonResponse(accuracyFixture));
     }
     if (url.startsWith("/api/metrics/lead-time-distribution")) {
       return Promise.resolve(jsonResponse(distributionFixture));

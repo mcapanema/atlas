@@ -5,6 +5,7 @@ nothing outside this package sees a Linear payload.
 """
 
 import logging
+from collections.abc import Set as AbstractSet
 from datetime import datetime
 from typing import Any
 
@@ -18,6 +19,20 @@ logger = logging.getLogger(__name__)
 # interpolates it). A history of exactly this length has likely been
 # truncated by the cap — older events are silently missing.
 HISTORY_PAGE_SIZE = 250
+
+
+def blocked_label_ids(label_nodes: list[dict[str, Any]]) -> set[str]:
+    """Ids of labels whose name marks blocked work.
+
+    ponytail: case-insensitive 'block' substring, zero config — covers
+    "Blocked", "blocked", "blocker: external". Promote to a Settings list
+    if a workspace ever needs exact names.
+    """
+    return {
+        node["id"]
+        for node in label_nodes
+        if "block" in str(node.get("name", "")).lower()
+    }
 
 
 def map_team(node: dict[str, Any]) -> SourceTeam:
@@ -35,7 +50,7 @@ def map_project(node: dict[str, Any]) -> SourceProject:
     )
 
 
-def map_issue(node: dict[str, Any]) -> SourceWorkItem:
+def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset()) -> SourceWorkItem:
     created_at = datetime.fromisoformat(node["createdAt"])
     history_nodes = node["history"]["nodes"]
     if len(history_nodes) >= HISTORY_PAGE_SIZE:
@@ -55,9 +70,7 @@ def map_issue(node: dict[str, Any]) -> SourceWorkItem:
         )
     ]
     for entry in history_nodes:
-        event = map_history_entry(entry)
-        if event is not None:
-            events.append(event)
+        events.extend(map_history_entry(entry, blocked_ids))
     project = node.get("project")
     # ponytail: only completedAt feeds completed_at — a canceled issue
     # (canceledAt) is neither delivered throughput nor open work; exclude
@@ -78,24 +91,50 @@ def map_issue(node: dict[str, Any]) -> SourceWorkItem:
     )
 
 
-def map_history_entry(entry: dict[str, Any]) -> SourceEvent | None:
-    """One issue-history entry → SourceEvent; None for non-state changes.
+def map_history_entry(
+    entry: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset()
+) -> list[SourceEvent]:
+    """One issue-history entry → 0..n SourceEvents.
 
-    ponytail: assignment/label/priority history is skipped — only state
-    transitions feed flow metrics today. Map toAssignee → EventType.ASSIGNED
-    here when assignment analytics are needed.
+    State transitions map as before. Blocked-label additions/removals map
+    to BLOCKED/UNBLOCKED with derived external_ids — Linear has no native
+    blocked event; the workspace's blocked label is the signal.
+
+    ponytail: labels present at issue creation produce no history entry,
+    so an item born blocked reads as never blocked. Diff current labels
+    against label history if that ever skews blocked time.
     """
+    events: list[SourceEvent] = []
+    occurred_at = datetime.fromisoformat(entry["createdAt"])
     to_state = entry.get("toState")
-    if to_state is None:
-        return None
-    from_state = entry.get("fromState")
-    return SourceEvent(
-        external_id=entry["id"],
-        type=_event_type(from_state, to_state),
-        occurred_at=datetime.fromisoformat(entry["createdAt"]),
-        from_state=from_state["name"] if from_state else None,
-        to_state=to_state["name"],
-    )
+    if to_state is not None:
+        from_state = entry.get("fromState")
+        events.append(
+            SourceEvent(
+                external_id=entry["id"],
+                type=_event_type(from_state, to_state),
+                occurred_at=occurred_at,
+                from_state=from_state["name"] if from_state else None,
+                to_state=to_state["name"],
+            )
+        )
+    if blocked_ids & set(entry.get("addedLabelIds") or ()):
+        events.append(
+            SourceEvent(
+                external_id=f"{entry['id']}:blocked",
+                type=EventType.BLOCKED,
+                occurred_at=occurred_at,
+            )
+        )
+    if blocked_ids & set(entry.get("removedLabelIds") or ()):
+        events.append(
+            SourceEvent(
+                external_id=f"{entry['id']}:unblocked",
+                type=EventType.UNBLOCKED,
+                occurred_at=occurred_at,
+            )
+        )
+    return events
 
 
 def _event_type(from_state: dict[str, Any] | None, to_state: dict[str, Any]) -> EventType:

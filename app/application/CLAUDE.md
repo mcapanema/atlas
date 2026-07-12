@@ -22,6 +22,9 @@ vary with the use case — the rule is "the ports this use case needs", not
 - `AdvisorService` composes sibling services (`MetricsService`,
   `ForecastService`). The `AdvisorPort` is called at the presentation layer,
   not in the service.
+- `SnapshotService` composes `MetricsService`/`ForecastService` (like the
+  advisor) plus the team/project repositories and both snapshot ports —
+  it is the only service that writes what the analytics computed.
 
 No FastAPI/Pydantic here either — services operate on Domain entities,
 not DTOs.

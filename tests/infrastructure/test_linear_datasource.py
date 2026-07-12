@@ -80,6 +80,8 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
                     "createdAt": "2026-07-02T09:00:00.000Z",
                     "fromState": {"name": "Backlog", "type": "backlog"},
                     "toState": {"name": "In Progress", "type": "started"},
+                    "addedLabelIds": [],
+                    "removedLabelIds": [],
                 }
             ]
         },
@@ -87,6 +89,8 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
         assert "completedAt" in body["query"]
         assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
         return _page("issues", [issue_node])
@@ -121,6 +125,9 @@ async def test_fetch_work_items_skips_malformed_nodes(
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
         return _page("issues", [bad, good])
 
     with caplog.at_level(logging.WARNING):
@@ -128,6 +135,52 @@ async def test_fetch_work_items_skips_malformed_nodes(
 
     assert [i.external_id for i in items] == ["i1"]
     assert any("i-bad" in record.getMessage() for record in caplog.records)
+
+
+async def test_fetch_work_items_resolves_blocked_labels() -> None:
+    issue_node: dict[str, Any] = {
+        "id": "i1",
+        "title": "Fix login",
+        "createdAt": "2026-07-01T10:00:00.000Z",
+        "state": {"name": "In Progress", "type": "started"},
+        "team": {"id": "t1"},
+        "project": None,
+        "history": {
+            "nodes": [
+                {
+                    "id": "h1",
+                    "createdAt": "2026-07-02T09:00:00.000Z",
+                    "fromState": None,
+                    "toState": None,
+                    "addedLabelIds": ["lbl-1"],
+                    "removedLabelIds": [],
+                },
+                {
+                    "id": "h2",
+                    "createdAt": "2026-07-03T09:00:00.000Z",
+                    "fromState": None,
+                    "toState": None,
+                    "addedLabelIds": [],
+                    "removedLabelIds": ["lbl-1"],
+                },
+            ]
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [{"id": "lbl-1", "name": "Blocked"}])
+        assert "addedLabelIds" in body["query"]
+        return _page("issues", [issue_node])
+
+    items = await _datasource(handler).fetch_work_items()
+
+    assert [e.type for e in items[0].events] == [
+        EventType.CREATED,
+        EventType.BLOCKED,
+        EventType.UNBLOCKED,
+    ]
 
 
 async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:

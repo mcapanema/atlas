@@ -1,11 +1,11 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, test, vi } from "vitest";
 
 vi.mock("./EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { forecastFixture, jsonResponse } from "../test/fixtures";
+import { forecastFixture, jsonResponse, mockMetricsFetch } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ForecastCard } from "./ForecastCard";
 
@@ -63,4 +63,12 @@ describe("ForecastCard", () => {
 
     await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
   });
+});
+
+test("shows forecast accuracy once past forecasts resolved", async () => {
+  mockMetricsFetch();
+  renderWithClient(<ForecastCard scope={{ teamId: "t-1" }} />);
+
+  expect(await screen.findByText("Past forecasts within P85")).toBeInTheDocument();
+  expect(screen.getByText("90%")).toBeInTheDocument();
 });

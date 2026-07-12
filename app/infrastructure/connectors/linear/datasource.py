@@ -8,6 +8,7 @@ from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
+    blocked_label_ids,
     map_issue,
     map_project,
     map_team,
@@ -64,6 +65,15 @@ query Projects($after: String) {
 }
 """
 
+_LABELS_QUERY = """
+query Labels($after: String) {
+  issueLabels(first: 100, after: $after) {
+    nodes { id name }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+"""
+
 # ponytail: nested history capped at HISTORY_PAGE_SIZE entries per issue —
 # enough for any sane issue; map_issue logs a warning when the cap is hit.
 # Paginate history per-issue if one ever exceeds it.
@@ -84,6 +94,8 @@ query Issues($after: String) {{
           createdAt
           fromState {{ name type }}
           toState {{ name type }}
+          addedLabelIds
+          removedLabelIds
         }}
       }}
     }}
@@ -106,7 +118,13 @@ class LinearDataSource:
         )
 
     async def fetch_work_items(self) -> list[SourceWorkItem]:
-        return _map_tolerantly(await self._nodes(_ISSUES_QUERY, "issues"), map_issue, "issue")
+        labels = await self._nodes(_LABELS_QUERY, "issueLabels")
+        blocked_ids = blocked_label_ids(labels)
+        return _map_tolerantly(
+            await self._nodes(_ISSUES_QUERY, "issues"),
+            lambda node: map_issue(node, blocked_ids),
+            "issue",
+        )
 
     async def _nodes(self, query: str, root: str) -> list[dict[str, Any]]:
         nodes: list[dict[str, Any]] = []
