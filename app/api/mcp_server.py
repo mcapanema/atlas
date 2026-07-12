@@ -248,4 +248,44 @@ def build_mcp_server(app: FastAPI) -> FastMCP:
             f"{summary['divergences']} divergences. Snapshots captured."
         )
 
+    def _scope_clause(team: str) -> str:
+        return f" for the team named {team!r}" if team else ""
+
+    @mcp.prompt()
+    def daily_standup(team: str = "") -> str:
+        """Prepare insights for today's daily standup."""
+        return f"""Help me run today's daily standup{_scope_clause(team)}.
+
+1. Call list_scopes and resolve the team (ask me if the name is ambiguous).
+2. Call meeting_brief for that team, then aging_wip if the brief flags stuck items.
+3. Report, in order: items over the p85 age line (by name), anything blocked,
+   and how WIP compares to recent completion rate.
+4. Keep it under 10 bullets, ordered by what needs a decision in the meeting.
+   Flag anything the data can't answer instead of guessing."""
+
+    @mcp.prompt()
+    def retrospective(team: str = "", sprint_days: str = "14") -> str:
+        """Prepare a data-grounded retrospective."""
+        scope = _scope_clause(team)
+        return f"""Help me prepare a retrospective{scope} covering the last {sprint_days} days.
+
+1. Call list_scopes to resolve the team, then meeting_brief with window_days={sprint_days}.
+2. Contrast this window against the trailing defaults: lead time, flow efficiency,
+   blocked time, and the delivery-health components with the weakest scores.
+3. Propose 2-3 discussion topics, each grounded in a number from the brief
+   (quote it), phrased as an open question for the team — not a verdict.
+4. Note explicitly where the window is too small to trust a trend."""
+
+    @mcp.prompt()
+    def planning(team: str = "") -> str:
+        """Prepare forecast-backed input for a planning session."""
+        return f"""Help me prepare for a planning session{_scope_clause(team)}.
+
+1. Call list_scopes to resolve the team, then meeting_brief.
+2. Ask me for the planned scope (item count) and/or a target date, then call
+   forecast with `remaining` and/or `target_date` to test the plan.
+3. Report the p50/p85/p95 completion dates and the confidence number, and say
+   plainly what would have to be dropped or moved for the plan to be realistic.
+4. Recommend committing at p85, not p50 — explain why in one sentence if asked."""
+
     return mcp

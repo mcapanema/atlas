@@ -194,3 +194,22 @@ async def test_run_sync_surfaces_unconfigured_connector(
             assert result.isError
             # The 409-until-configured detail must reach the model verbatim.
             assert "ATLAS_LINEAR_API_KEY" in tool_text(result)
+
+
+async def test_meeting_prompts(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with (
+        running_app(sessionmaker, settings_env) as app,
+        mcp_session(app) as session,
+    ):
+        prompts = await session.list_prompts()
+        names = [p.name for p in prompts.prompts]
+        assert {"daily_standup", "retrospective", "planning"} <= set(names)
+
+        prompt = await session.get_prompt("daily_standup", {"team": "Platform"})
+        content = prompt.messages[0].content
+        assert isinstance(content, TextContent)
+        assert "Platform" in content.text
+        assert "meeting_brief" in content.text
