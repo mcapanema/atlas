@@ -216,3 +216,28 @@ def test_system_prompt_is_lazy_and_cached() -> None:
     prompt = _system_prompt()
     assert "Little's Law" in prompt  # knowledge base is embedded
     assert _system_prompt() is prompt  # read once, cached
+
+
+def test_render_context_includes_queue_and_touch_time() -> None:
+    now = datetime(2026, 7, 10, tzinfo=UTC)
+    start = now - timedelta(days=30)
+    stats = DurationStats(
+        p50=timedelta(days=2), p75=timedelta(days=3), p85=timedelta(days=4),
+        p95=timedelta(days=5), mean=timedelta(days=2, hours=12),
+    )
+    context = DeliveryContext(
+        flow=FlowMetrics(
+            window_start=start, window_end=now, completed=1, wip=0,
+            lead_time=stats, cycle_time=stats, blocked_time=timedelta(0),
+            flow_efficiency=1.0, queue_time=stats, touch_time=stats,
+        ),
+        distribution=LeadTimeDistribution(window_start=start, window_end=now, bins=()),
+        forecast=DeliveryForecast(
+            window_start=start, window_end=now, remaining=0, completion=None, confidence=None
+        ),
+    )
+
+    text = _render_context(context)
+
+    assert "queue time p50=2.0d" in text
+    assert "touch time p50=2.0d" in text

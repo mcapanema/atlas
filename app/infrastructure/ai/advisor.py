@@ -98,6 +98,11 @@ def _render_context(context: DeliveryContext) -> str:
     lines.append(f"- blocked time total={_days(flow.blocked_time)}")
     if flow.flow_efficiency is not None:
         lines.append(f"- flow efficiency={flow.flow_efficiency:.2f}")
+    if flow.queue_time is not None and flow.touch_time is not None:
+        lines.append(
+            f"- queue time p50={_days(flow.queue_time.p50)}, "
+            f"touch time p50={_days(flow.touch_time.p50)}"
+        )
 
     dist = context.distribution
     dist_days = (dist.window_end - dist.window_start).days

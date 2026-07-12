@@ -44,6 +44,8 @@ async def get_flow_metrics(
         cycle_time=_stats_read(metrics.cycle_time),
         blocked_seconds=metrics.blocked_time.total_seconds(),
         flow_efficiency=metrics.flow_efficiency,
+        queue_time=_stats_read(metrics.queue_time),
+        touch_time=_stats_read(metrics.touch_time),
     )
 
 

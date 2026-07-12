@@ -162,6 +162,8 @@ class FlowMetricsRead(BaseModel):
     cycle_time: DurationStatsRead | None
     blocked_seconds: float
     flow_efficiency: float | None
+    queue_time: DurationStatsRead | None
+    touch_time: DurationStatsRead | None
 
 
 class DailyFlowCountRead(BaseModel):

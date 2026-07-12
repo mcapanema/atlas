@@ -158,3 +158,20 @@ async def test_lead_time_distribution_requires_exactly_one_scope(client: AsyncCl
             f"/api/metrics/lead-time-distribution?team_id={uuid4()}&project_id={uuid4()}"
         )
     ).status_code == 422
+
+
+async def test_flow_metrics_include_queue_and_touch_time(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+
+    body = (await client.get(f"/api/metrics?team_id={team_id}")).json()
+
+    assert body["queue_time"]["p50_seconds"] == pytest.approx(4 * 86400)
+    assert body["touch_time"]["p50_seconds"] == pytest.approx(4 * 86400)
