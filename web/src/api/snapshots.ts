@@ -43,6 +43,15 @@ export function useForecastAccuracy(scope: MetricsScope) {
   });
 }
 
+export function useAllTeamsSnapshots(teams: Team[]) {
+  return useQueries({
+    queries: teams.map((team) => ({
+      queryKey: ["metrics", "snapshots", { teamId: team.id }],
+      queryFn: () => apiFetch<MetricSnapshot[]>(`/api/metrics/snapshots?team_id=${team.id}`),
+    })),
+  });
+}
+
 export function useAllTeamsForecastAccuracy(teams: Team[]) {
   return useQueries({
     queries: teams.map((team) => ({

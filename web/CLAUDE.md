@@ -15,7 +15,18 @@ for server state, React Router for routing.
 - `src/pages/<Concept>Page.tsx` — one page per concept, an Ant Design
   component consuming the query hook.
 - `src/components/AppLayout.tsx` — the sidebar shell; add new pages to its
-  `Menu` items and to the `<Routes>` in `App.tsx`.
+  grouped `NAV` items and to the `<Routes>` in `App.tsx`.
+- `src/theme/` — the design system: `tokens.ts` (OKLCH-derived palette for
+  both modes + font stacks, single source of truth), `antdTheme.ts`
+  (maps tokens onto AntD's compact/dark algorithms; the final
+  `restoreTypeRamp` mapping step is load-bearing — compact alone rebases
+  the font map on `fontSizeSM`, deriving a 10px app-wide base from the
+  13px seed), `ThemeProvider.tsx` +
+  `context.ts` (`useThemeMode()`; mode persists to `localStorage` under
+  `atlas-theme`, defaults to the OS preference — `index.html` mirrors that
+  logic pre-paint). Global CSS lives in `src/index.css` and references
+  AntD's `--ant-*` CSS variables instead of restating colors; the body
+  bg/ink literals there deliberately mirror `tokens.ts` — change together.
 
 ## Conventions
 
@@ -51,6 +62,13 @@ for server state, React Router for routing.
   imports of the full `"echarts"` package are not. jsdom has no
   canvas: tests that render a page containing charts must
   `vi.mock("../components/EChart")`; only `charts.test.ts` asserts on
-  option contents. Chart colors in `charts.ts` are palette-validated —
+  option contents. Series colors in `charts.ts` are palette-validated —
   don't swap them casually, and keep the CFD's legend + end labels
-  (contrast relief for the aqua/yellow bands).
+  (contrast relief for the aqua/yellow bands). Neutral chart furniture
+  (axes, gridlines, legends) comes from `src/theme/tokens.ts`: every
+  option builder takes a trailing `mode` param (default `"light"`) —
+  components pass `useThemeMode().mode` and include it in `useMemo` deps.
+- Fonts are the Red Hat superfamily (`@fontsource-variable/*`, imported in
+  `main.tsx`): Text for UI (AntD `fontFamily`), Display for headings
+  (element selectors in `index.css`), Mono for metric figures
+  (`.ant-statistic-content`). Don't introduce other families.
