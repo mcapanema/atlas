@@ -286,3 +286,21 @@ class AgingWipRead(BaseModel):
     now: datetime
     cycle_time_p85_seconds: float | None
     items: list[AgingItemRead]
+
+
+class HealthComponentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    score: int
+    reason: str
+
+
+class DeliveryHealthRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    window_start: datetime
+    window_end: datetime
+    score: int | None
+    band: Literal["healthy", "warning", "critical"] | None
+    components: list[HealthComponentRead]

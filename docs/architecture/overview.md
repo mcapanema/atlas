@@ -51,7 +51,11 @@ persisted events; these slices have no tables and no migrations.
   percentiles, Throughput, WIP, Blocked Time, Flow Efficiency
   (`summary.py`) — plus daily CFD phase counts (`cfd.py`), weekly
   throughput buckets (`history.py`), and a lead-time histogram
-  (`distribution.py`).
+  (`distribution.py`). The metrics slice also computes Queue Time, Touch
+  Time, Aging WIP, and a Delivery Health composite (predictability /
+  efficiency / flow / stability / risk, each 0–100 with a reason string).
+  The VISION's Flow Velocity and Flow Load are throughput and WIP under
+  Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
   simulation of the scope's open work by resampling its historical daily
   throughput — seeded `random.Random`, deterministic by construction.
@@ -66,7 +70,7 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 `ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
-`/api/forecasts`, and `GET /api/recommendations` (409 until
+`/api/metrics/health`, `/api/forecasts`, and `GET /api/recommendations` (409 until
 `ATLAS_OPENROUTER_API_KEY` is set — ADR-0005). The frontend consumes them
 on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
 dashboards — charted with Apache ECharts (ADR-0007) — plus the Flow

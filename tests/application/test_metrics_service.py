@@ -205,3 +205,26 @@ async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
     assert aging.cycle_time_p85 == timedelta(days=7)
     assert aging.items[0].over_p85 is True
     assert aging.items[1].over_p85 is False
+
+
+async def test_delivery_health_for_team() -> None:
+    team_id = uuid4()
+    done, doing = _item(team_id), _item(team_id)
+    service = MetricsService(
+        InMemoryWorkItemRepository([done, doing]),
+        InMemoryEventRepository(
+            [
+                _event(done, EventType.CREATED, 10),
+                _event(done, EventType.STARTED, 8),
+                _event(done, EventType.COMPLETED, 2),
+                _event(doing, EventType.CREATED, 5),
+                _event(doing, EventType.STARTED, 4),
+            ]
+        ),
+    )
+
+    health = await service.get_delivery_health(team_id=team_id, now=NOW)
+
+    assert health.score is not None
+    assert health.band in ("healthy", "warning", "critical")
+    assert any(c.name == "risk" for c in health.components)

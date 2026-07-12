@@ -206,3 +206,31 @@ async def test_aging_wip_for_unknown_team_is_404(client: AsyncClient) -> None:
 
 async def test_aging_wip_requires_exactly_one_scope(client: AsyncClient) -> None:
     assert (await client.get("/api/metrics/aging-wip")).status_code == 422
+
+
+async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+
+    response = await client.get(f"/api/metrics/health?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert 0 <= body["score"] <= 100
+    assert body["band"] in ("healthy", "warning", "critical")
+    assert "predictability" in [c["name"] for c in body["components"]]
+
+
+async def test_delivery_health_for_unknown_team_is_404(client: AsyncClient) -> None:
+    assert (await client.get(f"/api/metrics/health?team_id={uuid4()}")).status_code == 404
+
+
+async def test_delivery_health_requires_exactly_one_scope(client: AsyncClient) -> None:
+    assert (await client.get("/api/metrics/health")).status_code == 422

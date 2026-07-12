@@ -8,6 +8,7 @@ from app.domain.metrics.distribution import (
     LeadTimeDistribution,
     compute_lead_time_distribution,
 )
+from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.history import FlowHistory, compute_flow_history
 from app.domain.metrics.summary import FlowMetrics, compute_flow_metrics
 from app.domain.work_items.repository import WorkItemRepository
@@ -85,3 +86,18 @@ class MetricsService:
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
         return compute_aging_wip(scope.items_with_samples, now=at)
+
+    async def get_delivery_health(
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        window_days: int = 30,
+        now: datetime | None = None,
+        scope: ScopeSamples | None = None,
+    ) -> DeliveryHealth:
+        """Composite delivery-health score over the trailing window ending at `now`."""
+        window_end = now if now is not None else datetime.now(UTC)
+        if scope is None:
+            scope = await self._scope.load(team_id=team_id, project_id=project_id)
+        return compute_delivery_health(scope.streams, now=window_end, window_days=window_days)

@@ -4,6 +4,7 @@ from app.api.deps import MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
     AgingItemRead,
     AgingWipRead,
+    DeliveryHealthRead,
     DurationStatsRead,
     FlowHistoryRead,
     FlowMetricsRead,
@@ -104,3 +105,15 @@ async def get_aging_wip(service: MetricsServiceDep, scope: ScopeDep) -> AgingWip
             for item in aging.items
         ],
     )
+
+
+@router.get("/health", response_model=DeliveryHealthRead)
+async def get_delivery_health(
+    service: MetricsServiceDep,
+    scope: ScopeDep,
+    window_days: int = Query(default=30, ge=7, le=365),
+) -> DeliveryHealthRead:
+    health = await service.get_delivery_health(
+        team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
+    )
+    return DeliveryHealthRead.model_validate(health)
