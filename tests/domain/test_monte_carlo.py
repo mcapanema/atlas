@@ -78,10 +78,10 @@ def test_summarize_completion_percentiles_and_outcome_histogram() -> None:
     assert forecast.p50_days == 10
     assert forecast.p85_days == 10
     assert forecast.p95_days == 20
-    assert forecast.outcomes == [
+    assert forecast.outcomes == (
         OutcomeBucket(days=10, trials=90),
         OutcomeBucket(days=20, trials=10),
-    ]
+    )
 
 
 def test_delivery_confidence_is_the_share_of_trials_within_target() -> None:

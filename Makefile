@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install migrate dev test lint typecheck security check build run clean \
+.PHONY: help install hooks migrate dev test lint typecheck security check build run clean \
 	docker-build docker-up docker-down docker-logs
 
 help: ## Show this help
@@ -8,8 +8,11 @@ help: ## Show this help
 
 install: ## Install backend and frontend dependencies
 	uv sync
-	cd web && npm install
+	cd web && npm ci
 	test -f .env || cp .env.example .env
+
+hooks: ## Install git pre-commit hooks (ruff + eslint on staged changes)
+	uv run pre-commit install
 
 migrate: ## Apply database migrations
 	uv run alembic upgrade head
@@ -36,7 +39,7 @@ security: ## Audit backend and frontend dependencies for known vulnerabilities
 	uv run --with pip-audit pip-audit
 	cd web && npm audit --audit-level=high
 
-check: lint typecheck test security ## Run the full CI gate locally
+check: lint typecheck test build security ## Run the full CI gate locally
 
 build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build

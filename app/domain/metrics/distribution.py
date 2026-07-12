@@ -23,7 +23,7 @@ class LeadTimeDistribution:
 
     window_start: datetime
     window_end: datetime
-    bins: list[DurationBin]
+    bins: tuple[DurationBin, ...]
 
 
 def duration_bins(durations: list[timedelta]) -> list[DurationBin]:
@@ -53,5 +53,5 @@ def compute_lead_time_distribution(
     return LeadTimeDistribution(
         window_start=window_start,
         window_end=now,
-        bins=duration_bins(lead_times(in_window)),
+        bins=tuple(duration_bins(lead_times(in_window))),
     )

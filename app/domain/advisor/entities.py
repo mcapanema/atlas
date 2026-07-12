@@ -5,7 +5,7 @@ explainable advice. These entities are the platform-neutral shape of that
 advice; the LLM adapter lives in Infrastructure.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 PRIORITIES = ("high", "medium", "low")
@@ -20,7 +20,7 @@ class Recommendation:
     problem: str
     root_cause: str
     action: str
-    evidence: list[str] = field(default_factory=list)
+    evidence: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.title.strip():
@@ -35,7 +35,7 @@ class DeliveryAdvice:
 
     generated_at: datetime
     summary: str
-    recommendations: list[Recommendation]
+    recommendations: tuple[Recommendation, ...]
 
     def __post_init__(self) -> None:
         if self.generated_at.tzinfo is None:

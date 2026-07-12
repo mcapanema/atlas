@@ -5,8 +5,8 @@ description = "Atlas — Delivery Intelligence Platform"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.34",
-    "sqlalchemy[asyncio]>=2.0",
+    "uvicorn[standard]>=0.51.0",
+    "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.20",
     "alembic>=1.14",
     "pydantic>=2.10",
@@ -18,10 +18,10 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
-    "hypothesis>=6.120",
     "ruff>=0.9",
     "mypy>=1.14",
     "pytest-cov>=7.1.0",
+    "pre-commit>=4.0",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.

@@ -17,16 +17,16 @@ class FakeAdvisor:
         return DeliveryAdvice(
             generated_at=datetime(2026, 7, 10, tzinfo=UTC),
             summary="Flow is healthy.",
-            recommendations=[
+            recommendations=(
                 Recommendation(
                     title="Lower WIP",
                     priority="high",
                     problem="WIP is 12 while weekly throughput is 3",
                     root_cause="Work is started faster than it finishes",
                     action="Set a WIP limit of 6",
-                    evidence=["wip=12", "completed=3"],
-                )
-            ],
+                    evidence=("wip=12", "completed=3"),
+                ),
+            ),
         )
 
 
@@ -104,7 +104,7 @@ async def test_transaction_released_before_llm_call(
             return DeliveryAdvice(
                 generated_at=datetime(2026, 7, 10, tzinfo=UTC),
                 summary="probe",
-                recommendations=[],
+                recommendations=(),
             )
 
     test_app.dependency_overrides[get_session] = tracking_get_session
@@ -144,7 +144,7 @@ async def test_recommendations_unknown_team_is_404_without_llm_call(
             return DeliveryAdvice(
                 generated_at=datetime(2026, 7, 10, tzinfo=UTC),
                 summary="never",
-                recommendations=[],
+                recommendations=(),
             )
 
     test_app.dependency_overrides[get_advisor_port] = lambda: RecordingAdvisor()

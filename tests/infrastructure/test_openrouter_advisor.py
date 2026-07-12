@@ -44,7 +44,7 @@ def _context() -> DeliveryContext:
     distribution = LeadTimeDistribution(
         window_start=_NOW - timedelta(days=90),
         window_end=_NOW,
-        bins=[DurationBin(start_days=0, end_days=1, count=3)],
+        bins=(DurationBin(start_days=0, end_days=1, count=3),),
     )
     forecast = DeliveryForecast(
         window_start=_NOW - timedelta(days=90),
@@ -57,7 +57,7 @@ def _context() -> DeliveryContext:
             p75_days=14,
             p85_days=17,
             p95_days=23,
-            outcomes=[OutcomeBucket(days=10, trials=250)],
+            outcomes=(OutcomeBucket(days=10, trials=250),),
         ),
         confidence=0.72,
     )
@@ -86,7 +86,7 @@ def test_render_context_handles_empty_scope() -> None:
             flow_efficiency=None,
         ),
         distribution=LeadTimeDistribution(
-            window_start=_NOW - timedelta(days=90), window_end=_NOW, bins=[]
+            window_start=_NOW - timedelta(days=90), window_end=_NOW, bins=()
         ),
         forecast=DeliveryForecast(
             window_start=_NOW - timedelta(days=90),
@@ -207,3 +207,12 @@ async def test_advise_raises_advisor_error_on_non_json_body() -> None:
 
     with pytest.raises(AdvisorError, match="not JSON"):
         await advisor.advise(_context())
+
+
+def test_system_prompt_is_lazy_and_cached() -> None:
+    from app.infrastructure.ai.advisor import _system_prompt
+
+    _system_prompt.cache_clear()
+    prompt = _system_prompt()
+    assert "Little's Law" in prompt  # knowledge base is embedded
+    assert _system_prompt() is prompt  # read once, cached

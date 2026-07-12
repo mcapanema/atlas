@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api import (
     advisor,
@@ -30,8 +31,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    app.state.sessionmaker = build_sessionmaker(settings.database_url, echo=settings.db_echo)
-    yield
+    sessionmaker = build_sessionmaker(settings.database_url, echo=settings.db_echo)
+    app.state.sessionmaker = sessionmaker
+    try:
+        yield
+    finally:
+        engine = sessionmaker.kw["bind"]
+        assert isinstance(engine, AsyncEngine)  # narrow Any for mypy; always true
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:
