@@ -179,6 +179,55 @@ test`, `make typecheck`, `make lint`, `make security`).
 weekly PRs for outdated backend (`uv`), frontend (`npm`), and GitHub Actions
 dependencies — see `.github/dependabot.yml`.
 
+## Chat access from Claude & ChatGPT (MCP)
+
+Atlas exposes an MCP server so you can ask about your teams' delivery from a
+chat interface: meeting briefs for daily standups, retros, reviews, and
+planning, with drill-down tools and a data-refresh action.
+
+### 1. Enable the endpoint
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(24))"   # generate a token
+echo 'ATLAS_MCP_TOKEN=<paste-it>' >> .env
+make run
+```
+
+The MCP endpoint is now at `http://localhost:8000/mcp/<token>/` (trailing
+slash matters). Anyone with the full URL can read delivery data — treat it
+like a password. Leave `ATLAS_MCP_TOKEN` empty to disable the endpoint
+entirely.
+
+### 2. Expose it to cloud clients (claude.ai / ChatGPT)
+
+Cloud chat apps can only reach public HTTPS URLs. Run a tunnel while you want
+chat access:
+
+```bash
+cloudflared tunnel --url http://localhost:8000   # or: ngrok http 8000
+```
+
+Copy the printed HTTPS origin; your connector URL is
+`https://<origin>/mcp/<token>/`.
+
+### 3. Connect a client
+
+- **claude.ai / Claude Desktop**: Settings → Connectors → *Add custom
+  connector* → paste the URL (no OAuth).
+- **Claude Code**: `claude mcp add --transport http atlas
+  http://localhost:8000/mcp/<token>/` (no tunnel needed locally).
+- **ChatGPT**: enable *Developer mode* (Settings → Apps & Connectors →
+  Advanced), then *Create connector* → paste the URL, no authentication.
+
+### 4. Use it
+
+Tools: `list_scopes`, `meeting_brief` (the one-call digest), `aging_wip`,
+`list_work_items`, `forecast` (supports what-if `remaining`/`target_date`),
+`run_sync`. Prompts: `daily_standup`, `retrospective`, `planning` — pick one
+from the client's prompt menu and it orchestrates the tools for you.
+Everything is computed by Atlas; the chat model explains, it never invents
+numbers it wasn't given.
+
 ---
 
 For more information about the architecture, engineering principles, and domain model, see the documentation in the `docs/` directory.

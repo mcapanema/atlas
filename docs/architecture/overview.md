@@ -150,3 +150,14 @@ FastAPI serves the REST API and, in production, the compiled React app from `web
 Async SQLAlchemy 2.0 over SQLite (aiosqlite) today; portable to PostgreSQL because all
 database-specific code is confined to Infrastructure and types (e.g. `Uuid`) render
 per-dialect. Alembic manages schema migrations.
+
+## Chat access (MCP)
+
+`app/api/mcp_server.py` mounts an MCP (Model Context Protocol) server inside
+the monolith at `/mcp/<ATLAS_MCP_TOKEN>` — Streamable HTTP, stateless, secret-
+URL auth (connector UIs cannot send custom headers). It is a Presentation-
+layer facade: every tool calls the REST API in-process and reformats the DTO
+as compact text, so analytics logic and error semantics live in exactly one
+place. `GET /api/recommendations/context` returns the advisor's digest as
+text for the same reason — a chat client brings its own LLM, so advice works
+without an OpenRouter key.

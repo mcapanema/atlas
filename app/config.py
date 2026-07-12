@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # (~3x LLM cost and latency). Off by default.
     advisor_self_critique: bool = False
 
+    # Secret path token for the MCP endpoint (/mcp/<token>); None/empty
+    # disables MCP chat access entirely (no route is mounted).
+    mcp_token: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -7,6 +7,7 @@ import pytest
 
 from app.domain.advisor.entities import AdviceFeedback, Persona
 from app.domain.advisor.port import AdvisorError, DeliveryContext
+from app.domain.advisor.render import render_context
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
     DeliveryForecast,
@@ -19,7 +20,6 @@ from app.infrastructure.ai.advisor import (
     OpenRouterAdvisor,
     RecommendationOut,
     _knowledge,
-    _render_context,
     _system_prompt,
 )
 
@@ -65,43 +65,6 @@ def _context() -> DeliveryContext:
         confidence=0.72,
     )
     return DeliveryContext(flow=flow, distribution=distribution, forecast=forecast)
-
-
-def test_render_context_includes_key_figures() -> None:
-    text = _render_context(_context())
-    assert "completed=12" in text
-    assert "wip=5" in text
-    assert "remaining=14" in text
-    assert "3.0d" in text  # lead time p50 rendered in days
-    assert "0.42" in text  # flow efficiency
-
-
-def test_render_context_handles_empty_scope() -> None:
-    empty = DeliveryContext(
-        flow=FlowMetrics(
-            window_start=_NOW - timedelta(days=30),
-            window_end=_NOW,
-            completed=0,
-            wip=0,
-            lead_time=None,
-            cycle_time=None,
-            blocked_time=timedelta(0),
-            flow_efficiency=None,
-        ),
-        distribution=LeadTimeDistribution(
-            window_start=_NOW - timedelta(days=90), window_end=_NOW, bins=()
-        ),
-        forecast=DeliveryForecast(
-            window_start=_NOW - timedelta(days=90),
-            window_end=_NOW,
-            remaining=0,
-            completion=None,
-            confidence=None,
-        ),
-    )
-    text = _render_context(empty)
-    assert "no completed items" in text
-    assert "no forecast" in text
 
 
 def _mock_client(
@@ -276,7 +239,7 @@ def test_render_context_includes_queue_and_touch_time() -> None:
         ),
     )
 
-    text = _render_context(context)
+    text = render_context(context)
 
     assert "queue time p50=2.0d" in text
     assert "touch time p50=2.0d" in text

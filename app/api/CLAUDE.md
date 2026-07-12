@@ -40,6 +40,13 @@ Presentation is allowed to know a concrete adapter exists).
   (`POST /api/connectors/linear/sync`).
 - `mount_spa()` must be registered last in `create_app()` — the rule and
   its reason are owned by `app/infrastructure/CLAUDE.md`.
+- **MCP facade** (`mcp_server.py`): the MCP server's tools call Atlas's own
+  REST API in-process (httpx `ASGITransport`) and return compact text —
+  never duplicate scope validation, DTO mapping, or error semantics inside
+  a tool, and never return raw endpoint JSON (chat context windows are the
+  budget). The endpoint mounts at `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()`
+  (before `mount_spa`) only when the token is set, and `lifespan` must run
+  `app.state.mcp.session_manager.run()` for it to serve.
 
 ## Testing
 

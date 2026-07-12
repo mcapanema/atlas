@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -13,6 +13,7 @@ from app.api import (
     events,
     forecasts,
     health,
+    mcp_server,
     metrics,
     organizations,
     personas,
@@ -35,7 +36,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     sessionmaker = build_sessionmaker(settings.database_url, echo=settings.db_echo)
     app.state.sessionmaker = sessionmaker
     try:
-        yield
+        async with AsyncExitStack() as stack:
+            # The MCP session manager only exists when ATLAS_MCP_TOKEN is set
+            # (create_app skips the mount otherwise) and must run for the
+            # streamable-HTTP endpoint to accept requests.
+            mcp = getattr(app.state, "mcp", None)
+            if mcp is not None:
+                await stack.enter_async_context(mcp.session_manager.run())
+            yield
     finally:
         engine = sessionmaker.kw["bind"]
         assert isinstance(engine, AsyncEngine)  # narrow Any for mypy; always true
@@ -103,6 +111,14 @@ def create_app() -> FastAPI:
         # The LLM adapter failed (API error, off-schema reply) — 502.
         logger.error("Advisor failure on %s %s: %s", request.method, request.url.path, exc)
         return JSONResponse(status_code=502, content={"detail": f"Advisor error: {exc}"})
+
+    settings = get_settings()
+    if settings.mcp_token:
+        # Secret-URL auth: connector UIs (claude.ai, ChatGPT) can't send
+        # custom headers, so the token rides in the path. No token, no route.
+        mcp = mcp_server.build_mcp_server(app)
+        app.state.mcp = mcp
+        app.mount(f"/mcp/{settings.mcp_token}", mcp.streamable_http_app())
 
     mount_spa(app)  # catch-all — must be registered after all API routers
     return app
