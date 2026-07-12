@@ -176,3 +176,21 @@ async def test_drilldown_tools(
             text = tool_text(fc)
             assert "Remaining:" in text
             assert "outcomes" not in text  # the raw bucket array must never leak
+
+
+async def test_run_sync_surfaces_unconfigured_connector(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        settings_env(mcp_token=TOKEN, linear_api_key="")
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            org = await client.post("/api/organizations", json={"name": "Acme"})
+            org_id = org.json()["id"]
+
+        async with mcp_session(app) as session:
+            result = await session.call_tool("run_sync", {"organization_id": org_id})
+            assert result.isError
+            # The 409-until-configured detail must reach the model verbatim.
+            assert "ATLAS_LINEAR_API_KEY" in tool_text(result)

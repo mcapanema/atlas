@@ -229,4 +229,23 @@ def build_mcp_server(app: FastAPI) -> FastMCP:
             lines.append(f"Confidence of hitting target_date: {data['confidence']:.2f}")
         return "\n".join(lines)
 
+    @mcp.tool()
+    async def run_sync(organization_id: str) -> str:
+        """Pull fresh data from the connected issue tracker (Linear) for an
+        organization (id from list_scopes), then capture analytics
+        snapshots. Run before a standup if the data may be stale. Can take
+        a while on large workspaces.
+        """
+        summary = await _api(
+            app,
+            "POST",
+            "/api/connectors/linear/sync",
+            json={"organization_id": organization_id},
+        )
+        return (
+            f"Sync complete: {summary['teams']} teams, {summary['projects']} projects, "
+            f"{summary['work_items']} work items, {summary['events']} events, "
+            f"{summary['divergences']} divergences. Snapshots captured."
+        )
+
     return mcp
