@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Query
 
 from app.api.deps import AdvisorPortDep, AdvisorServiceDep, PersonaServiceDep, SessionDep
-from app.api.schemas import DeliveryAdviceRead, IntegrationStatusRead
+from app.api.schemas import AdviceContextRead, DeliveryAdviceRead, IntegrationStatusRead
 from app.api.scope import ScopeDep
 from app.config import get_settings
 from app.domain.advisor.entities import Persona
+from app.domain.advisor.render import render_context
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -12,6 +13,19 @@ router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 @router.get("/status", response_model=IntegrationStatusRead)
 async def advisor_status() -> IntegrationStatusRead:
     return IntegrationStatusRead(configured=bool(get_settings().openrouter_api_key))
+
+
+@router.get("/context", response_model=AdviceContextRead)
+async def get_advice_context(
+    service: AdvisorServiceDep,
+    scope: ScopeDep,
+    window_days: int = Query(default=30, ge=7, le=365),
+) -> AdviceContextRead:
+    """The advisor's input digest, for clients that bring their own LLM (MCP)."""
+    context = await service.build_context(
+        team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
+    )
+    return AdviceContextRead(context=render_context(context))
 
 
 # ponytail: synchronous LLM call on GET (tens of seconds) — fine for one EM

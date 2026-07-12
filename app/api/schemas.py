@@ -250,6 +250,12 @@ class DeliveryAdviceRead(BaseModel):
     recommendations: list[RecommendationRead]
 
 
+class AdviceContextRead(BaseModel):
+    """The compact metrics digest the advisor reasons over, as plain text."""
+
+    context: str
+
+
 class MetricSnapshotRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
