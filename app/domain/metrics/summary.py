@@ -13,6 +13,7 @@ from app.domain.metrics.blocked_time import total_blocked_time
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.lead_time import lead_times
+from app.domain.metrics.queue_touch import queue_times, touch_times
 from app.domain.metrics.samples import FlowSample
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.throughput import throughput
@@ -42,6 +43,8 @@ class FlowMetrics:
     cycle_time: DurationStats | None
     blocked_time: timedelta
     flow_efficiency: float | None
+    queue_time: DurationStats | None = None
+    touch_time: DurationStats | None = None
 
 
 def _duration_stats(durations: list[timedelta]) -> DurationStats | None:
@@ -74,4 +77,6 @@ def compute_flow_metrics(
         cycle_time=_duration_stats(cycle_times(in_window)),
         blocked_time=total_blocked_time(in_window),
         flow_efficiency=flow_efficiency(in_window),
+        queue_time=_duration_stats(queue_times(in_window)),
+        touch_time=_duration_stats(touch_times(in_window)),
     )
