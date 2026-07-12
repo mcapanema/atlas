@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
@@ -12,8 +12,15 @@ from app.domain.advisor.port import DeliveryContext
 class FakeReflectingAdvisor:
     """Advisor double for reflect tests; `guidance` is what reflection returns."""
 
-    def __init__(self, guidance: str = "Lead with WIP limits.") -> None:
+    def __init__(
+        self,
+        guidance: str = "Lead with WIP limits.",
+        on_reflect: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self.guidance = guidance
+        # Hook run from inside reflect(), before it returns — lets a test
+        # simulate feedback arriving while the (slow) LLM call is in flight.
+        self.on_reflect = on_reflect
         self.reflect_calls: list[tuple[Persona, int, str | None]] = []
 
     async def advise(
@@ -37,13 +44,19 @@ class FakeReflectingAdvisor:
         current_guidance: str | None,
     ) -> str:
         self.reflect_calls.append((persona, len(feedback), current_guidance))
+        if self.on_reflect is not None:
+            await self.on_reflect()
         return self.guidance
 
 
-async def _post_feedback(client: AsyncClient, persona: str = "agile_coach") -> None:
+async def _post_feedback(
+    client: AsyncClient,
+    persona: str = "agile_coach",
+    advice_summary: str = "Flow is healthy.",
+) -> None:
     response = await client.post(
         f"/api/personas/{persona}/feedback",
-        json={"rating": "up", "comment": "spot on", "advice_summary": "Flow is healthy."},
+        json={"rating": "up", "comment": "spot on", "advice_summary": advice_summary},
     )
     assert response.status_code == 201
 
@@ -139,6 +152,43 @@ async def test_second_reflection_receives_current_guidance(
 
     assert response.status_code == 201
     assert response.json()["version"] == 2
+    assert fake.reflect_calls[1] == (Persona.AGILE_COACH, 1, "Lead with WIP limits.")
+
+
+async def test_reflect_survives_feedback_arriving_mid_call(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    """Feedback posted while reflect() is in flight must not be lost.
+
+    Regression test for the race fixed in app/api/personas.py: the
+    "already distilled" watermark must be captured from the pending
+    feedback's own created_at BEFORE calling advisor.reflect(), not from
+    the new guidance row's created_at (stamped after the LLM returns). A
+    feedback item arriving mid-call would otherwise fall between the two
+    timestamps and be silently dropped forever — the next reflect would
+    see zero pending feedback and 409 instead of picking it up.
+    """
+    fake = FakeReflectingAdvisor()
+
+    async def post_mid_flight_feedback() -> None:
+        await _post_feedback(client, advice_summary="Mid-flight feedback.")
+
+    fake.on_reflect = post_mid_flight_feedback
+    test_app.dependency_overrides[get_advisor_port] = lambda: fake
+    await _post_feedback(client)  # F1, before reflect starts
+
+    first = await client.post("/api/personas/agile_coach/reflect")
+    assert first.status_code == 201
+    assert first.json()["version"] == 1
+
+    # F2 (posted from on_reflect, mid-call) must still be pending: this must
+    # succeed with a new version, not 409 "no pending feedback".
+    second = await client.post("/api/personas/agile_coach/reflect")
+    assert second.status_code == 201
+    assert second.json()["version"] == 2
+
+    assert fake.reflect_calls[0] == (Persona.AGILE_COACH, 1, None)
+    # The second call saw exactly F2 — proof it wasn't silently dropped.
     assert fake.reflect_calls[1] == (Persona.AGILE_COACH, 1, "Lead with WIP limits.")
 
 
