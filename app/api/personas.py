@@ -45,6 +45,12 @@ async def reflect(
             detail="No new feedback to reflect on; rate some advice first",
         )
     current = await service.active_guidance(persona)
+    # Captured before the LLM call so the next reflect's "already distilled"
+    # watermark reflects what THIS call actually saw, not when the guidance
+    # row happens to be written (which is after the LLM returns — feedback
+    # submitted while the call is in flight would otherwise fall between the
+    # two and be silently skipped forever).
+    high_water_mark = max(f.created_at for f in pending)
     # Release the read transaction before the LLM call — holding it open
     # would block every SQLite writer for up to 120 seconds. add_guidance
     # below runs in a fresh transaction committed by get_session.
@@ -54,7 +60,7 @@ async def reflect(
         feedback=pending,
         current_guidance=current.guidance if current else None,
     )
-    guidance = await service.add_guidance(persona, text)
+    guidance = await service.add_guidance(persona, text, created_at=high_water_mark)
     return PersonaGuidanceRead.model_validate(guidance)
 
 

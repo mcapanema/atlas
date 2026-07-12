@@ -82,6 +82,17 @@ async def test_pending_feedback_is_everything_when_no_guidance_exists() -> None:
     assert await service.pending_feedback(Persona.AGILE_COACH) == [feedback]
 
 
+async def test_add_guidance_honors_explicit_created_at() -> None:
+    service, _, _ = _service()
+    watermark = _T0 + timedelta(hours=2)
+
+    guidance = await service.add_guidance(
+        Persona.AGILE_COACH, "Be concise.", created_at=watermark
+    )
+
+    assert guidance.created_at == watermark
+
+
 async def test_restore_copies_old_text_as_a_new_version() -> None:
     service, _, _ = _service()
     await service.add_guidance(Persona.AGILE_COACH, "Be concise.")

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.repository import AdviceFeedbackRepository, PersonaGuidanceRepository
 
@@ -43,10 +45,22 @@ class PersonaService:
         since = latest.created_at if latest else None
         return await self._feedback.list_for_persona(persona, since=since)
 
-    async def add_guidance(self, persona: Persona, guidance_text: str) -> PersonaGuidance:
+    async def add_guidance(
+        self,
+        persona: Persona,
+        guidance_text: str,
+        *,
+        created_at: datetime | None = None,
+    ) -> PersonaGuidance:
         latest = await self._guidance.latest(persona)
         version = (latest.version if latest else 0) + 1
-        guidance = PersonaGuidance(persona=persona, version=version, guidance=guidance_text)
+        guidance = (
+            PersonaGuidance(persona=persona, version=version, guidance=guidance_text)
+            if created_at is None
+            else PersonaGuidance(
+                persona=persona, version=version, guidance=guidance_text, created_at=created_at
+            )
+        )
         await self._guidance.add(guidance)
         return guidance
 
