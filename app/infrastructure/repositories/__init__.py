@@ -4,10 +4,19 @@
 from app.infrastructure.repositories import (
     events,
     organizations,
+    personas,
     projects,
     snapshots,
     teams,
     work_items,
 )
 
-__all__ = ["events", "organizations", "projects", "snapshots", "teams", "work_items"]
+__all__ = [
+    "events",
+    "organizations",
+    "personas",
+    "projects",
+    "snapshots",
+    "teams",
+    "work_items",
+]
