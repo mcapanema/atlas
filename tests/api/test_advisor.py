@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -7,14 +7,18 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_advisor_port, get_session
-from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
+from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 from tests.api.helpers import create_team
 
 
 class FakeAdvisor:
     async def advise(
-        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        self,
+        context: DeliveryContext,
+        *,
+        persona: Persona = Persona.AGILE_COACH,
+        guidance: str | None = None,
     ) -> DeliveryAdvice:
         return DeliveryAdvice(
             generated_at=datetime(2026, 7, 10, tzinfo=UTC),
@@ -102,7 +106,11 @@ async def test_transaction_released_before_llm_call(
 
     class ProbeAdvisor:
         async def advise(
-            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+            self,
+            context: DeliveryContext,
+            *,
+            persona: Persona = Persona.AGILE_COACH,
+            guidance: str | None = None,
         ) -> DeliveryAdvice:
             in_transaction_during_advise.append(sessions[-1].in_transaction())
             return DeliveryAdvice(
@@ -126,7 +134,11 @@ async def test_recommendations_502_when_advisor_fails(
 ) -> None:
     class FailingAdvisor:
         async def advise(
-            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+            self,
+            context: DeliveryContext,
+            *,
+            persona: Persona = Persona.AGILE_COACH,
+            guidance: str | None = None,
         ) -> DeliveryAdvice:
             raise AdvisorError("OpenRouter request failed")
 
@@ -146,7 +158,11 @@ async def test_recommendations_unknown_team_is_404_without_llm_call(
 
     class RecordingAdvisor:
         async def advise(
-            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+            self,
+            context: DeliveryContext,
+            *,
+            persona: Persona = Persona.AGILE_COACH,
+            guidance: str | None = None,
         ) -> DeliveryAdvice:
             calls.append(context)
             return DeliveryAdvice(
@@ -170,7 +186,11 @@ async def test_persona_is_forwarded_to_the_advisor(
 
     class RecordingPersonaAdvisor:
         async def advise(
-            self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+            self,
+            context: DeliveryContext,
+            *,
+            persona: Persona = Persona.AGILE_COACH,
+            guidance: str | None = None,
         ) -> DeliveryAdvice:
             personas.append(persona)
             return DeliveryAdvice(
@@ -199,3 +219,73 @@ async def test_unknown_persona_is_422(client: AsyncClient, test_app: FastAPI) ->
     )
 
     assert response.status_code == 422
+
+
+async def test_learned_guidance_is_forwarded_to_the_advisor(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    forwarded: list[str | None] = []
+
+    class GuidanceAwareAdvisor:
+        async def advise(
+            self,
+            context: DeliveryContext,
+            *,
+            persona: Persona = Persona.AGILE_COACH,
+            guidance: str | None = None,
+        ) -> DeliveryAdvice:
+            forwarded.append(guidance)
+            return DeliveryAdvice(
+                generated_at=datetime(2026, 7, 12, tzinfo=UTC),
+                summary="ok",
+                recommendations=(),
+            )
+
+        async def reflect(
+            self,
+            *,
+            persona: Persona,
+            feedback: Sequence[AdviceFeedback],
+            current_guidance: str | None,
+        ) -> str:
+            return "Prefer WIP limits."
+
+    test_app.dependency_overrides[get_advisor_port] = lambda: GuidanceAwareAdvisor()
+    team_id = await create_team(client)
+    await client.post(
+        "/api/personas/agile_coach/feedback",
+        json={"rating": "up", "comment": None, "advice_summary": "good"},
+    )
+    await client.post("/api/personas/agile_coach/reflect")
+
+    response = await client.get(f"/api/recommendations?team_id={team_id}")
+
+    assert response.status_code == 200
+    assert forwarded == ["Prefer WIP limits."]
+
+
+async def test_no_guidance_forwards_none(client: AsyncClient, test_app: FastAPI) -> None:
+    forwarded: list[str | None] = []
+
+    class GuidanceAwareAdvisor:
+        async def advise(
+            self,
+            context: DeliveryContext,
+            *,
+            persona: Persona = Persona.AGILE_COACH,
+            guidance: str | None = None,
+        ) -> DeliveryAdvice:
+            forwarded.append(guidance)
+            return DeliveryAdvice(
+                generated_at=datetime(2026, 7, 12, tzinfo=UTC),
+                summary="ok",
+                recommendations=(),
+            )
+
+    test_app.dependency_overrides[get_advisor_port] = lambda: GuidanceAwareAdvisor()
+    team_id = await create_team(client)
+
+    response = await client.get(f"/api/recommendations?team_id={team_id}")
+
+    assert response.status_code == 200
+    assert forwarded == [None]

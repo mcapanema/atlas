@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 
-from app.api.deps import AdvisorPortDep, AdvisorServiceDep, SessionDep
+from app.api.deps import AdvisorPortDep, AdvisorServiceDep, PersonaServiceDep, SessionDep
 from app.api.schemas import DeliveryAdviceRead, IntegrationStatusRead
 from app.api.scope import ScopeDep
 from app.config import get_settings
@@ -25,6 +25,7 @@ async def get_recommendations(
     # scope is also unknown.
     advisor: AdvisorPortDep,
     session: SessionDep,
+    personas: PersonaServiceDep,
     scope: ScopeDep,
     window_days: int = Query(default=30, ge=7, le=365),
     # ponytail: no ge/le-style constraint needed, so a plain default (not
@@ -37,8 +38,11 @@ async def get_recommendations(
     context = await service.build_context(
         team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
     )
+    active = await personas.active_guidance(persona)
     # Release the read transaction before the LLM call — holding it open
     # would block every SQLite writer for up to 120 seconds.
     await session.commit()
-    advice = await advisor.advise(context, persona=persona)
+    advice = await advisor.advise(
+        context, persona=persona, guidance=active.guidance if active else None
+    )
     return DeliveryAdviceRead.model_validate(advice)
