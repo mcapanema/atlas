@@ -1,9 +1,10 @@
-import { Alert, Card, Col, Row, Skeleton, Table, Tag } from "antd";
+import { Alert, Card, Col, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 
 import {
   useAgingWip,
+  useDeliveryHealth,
   useFlowHistory,
   useFlowMetrics,
   useLeadTimeDistribution,
@@ -38,12 +39,15 @@ function duration(stats: DurationStats | null, key: keyof DurationStats): string
   return stats ? formatSeconds(stats[key]) : "—";
 }
 
+const bandColor: Record<string, string> = { healthy: "green", warning: "orange", critical: "red" };
+
 export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const metrics = useFlowMetrics(scope);
   const history = useFlowHistory(scope);
   const distribution = useLeadTimeDistribution(scope);
   const snapshots = useMetricSnapshots(scope);
   const aging = useAgingWip(scope);
+  const health = useDeliveryHealth(scope);
 
   const cfdOption = useMemo(
     () => (history.data ? buildCfdOption(history.data.days) : null),
@@ -130,6 +134,25 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
             </Col>
           )}
         </Row>
+      )}
+      {health.data && health.data.score != null && health.data.band != null && (
+        <Card title="Delivery health">
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <Space>
+              <Tag color={bandColor[health.data.band]}>{health.data.band}</Tag>
+              <Typography.Text strong style={{ fontSize: 24 }}>
+                {health.data.score}
+              </Typography.Text>
+            </Space>
+            <ul style={{ marginBottom: 0 }}>
+              {health.data.components.map((c) => (
+                <li key={c.name}>
+                  <b>{c.name}</b> {c.score} — {c.reason}
+                </li>
+              ))}
+            </ul>
+          </Space>
+        </Card>
       )}
       {aging.data && aging.data.items.length > 0 && (
         <Card title="Aging WIP">

@@ -107,3 +107,35 @@ export function useAgingWip(scope: MetricsScope) {
     queryFn: () => apiFetch<AgingWip>(`/api/metrics/aging-wip?${param}`),
   });
 }
+
+export interface HealthComponent {
+  name: string;
+  score: number;
+  reason: string;
+}
+
+export interface DeliveryHealth {
+  window_start: string;
+  window_end: string;
+  score: number | null;
+  band: "healthy" | "warning" | "critical" | null;
+  components: HealthComponent[];
+}
+
+export function useDeliveryHealth(scope: MetricsScope) {
+  const param = scopeParam(scope);
+  return useQuery({
+    queryKey: ["metrics", "health", scope],
+    enabled: param !== null,
+    queryFn: () => apiFetch<DeliveryHealth>(`/api/metrics/health?${param}`),
+  });
+}
+
+export function useAllTeamsHealth(teams: Team[]) {
+  return useQueries({
+    queries: teams.map((team) => ({
+      queryKey: ["metrics", "health", { teamId: team.id }],
+      queryFn: () => apiFetch<DeliveryHealth>(`/api/metrics/health?team_id=${team.id}`),
+    })),
+  });
+}

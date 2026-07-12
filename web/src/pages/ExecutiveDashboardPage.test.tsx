@@ -94,4 +94,13 @@ describe("ExecutiveDashboardPage", () => {
     expect(await screen.findByText("Forecast accuracy (P85)")).toBeInTheDocument();
     expect(await screen.findByText("90%")).toBeInTheDocument();
   });
+
+  it("shows per-team delivery health", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    expect(await screen.findByText("Health")).toBeInTheDocument();
+    expect(await screen.findByText("82")).toBeInTheDocument();
+  });
 });

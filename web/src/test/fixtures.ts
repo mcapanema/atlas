@@ -142,6 +142,20 @@ export const agingWipFixture = {
   ],
 };
 
+export const healthFixture = {
+  window_start: "2026-06-10T00:00:00Z",
+  window_end: "2026-07-10T00:00:00Z",
+  score: 82,
+  band: "healthy",
+  components: [
+    { name: "predictability", score: 74, reason: "lead time p95 is 1.8x p50" },
+    { name: "efficiency", score: 78, reason: "flow efficiency 78%" },
+    { name: "flow", score: 100, reason: "completed 3 recently vs 2 in the prior half-window" },
+    { name: "stability", score: 89, reason: "WIP equals 1.4 weeks of throughput" },
+    { name: "risk", score: 70, reason: "1 of 2 in-progress items blocked or aging past cycle p85" },
+  ],
+};
+
 export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
@@ -156,6 +170,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/metrics/aging-wip")) {
       return Promise.resolve(jsonResponse(agingWipFixture));
+    }
+    if (url.startsWith("/api/metrics/health")) {
+      return Promise.resolve(jsonResponse(healthFixture));
     }
     if (url.startsWith("/api/metrics/lead-time-distribution")) {
       return Promise.resolve(jsonResponse(distributionFixture));
