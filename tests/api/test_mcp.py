@@ -147,3 +147,32 @@ async def test_meeting_brief_scope_errors_surface(
             )
             assert result.isError
             assert "not found" in tool_text(result)
+
+
+async def test_drilldown_tools(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            team_id = await create_team(client)
+            item = await client.post(
+                "/api/work-items", json={"team_id": team_id, "title": "Fix login flake"}
+            )
+            assert item.status_code == 201
+
+        async with mcp_session(app) as session:
+            items = await session.call_tool("list_work_items", {"team_id": team_id})
+            assert not items.isError
+            assert "Fix login flake" in tool_text(items)
+
+            aging = await session.call_tool("aging_wip", {"team_id": team_id})
+            assert not aging.isError
+            assert "Aging WIP" in tool_text(aging)
+
+            fc = await session.call_tool("forecast", {"team_id": team_id})
+            assert not fc.isError
+            text = tool_text(fc)
+            assert "Remaining:" in text
+            assert "outcomes" not in text  # the raw bucket array must never leak

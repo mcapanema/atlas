@@ -152,4 +152,81 @@ def build_mcp_server(app: FastAPI) -> FastMCP:
             [context["context"], _render_health(health), _render_aging(aging)]
         )
 
+    @mcp.tool()
+    async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
+        """Every in-progress item with its age, flagged when older than the
+        scope's cycle-time p85 — the 'what is stuck' view for a daily
+        standup. Provide exactly one of team_id/project_id.
+        """
+        aging = await _api(
+            app,
+            "GET",
+            "/api/metrics/aging-wip",
+            params=_params(team_id=team_id, project_id=project_id),
+        )
+        return _render_aging(aging, limit=50)
+
+    @mcp.tool()
+    async def list_work_items(
+        team_id: str | None = None,
+        project_id: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> str:
+        """Page through a scope's work items (id, state, type, title).
+        Use ids from here with the Atlas web UI or for follow-up questions.
+        """
+        page = await _api(
+            app,
+            "GET",
+            "/api/work-items",
+            params=_params(team_id=team_id, project_id=project_id, limit=limit, offset=offset),
+        )
+        if not page["items"]:
+            return "No work items in scope."
+        lines = [
+            f"- {i['id']}  [{i['state']}] ({i['type']}) {i['title']}" for i in page["items"]
+        ]
+        lines.append(f"Showing {len(page['items'])} of {page['total']} (offset {offset}).")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    async def forecast(
+        team_id: str | None = None,
+        project_id: str | None = None,
+        remaining: int | None = None,
+        target_date: str | None = None,
+        window_days: int = 90,
+    ) -> str:
+        """Monte Carlo completion forecast for a scope. Optional what-ifs:
+        `remaining` overrides the open-item count (e.g. a planned sprint
+        scope), `target_date` (YYYY-MM-DD) adds a hit-the-date confidence.
+        Provide exactly one of team_id/project_id.
+        """
+        data = await _api(
+            app,
+            "GET",
+            "/api/forecasts",
+            params=_params(
+                team_id=team_id,
+                project_id=project_id,
+                remaining=remaining,
+                target_date=target_date,
+                window_days=window_days,
+            ),
+        )
+        lines = [f"Remaining: {data['remaining']} open items"]
+        completion = data["completion"]
+        if completion is None:
+            lines.append("No completion forecast (no historical throughput in window).")
+        else:
+            lines.append(
+                f"Completion dates ({completion['trials']} trials): "
+                f"p50={completion['p50_date'][:10]}, p75={completion['p75_date'][:10]}, "
+                f"p85={completion['p85_date'][:10]}, p95={completion['p95_date'][:10]}"
+            )
+        if data["confidence"] is not None:
+            lines.append(f"Confidence of hitting target_date: {data['confidence']:.2f}")
+        return "\n".join(lines)
+
     return mcp
