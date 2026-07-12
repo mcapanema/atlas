@@ -36,6 +36,3 @@ web/coverage/
 # Ignore graphify directories
 .tokensave
 graphify-out
-
-SPEC.md
-VISION.md
