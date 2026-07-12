@@ -1,9 +1,10 @@
 """Port for the AI advisor: structured computed metrics in, explainable advice out."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.domain.advisor.entities import DeliveryAdvice, Persona
+from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona
 from app.domain.forecasting.monte_carlo import DeliveryForecast
 from app.domain.metrics.distribution import LeadTimeDistribution
 from app.domain.metrics.summary import FlowMetrics
@@ -40,3 +41,13 @@ class AdvisorPort(Protocol):
         persona: Persona = Persona.AGILE_COACH,
         guidance: str | None = None,
     ) -> DeliveryAdvice: ...
+
+    async def reflect(
+        self,
+        *,
+        persona: Persona,
+        feedback: Sequence[AdviceFeedback],
+        current_guidance: str | None,
+    ) -> str:
+        """Distill feedback into the persona's next learned-guidance note."""
+        ...

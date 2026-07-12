@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.domain.advisor.entities import Persona
+from app.domain.advisor.entities import AdviceFeedback, Persona
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
@@ -280,3 +280,69 @@ def test_render_context_includes_queue_and_touch_time() -> None:
 
     assert "queue time p50=2.0d" in text
     assert "touch time p50=2.0d" in text
+
+
+def _feedback_entries() -> list[AdviceFeedback]:
+    return [
+        AdviceFeedback(
+            persona=Persona.AGILE_COACH,
+            rating="down",
+            advice_summary="Add staff to the team.",
+            comment="staffing advice is out of my control",
+            created_at=_NOW,
+        ),
+        AdviceFeedback(
+            persona=Persona.AGILE_COACH,
+            rating="up",
+            advice_summary="Set a WIP limit of 4.",
+            created_at=_NOW,
+        ),
+    ]
+
+
+async def test_reflect_returns_distilled_guidance_and_sends_feedback() -> None:
+    payload = {
+        "choices": [
+            {"message": {"content": json.dumps({"guidance": "Prefer WIP actions."})}}
+        ]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    guidance = await advisor.reflect(
+        persona=Persona.AGILE_COACH,
+        feedback=_feedback_entries(),
+        current_guidance="Be concise.",
+    )
+
+    assert guidance == "Prefer WIP actions."
+    body = json.loads(captured[0].content)
+    assert body["response_format"]["json_schema"]["name"] == "persona_guidance"
+    user_message = body["messages"][1]["content"]
+    assert "staffing advice is out of my control" in user_message
+    assert "[down]" in user_message and "[up]" in user_message
+    assert "Be concise." in user_message  # current guidance is offered for carry-over
+    assert "Agile Coach" in body["messages"][0]["content"]
+
+
+async def test_reflect_raises_on_blank_guidance() -> None:
+    payload = {"choices": [{"message": {"content": json.dumps({"guidance": "  "})}}]}
+    advisor = _advisor_returning(httpx.Response(200, json=payload))
+
+    with pytest.raises(AdvisorError, match="empty guidance"):
+        await advisor.reflect(
+            persona=Persona.AGILE_COACH, feedback=_feedback_entries(), current_guidance=None
+        )
+
+
+async def test_reflect_raises_advisor_error_on_api_error() -> None:
+    advisor = _advisor_returning(httpx.Response(500, json={}))
+
+    with pytest.raises(AdvisorError, match="request failed"):
+        await advisor.reflect(
+            persona=Persona.AGILE_COACH, feedback=_feedback_entries(), current_guidance=None
+        )
