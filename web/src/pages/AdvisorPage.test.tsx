@@ -27,6 +27,24 @@ function mockFetch({ configured = true } = {}) {
     if (url.startsWith("/api/recommendations/status")) {
       return Promise.resolve(jsonResponse({ configured }));
     }
+    if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+      return Promise.resolve(jsonResponse([]));
+    }
+    if (url.startsWith("/api/personas") && url.endsWith("/feedback")) {
+      return Promise.resolve(
+        jsonResponse(
+          {
+            id: "f-1",
+            persona: "agile_coach",
+            rating: "up",
+            comment: null,
+            advice_summary: "Flow is healthy.",
+            created_at: "2026-07-12T00:00:00Z",
+          },
+          201,
+        ),
+      );
+    }
     if (url.startsWith("/api/recommendations")) return Promise.resolve(jsonResponse(advice));
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
@@ -81,6 +99,9 @@ describe("AdvisorPage", () => {
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
         return Promise.resolve(jsonResponse({ configured: true }));
+      }
+      if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+        return Promise.resolve(jsonResponse([]));
       }
       if (url.startsWith("/api/recommendations")) {
         return Promise.resolve(jsonResponse({ detail: "LLM unavailable" }, 500));
@@ -137,6 +158,9 @@ describe("AdvisorPage", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+        return Promise.resolve(jsonResponse([]));
+      }
       return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
     });
 
@@ -146,5 +170,87 @@ describe("AdvisorPage", () => {
       expect(screen.getByText("Failed to load advisor status")).toBeInTheDocument(),
     );
     expect(screen.getByText("boom")).toBeInTheDocument();
+  });
+
+  it("submits thumbs-up feedback for the rendered advice", async () => {
+    mockFetch();
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+    await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
+    );
+    const call = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
+    expect(String(call![0])).toBe("/api/personas/agile_coach/feedback");
+    expect(call![1]!.method).toBe("POST");
+    expect(JSON.parse(String(call![1]!.body))).toEqual({
+      rating: "up",
+      comment: null,
+      advice_summary: "Flow is healthy.",
+    });
+  });
+
+  it("sends the optional comment with thumbs-down feedback", async () => {
+    mockFetch();
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+    await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText("Optional comment"), {
+      target: { value: "too generic" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Not helpful" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
+    );
+    const call = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
+    expect(JSON.parse(String(call![1]!.body))).toEqual({
+      rating: "down",
+      comment: "too generic",
+      advice_summary: "Flow is healthy.",
+    });
+  });
+
+  it("surfaces a feedback submission failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      if (url.startsWith("/api/recommendations/status")) {
+        return Promise.resolve(jsonResponse({ configured: true }));
+      }
+      if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.endsWith("/feedback")) {
+        return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+      }
+      if (url.startsWith("/api/recommendations")) return Promise.resolve(jsonResponse(advice));
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+    await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Failed to submit feedback")).toBeInTheDocument(),
+    );
   });
 });

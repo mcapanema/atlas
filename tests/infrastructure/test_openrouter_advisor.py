@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.domain.advisor.entities import Persona
+from app.domain.advisor.entities import AdviceFeedback, Persona
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
@@ -18,6 +18,7 @@ from app.infrastructure.ai.advisor import (
     AdviceOut,
     OpenRouterAdvisor,
     RecommendationOut,
+    _knowledge,
     _render_context,
     _system_prompt,
 )
@@ -211,11 +212,38 @@ async def test_advise_raises_advisor_error_on_non_json_body() -> None:
         await advisor.advise(_context())
 
 
-def test_system_prompt_is_lazy_and_cached() -> None:
-    _system_prompt.cache_clear()
+def test_knowledge_file_is_read_once() -> None:
+    _knowledge.cache_clear()
     prompt = _system_prompt(Persona.AGILE_COACH)
     assert "Little's Law" in prompt  # knowledge base is embedded
-    assert _system_prompt(Persona.AGILE_COACH) is prompt  # read once, cached
+    _system_prompt(Persona.AGILE_COACH)
+    assert _knowledge.cache_info().misses == 1
+
+
+def test_system_prompt_appends_learned_guidance() -> None:
+    base = _system_prompt(Persona.AGILE_COACH)
+    grown = _system_prompt(Persona.AGILE_COACH, "Prefer WIP actions over staffing advice.")
+    assert grown.startswith(base)  # static base is untouched; learning only appends
+    assert "Learned guidance" in grown
+    assert "Prefer WIP actions" in grown
+    assert _system_prompt(Persona.AGILE_COACH, None) == base
+
+
+async def test_advise_puts_guidance_in_the_system_message() -> None:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": _advice_out().model_dump_json()}}]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    await advisor.advise(_context(), guidance="Prefer WIP actions over staffing advice.")
+
+    body = json.loads(captured[0].content)
+    assert "Prefer WIP actions" in body["messages"][0]["content"]
 
 
 def test_system_prompt_varies_by_persona() -> None:
@@ -252,3 +280,134 @@ def test_render_context_includes_queue_and_touch_time() -> None:
 
     assert "queue time p50=2.0d" in text
     assert "touch time p50=2.0d" in text
+
+
+def _feedback_entries() -> list[AdviceFeedback]:
+    return [
+        AdviceFeedback(
+            persona=Persona.AGILE_COACH,
+            rating="down",
+            advice_summary="Add staff to the team.",
+            comment="staffing advice is out of my control",
+            created_at=_NOW,
+        ),
+        AdviceFeedback(
+            persona=Persona.AGILE_COACH,
+            rating="up",
+            advice_summary="Set a WIP limit of 4.",
+            created_at=_NOW,
+        ),
+    ]
+
+
+async def test_reflect_returns_distilled_guidance_and_sends_feedback() -> None:
+    payload = {
+        "choices": [
+            {"message": {"content": json.dumps({"guidance": "Prefer WIP actions."})}}
+        ]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    guidance = await advisor.reflect(
+        persona=Persona.AGILE_COACH,
+        feedback=_feedback_entries(),
+        current_guidance="Be concise.",
+    )
+
+    assert guidance == "Prefer WIP actions."
+    body = json.loads(captured[0].content)
+    assert body["response_format"]["json_schema"]["name"] == "persona_guidance"
+    user_message = body["messages"][1]["content"]
+    assert "staffing advice is out of my control" in user_message
+    assert "[down]" in user_message and "[up]" in user_message
+    assert "Be concise." in user_message  # current guidance is offered for carry-over
+    assert "Agile Coach" in body["messages"][0]["content"]
+
+
+async def test_reflect_raises_on_blank_guidance() -> None:
+    payload = {"choices": [{"message": {"content": json.dumps({"guidance": "  "})}}]}
+    advisor = _advisor_returning(httpx.Response(200, json=payload))
+
+    with pytest.raises(AdvisorError, match="empty guidance"):
+        await advisor.reflect(
+            persona=Persona.AGILE_COACH, feedback=_feedback_entries(), current_guidance=None
+        )
+
+
+async def test_reflect_raises_advisor_error_on_api_error() -> None:
+    advisor = _advisor_returning(httpx.Response(500, json={}))
+
+    with pytest.raises(AdvisorError, match="request failed"):
+        await advisor.reflect(
+            persona=Persona.AGILE_COACH, feedback=_feedback_entries(), current_guidance=None
+        )
+
+
+def _sequenced_client(
+    responses: list[httpx.Response], captured: list[httpx.Request]
+) -> httpx.AsyncClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return responses[len(captured) - 1]
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+async def test_self_critique_runs_draft_critique_revise() -> None:
+    revised = AdviceOut(summary="Revised after critique.", recommendations=[])
+    responses = [
+        httpx.Response(
+            200, json={"choices": [{"message": {"content": _advice_out().model_dump_json()}}]}
+        ),
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "Evidence 'wip=99' is not in the metrics."}}
+                ]
+            },
+        ),
+        httpx.Response(
+            200, json={"choices": [{"message": {"content": revised.model_dump_json()}}]}
+        ),
+    ]
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _sequenced_client(responses, captured),
+        self_critique=True,
+    )
+
+    advice = await advisor.advise(_context())
+
+    assert advice.summary == "Revised after critique."
+    assert len(captured) == 3
+    critique_body = json.loads(captured[1].content)
+    assert "response_format" not in critique_body  # critique is free text
+    assert "wip=5" in critique_body["messages"][1]["content"]  # sees the metrics
+    revise_body = json.loads(captured[2].content)
+    assert revise_body["messages"][2]["role"] == "assistant"  # draft is in-context
+    assert "wip=99" in revise_body["messages"][3]["content"]  # critique is quoted
+    assert revise_body["response_format"]["json_schema"]["name"] == "delivery_advice"
+
+
+async def test_self_critique_off_is_a_single_call() -> None:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": _advice_out().model_dump_json()}}]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    await advisor.advise(_context())
+
+    assert len(captured) == 1

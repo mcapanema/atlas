@@ -6,9 +6,10 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
+from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.events.entities import Event
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
@@ -207,6 +208,50 @@ class InMemoryMetricSnapshotRepository:
     ) -> bool:
         scoped = await self.list(team_id=team_id, project_id=project_id)
         return any(s.captured_on == captured_on for s in scoped)
+
+
+class InMemoryAdviceFeedbackRepository:
+    def __init__(self, feedback: list[AdviceFeedback] | None = None) -> None:
+        self._feedback: dict[UUID, AdviceFeedback] = {f.id: f for f in feedback or []}
+
+    async def add(self, feedback: AdviceFeedback) -> None:
+        self._feedback[feedback.id] = feedback
+
+    async def list_for_persona(
+        self, persona: Persona, *, since: datetime | None = None
+    ) -> list[AdviceFeedback]:
+        found = [
+            f
+            for f in self._feedback.values()
+            if f.persona is persona and (since is None or f.created_at > since)
+        ]
+        return sorted(found, key=lambda f: f.created_at)
+
+
+class InMemoryPersonaGuidanceRepository:
+    def __init__(self, guidance: list[PersonaGuidance] | None = None) -> None:
+        self._guidance: dict[UUID, PersonaGuidance] = {g.id: g for g in guidance or []}
+
+    async def add(self, guidance: PersonaGuidance) -> None:
+        self._guidance[guidance.id] = guidance
+
+    async def latest(self, persona: Persona) -> PersonaGuidance | None:
+        versions = await self.list_versions(persona)
+        return versions[0] if versions else None
+
+    async def list_versions(self, persona: Persona) -> list[PersonaGuidance]:
+        found = [g for g in self._guidance.values() if g.persona is persona]
+        return sorted(found, key=lambda g: g.version, reverse=True)
+
+    async def get_version(self, persona: Persona, version: int) -> PersonaGuidance | None:
+        return next(
+            (
+                g
+                for g in self._guidance.values()
+                if g.persona is persona and g.version == version
+            ),
+            None,
+        )
 
 
 class InMemoryForecastSnapshotRepository:

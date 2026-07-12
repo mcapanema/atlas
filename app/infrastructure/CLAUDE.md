@@ -30,7 +30,7 @@ here — this is the only layer allowed to import SQLAlchemy, aiosqlite, or
   `AdvisorPort`, calling OpenRouter's chat-completions API with plain httpx —
   no provider SDK) plus `ai/knowledge/*.md`, the versioned knowledge base its
   system prompt is grounded in. OpenRouter must never be called outside this
-  package, and Pydantic models here (`AdviceOut`) are wire format only —
+  package, and Pydantic models here (`AdviceOut`, `GuidanceOut`) are wire format only —
   always convert to Domain entities before returning.
 - `static.py` — `mount_spa(app)`, serves the compiled React build in
   production; a no-op when `web/dist` doesn't exist (dev mode). Must be the

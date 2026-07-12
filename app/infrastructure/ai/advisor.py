@@ -8,7 +8,7 @@ knowledge file grounds recommendations in named flow principles.
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -17,7 +17,7 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
+from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -48,12 +48,28 @@ _PERSONA_ROLE: dict[Persona, str] = {
 }
 
 
-@lru_cache(maxsize=len(Persona))
-def _system_prompt(persona: Persona) -> str:
-    """Build the persona's system prompt on first use; the knowledge file is read once per
-    persona."""
-    knowledge = (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
-    return f"""{_PERSONA_ROLE[persona]} You help Engineering Managers improve \
+_CRITIQUE_PROMPT = (
+    "You review draft delivery advice before it reaches an Engineering "
+    "Manager. Check, tersely and concretely: (1) every evidence value "
+    "literally appears in the provided metrics; (2) each root cause actually "
+    "follows from the evidence; (3) each action is one concrete next step; "
+    "(4) priorities match impact. List only real problems, one line each. "
+    "If the draft is sound, reply exactly: No issues."
+)
+
+
+@lru_cache(maxsize=1)
+def _knowledge() -> str:
+    return (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
+
+
+def _system_prompt(persona: Persona, guidance: str | None = None) -> str:
+    """Compose the persona prompt: static role + knowledge base + learned guidance.
+
+    The static parts are the immutable safe base; learning (the reflected
+    guidance note) can only append — it can never rewrite the persona.
+    """
+    prompt = f"""{_PERSONA_ROLE[persona]} You help Engineering Managers improve \
 software delivery using Lean and Kanban flow thinking.
 
 Ground every claim in the knowledge base below and in the metrics provided by \
@@ -72,7 +88,14 @@ and return fewer (or zero) recommendations rather than speculating.
 
 Knowledge base:
 
-{knowledge}"""
+{_knowledge()}"""
+    if guidance:
+        prompt += (
+            "\n\nLearned guidance (distilled from Engineering Manager feedback on "
+            "your past advice; follow it unless it conflicts with the rules above):\n\n"
+            f"{guidance}"
+        )
+    return prompt
 
 
 class RecommendationOut(BaseModel):
@@ -97,6 +120,33 @@ class AdviceOut(BaseModel):
 
     summary: str
     recommendations: list[RecommendationOut]
+
+
+class GuidanceOut(BaseModel):
+    """Structured-output shape for a reflected guidance note (wire format only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    guidance: str
+
+
+_ADVICE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "delivery_advice",
+        "strict": True,
+        "schema": AdviceOut.model_json_schema(),
+    },
+}
+
+_GUIDANCE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "persona_guidance",
+        "strict": True,
+        "schema": GuidanceOut.model_json_schema(),
+    },
+}
 
 
 def _days(delta: timedelta) -> str:
@@ -154,6 +204,18 @@ def _render_context(context: DeliveryContext) -> str:
     return "\n".join(lines)
 
 
+def _render_feedback(feedback: Sequence[AdviceFeedback]) -> str:
+    # ponytail: unbounded list in the prompt; cap or pre-summarize at ~50
+    # entries if reflections ever bloat the context window.
+    lines = []
+    for entry in feedback:
+        line = f"- [{entry.rating}] advice: {entry.advice_summary}"
+        if entry.comment:
+            line += f" | EM comment: {entry.comment}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _message_content(response: httpx.Response) -> str:
     """Validate the chat-completions envelope before indexing into it."""
     try:
@@ -179,6 +241,8 @@ class OpenRouterAdvisor:
         api_key: str,
         model: str,
         client_factory: Callable[[], httpx.AsyncClient] | None = None,
+        *,
+        self_critique: bool = False,
     ) -> None:
         # One code path serves tests and production: tests inject a factory
         # returning a MockTransport-backed client; production builds a real
@@ -192,36 +256,71 @@ class OpenRouterAdvisor:
         )
         self._api_key = api_key
         self._model = model
+        self._self_critique = self_critique
 
-    async def advise(
-        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
-    ) -> DeliveryAdvice:
-        request_kwargs: dict[str, Any] = {
-            "headers": {"Authorization": f"Bearer {self._api_key}"},
-            "json": {
-                "model": self._model,
-                "messages": [
-                    {"role": "system", "content": _system_prompt(persona)},
-                    {"role": "user", "content": _render_context(context)},
-                ],
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "delivery_advice",
-                        "strict": True,
-                        "schema": AdviceOut.model_json_schema(),
-                    },
-                },
-            },
-        }
+    async def _complete(
+        self,
+        client: httpx.AsyncClient,
+        messages: list[dict[str, Any]],
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        body: dict[str, Any] = {"model": self._model, "messages": messages}
+        if response_format is not None:
+            body["response_format"] = response_format
         try:
-            async with self._client_factory() as client:
-                response = await client.post(_API_URL, **request_kwargs)
+            response = await client.post(
+                _API_URL,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json=body,
+            )
             response.raise_for_status()
         except httpx.HTTPError as exc:
             logger.error("OpenRouter request failed: %s", exc)
             raise AdvisorError(f"OpenRouter request failed: {exc}") from exc
-        content = _message_content(response)
+        return _message_content(response)
+
+    async def advise(
+        self,
+        context: DeliveryContext,
+        *,
+        persona: Persona = Persona.AGILE_COACH,
+        guidance: str | None = None,
+    ) -> DeliveryAdvice:
+        user_content = _render_context(context)
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": _system_prompt(persona, guidance)},
+            {"role": "user", "content": user_content},
+        ]
+        async with self._client_factory() as client:
+            content = await self._complete(client, messages, _ADVICE_FORMAT)
+            if self._self_critique:
+                # ponytail: fixed single critique round (~3x cost); make the
+                # round count configurable only if quality data ever demands it.
+                critique = await self._complete(
+                    client,
+                    [
+                        {"role": "system", "content": _CRITIQUE_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Metrics provided to the advisor:\n{user_content}\n\n"
+                                f"Draft advice JSON:\n{content}"
+                            ),
+                        },
+                    ],
+                )
+                messages += [
+                    {"role": "assistant", "content": content},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"A reviewer critiqued your draft:\n{critique}\n\n"
+                            "Produce the final advice, fixing every valid point. "
+                            "Same JSON schema as before."
+                        ),
+                    },
+                ]
+                content = await self._complete(client, messages, _ADVICE_FORMAT)
         try:
             parsed = AdviceOut.model_validate_json(content)
         except ValidationError as exc:
@@ -244,3 +343,45 @@ class OpenRouterAdvisor:
                 for r in parsed.recommendations
             ),
         )
+
+    async def reflect(
+        self,
+        *,
+        persona: Persona,
+        feedback: Sequence[AdviceFeedback],
+        current_guidance: str | None,
+    ) -> str:
+        system = f"""{_PERSONA_ROLE[persona]}
+
+You maintain this persona's "learned guidance" — a short note appended to your \
+system prompt on every future advice request, distilled from Engineering \
+Manager feedback on your past advice.
+
+Rewrite the guidance note now:
+- Keep it under 200 words, as imperative bullet points.
+- Carry forward still-useful points from the current note; drop anything the \
+new feedback contradicts.
+- Generalize durable preferences ("lead with the single highest-impact \
+action"), not one-off details.
+- Never weaken the grounding rules: metrics are computed elsewhere and \
+numbers are never invented."""
+        user = (
+            f"Current guidance note:\n{current_guidance or '(none yet)'}\n\n"
+            f"Feedback since the last reflection:\n{_render_feedback(feedback)}"
+        )
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        async with self._client_factory() as client:
+            content = await self._complete(client, messages, _GUIDANCE_FORMAT)
+        try:
+            parsed = GuidanceOut.model_validate_json(content)
+        except ValidationError as exc:
+            logger.error("OpenRouter reply did not match the guidance schema: %s", exc)
+            raise AdvisorError(
+                "OpenRouter returned guidance in an unexpected shape"
+            ) from exc
+        if not parsed.guidance.strip():
+            raise AdvisorError("OpenRouter returned empty guidance")
+        return parsed.guidance

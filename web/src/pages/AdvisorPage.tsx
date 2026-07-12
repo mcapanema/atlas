@@ -1,8 +1,11 @@
-import { Alert, Button, Card, List, Select, Space, Tag, Typography } from "antd";
+import { Alert, Button, Card, Input, List, Select, Space, Tag, Typography } from "antd";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useAdvice, useAdvisorStatus, type Persona } from "../api/advisor";
+import { useSendFeedback } from "../api/personas";
 import { useTeams } from "../api/teams";
+import { PersonaLearningCard } from "../components/PersonaLearningCard";
 
 const priorityColor: Record<string, string> = {
   high: "red",
@@ -24,6 +27,17 @@ export function AdvisorPage() {
   const status = useAdvisorStatus();
   const persona = (searchParams.get("persona") as Persona | null) ?? "agile_coach";
   const advice = useAdvice({ teamId }, persona);
+  const feedback = useSendFeedback(persona);
+  const [comment, setComment] = useState("");
+
+  const sendFeedback = (rating: "up" | "down") => {
+    if (!advice.data) return;
+    feedback.mutate({
+      rating,
+      comment: comment.trim() || null,
+      advice_summary: advice.data.summary,
+    });
+  };
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -71,11 +85,16 @@ export function AdvisorPage() {
             type="primary"
             disabled={!teamId || !configured}
             loading={advice.isFetching}
-            onClick={() => void advice.refetch()}
+            onClick={() => {
+              feedback.reset();
+              setComment("");
+              void advice.refetch();
+            }}
           >
             Get advice
           </Button>
         </Space>
+        <PersonaLearningCard persona={persona} />
         {!teamId && <Alert type="info" message="Select a team to get delivery advice." />}
         {advice.isError && (
           <Alert
@@ -124,6 +143,37 @@ export function AdvisorPage() {
                 </List.Item>
               )}
             />
+            <Card size="small" title="Was this advice helpful?">
+              {feedback.isSuccess ? (
+                <Typography.Text>
+                  Thanks for the feedback — it will shape this persona's next reflection.
+                </Typography.Text>
+              ) : (
+                <Space direction="vertical" style={{ width: "100%" }}>
+                  <Input.TextArea
+                    rows={2}
+                    placeholder="Optional comment"
+                    value={comment}
+                    onChange={(event) => setComment(event.target.value)}
+                  />
+                  <Space>
+                    <Button loading={feedback.isPending} onClick={() => sendFeedback("up")}>
+                      Helpful
+                    </Button>
+                    <Button loading={feedback.isPending} onClick={() => sendFeedback("down")}>
+                      Not helpful
+                    </Button>
+                  </Space>
+                  {feedback.isError && (
+                    <Alert
+                      type="error"
+                      message="Failed to submit feedback"
+                      description={feedback.error.message}
+                    />
+                  )}
+                </Space>
+              )}
+            </Card>
           </>
         )}
       </Space>

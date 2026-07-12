@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.advisor.entities import Persona
 from app.domain.events.entities import EventType
 from app.domain.work_items.entities import DEFAULT_STATE, WorkItemType
 
@@ -304,3 +305,29 @@ class DeliveryHealthRead(BaseModel):
     score: int | None
     band: Literal["healthy", "warning", "critical"] | None
     components: list[HealthComponentRead]
+
+
+class AdviceFeedbackCreate(BaseModel):
+    rating: Literal["up", "down"]
+    comment: str | None = Field(default=None, max_length=2000)
+    advice_summary: str = Field(min_length=1, max_length=4000)
+
+
+class AdviceFeedbackRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    persona: Persona
+    rating: Literal["up", "down"]
+    comment: str | None
+    advice_summary: str
+    created_at: datetime
+
+
+class PersonaGuidanceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    persona: Persona
+    version: int
+    guidance: str
+    created_at: datetime

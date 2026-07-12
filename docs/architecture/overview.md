@@ -64,6 +64,15 @@ persisted events; these slices have no tables and no migrations.
   forecast — and returns explainable `DeliveryAdvice` (narrative summary
   plus prioritized `Recommendation`s with root causes and evidence). The
   AI never calculates (ADR-0006).
+  Advice stays computed-on-read, but personas carry learned state:
+  `AdviceFeedback` and `PersonaGuidance` (persisted aggregates in the same
+  slice, tables `advice_feedback`/`persona_guidance`) record EM ratings and
+  the append-only learned-guidance versions. `PersonaService`
+  (`app/application/personas/service.py`) manages them;
+  `POST /api/personas/{persona}/reflect` asks the LLM to distill pending
+  feedback into the next guidance version, which the adapter appends to that
+  persona's system prompt on every subsequent advice request (latest version
+  wins; restore re-adds an old version's text as a new version).
 
 All three share one scope pipeline: `app/api/scope.py` validates the scope
 (exactly one of `team_id`/`project_id`, 404 when it doesn't exist), and
@@ -125,6 +134,10 @@ provider SDK (ADR-0006) — enforcing a strict JSON response schema and
 grounding the system prompt in a versioned knowledge file
 (`app/infrastructure/ai/knowledge/flow_coaching.md`). Model choice is
 configuration (`ATLAS_ADVISOR_MODEL`).
+
+An optional self-critique pass (`ATLAS_ADVISOR_SELF_CRITIQUE`, default off)
+runs draft → critique → revise inside a single advice request; the reflect
+call that distills feedback into persona guidance uses the same adapter.
 
 ## Single-service deployment
 
