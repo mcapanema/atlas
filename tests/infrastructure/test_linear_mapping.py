@@ -8,6 +8,7 @@ import pytest
 from app.domain.events.entities import EventType
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
+    blocked_label_ids,
     map_history_entry,
     map_issue,
     map_project,
@@ -49,9 +50,8 @@ def _entry(
 
 
 def test_history_entry_entering_started_is_started() -> None:
-    event = map_history_entry(_entry("backlog", "started", "Backlog", "In Progress"))
+    [event] = map_history_entry(_entry("backlog", "started", "Backlog", "In Progress"))
 
-    assert event is not None
     assert event.type is EventType.STARTED
     assert event.from_state == "Backlog"
     assert event.to_state == "In Progress"
@@ -59,16 +59,14 @@ def test_history_entry_entering_started_is_started() -> None:
 
 
 def test_history_entry_within_started_is_state_changed() -> None:
-    event = map_history_entry(_entry("started", "started", "In Progress", "In Review"))
+    [event] = map_history_entry(_entry("started", "started", "In Progress", "In Review"))
 
-    assert event is not None
     assert event.type is EventType.STATE_CHANGED
 
 
 def test_history_entry_entering_completed_is_completed() -> None:
-    event = map_history_entry(_entry("started", "completed"))
+    [event] = map_history_entry(_entry("started", "completed"))
 
-    assert event is not None
     assert event.type is EventType.COMPLETED
 
 
@@ -80,7 +78,91 @@ def test_history_entry_without_to_state_is_skipped() -> None:
         "toState": None,
     }
 
-    assert map_history_entry(entry) is None
+    assert map_history_entry(entry) == []
+
+
+BLOCKED_IDS = frozenset({"lbl-blocked"})
+
+
+def _label_entry(added: list[str], removed: list[str]) -> dict[str, Any]:
+    return {
+        "id": "h9",
+        "createdAt": "2026-07-02T11:00:00.000Z",
+        "fromState": None,
+        "toState": None,
+        "addedLabelIds": added,
+        "removedLabelIds": removed,
+    }
+
+
+def test_blocked_label_added_emits_blocked() -> None:
+    [event] = map_history_entry(_label_entry(["lbl-blocked"], []), BLOCKED_IDS)
+
+    assert event.type is EventType.BLOCKED
+    assert event.external_id == "h9:blocked"
+    assert event.from_state is None
+    assert event.to_state is None
+    assert event.occurred_at == datetime(2026, 7, 2, 11, 0, tzinfo=UTC)
+
+
+def test_blocked_label_removed_emits_unblocked() -> None:
+    [event] = map_history_entry(_label_entry([], ["lbl-blocked"]), BLOCKED_IDS)
+
+    assert event.type is EventType.UNBLOCKED
+    assert event.external_id == "h9:unblocked"
+
+
+def test_non_blocked_label_changes_emit_nothing() -> None:
+    assert map_history_entry(_label_entry(["lbl-bug"], ["lbl-chore"]), BLOCKED_IDS) == []
+
+
+def test_label_changes_without_blocked_ids_emit_nothing() -> None:
+    assert map_history_entry(_label_entry(["lbl-blocked"], [])) == []
+
+
+def test_state_change_and_blocked_label_in_one_entry_emits_both() -> None:
+    entry = {
+        **_entry("backlog", "started", "Backlog", "In Progress"),
+        "addedLabelIds": ["lbl-blocked"],
+    }
+
+    events = map_history_entry(entry, BLOCKED_IDS)
+
+    assert [e.type for e in events] == [EventType.STARTED, EventType.BLOCKED]
+    assert events[0].external_id == "h1"
+    assert events[1].external_id == "h1:blocked"
+
+
+def test_blocked_label_ids_matches_block_substring_case_insensitively() -> None:
+    ids = blocked_label_ids(
+        [
+            {"id": "l1", "name": "Blocked"},
+            {"id": "l2", "name": "blocker: external"},
+            {"id": "l3", "name": "bug"},
+        ]
+    )
+
+    assert ids == {"l1", "l2"}
+
+
+def test_map_issue_threads_blocked_ids_through_history() -> None:
+    node = {
+        **ISSUE_NODE,
+        "history": {
+            "nodes": [
+                *ISSUE_NODE["history"]["nodes"],
+                _label_entry(["lbl-blocked"], []),
+            ]
+        },
+    }
+
+    item = map_issue(node, BLOCKED_IDS)
+
+    assert [e.type for e in item.events] == [
+        EventType.CREATED,
+        EventType.STARTED,
+        EventType.BLOCKED,
+    ]
 
 
 ISSUE_NODE: dict[str, Any] = {

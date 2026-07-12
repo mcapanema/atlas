@@ -1,5 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({ options: [] as unknown[] }));
 vi.mock("./EChart", () => ({
@@ -27,18 +27,19 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    // Wait for the full render (all 5 charts), not just the stat tiles: FlowDashboard's
+    // Wait for the full render (all 6 charts), not just the stat tiles: FlowDashboard's
     // loading skeleton gates ForecastCard's mount on metrics/history, so ForecastCard's
     // own forecast fetch only starts once they resolve — it lags behind metrics text.
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
     expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument(); // flow efficiency
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
     expect(screen.getByText("Weekly throughput (90d)")).toBeInTheDocument();
     expect(screen.getByText("WIP over time (90d)")).toBeInTheDocument();
     expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
+    expect(screen.getByText("Lead time trend")).toBeInTheDocument();
     expect(screen.getByText("Completion forecast")).toBeInTheDocument();
-    expect(screen.getAllByTestId("echart")).toHaveLength(5);
+    expect(screen.getAllByTestId("echart")).toHaveLength(6);
 
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
     expect(urls).toContain("/api/metrics?team_id=team-1");
@@ -71,13 +72,20 @@ describe("FlowDashboard", () => {
     mockMetricsFetch();
 
     const { rerender } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
 
     const firstRender = [...captured.options];
     captured.options.length = 0;
     rerender(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    expect(captured.options).toHaveLength(5);
+    expect(captured.options).toHaveLength(6);
     captured.options.forEach((option, i) => expect(option).toBe(firstRender[i]));
   });
+});
+
+test("renders lead time trend from snapshots", async () => {
+  mockMetricsFetch();
+  renderWithClient(<FlowDashboard scope={{ teamId: "t-1" }} />);
+
+  expect(await screen.findByText("Lead time trend")).toBeInTheDocument();
 });

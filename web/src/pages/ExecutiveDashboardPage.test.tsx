@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { metricsFixture, mockMetricsFetch, teamFixture } from "../test/fixtures";
+import { jsonResponse, metricsFixture, mockMetricsFetch, teamFixture } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ExecutiveDashboardPage } from "./ExecutiveDashboardPage";
 
@@ -46,5 +46,30 @@ describe("ExecutiveDashboardPage", () => {
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
     expect(urls).toContain(`/api/metrics?team_id=${teams[0].id}`);
     expect(urls).toContain(`/api/metrics?team_id=${teams[1].id}`);
+  });
+
+  it("surfaces teams whose metrics failed to load instead of showing em dashes", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      if (url.startsWith(`/api/metrics?team_id=${teams[0].id}`)) {
+        return Promise.resolve(jsonResponse(metricsFixture));
+      }
+      return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+    });
+
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Metrics failed to load for 1 team")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows per-team forecast accuracy", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    expect(await screen.findByText("Forecast accuracy (P85)")).toBeInTheDocument();
+    expect(await screen.findByText("90%")).toBeInTheDocument();
   });
 });

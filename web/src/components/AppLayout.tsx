@@ -2,7 +2,7 @@ import { Layout, Menu } from "antd";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-const { Header, Sider, Content } = Layout;
+const { Sider, Content } = Layout;
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -27,7 +27,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: "#fff" }} />
         <Content style={{ margin: 24 }}>{children}</Content>
       </Layout>
     </Layout>

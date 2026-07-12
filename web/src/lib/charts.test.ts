@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 
+import { snapshotsFixture } from "../test/fixtures";
 import {
   buildCfdOption,
   buildForecastOption,
   buildLeadTimeDistributionOption,
+  buildLeadTimeTrendOption,
   buildThroughputOption,
   buildWipOption,
 } from "./charts";
@@ -84,4 +86,15 @@ describe("buildForecastOption", () => {
     expect(series[0].data).toEqual([400, 1600]);
     expect((option.xAxis as { data: string[] }).data).toEqual(["2026-07-20", "2026-07-22"]);
   });
+});
+
+test("lead time trend charts P50/P85 in days per snapshot day", () => {
+  const option = buildLeadTimeTrendOption(snapshotsFixture);
+
+  const series = option.series as { name: string; data: (number | null)[] }[];
+  expect(series.map((s) => s.name)).toEqual(["Lead time P50 (d)", "Lead time P85 (d)"]);
+  expect(series[0].data).toEqual([2, 2]);
+  expect(series[1].data).toEqual([4, 5]);
+  const xAxis = option.xAxis as { data: string[] };
+  expect(xAxis.data).toEqual(["2026-07-09", "2026-07-10"]);
 });

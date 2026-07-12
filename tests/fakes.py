@@ -6,11 +6,13 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
+from datetime import date
 from uuid import UUID
 
 from app.domain.events.entities import Event
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
+from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem
@@ -176,3 +178,63 @@ class FakeDataSource:
 
     async def fetch_work_items(self) -> list[SourceWorkItem]:
         return self.work_items
+
+
+class InMemoryMetricSnapshotRepository:
+    def __init__(self, snapshots: list[MetricSnapshot] | None = None) -> None:
+        self._snapshots: dict[UUID, MetricSnapshot] = {s.id: s for s in snapshots or []}
+
+    async def add(self, snapshot: MetricSnapshot) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
+    async def list(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[MetricSnapshot]:
+        found = [
+            s
+            for s in self._snapshots.values()
+            if (team_id is None or s.team_id == team_id)
+            and (project_id is None or s.project_id == project_id)
+        ]
+        return sorted(found, key=lambda s: s.captured_on)
+
+    async def exists_on(
+        self,
+        captured_on: date,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+    ) -> bool:
+        scoped = await self.list(team_id=team_id, project_id=project_id)
+        return any(s.captured_on == captured_on for s in scoped)
+
+
+class InMemoryForecastSnapshotRepository:
+    def __init__(self, snapshots: list[ForecastSnapshot] | None = None) -> None:
+        self._snapshots: dict[UUID, ForecastSnapshot] = {
+            s.id: s for s in snapshots or []
+        }
+
+    async def add(self, snapshot: ForecastSnapshot) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
+    async def list(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[ForecastSnapshot]:
+        found = [
+            s
+            for s in self._snapshots.values()
+            if (team_id is None or s.team_id == team_id)
+            and (project_id is None or s.project_id == project_id)
+        ]
+        return sorted(found, key=lambda s: s.captured_on)
+
+    async def exists_on(
+        self,
+        captured_on: date,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+    ) -> bool:
+        scoped = await self.list(team_id=team_id, project_id=project_id)
+        return any(s.captured_on == captured_on for s in scoped)

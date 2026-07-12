@@ -18,8 +18,8 @@ class FlowHistory:
 
     window_start: datetime
     window_end: datetime
-    days: list[DailyFlowCount]
-    weeks: list[ThroughputBucket]
+    days: tuple[DailyFlowCount, ...]
+    weeks: tuple[ThroughputBucket, ...]
 
 
 def compute_flow_history(
@@ -35,6 +35,6 @@ def compute_flow_history(
     return FlowHistory(
         window_start=window_start,
         window_end=now,
-        days=daily_flow_counts(event_streams, start=window_start, end=now),
-        weeks=weekly_throughput(samples, end=now, weeks=max(1, window_days // 7)),
+        days=tuple(daily_flow_counts(event_streams, start=window_start, end=now)),
+        weeks=tuple(weekly_throughput(samples, end=now, weeks=max(1, window_days // 7))),
     )

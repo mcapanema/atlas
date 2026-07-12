@@ -1,33 +1,15 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, select
-from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import DateTime, TypeDecorator, Uuid
+from sqlalchemy.types import Uuid
 
 from app.domain.events.entities import Event, EventType
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.types import UTCDateTime
 from app.infrastructure.repositories.batching import chunked
-
-
-class _UTCDateTime(TypeDecorator[datetime]):
-    """DateTime(timezone=True) that survives SQLite's naive round-trip.
-
-    ponytail: SQLite stores DATETIME as a naive ISO string, dropping tzinfo
-    on read (Postgres's timestamptz doesn't have this problem). Event's
-    domain invariant requires tz-aware occurred_at, so reattach UTC here.
-    Move to a shared database/types.py if another entity needs the same fix.
-    """
-
-    impl = DateTime(timezone=True)
-    cache_ok = True
-
-    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
-        if value is not None and value.tzinfo is None:
-            return value.replace(tzinfo=UTC)
-        return value
 
 
 class EventModel(Base):
@@ -38,13 +20,13 @@ class EventModel(Base):
         Uuid, ForeignKey("work_items.id"), nullable=False, index=True
     )
     type: Mapped[str] = mapped_column(String(32), nullable=False)
-    occurred_at: Mapped[datetime] = mapped_column(_UTCDateTime, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     from_state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     to_state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     external_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
-    recorded_at: Mapped[datetime] = mapped_column(_UTCDateTime, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     def to_domain(self) -> Event:
         return Event(

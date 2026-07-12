@@ -18,10 +18,10 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
-    "hypothesis>=6.120",
     "ruff>=0.9",
     "mypy>=1.14",
     "pytest-cov>=7.1.0",
+    "pre-commit>=4.0",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.

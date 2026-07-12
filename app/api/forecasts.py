@@ -2,8 +2,13 @@ from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import ForecastServiceDep
-from app.api.schemas import CompletionForecastRead, ForecastRead, OutcomeBucketRead
+from app.api.deps import ForecastServiceDep, SnapshotServiceDep
+from app.api.schemas import (
+    CompletionForecastRead,
+    ForecastAccuracyRead,
+    ForecastRead,
+    OutcomeBucketRead,
+)
 from app.api.scope import ScopeDep
 from app.domain.forecasting.monte_carlo import CompletionForecast
 
@@ -49,3 +54,13 @@ async def get_forecast(
         completion=_completion_read(forecast.completion, forecast.window_end),
         confidence=forecast.confidence,
     )
+
+
+@router.get("/accuracy", response_model=ForecastAccuracyRead)
+async def get_forecast_accuracy(
+    service: SnapshotServiceDep, scope: ScopeDep
+) -> ForecastAccuracyRead:
+    accuracy = await service.get_forecast_accuracy(
+        team_id=scope.team_id, project_id=scope.project_id
+    )
+    return ForecastAccuracyRead.model_validate(accuracy)

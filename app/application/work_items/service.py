@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from app.domain.work_items.entities import WorkItem, WorkItemType
+from app.domain.work_items.entities import DEFAULT_STATE, WorkItem, WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
 
@@ -15,7 +15,7 @@ class WorkItemService:
         team_id: UUID,
         title: str,
         type: WorkItemType = WorkItemType.TASK,
-        state: str = "backlog",
+        state: str = DEFAULT_STATE,
         project_id: UUID | None = None,
         external_id: str | None = None,
     ) -> WorkItem:

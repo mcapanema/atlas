@@ -17,90 +17,110 @@ Atlas is a single-deployable monolith with a Domain-Driven Design interior.
 - **Infrastructure** implements the Domain ports (e.g. `SqlAlchemyOrganizationRepository`).
 - **Presentation** (FastAPI routers, React app) depends on Application and returns typed DTOs — ORM entities are never exposed.
 
-## Vertical slice pattern
+## Vertical slices
 
-Each domain concept owns:
-- `app/domain/<concept>/entities.py` + `repository.py` (the port)
-- `app/application/<concept>/service.py` (use cases)
-- `app/infrastructure/repositories/<concept>.py` (ORM model + adapter)
-- `app/api/<concept>.py` + DTOs in `app/api/schemas.py`
+Each domain concept spans all four layers in the same shape:
 
-`Organization` is the reference implementation. `Team`, `Project`, `Work Item`,
-and `Event` are now implemented in the same shape, forming the ownership
-hierarchy `Organization → Team → Project → Work Item → Event`: a Team owns
-Projects and Work Items, a Project groups Work Items, and each Work Item
-accumulates immutable Events (state changes, assignment, etc.) — the system
-of record that metrics will later derive from. `Metric` is now real as a *computed* concept: the metrics engine
-(`app/domain/metrics/`) derives per-item `FlowSample`s from events
-(`derive_flow_sample`) and folds them into `TeamFlowMetrics` — Lead/Cycle
-Time percentiles, Throughput, WIP, Blocked Time, Flow Efficiency — via
-`compute_team_metrics` (`summary.py`). Nothing is persisted: metrics are
-recomputed per request (`MetricsService`), served from
-`GET /api/metrics?team_id=…`, and shown on the Flow Metrics page
-(`/metrics`). This slice deliberately has no repository — everything is
-recomputed on read, no snapshot tables. The Linear connector (below) populates these slices from a real
-workspace, and the Work Item Explorer (`/work-items` in the frontend) makes
-them visible: per-item event timeline plus state/blocked periods derived by
-the pure domain function `derive_timeline`
-(`app/domain/events/timeline.py`) and served from
-`GET /api/work-items/{id}/timeline`. Phase 3's metrics engine builds on
-the same derivation. Phase 4 adds flow *history* alongside the summary:
-daily phase counts (Cumulative Flow Diagram data) via event replay in
-`app/domain/metrics/cfd.py`, plus weekly throughput buckets — both
-computed on read like the summary metrics, nothing persisted, no snapshot
-tables yet. `GET /api/metrics` and `GET /api/metrics/history` both scope
-by team or project. The frontend's three dashboard pages consume this:
-Executive (`/`) shows a portfolio table across teams, while Team (`/teams`)
-and Project (`/projects`) chart it via Apache ECharts.
+- `app/domain/<concept>/` — entities and/or ports (pure Python)
+- `app/application/<concept>/service.py` — use cases
+- `app/infrastructure/…` — the adapter side (ORM repository, connector, LLM client)
+- `app/api/<concept>.py` — router, with DTOs in `app/api/schemas.py`
 
-Phase 5 adds *forecasting* on the same computed-on-read pattern:
-`app/domain/forecasting/monte_carlo.py` simulates completion of the scope's
-open work by resampling its historical daily throughput (seeded
-`random.Random` — deterministic by construction), and
-`app/domain/metrics/distribution.py` bins lead times into a day-width
-histogram. `ForecastService` counts the scope's open items (event-less
-backlog included) and runs the simulation; results are served from
-`GET /api/forecasts` (percentile finish dates, optional `target_date`
-delivery confidence, outcome histogram) and
-`GET /api/metrics/lead-time-distribution`, both scoped by team or project
-like `/api/metrics`. The Team and Project dashboards render them through
-the shared `FlowDashboard`: a lead-time distribution chart plus a
-`ForecastCard` with a target-date picker. Still nothing persisted — no
-snapshot tables, no new migrations.
+The slices come in four kinds.
 
-Phase 6 adds the *AI Intelligence* layer on the same compute-on-read pattern:
-the `advisor` slice defines an `AdvisorPort` (`app/domain/advisor/port.py`)
-that takes a `DeliveryContext` — the already-computed `FlowMetrics`,
-`LeadTimeDistribution`, and `DeliveryForecast` — and returns explainable
-`DeliveryAdvice` (a narrative summary plus prioritized `Recommendation`s,
-each carrying a root cause and evidence quoting the input metrics). The AI
-never calculates: `AdvisorService` assembles the context by composing
-`MetricsService` and `ForecastService`, and the OpenRouter adapter
-(`app/infrastructure/ai/advisor.py`) does the reasoning via OpenRouter's
-OpenAI-compatible chat-completions API (plain httpx, strict JSON schema —
-no provider SDK), grounded in a versioned knowledge file
-(`app/infrastructure/ai/knowledge/flow_coaching.md` — the SPEC's Knowledge
-Layer). Served from `GET /api/recommendations` (409 until
-`ATLAS_OPENROUTER_API_KEY` is set, mirroring the Linear connector) and the
-Advisor page (`/advisor`), which generates advice on demand. Nothing
-persisted — advice is regenerated per request, no migrations.
+### Persisted aggregates — the system of record
+
+`Organization → Team → Project → Work Item → Event`, each with
+`entities.py` + `repository.py` (a `Protocol` port), a SQLAlchemy adapter
+in `app/infrastructure/repositories/`, and a CRUD router. A Team owns
+Projects and Work Items; a Project groups Work Items; each Work Item
+accumulates immutable Events (state changes, assignments, blocks). Events
+are the source of truth everything analytical derives from. One pure
+derivation lives beside its aggregate: `derive_timeline`
+(`app/domain/events/timeline.py`) turns an item's events into
+state/blocked periods for `GET /api/work-items/{id}/timeline` and the Work
+Item Explorer (`/work-items`).
+
+### Computed-on-read analytics (ADR-0003, amended by ADR-0008)
+
+Metrics, forecasts, and AI advice are recomputed per request from the
+persisted events; these slices have no tables and no migrations.
+
+- **Metrics** (`app/domain/metrics/`): per-item `FlowSample`s
+  (`samples.py`) fold into `TeamFlowMetrics` — Lead/Cycle Time
+  percentiles, Throughput, WIP, Blocked Time, Flow Efficiency
+  (`summary.py`) — plus daily CFD phase counts (`cfd.py`), weekly
+  throughput buckets (`history.py`), and a lead-time histogram
+  (`distribution.py`).
+- **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
+  simulation of the scope's open work by resampling its historical daily
+  throughput — seeded `random.Random`, deterministic by construction.
+- **Advisor** (`app/domain/advisor/`): `AdvisorPort` takes a
+  `DeliveryContext` — the already-computed metrics, distribution, and
+  forecast — and returns explainable `DeliveryAdvice` (narrative summary
+  plus prioritized `Recommendation`s with root causes and evidence). The
+  AI never calculates (ADR-0006).
+
+All three share one scope pipeline: `app/api/scope.py` validates the scope
+(exactly one of `team_id`/`project_id`, 404 when it doesn't exist), and
+`ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
+events once per request. Served from `GET /api/metrics`,
+`/api/metrics/history`, `/api/metrics/lead-time-distribution`,
+`/api/forecasts`, and `GET /api/recommendations` (409 until
+`ATLAS_OPENROUTER_API_KEY` is set — ADR-0005). The frontend consumes them
+on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
+dashboards — charted with Apache ECharts (ADR-0007) — plus the Flow
+Metrics (`/metrics`) and Advisor (`/advisor`) pages.
+
+### Persisted analytics snapshots (ADR-0008)
+
+The one write-side projection: `app/domain/snapshots/` holds
+`MetricSnapshot` and `ForecastSnapshot` (one immutable row per scope per
+UTC day) with repository ports, `SnapshotService`
+(`app/application/snapshots/service.py`) captures them for every team and
+project inside the sync request, and `evaluate_forecast_accuracy`
+(`app/domain/forecasting/accuracy.py`) scores past forecast snapshots
+against actual completions. Served from `GET /api/metrics/snapshots`
+(lead-time trend on the dashboards) and `GET /api/forecasts/accuracy`
+(forecast calibration on the forecast card and Executive Dashboard).
+
+### Ports to external systems
+
+- **Sync** (`app/domain/sync/`): the `DeliveryDataSource` port (`port.py`)
+  plus platform-neutral snapshots (`SourceTeam`, `SourceProject`,
+  `SourceWorkItem`, `SourceEvent` in `source.py`). `SyncService`
+  (`app/application/sync/service.py`) upserts snapshots into the domain
+  model idempotently, matching on `external_id` — running sync twice is a
+  no-op (ADR-0004).
+- **Advisor** (`app/domain/advisor/port.py`): implemented by the
+  OpenRouter adapter (ADR-0006).
+
+Each port defines its failure type beside it (`DataSourceError`,
+`AdvisorError`); adapters translate vendor errors into them, and
+`create_app()`'s exception handlers turn them into 502s.
 
 ## Connectors
 
-External delivery systems are integrated through the `DeliveryDataSource`
-port (`app/domain/sync/port.py`), which yields platform-neutral snapshots
-(`SourceTeam`, `SourceProject`, `SourceWorkItem`, `SourceEvent` — in
-`app/domain/sync/source.py`). Connector-specific code lives only in
-`app/infrastructure/connectors/<vendor>/`; vendor payloads never leave that
-package.
+Connector-specific code lives only in
+`app/infrastructure/connectors/<vendor>/`; vendor payloads never leave
+that package. The first connector is Linear
+(`app/infrastructure/connectors/linear/`): a small GraphQL client (httpx,
+personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
+mapping functions, and a paginating `LinearDataSource`. Exposed as
+`POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
+and the Connectors page in the frontend. Blocked work is inferred from the
+workspace's blocked label: the datasource resolves label ids whose name
+contains "block" and the mapper turns label add/remove history into
+BLOCKED/UNBLOCKED events, which feed blocked time and flow efficiency.
 
-The first connector is Linear (`app/infrastructure/connectors/linear/`):
-a small GraphQL client (httpx, personal API key via `ATLAS_LINEAR_API_KEY`),
-pure mapping functions, and a paginating `LinearDataSource`. The
-`SyncService` use case (`app/application/sync/service.py`) upserts the
-snapshots into the domain model idempotently, matching by `external_id` —
-running sync twice is a no-op. Exposed as `POST /api/connectors/linear/sync`
-and the Connectors page in the frontend.
+## AI adapter
+
+The advisor's adapter (`app/infrastructure/ai/advisor.py`) calls
+OpenRouter's OpenAI-compatible chat-completions API with plain httpx — no
+provider SDK (ADR-0006) — enforcing a strict JSON response schema and
+grounding the system prompt in a versioned knowledge file
+(`app/infrastructure/ai/knowledge/flow_coaching.md`). Model choice is
+configuration (`ATLAS_ADVISOR_MODEL`).
 
 ## Single-service deployment
 

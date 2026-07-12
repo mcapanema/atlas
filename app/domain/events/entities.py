@@ -1,11 +1,9 @@
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
+from app.domain._time import utcnow
 
 
 class EventType(StrEnum):
@@ -33,7 +31,7 @@ class Event:
     to_state: str | None = None
     external_id: str | None = None
     id: UUID = field(default_factory=uuid4)
-    recorded_at: datetime = field(default_factory=_utcnow)
+    recorded_at: datetime = field(default_factory=utcnow)
 
     def __post_init__(self) -> None:
         if self.occurred_at.tzinfo is None:

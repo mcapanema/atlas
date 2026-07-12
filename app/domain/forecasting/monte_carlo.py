@@ -81,7 +81,7 @@ class CompletionForecast:
     p75_days: int
     p85_days: int
     p95_days: int
-    outcomes: list[OutcomeBucket]
+    outcomes: tuple[OutcomeBucket, ...]
 
 
 def summarize_completion(days_per_trial: list[int], *, remaining: int) -> CompletionForecast:
@@ -95,7 +95,7 @@ def summarize_completion(days_per_trial: list[int], *, remaining: int) -> Comple
         p75_days=math.ceil(percentile(values, 75)),
         p85_days=math.ceil(percentile(values, 85)),
         p95_days=math.ceil(percentile(values, 95)),
-        outcomes=[OutcomeBucket(days=d, trials=n) for d, n in sorted(counts.items())],
+        outcomes=tuple(OutcomeBucket(days=d, trials=n) for d, n in sorted(counts.items())),
     )
 
 
