@@ -80,6 +80,8 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
               data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"
             }
           />
+          <StatCard title="Queue time P50" value={duration(data.queue_time, "p50_seconds")} />
+          <StatCard title="Touch time P50" value={duration(data.touch_time, "p50_seconds")} />
         </Row>
       )}
       {cfdOption && throughputOption && wipOption && (

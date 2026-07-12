@@ -105,6 +105,15 @@ describe("FlowDashboard", () => {
     expect(captured.options).toHaveLength(6);
     captured.options.forEach((option, i) => expect(option).toBe(firstRender[i]));
   });
+
+  it("renders queue and touch time tiles", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Queue time P50")).toBeInTheDocument());
+    expect(screen.getByText("Touch time P50")).toBeInTheDocument();
+  });
 });
 
 test("renders lead time trend from snapshots", async () => {

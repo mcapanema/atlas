@@ -28,6 +28,20 @@ export const metricsFixture = {
   },
   blocked_seconds: 0,
   flow_efficiency: 0.75,
+  queue_time: {
+    p50_seconds: 129600,
+    p75_seconds: 172800,
+    p85_seconds: 216000,
+    p95_seconds: 259200,
+    mean_seconds: 151200,
+  },
+  touch_time: {
+    p50_seconds: 43200,
+    p75_seconds: 86400,
+    p85_seconds: 129600,
+    p95_seconds: 172800,
+    mean_seconds: 64800,
+  },
 };
 
 export const historyFixture = {

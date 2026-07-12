@@ -23,6 +23,8 @@ export interface FlowMetrics {
   cycle_time: DurationStats | null;
   blocked_seconds: number;
   flow_efficiency: number | null;
+  queue_time: DurationStats | null;
+  touch_time: DurationStats | null;
 }
 
 export interface FlowHistory {
