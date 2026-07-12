@@ -2,6 +2,8 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
+    AgingItemRead,
+    AgingWipRead,
     DurationStatsRead,
     FlowHistoryRead,
     FlowMetricsRead,
@@ -81,3 +83,24 @@ async def get_metric_snapshots(
         team_id=scope.team_id, project_id=scope.project_id
     )
     return [MetricSnapshotRead.model_validate(s) for s in snapshots]
+
+
+@router.get("/aging-wip", response_model=AgingWipRead)
+async def get_aging_wip(service: MetricsServiceDep, scope: ScopeDep) -> AgingWipRead:
+    aging = await service.get_aging_wip(team_id=scope.team_id, project_id=scope.project_id)
+    return AgingWipRead(
+        now=aging.now,
+        cycle_time_p85_seconds=(
+            aging.cycle_time_p85.total_seconds() if aging.cycle_time_p85 is not None else None
+        ),
+        items=[
+            AgingItemRead(
+                work_item_id=item.work_item_id,
+                title=item.title,
+                state=item.state,
+                age_seconds=item.age.total_seconds(),
+                over_p85=item.over_p85,
+            )
+            for item in aging.items
+        ],
+    )

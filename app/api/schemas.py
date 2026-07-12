@@ -272,3 +272,17 @@ class ForecastAccuracyRead(BaseModel):
     p50_hit_rate: float | None
     p85_hit_rate: float | None
     mean_abs_error_days: float | None
+
+
+class AgingItemRead(BaseModel):
+    work_item_id: UUID
+    title: str
+    state: str
+    age_seconds: float
+    over_p85: bool
+
+
+class AgingWipRead(BaseModel):
+    now: datetime
+    cycle_time_p85_seconds: float | None
+    items: list[AgingItemRead]

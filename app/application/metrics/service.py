@@ -3,6 +3,7 @@ from uuid import UUID
 
 from app.application.scope import ScopeSampleLoader, ScopeSamples
 from app.domain.events.repository import EventRepository
+from app.domain.metrics.aging import AgingWip, compute_aging_wip
 from app.domain.metrics.distribution import (
     LeadTimeDistribution,
     compute_lead_time_distribution,
@@ -70,3 +71,17 @@ class MetricsService:
         return compute_lead_time_distribution(
             scope.samples, now=window_end, window_days=window_days
         )
+
+    async def get_aging_wip(
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        now: datetime | None = None,
+        scope: ScopeSamples | None = None,
+    ) -> AgingWip:
+        """Ages of the scope's current in-progress items, oldest first."""
+        at = now if now is not None else datetime.now(UTC)
+        if scope is None:
+            scope = await self._scope.load(team_id=team_id, project_id=project_id)
+        return compute_aging_wip(scope.items_with_samples, now=at)
