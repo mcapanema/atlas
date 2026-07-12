@@ -108,3 +108,42 @@ async def test_list_scopes_tool(
             text = tool_text(result)
             assert "Acme" in text  # organization from create_team
             assert "Platform" in text  # team from create_team
+
+
+async def test_meeting_brief_composes_digest(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            team_id = await create_team(client)
+
+        async with mcp_session(app) as session:
+            result = await session.call_tool("meeting_brief", {"team_id": team_id})
+            assert not result.isError
+            text = tool_text(result)
+            assert "Flow metrics" in text
+            assert "Delivery health" in text
+            assert "Aging WIP" in text
+
+
+async def test_meeting_brief_scope_errors_surface(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:  # noqa: SIM117
+        # mcp_session must nest because it depends on the app from running_app.
+        async with mcp_session(app) as session:
+            # No scope at all -> the REST 422 detail must reach the model.
+            result = await session.call_tool("meeting_brief", {})
+            assert result.isError
+            assert "exactly one" in tool_text(result)
+
+            # Unknown team -> the REST 404 detail must reach the model.
+            result = await session.call_tool(
+                "meeting_brief",
+                {"team_id": "00000000-0000-0000-0000-000000000000"},
+            )
+            assert result.isError
+            assert "not found" in tool_text(result)

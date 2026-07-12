@@ -32,6 +32,35 @@ def _params(**kwargs: Any) -> dict[str, Any]:
     return {key: value for key, value in kwargs.items() if value is not None}
 
 
+_DAY_SECONDS = 86400
+
+
+def _render_health(health: dict[str, Any]) -> str:
+    if health["score"] is None:
+        return "Delivery health: not enough data to score."
+    lines = [f"Delivery health: {health['score']}/100 ({health['band']})"]
+    lines += [f"- {c['name']} {c['score']}: {c['reason']}" for c in health["components"]]
+    return "\n".join(lines)
+
+
+def _render_aging(aging: dict[str, Any], limit: int = 10) -> str:
+    items = aging["items"]
+    if not items:
+        return "Aging WIP: nothing in progress."
+    p85 = aging["cycle_time_p85_seconds"]
+    header = "Aging WIP"
+    if p85 is not None:
+        header += f" (cycle-time p85 = {p85 / _DAY_SECONDS:.1f}d)"
+    lines = [header + ":"]
+    for item in items[:limit]:
+        age = item["age_seconds"] / _DAY_SECONDS
+        flag = " [over p85]" if item["over_p85"] else ""
+        lines.append(f"- {item['title']} — {item['state']}, {age:.1f}d{flag}")
+    if len(items) > limit:
+        lines.append(f"... and {len(items) - limit} more (use aging_wip for the full list)")
+    return "\n".join(lines)
+
+
 async def _api(
     app: FastAPI,
     method: str,
@@ -95,5 +124,32 @@ def build_mcp_server(app: FastAPI) -> FastMCP:
             f"- {p['id']}  {p['name']} (team {p['team_id']})" for p in projects
         ] or ["- (none)"]
         return "\n".join(lines)
+
+    @mcp.tool()
+    async def meeting_brief(
+        team_id: str | None = None,
+        project_id: str | None = None,
+        window_days: int = 30,
+    ) -> str:
+        """One-call delivery brief for a team or project — flow metrics,
+        lead-time distribution, Monte Carlo forecast, delivery health, and
+        aging WIP. Provide exactly one of team_id/project_id (from
+        list_scopes). Use this for daily standups, retros, reviews, and
+        planning before reaching for any drill-down tool.
+        """
+        scope = _params(team_id=team_id, project_id=project_id)
+        context = await _api(
+            app,
+            "GET",
+            "/api/recommendations/context",
+            params={**scope, "window_days": window_days},
+        )
+        health = await _api(
+            app, "GET", "/api/metrics/health", params={**scope, "window_days": window_days}
+        )
+        aging = await _api(app, "GET", "/api/metrics/aging-wip", params=scope)
+        return "\n\n".join(
+            [context["context"], _render_health(health), _render_aging(aging)]
+        )
 
     return mcp
