@@ -5,7 +5,7 @@ vi.mock("../components/EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { mockMetricsFetch } from "../test/fixtures";
+import { jsonResponse, mockMetricsFetch } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ProjectDashboardPage } from "./ProjectDashboardPage";
 
@@ -33,5 +33,13 @@ describe("ProjectDashboardPage", () => {
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
     expect(urls).toContain(`/api/metrics?project_id=${project.id}`);
+  });
+
+  it("shows an error when projects fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderWithClient(<ProjectDashboardPage />, ["/projects"]);
+
+    await waitFor(() => expect(screen.getByText("Failed to load projects")).toBeInTheDocument());
   });
 });

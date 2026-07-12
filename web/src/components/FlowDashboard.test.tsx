@@ -9,7 +9,7 @@ vi.mock("./EChart", () => ({
   },
 }));
 
-import { mockMetricsFetch } from "../test/fixtures";
+import { jsonResponse, metricsFixture, mockMetricsFetch } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
 
@@ -66,6 +66,30 @@ describe("FlowDashboard", () => {
     const { container } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     expect(container.querySelector(".ant-skeleton")).not.toBeNull();
+  });
+
+  it("shows an error when metrics fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Failed to load metrics")).toBeInTheDocument());
+  });
+
+  it("shows placeholders when lead/cycle time and flow efficiency have no data yet", async () => {
+    mockMetricsFetch({
+      "/api/metrics?team_id=team-1": {
+        ...metricsFixture,
+        lead_time: null,
+        cycle_time: null,
+        flow_efficiency: null,
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
   });
 
   it("reuses chart option objects across re-renders", async () => {

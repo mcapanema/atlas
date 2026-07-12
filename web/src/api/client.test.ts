@@ -19,6 +19,17 @@ describe("apiFetch", () => {
     expect(sent.get("X-Custom")).toBe("1");
   });
 
+  it("does not override a caller-supplied Content-Type", async () => {
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await apiFetch("/api/things", { headers: { "Content-Type": "text/plain" } });
+
+    const sent = new Headers(spy.mock.calls[0][1]?.headers);
+    expect(sent.get("Content-Type")).toBe("text/plain");
+  });
+
   it("surfaces the FastAPI detail field from error responses", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "Team not found" }), {

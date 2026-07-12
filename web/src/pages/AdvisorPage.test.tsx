@@ -75,6 +75,47 @@ describe("AdvisorPage", () => {
     expect(screen.getByText("wip=12")).toBeInTheDocument();
   });
 
+  it("surfaces an advice generation failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      if (url.startsWith("/api/recommendations/status")) {
+        return Promise.resolve(jsonResponse({ configured: true }));
+      }
+      if (url.startsWith("/api/recommendations")) {
+        return Promise.resolve(jsonResponse({ detail: "LLM unavailable" }, 500));
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+
+    await waitFor(() => expect(screen.getByText("Failed to generate advice")).toBeInTheDocument());
+    expect(screen.getByText("LLM unavailable")).toBeInTheDocument();
+  });
+
+  it("shows an error when teams fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Failed to load teams")).toBeInTheDocument());
+  });
+
+  it("picks a team from the select and reflects it in the URL", async () => {
+    mockFetch();
+
+    renderPage();
+
+    fireEvent.mouseDown(await screen.findByRole("combobox"));
+    fireEvent.click(await screen.findByTitle(teamFixture.name));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+  });
+
   it("surfaces an advisor status failure instead of silently disabling the button", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);

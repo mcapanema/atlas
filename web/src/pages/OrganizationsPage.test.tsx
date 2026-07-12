@@ -21,4 +21,14 @@ describe("OrganizationsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Acme")).toBeInTheDocument());
   });
+
+  it("shows an error when organizations fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderWithClient(<OrganizationsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Failed to load organizations")).toBeInTheDocument(),
+    );
+  });
 });

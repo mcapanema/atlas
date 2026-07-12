@@ -47,6 +47,14 @@ describe("TeamDashboardPage", () => {
     expect(urls).toContain(`/api/metrics?team_id=${teamFixture.id}`);
   });
 
+  it("shows an error when teams fail to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Failed to load teams")).toBeInTheDocument());
+  });
+
   it("prompts for a team before fetching metrics", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([]));
 
