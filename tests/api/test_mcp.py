@@ -13,7 +13,7 @@ import httpx
 from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -37,22 +37,13 @@ async def running_app(
 
 @asynccontextmanager
 async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
-    def factory(
-        headers: dict[str, str] | None = None,
-        timeout: httpx.Timeout | None = None,
-        auth: httpx.Auth | None = None,
-    ) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            transport=ASGITransport(app=app),
-            headers=headers,
-            timeout=timeout,
-            auth=auth,
-            follow_redirects=True,
-        )
-
     async with (
-        streamablehttp_client(
-            f"http://test/mcp/{TOKEN}/", httpx_client_factory=factory
+        httpx.AsyncClient(
+            transport=ASGITransport(app=app),
+            follow_redirects=True,
+        ) as http_client,
+        streamable_http_client(
+            f"http://test/mcp/{TOKEN}/", http_client=http_client
         ) as (read, write, _),
         ClientSession(read, write) as session,
     ):
