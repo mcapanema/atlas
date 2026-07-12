@@ -28,6 +28,20 @@ export const metricsFixture = {
   },
   blocked_seconds: 0,
   flow_efficiency: 0.75,
+  queue_time: {
+    p50_seconds: 129600,
+    p75_seconds: 172800,
+    p85_seconds: 216000,
+    p95_seconds: 259200,
+    mean_seconds: 151200,
+  },
+  touch_time: {
+    p50_seconds: 43200,
+    p75_seconds: 86400,
+    p85_seconds: 129600,
+    p95_seconds: 172800,
+    mean_seconds: 64800,
+  },
 };
 
 export const historyFixture = {
@@ -114,6 +128,34 @@ export const accuracyFixture = {
   mean_abs_error_days: 2.5,
 };
 
+export const agingWipFixture = {
+  now: "2026-07-10T00:00:00Z",
+  cycle_time_p85_seconds: 259200,
+  items: [
+    {
+      work_item_id: "44444444-4444-4444-4444-444444444444",
+      title: "Stuck item",
+      state: "in_progress",
+      age_seconds: 518400,
+      over_p85: true,
+    },
+  ],
+};
+
+export const healthFixture = {
+  window_start: "2026-06-10T00:00:00Z",
+  window_end: "2026-07-10T00:00:00Z",
+  score: 82,
+  band: "healthy",
+  components: [
+    { name: "predictability", score: 74, reason: "lead time p95 is 1.8x p50" },
+    { name: "efficiency", score: 78, reason: "flow efficiency 78%" },
+    { name: "flow", score: 100, reason: "completed 3 recently vs 2 in the prior half-window" },
+    { name: "stability", score: 89, reason: "WIP equals 1.4 weeks of throughput" },
+    { name: "risk", score: 70, reason: "1 of 2 in-progress items blocked or aging past cycle p85" },
+  ],
+};
+
 export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
@@ -125,6 +167,12 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/forecasts/accuracy")) {
       return Promise.resolve(jsonResponse(accuracyFixture));
+    }
+    if (url.startsWith("/api/metrics/aging-wip")) {
+      return Promise.resolve(jsonResponse(agingWipFixture));
+    }
+    if (url.startsWith("/api/metrics/health")) {
+      return Promise.resolve(jsonResponse(healthFixture));
     }
     if (url.startsWith("/api/metrics/lead-time-distribution")) {
       return Promise.resolve(jsonResponse(distributionFixture));

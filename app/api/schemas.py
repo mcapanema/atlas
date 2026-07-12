@@ -162,6 +162,8 @@ class FlowMetricsRead(BaseModel):
     cycle_time: DurationStatsRead | None
     blocked_seconds: float
     flow_efficiency: float | None
+    queue_time: DurationStatsRead | None
+    touch_time: DurationStatsRead | None
 
 
 class DailyFlowCountRead(BaseModel):
@@ -270,3 +272,35 @@ class ForecastAccuracyRead(BaseModel):
     p50_hit_rate: float | None
     p85_hit_rate: float | None
     mean_abs_error_days: float | None
+
+
+class AgingItemRead(BaseModel):
+    work_item_id: UUID
+    title: str
+    state: str
+    age_seconds: float
+    over_p85: bool
+
+
+class AgingWipRead(BaseModel):
+    now: datetime
+    cycle_time_p85_seconds: float | None
+    items: list[AgingItemRead]
+
+
+class HealthComponentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    score: int
+    reason: str
+
+
+class DeliveryHealthRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    window_start: datetime
+    window_end: datetime
+    score: int | None
+    band: Literal["healthy", "warning", "critical"] | None
+    components: list[HealthComponentRead]

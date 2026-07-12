@@ -1,23 +1,40 @@
-import { Alert, Table, Typography } from "antd";
+import { Alert, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Link } from "react-router-dom";
 
-import { useAllTeamsFlowMetrics, type FlowMetrics } from "../api/metrics";
+import {
+  useAllTeamsFlowMetrics,
+  useAllTeamsHealth,
+  type DeliveryHealth,
+  type FlowMetrics,
+} from "../api/metrics";
 import { useAllTeamsForecastAccuracy, type ForecastAccuracy } from "../api/snapshots";
 import { useTeams, type Team } from "../api/teams";
 import { formatSeconds } from "../lib/duration";
+
+const bandColor: Record<string, string> = { healthy: "green", warning: "orange", critical: "red" };
 
 interface TeamRow {
   key: string;
   team: Team;
   metrics: FlowMetrics | undefined;
   accuracy: ForecastAccuracy | undefined;
+  health: DeliveryHealth | undefined;
 }
 
 const columns: ColumnsType<TeamRow> = [
   {
     title: "Team",
     render: (_, row) => <Link to={`/teams?team=${row.team.id}`}>{row.team.name}</Link>,
+  },
+  {
+    title: "Health",
+    render: (_, row) =>
+      row.health?.band != null && row.health.score != null ? (
+        <Tag color={bandColor[row.health.band]}>{row.health.score}</Tag>
+      ) : (
+        "—"
+      ),
   },
   { title: "Throughput (30d)", render: (_, row) => row.metrics?.completed ?? "—" },
   { title: "WIP", render: (_, row) => row.metrics?.wip ?? "—" },
@@ -52,6 +69,7 @@ export function ExecutiveDashboardPage() {
   // team count makes N round trips slow.
   const metrics = useAllTeamsFlowMetrics(teams.data ?? []);
   const accuracy = useAllTeamsForecastAccuracy(teams.data ?? []);
+  const health = useAllTeamsHealth(teams.data ?? []);
 
   if (teams.isError) {
     return <Alert type="error" message="Failed to load teams" />;
@@ -61,6 +79,7 @@ export function ExecutiveDashboardPage() {
     team,
     metrics: metrics[index]?.data,
     accuracy: accuracy[index]?.data,
+    health: health[index]?.data,
   }));
   const failedCount = metrics.filter((m) => m.isError).length;
   return (

@@ -73,3 +73,20 @@ async def test_load_scopes_by_team_and_project() -> None:
 
     assert by_team.item_count == 2
     assert by_project.item_count == 1
+
+
+async def test_load_pairs_items_with_their_samples() -> None:
+    team_id = uuid4()
+    done, backlog = _item(team_id), _item(team_id)
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([done, backlog]),
+        InMemoryEventRepository(
+            [_event(done, EventType.CREATED, 10), _event(done, EventType.COMPLETED, 2)]
+        ),
+    )
+
+    scope = await loader.load(team_id=team_id)
+
+    assert [(item.id, sample) for item, sample in scope.items_with_samples] == [
+        (done.id, scope.samples[0])
+    ]

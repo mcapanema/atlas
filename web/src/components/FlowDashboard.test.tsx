@@ -9,7 +9,13 @@ vi.mock("./EChart", () => ({
   },
 }));
 
-import { jsonResponse, metricsFixture, mockMetricsFetch } from "../test/fixtures";
+import {
+  agingWipFixture,
+  healthFixture,
+  jsonResponse,
+  metricsFixture,
+  mockMetricsFetch,
+} from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
 
@@ -104,6 +110,56 @@ describe("FlowDashboard", () => {
 
     expect(captured.options).toHaveLength(6);
     captured.options.forEach((option, i) => expect(option).toBe(firstRender[i]));
+  });
+
+  it("renders queue and touch time tiles", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Queue time P50")).toBeInTheDocument());
+    expect(screen.getByText("Touch time P50")).toBeInTheDocument();
+  });
+
+  it("renders the aging WIP table", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
+    expect(screen.getByText("Stuck item")).toBeInTheDocument();
+    expect(screen.getByText("over P85")).toBeInTheDocument();
+  });
+
+  it("omits the aging WIP card when nothing is in progress", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, items: [] } });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
+    expect(screen.queryByText("Aging WIP")).toBeNull();
+  });
+
+  it("renders the delivery health card", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Delivery health")).toBeInTheDocument());
+    expect(screen.getByText("healthy")).toBeInTheDocument();
+    expect(screen.getByText("82")).toBeInTheDocument();
+    expect(screen.getByText(/lead time p95 is 1.8x p50/)).toBeInTheDocument();
+  });
+
+  it("omits the health card when the scope has no data", async () => {
+    mockMetricsFetch({
+      "/api/metrics/health": { ...healthFixture, score: null, band: null, components: [] },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
+    expect(screen.queryByText("Delivery health")).toBeNull();
   });
 });
 

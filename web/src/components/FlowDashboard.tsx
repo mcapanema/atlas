@@ -1,10 +1,14 @@
-import { Alert, Card, Col, Row, Skeleton } from "antd";
+import { Alert, Card, Col, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 
 import {
+  useAgingWip,
+  useDeliveryHealth,
   useFlowHistory,
   useFlowMetrics,
   useLeadTimeDistribution,
+  type AgingItem,
   type DurationStats,
   type MetricsScope,
 } from "../api/metrics";
@@ -21,15 +25,29 @@ import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { StatCard } from "./StatCard";
 
+const agingColumns: ColumnsType<AgingItem> = [
+  { title: "Title", dataIndex: "title" },
+  { title: "State", dataIndex: "state" },
+  { title: "Age", render: (_, item) => formatSeconds(item.age_seconds) },
+  {
+    title: "",
+    render: (_, item) => (item.over_p85 ? <Tag color="red">over P85</Tag> : null),
+  },
+];
+
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
 }
+
+const bandColor: Record<string, string> = { healthy: "green", warning: "orange", critical: "red" };
 
 export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const metrics = useFlowMetrics(scope);
   const history = useFlowHistory(scope);
   const distribution = useLeadTimeDistribution(scope);
   const snapshots = useMetricSnapshots(scope);
+  const aging = useAgingWip(scope);
+  const health = useDeliveryHealth(scope);
 
   const cfdOption = useMemo(
     () => (history.data ? buildCfdOption(history.data.days) : null),
@@ -80,6 +98,8 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
               data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"
             }
           />
+          <StatCard title="Queue time P50" value={duration(data.queue_time, "p50_seconds")} />
+          <StatCard title="Touch time P50" value={duration(data.touch_time, "p50_seconds")} />
         </Row>
       )}
       {cfdOption && throughputOption && wipOption && (
@@ -114,6 +134,36 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
             </Col>
           )}
         </Row>
+      )}
+      {health.data && health.data.score != null && health.data.band != null && (
+        <Card title="Delivery health">
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <Space>
+              <Tag color={bandColor[health.data.band]}>{health.data.band}</Tag>
+              <Typography.Text strong style={{ fontSize: 24 }}>
+                {health.data.score}
+              </Typography.Text>
+            </Space>
+            <ul style={{ marginBottom: 0 }}>
+              {health.data.components.map((c) => (
+                <li key={c.name}>
+                  <b>{c.name}</b> {c.score} — {c.reason}
+                </li>
+              ))}
+            </ul>
+          </Space>
+        </Card>
+      )}
+      {aging.data && aging.data.items.length > 0 && (
+        <Card title="Aging WIP">
+          <Table
+            size="small"
+            rowKey="work_item_id"
+            pagination={false}
+            columns={agingColumns}
+            dataSource={aging.data.items}
+          />
+        </Card>
       )}
       <ForecastCard scope={scope} />
     </>

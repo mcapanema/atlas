@@ -158,3 +158,79 @@ async def test_lead_time_distribution_requires_exactly_one_scope(client: AsyncCl
             f"/api/metrics/lead-time-distribution?team_id={uuid4()}&project_id={uuid4()}"
         )
     ).status_code == 422
+
+
+async def test_flow_metrics_include_queue_and_touch_time(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+
+    body = (await client.get(f"/api/metrics?team_id={team_id}")).json()
+
+    assert body["queue_time"]["p50_seconds"] == pytest.approx(4 * 86400)
+    assert body["touch_time"]["p50_seconds"] == pytest.approx(4 * 86400)
+
+
+async def test_aging_wip_end_to_end(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Stuck"})
+    ).json()
+    for type_, days in (("created", 10), ("started", 6)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+
+    response = await client.get(f"/api/metrics/aging-wip?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cycle_time_p85_seconds"] is None
+    (aging_item,) = body["items"]
+    assert aging_item["title"] == "Stuck"
+    assert aging_item["over_p85"] is False
+    assert aging_item["age_seconds"] > 5 * 86400
+
+
+async def test_aging_wip_for_unknown_team_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/metrics/aging-wip?team_id={uuid4()}")
+    assert response.status_code == 404
+
+
+async def test_aging_wip_requires_exactly_one_scope(client: AsyncClient) -> None:
+    assert (await client.get("/api/metrics/aging-wip")).status_code == 422
+
+
+async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+
+    response = await client.get(f"/api/metrics/health?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert 0 <= body["score"] <= 100
+    assert body["band"] in ("healthy", "warning", "critical")
+    assert "predictability" in [c["name"] for c in body["components"]]
+
+
+async def test_delivery_health_for_unknown_team_is_404(client: AsyncClient) -> None:
+    assert (await client.get(f"/api/metrics/health?team_id={uuid4()}")).status_code == 404
+
+
+async def test_delivery_health_requires_exactly_one_scope(client: AsyncClient) -> None:
+    assert (await client.get("/api/metrics/health")).status_code == 422

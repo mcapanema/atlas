@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.domain.advisor.entities import DeliveryAdvice, Recommendation
+from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
 
 
 def _recommendation(**overrides: object) -> Recommendation:
@@ -50,3 +50,12 @@ def test_advice_rejects_blank_summary() -> None:
             summary="  ",
             recommendations=(),
         )
+
+
+def test_persona_wire_values() -> None:
+    assert [p.value for p in Persona] == [
+        "agile_coach",
+        "engineering_advisor",
+        "project_advisor",
+        "delivery_analyst",
+    ]

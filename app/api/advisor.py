@@ -4,6 +4,7 @@ from app.api.deps import AdvisorPortDep, AdvisorServiceDep, SessionDep
 from app.api.schemas import DeliveryAdviceRead, IntegrationStatusRead
 from app.api.scope import ScopeDep
 from app.config import get_settings
+from app.domain.advisor.entities import Persona
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -26,6 +27,12 @@ async def get_recommendations(
     session: SessionDep,
     scope: ScopeDep,
     window_days: int = Query(default=30, ge=7, le=365),
+    # ponytail: no ge/le-style constraint needed, so a plain default (not
+    # Query(default=...)) is enough — FastAPI still treats it as a query
+    # param and 422s on an unrecognized value. Query() also works but ruff's
+    # B008 check doesn't recognize Enum defaults as exempt like it does for
+    # int/str/None.
+    persona: Persona = Persona.AGILE_COACH,
 ) -> DeliveryAdviceRead:
     context = await service.build_context(
         team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
@@ -33,5 +40,5 @@ async def get_recommendations(
     # Release the read transaction before the LLM call — holding it open
     # would block every SQLite writer for up to 120 seconds.
     await session.commit()
-    advice = await advisor.advise(context)
+    advice = await advisor.advise(context, persona=persona)
     return DeliveryAdviceRead.model_validate(advice)

@@ -23,6 +23,8 @@ export interface FlowMetrics {
   cycle_time: DurationStats | null;
   blocked_seconds: number;
   flow_efficiency: number | null;
+  queue_time: DurationStats | null;
+  touch_time: DurationStats | null;
 }
 
 export interface FlowHistory {
@@ -80,5 +82,60 @@ export function useLeadTimeDistribution(scope: MetricsScope) {
     enabled: param !== null,
     queryFn: () =>
       apiFetch<LeadTimeDistribution>(`/api/metrics/lead-time-distribution?${param}`),
+  });
+}
+
+export interface AgingItem {
+  work_item_id: string;
+  title: string;
+  state: string;
+  age_seconds: number;
+  over_p85: boolean;
+}
+
+export interface AgingWip {
+  now: string;
+  cycle_time_p85_seconds: number | null;
+  items: AgingItem[];
+}
+
+export function useAgingWip(scope: MetricsScope) {
+  const param = scopeParam(scope);
+  return useQuery({
+    queryKey: ["metrics", "aging-wip", scope],
+    enabled: param !== null,
+    queryFn: () => apiFetch<AgingWip>(`/api/metrics/aging-wip?${param}`),
+  });
+}
+
+export interface HealthComponent {
+  name: string;
+  score: number;
+  reason: string;
+}
+
+export interface DeliveryHealth {
+  window_start: string;
+  window_end: string;
+  score: number | null;
+  band: "healthy" | "warning" | "critical" | null;
+  components: HealthComponent[];
+}
+
+export function useDeliveryHealth(scope: MetricsScope) {
+  const param = scopeParam(scope);
+  return useQuery({
+    queryKey: ["metrics", "health", scope],
+    enabled: param !== null,
+    queryFn: () => apiFetch<DeliveryHealth>(`/api/metrics/health?${param}`),
+  });
+}
+
+export function useAllTeamsHealth(teams: Team[]) {
+  return useQueries({
+    queries: teams.map((team) => ({
+      queryKey: ["metrics", "health", { teamId: team.id }],
+      queryFn: () => apiFetch<DeliveryHealth>(`/api/metrics/health?team_id=${team.id}`),
+    })),
   });
 }

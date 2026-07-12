@@ -110,10 +110,27 @@ describe("AdvisorPage", () => {
 
     renderPage();
 
-    fireEvent.mouseDown(await screen.findByRole("combobox"));
+    fireEvent.mouseDown((await screen.findAllByRole("combobox"))[0]);
     fireEvent.click(await screen.findByTitle(teamFixture.name));
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+  });
+
+  it("sends the selected persona with the advice request", async () => {
+    mockFetch();
+
+    renderPage(`/advisor?team=${teamFixture.id}&persona=delivery_analyst`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+
+    await waitFor(() =>
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+        `/api/recommendations?team_id=${teamFixture.id}&persona=delivery_analyst`,
+      ),
+    );
   });
 
   it("surfaces an advisor status failure instead of silently disabling the button", async () => {

@@ -7,12 +7,13 @@ copies of this loop is exactly where remaining-count bugs hide.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from app.domain.events.entities import Event
 from app.domain.events.repository import EventRepository
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
+from app.domain.work_items.entities import WorkItem
 from app.domain.work_items.repository import WorkItemRepository
 
 
@@ -23,11 +24,14 @@ class ScopeSamples:
     `streams` holds one occurred_at-ordered event list per work item that
     has events. `item_count` counts every item in the scope, including
     eventless backlog — it is the forecast's remaining-work denominator.
+    `items_with_samples` pairs each evented item with its derived sample
+    (aging WIP needs item identity).
     """
 
     streams: list[list[Event]]
     samples: list[FlowSample]
     item_count: int
+    items_with_samples: list[tuple[WorkItem, FlowSample]] = field(default_factory=list)
 
 
 class ScopeSampleLoader:
@@ -45,10 +49,19 @@ class ScopeSampleLoader:
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
         for event in events:
             by_item[event.work_item_id].append(event)
-        streams = [by_item[item.id] for item in items if by_item[item.id]]
-        samples = [
-            sample
-            for stream in streams
-            if (sample := derive_flow_sample(stream)) is not None
-        ]
-        return ScopeSamples(streams=streams, samples=samples, item_count=len(items))
+        streams: list[list[Event]] = []
+        items_with_samples: list[tuple[WorkItem, FlowSample]] = []
+        for item in items:
+            stream = by_item[item.id]
+            if not stream:
+                continue
+            streams.append(stream)
+            sample = derive_flow_sample(stream)
+            if sample is not None:
+                items_with_samples.append((item, sample))
+        return ScopeSamples(
+            streams=streams,
+            samples=[sample for _, sample in items_with_samples],
+            item_count=len(items),
+            items_with_samples=items_with_samples,
+        )

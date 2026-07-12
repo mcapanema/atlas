@@ -83,3 +83,20 @@ def test_compute_flow_metrics_with_no_samples_is_empty() -> None:
     assert metrics.cycle_time is None
     assert metrics.blocked_time == timedelta(0)
     assert metrics.flow_efficiency is None
+
+
+def test_flow_metrics_include_queue_and_touch_time() -> None:
+    now = datetime(2026, 7, 10, tzinfo=UTC)
+    sample = FlowSample(
+        created_at=now - timedelta(days=10),
+        started_at=now - timedelta(days=6),
+        completed_at=now - timedelta(days=2),
+        blocked_time=timedelta(days=1),
+    )
+
+    metrics = compute_flow_metrics([sample], now=now)
+
+    assert metrics.queue_time is not None
+    assert metrics.queue_time.p50 == timedelta(days=5)  # 4d pre-start wait + 1d blocked
+    assert metrics.touch_time is not None
+    assert metrics.touch_time.p50 == timedelta(days=3)  # 4d cycle - 1d blocked

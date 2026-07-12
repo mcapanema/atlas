@@ -178,3 +178,53 @@ async def test_precomputed_scope_skips_repository_loading() -> None:
     assert metrics.completed == 1
     assert sum(b.completed for b in history.weeks) == 1
     assert sum(b.count for b in distribution.bins) == 1
+
+
+async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
+    team_id = uuid4()
+    old, young, done = _item(team_id), _item(team_id), _item(team_id)
+    service = MetricsService(
+        InMemoryWorkItemRepository([old, young, done]),
+        InMemoryEventRepository(
+            [
+                _event(old, EventType.CREATED, 12),
+                _event(old, EventType.STARTED, 10),
+                _event(young, EventType.CREATED, 3),
+                _event(young, EventType.STARTED, 2),
+                _event(done, EventType.CREATED, 9),
+                _event(done, EventType.STARTED, 8),
+                _event(done, EventType.COMPLETED, 1),
+            ]
+        ),
+    )
+
+    aging = await service.get_aging_wip(team_id=team_id, now=NOW)
+
+    assert [a.work_item_id for a in aging.items] == [old.id, young.id]
+    assert aging.items[0].age == timedelta(days=10)
+    assert aging.cycle_time_p85 == timedelta(days=7)
+    assert aging.items[0].over_p85 is True
+    assert aging.items[1].over_p85 is False
+
+
+async def test_delivery_health_for_team() -> None:
+    team_id = uuid4()
+    done, doing = _item(team_id), _item(team_id)
+    service = MetricsService(
+        InMemoryWorkItemRepository([done, doing]),
+        InMemoryEventRepository(
+            [
+                _event(done, EventType.CREATED, 10),
+                _event(done, EventType.STARTED, 8),
+                _event(done, EventType.COMPLETED, 2),
+                _event(doing, EventType.CREATED, 5),
+                _event(doing, EventType.STARTED, 4),
+            ]
+        ),
+    )
+
+    health = await service.get_delivery_health(team_id=team_id, now=NOW)
+
+    assert health.score is not None
+    assert health.band in ("healthy", "warning", "critical")
+    assert any(c.name == "risk" for c in health.components)

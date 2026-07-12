@@ -29,13 +29,20 @@ export function useAdvisorStatus() {
   });
 }
 
-export function useAdvice(scope: MetricsScope) {
+export type Persona =
+  | "agile_coach"
+  | "engineering_advisor"
+  | "project_advisor"
+  | "delivery_analyst";
+
+export function useAdvice(scope: MetricsScope, persona: Persona) {
   const param = scopeParam(scope);
   return useQuery({
-    queryKey: ["advisor", "advice", scope],
+    queryKey: ["advisor", "advice", scope, persona],
     // Expensive LLM call — never auto-fetch; the page triggers refetch() explicitly.
     enabled: false,
     staleTime: Infinity,
-    queryFn: () => apiFetch<DeliveryAdvice>(`/api/recommendations?${param}`),
+    queryFn: () =>
+      apiFetch<DeliveryAdvice>(`/api/recommendations?${param}&persona=${persona}`),
   });
 }
