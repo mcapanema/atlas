@@ -9,6 +9,7 @@ from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
+from app.application.personas.service import PersonaService
 from app.application.projects.service import ProjectService
 from app.application.snapshots.service import SnapshotService
 from app.application.sync.service import SyncService
@@ -22,6 +23,10 @@ from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
+from app.infrastructure.repositories.personas import (
+    SqlAlchemyAdviceFeedbackRepository,
+    SqlAlchemyPersonaGuidanceRepository,
+)
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.snapshots import (
     SqlAlchemyForecastSnapshotRepository,
@@ -126,6 +131,16 @@ def get_advisor_service(
 
 
 AdvisorServiceDep = Annotated[AdvisorService, Depends(get_advisor_service)]
+
+
+def get_persona_service(session: SessionDep) -> PersonaService:
+    return PersonaService(
+        SqlAlchemyAdviceFeedbackRepository(session),
+        SqlAlchemyPersonaGuidanceRepository(session),
+    )
+
+
+PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
 
 
 def get_delivery_data_source() -> DeliveryDataSource:

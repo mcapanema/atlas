@@ -15,6 +15,7 @@ from app.api import (
     health,
     metrics,
     organizations,
+    personas,
     projects,
     teams,
     work_items,
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(forecasts.router)
     app.include_router(connectors.router)
     app.include_router(advisor.router)
+    app.include_router(personas.router)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
