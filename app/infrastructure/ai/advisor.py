@@ -48,6 +48,16 @@ _PERSONA_ROLE: dict[Persona, str] = {
 }
 
 
+_CRITIQUE_PROMPT = (
+    "You review draft delivery advice before it reaches an Engineering "
+    "Manager. Check, tersely and concretely: (1) every evidence value "
+    "literally appears in the provided metrics; (2) each root cause actually "
+    "follows from the evidence; (3) each action is one concrete next step; "
+    "(4) priorities match impact. List only real problems, one line each. "
+    "If the draft is sound, reply exactly: No issues."
+)
+
+
 @lru_cache(maxsize=1)
 def _knowledge() -> str:
     return (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
@@ -231,6 +241,8 @@ class OpenRouterAdvisor:
         api_key: str,
         model: str,
         client_factory: Callable[[], httpx.AsyncClient] | None = None,
+        *,
+        self_critique: bool = False,
     ) -> None:
         # One code path serves tests and production: tests inject a factory
         # returning a MockTransport-backed client; production builds a real
@@ -244,6 +256,7 @@ class OpenRouterAdvisor:
         )
         self._api_key = api_key
         self._model = model
+        self._self_critique = self_critique
 
     async def _complete(
         self,
@@ -273,12 +286,41 @@ class OpenRouterAdvisor:
         persona: Persona = Persona.AGILE_COACH,
         guidance: str | None = None,
     ) -> DeliveryAdvice:
+        user_content = _render_context(context)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _system_prompt(persona, guidance)},
-            {"role": "user", "content": _render_context(context)},
+            {"role": "user", "content": user_content},
         ]
         async with self._client_factory() as client:
             content = await self._complete(client, messages, _ADVICE_FORMAT)
+            if self._self_critique:
+                # ponytail: fixed single critique round (~3x cost); make the
+                # round count configurable only if quality data ever demands it.
+                critique = await self._complete(
+                    client,
+                    [
+                        {"role": "system", "content": _CRITIQUE_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Metrics provided to the advisor:\n{user_content}\n\n"
+                                f"Draft advice JSON:\n{content}"
+                            ),
+                        },
+                    ],
+                )
+                messages += [
+                    {"role": "assistant", "content": content},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"A reviewer critiqued your draft:\n{critique}\n\n"
+                            "Produce the final advice, fixing every valid point. "
+                            "Same JSON schema as before."
+                        ),
+                    },
+                ]
+                content = await self._complete(client, messages, _ADVICE_FORMAT)
         try:
             parsed = AdviceOut.model_validate_json(content)
         except ValidationError as exc:

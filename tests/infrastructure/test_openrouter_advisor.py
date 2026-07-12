@@ -346,3 +346,68 @@ async def test_reflect_raises_advisor_error_on_api_error() -> None:
         await advisor.reflect(
             persona=Persona.AGILE_COACH, feedback=_feedback_entries(), current_guidance=None
         )
+
+
+def _sequenced_client(
+    responses: list[httpx.Response], captured: list[httpx.Request]
+) -> httpx.AsyncClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return responses[len(captured) - 1]
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+async def test_self_critique_runs_draft_critique_revise() -> None:
+    revised = AdviceOut(summary="Revised after critique.", recommendations=[])
+    responses = [
+        httpx.Response(
+            200, json={"choices": [{"message": {"content": _advice_out().model_dump_json()}}]}
+        ),
+        httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "Evidence 'wip=99' is not in the metrics."}}
+                ]
+            },
+        ),
+        httpx.Response(
+            200, json={"choices": [{"message": {"content": revised.model_dump_json()}}]}
+        ),
+    ]
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _sequenced_client(responses, captured),
+        self_critique=True,
+    )
+
+    advice = await advisor.advise(_context())
+
+    assert advice.summary == "Revised after critique."
+    assert len(captured) == 3
+    critique_body = json.loads(captured[1].content)
+    assert "response_format" not in critique_body  # critique is free text
+    assert "wip=5" in critique_body["messages"][1]["content"]  # sees the metrics
+    revise_body = json.loads(captured[2].content)
+    assert revise_body["messages"][2]["role"] == "assistant"  # draft is in-context
+    assert "wip=99" in revise_body["messages"][3]["content"]  # critique is quoted
+    assert revise_body["response_format"]["json_schema"]["name"] == "delivery_advice"
+
+
+async def test_self_critique_off_is_a_single_call() -> None:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": _advice_out().model_dump_json()}}]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    await advisor.advise(_context())
+
+    assert len(captured) == 1

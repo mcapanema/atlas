@@ -109,7 +109,11 @@ def get_advisor_port() -> AdvisorPort:
             status_code=status.HTTP_409_CONFLICT,
             detail="Advisor is not configured; set ATLAS_OPENROUTER_API_KEY",
         )
-    return OpenRouterAdvisor(api_key=settings.openrouter_api_key, model=settings.advisor_model)
+    return OpenRouterAdvisor(
+        api_key=settings.openrouter_api_key,
+        model=settings.advisor_model,
+        self_critique=settings.advisor_self_critique,
+    )
 
 
 AdvisorPortDep = Annotated[AdvisorPort, Depends(get_advisor_port)]
