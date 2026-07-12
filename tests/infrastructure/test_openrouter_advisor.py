@@ -18,6 +18,7 @@ from app.infrastructure.ai.advisor import (
     AdviceOut,
     OpenRouterAdvisor,
     RecommendationOut,
+    _knowledge,
     _render_context,
     _system_prompt,
 )
@@ -211,11 +212,38 @@ async def test_advise_raises_advisor_error_on_non_json_body() -> None:
         await advisor.advise(_context())
 
 
-def test_system_prompt_is_lazy_and_cached() -> None:
-    _system_prompt.cache_clear()
+def test_knowledge_file_is_read_once() -> None:
+    _knowledge.cache_clear()
     prompt = _system_prompt(Persona.AGILE_COACH)
     assert "Little's Law" in prompt  # knowledge base is embedded
-    assert _system_prompt(Persona.AGILE_COACH) is prompt  # read once, cached
+    _system_prompt(Persona.AGILE_COACH)
+    assert _knowledge.cache_info().misses == 1
+
+
+def test_system_prompt_appends_learned_guidance() -> None:
+    base = _system_prompt(Persona.AGILE_COACH)
+    grown = _system_prompt(Persona.AGILE_COACH, "Prefer WIP actions over staffing advice.")
+    assert grown.startswith(base)  # static base is untouched; learning only appends
+    assert "Learned guidance" in grown
+    assert "Prefer WIP actions" in grown
+    assert _system_prompt(Persona.AGILE_COACH, None) == base
+
+
+async def test_advise_puts_guidance_in_the_system_message() -> None:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": _advice_out().model_dump_json()}}]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    await advisor.advise(_context(), guidance="Prefer WIP actions over staffing advice.")
+
+    body = json.loads(captured[0].content)
+    assert "Prefer WIP actions" in body["messages"][0]["content"]
 
 
 def test_system_prompt_varies_by_persona() -> None:

@@ -48,12 +48,18 @@ _PERSONA_ROLE: dict[Persona, str] = {
 }
 
 
-@lru_cache(maxsize=len(Persona))
-def _system_prompt(persona: Persona) -> str:
-    """Build the persona's system prompt on first use; the knowledge file is read once per
-    persona."""
-    knowledge = (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
-    return f"""{_PERSONA_ROLE[persona]} You help Engineering Managers improve \
+@lru_cache(maxsize=1)
+def _knowledge() -> str:
+    return (Path(__file__).parent / "knowledge" / "flow_coaching.md").read_text()
+
+
+def _system_prompt(persona: Persona, guidance: str | None = None) -> str:
+    """Compose the persona prompt: static role + knowledge base + learned guidance.
+
+    The static parts are the immutable safe base; learning (the reflected
+    guidance note) can only append — it can never rewrite the persona.
+    """
+    prompt = f"""{_PERSONA_ROLE[persona]} You help Engineering Managers improve \
 software delivery using Lean and Kanban flow thinking.
 
 Ground every claim in the knowledge base below and in the metrics provided by \
@@ -72,7 +78,14 @@ and return fewer (or zero) recommendations rather than speculating.
 
 Knowledge base:
 
-{knowledge}"""
+{_knowledge()}"""
+    if guidance:
+        prompt += (
+            "\n\nLearned guidance (distilled from Engineering Manager feedback on "
+            "your past advice; follow it unless it conflicts with the rules above):\n\n"
+            f"{guidance}"
+        )
+    return prompt
 
 
 class RecommendationOut(BaseModel):
@@ -194,14 +207,18 @@ class OpenRouterAdvisor:
         self._model = model
 
     async def advise(
-        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        self,
+        context: DeliveryContext,
+        *,
+        persona: Persona = Persona.AGILE_COACH,
+        guidance: str | None = None,
     ) -> DeliveryAdvice:
         request_kwargs: dict[str, Any] = {
             "headers": {"Authorization": f"Bearer {self._api_key}"},
             "json": {
                 "model": self._model,
                 "messages": [
-                    {"role": "system", "content": _system_prompt(persona)},
+                    {"role": "system", "content": _system_prompt(persona, guidance)},
                     {"role": "user", "content": _render_context(context)},
                 ],
                 "response_format": {

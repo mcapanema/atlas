@@ -27,8 +27,16 @@ class DeliveryContext:
 
 
 class AdvisorPort(Protocol):
-    """Reasoning adapter (an LLM). Explains metrics; never computes them."""
+    """Reasoning adapter (an LLM). Explains metrics; never computes them.
+
+    `guidance` is the persona's learned note (latest PersonaGuidance version),
+    appended to the static system prompt by the adapter.
+    """
 
     async def advise(
-        self, context: DeliveryContext, *, persona: Persona = Persona.AGILE_COACH
+        self,
+        context: DeliveryContext,
+        *,
+        persona: Persona = Persona.AGILE_COACH,
+        guidance: str | None = None,
     ) -> DeliveryAdvice: ...
