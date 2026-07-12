@@ -1,7 +1,7 @@
 import { Alert, Button, Card, List, Select, Space, Tag, Typography } from "antd";
 import { useSearchParams } from "react-router-dom";
 
-import { useAdvice, useAdvisorStatus } from "../api/advisor";
+import { useAdvice, useAdvisorStatus, type Persona } from "../api/advisor";
 import { useTeams } from "../api/teams";
 
 const priorityColor: Record<string, string> = {
@@ -10,12 +10,26 @@ const priorityColor: Record<string, string> = {
   low: "blue",
 };
 
+const PERSONA_OPTIONS = [
+  { value: "agile_coach", label: "Agile Coach" },
+  { value: "engineering_advisor", label: "Engineering Advisor" },
+  { value: "project_advisor", label: "Project Advisor" },
+  { value: "delivery_analyst", label: "Delivery Analyst" },
+];
+
 export function AdvisorPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const teamId = searchParams.get("team") ?? undefined;
   const teams = useTeams();
   const status = useAdvisorStatus();
-  const advice = useAdvice({ teamId });
+  const persona = (searchParams.get("persona") as Persona | null) ?? "agile_coach";
+  const advice = useAdvice({ teamId }, persona);
+
+  const setParam = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set(key, value);
+    setSearchParams(next);
+  };
 
   if (teams.isError) {
     return <Alert type="error" message="Failed to load teams" />;
@@ -43,9 +57,15 @@ export function AdvisorPage() {
             style={{ width: 260 }}
             placeholder="Select a team"
             value={teamId}
-            onChange={(value) => setSearchParams({ team: value })}
+            onChange={(value) => setParam("team", value)}
             loading={teams.isLoading}
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
+          />
+          <Select
+            style={{ width: 220 }}
+            value={persona}
+            onChange={(value) => setParam("persona", value)}
+            options={PERSONA_OPTIONS}
           />
           <Button
             type="primary"
