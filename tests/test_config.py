@@ -6,7 +6,7 @@ from app.config import Settings
 
 # Scrubbed from the real environment so a developer's shell or CI can't
 # leak into assertions.
-_VARS = ("ATLAS_DATABASE_URL", "ATLAS_DB_ECHO", "ATLAS_ADVISOR_MODEL")
+_VARS = ("ATLAS_DATABASE_URL", "ATLAS_DB_ECHO", "ATLAS_ADVISOR_MODEL", "ATLAS_MCP_TOKEN")
 
 
 @pytest.fixture(autouse=True)
@@ -52,3 +52,12 @@ def test_real_env_var_beats_env_file(
     monkeypatch.setenv("ATLAS_ADVISOR_MODEL", "model-from-env")
 
     assert Settings(_env_file=env_file).advisor_model == "model-from-env"
+
+
+def test_mcp_token_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.mcp_token is None
+
+    monkeypatch.setenv("ATLAS_MCP_TOKEN", "sekret")
+    assert Settings(_env_file=None).mcp_token == "sekret"
