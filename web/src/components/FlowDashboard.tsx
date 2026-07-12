@@ -1,6 +1,7 @@
-import { Alert, Card, Col, Row, Skeleton, Table, Tag } from "antd";
+import { Alert, Card, Col, Row, Skeleton, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import {
   useAgingWip,
@@ -30,7 +31,11 @@ import { HealthBadge } from "./HealthBadge";
 import { StatCard } from "./StatCard";
 
 const agingColumns: ColumnsType<AgingItem> = [
-  { title: "Title", dataIndex: "title" },
+  {
+    title: "Title",
+    dataIndex: "title",
+    render: (title, item) => <Link to={`/work-items/${item.work_item_id}`}>{title}</Link>,
+  },
   { title: "State", dataIndex: "state" },
   { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
   {
@@ -127,7 +132,7 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
 
   const data = metrics.data;
   return (
-    <>
+    <Space direction="vertical" style={{ width: "100%" }} size="large">
       {health.data && health.data.score != null && health.data.band != null && (
         <HealthStrip
           health={health.data}
@@ -198,6 +203,6 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
         </Card>
       )}
       <ForecastCard scope={scope} />
-    </>
+    </Space>
   );
 }
