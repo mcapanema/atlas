@@ -84,3 +84,26 @@ export function useLeadTimeDistribution(scope: MetricsScope) {
       apiFetch<LeadTimeDistribution>(`/api/metrics/lead-time-distribution?${param}`),
   });
 }
+
+export interface AgingItem {
+  work_item_id: string;
+  title: string;
+  state: string;
+  age_seconds: number;
+  over_p85: boolean;
+}
+
+export interface AgingWip {
+  now: string;
+  cycle_time_p85_seconds: number | null;
+  items: AgingItem[];
+}
+
+export function useAgingWip(scope: MetricsScope) {
+  const param = scopeParam(scope);
+  return useQuery({
+    queryKey: ["metrics", "aging-wip", scope],
+    enabled: param !== null,
+    queryFn: () => apiFetch<AgingWip>(`/api/metrics/aging-wip?${param}`),
+  });
+}

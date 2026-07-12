@@ -1,10 +1,13 @@
-import { Alert, Card, Col, Row, Skeleton } from "antd";
+import { Alert, Card, Col, Row, Skeleton, Table, Tag } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 
 import {
+  useAgingWip,
   useFlowHistory,
   useFlowMetrics,
   useLeadTimeDistribution,
+  type AgingItem,
   type DurationStats,
   type MetricsScope,
 } from "../api/metrics";
@@ -21,6 +24,16 @@ import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { StatCard } from "./StatCard";
 
+const agingColumns: ColumnsType<AgingItem> = [
+  { title: "Title", dataIndex: "title" },
+  { title: "State", dataIndex: "state" },
+  { title: "Age", render: (_, item) => formatSeconds(item.age_seconds) },
+  {
+    title: "",
+    render: (_, item) => (item.over_p85 ? <Tag color="red">over P85</Tag> : null),
+  },
+];
+
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
 }
@@ -30,6 +43,7 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   const history = useFlowHistory(scope);
   const distribution = useLeadTimeDistribution(scope);
   const snapshots = useMetricSnapshots(scope);
+  const aging = useAgingWip(scope);
 
   const cfdOption = useMemo(
     () => (history.data ? buildCfdOption(history.data.days) : null),
@@ -116,6 +130,17 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
             </Col>
           )}
         </Row>
+      )}
+      {aging.data && aging.data.items.length > 0 && (
+        <Card title="Aging WIP">
+          <Table
+            size="small"
+            rowKey="work_item_id"
+            pagination={false}
+            columns={agingColumns}
+            dataSource={aging.data.items}
+          />
+        </Card>
       )}
       <ForecastCard scope={scope} />
     </>

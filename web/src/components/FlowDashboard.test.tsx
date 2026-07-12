@@ -9,7 +9,7 @@ vi.mock("./EChart", () => ({
   },
 }));
 
-import { jsonResponse, metricsFixture, mockMetricsFetch } from "../test/fixtures";
+import { agingWipFixture, jsonResponse, metricsFixture, mockMetricsFetch } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
 
@@ -113,6 +113,25 @@ describe("FlowDashboard", () => {
 
     await waitFor(() => expect(screen.getByText("Queue time P50")).toBeInTheDocument());
     expect(screen.getByText("Touch time P50")).toBeInTheDocument();
+  });
+
+  it("renders the aging WIP table", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
+    expect(screen.getByText("Stuck item")).toBeInTheDocument();
+    expect(screen.getByText("over P85")).toBeInTheDocument();
+  });
+
+  it("omits the aging WIP card when nothing is in progress", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, items: [] } });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
+    expect(screen.queryByText("Aging WIP")).toBeNull();
   });
 });
 

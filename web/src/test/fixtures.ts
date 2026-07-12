@@ -128,6 +128,20 @@ export const accuracyFixture = {
   mean_abs_error_days: 2.5,
 };
 
+export const agingWipFixture = {
+  now: "2026-07-10T00:00:00Z",
+  cycle_time_p85_seconds: 259200,
+  items: [
+    {
+      work_item_id: "44444444-4444-4444-4444-444444444444",
+      title: "Stuck item",
+      state: "in_progress",
+      age_seconds: 518400,
+      over_p85: true,
+    },
+  ],
+};
+
 export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = String(input);
@@ -139,6 +153,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/forecasts/accuracy")) {
       return Promise.resolve(jsonResponse(accuracyFixture));
+    }
+    if (url.startsWith("/api/metrics/aging-wip")) {
+      return Promise.resolve(jsonResponse(agingWipFixture));
     }
     if (url.startsWith("/api/metrics/lead-time-distribution")) {
       return Promise.resolve(jsonResponse(distributionFixture));
