@@ -7,7 +7,7 @@ stdlib over Domain types; belongs to the advisor slice's data.
 
 from datetime import timedelta
 
-from app.domain.advisor.port import DeliveryContext
+from app.domain.advisor.port import DeliveryContext, MeetingContext
 
 
 def _days(delta: timedelta) -> str:
@@ -63,3 +63,40 @@ def render_context(context: DeliveryContext) -> str:
     if forecast.confidence is not None:
         lines.append(f"- delivery confidence vs target date={forecast.confidence:.2f}")
     return "\n".join(lines)
+
+
+_AGING_LIMIT = 10
+
+
+def render_meeting_context(context: MeetingContext) -> str:
+    """Render the meeting digest: advisor context + delivery health + aging WIP.
+
+    Same vocabulary as the MCP meeting_brief tool — one meeting-prep
+    rendering whether the LLM is external (MCP) or internal (OpenRouter).
+    """
+    blocks = [render_context(context.delivery)]
+
+    health = context.health
+    if health.score is None:
+        blocks.append("Delivery health: not enough data to score.")
+    else:
+        lines = [f"Delivery health: {health.score}/100 ({health.band})"]
+        lines += [f"- {c.name} {c.score}: {c.reason}" for c in health.components]
+        blocks.append("\n".join(lines))
+
+    aging = context.aging
+    if not aging.items:
+        blocks.append("Aging WIP: nothing in progress.")
+    else:
+        header = "Aging WIP"
+        if aging.cycle_time_p85 is not None:
+            header += f" (cycle-time p85 = {_days(aging.cycle_time_p85)})"
+        lines = [header + ":"]
+        for item in aging.items[:_AGING_LIMIT]:
+            flag = " [over p85]" if item.over_p85 else ""
+            lines.append(f"- {item.title} — {item.state}, {_days(item.age)}{flag}")
+        if len(aging.items) > _AGING_LIMIT:
+            lines.append(f"... and {len(aging.items) - _AGING_LIMIT} more")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)

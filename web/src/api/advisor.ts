@@ -33,7 +33,10 @@ export type Persona =
   | "agile_coach"
   | "engineering_advisor"
   | "project_advisor"
-  | "delivery_analyst";
+  | "delivery_analyst"
+  | "daily_standup"
+  | "retrospective"
+  | "planning";
 
 export function useAdvice(scope: MetricsScope, persona: Persona) {
   const param = scopeParam(scope);

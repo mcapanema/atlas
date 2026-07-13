@@ -5,21 +5,26 @@ from typing import Any
 import httpx
 import pytest
 
-from app.domain.advisor.entities import AdviceFeedback, Persona
-from app.domain.advisor.port import AdvisorError, DeliveryContext
+from app.domain.advisor.entities import AdviceFeedback, MeetingType, Persona
+from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
 from app.domain.advisor.render import render_context
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
     DeliveryForecast,
     OutcomeBucket,
 )
+from app.domain.metrics.aging import AgingWip
 from app.domain.metrics.distribution import DurationBin, LeadTimeDistribution
+from app.domain.metrics.health import DeliveryHealth, HealthComponent
 from app.domain.metrics.summary import DurationStats, FlowMetrics
 from app.infrastructure.ai.advisor import (
     AdviceOut,
+    MeetingPrepOut,
     OpenRouterAdvisor,
     RecommendationOut,
+    TalkingPointOut,
     _knowledge,
+    _meeting_system_prompt,
     _system_prompt,
 )
 
@@ -374,3 +379,130 @@ async def test_self_critique_off_is_a_single_call() -> None:
     await advisor.advise(_context())
 
     assert len(captured) == 1
+
+
+def _meeting_context() -> MeetingContext:
+    return MeetingContext(
+        delivery=_context(),
+        health=DeliveryHealth(
+            window_start=_NOW - timedelta(days=30),
+            window_end=_NOW,
+            score=61,
+            band="warning",
+            components=(
+                HealthComponent(name="efficiency", score=42, reason="flow efficiency 42%"),
+            ),
+        ),
+        aging=AgingWip(now=_NOW, cycle_time_p85=timedelta(days=4), items=()),
+    )
+
+
+def _prep_out() -> MeetingPrepOut:
+    return MeetingPrepOut(
+        headline="One item is past the p85 age line.",
+        talking_points=[
+            TalkingPointOut(
+                point="Unstick 'Fix login'",
+                detail="In progress 6.0d against a 4.0d p85.",
+                evidence=["cycle-time p85 = 4.0d"],
+                needs_decision=True,
+            )
+        ],
+    )
+
+
+async def test_prepare_meeting_maps_structured_output_to_domain() -> None:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": _prep_out().model_dump_json()}}]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    prep = await advisor.prepare_meeting(_meeting_context(), meeting=MeetingType.DAILY_STANDUP)
+
+    assert prep.meeting is MeetingType.DAILY_STANDUP
+    assert prep.headline == "One item is past the p85 age line."
+    assert prep.talking_points[0].needs_decision is True
+    assert prep.talking_points[0].evidence == ("cycle-time p85 = 4.0d",)
+    assert prep.generated_at.tzinfo is not None
+    (request,) = captured
+    body = json.loads(request.content)
+    assert body["response_format"]["json_schema"]["name"] == "meeting_prep"
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert body["response_format"]["json_schema"]["schema"]["additionalProperties"] is False
+    # the user message carries the full meeting digest, health and aging included
+    assert "Delivery health: 61/100 (warning)" in body["messages"][1]["content"]
+    assert "completed=12" in body["messages"][1]["content"]
+
+
+def test_meeting_system_prompt_varies_by_meeting_and_keeps_grounding() -> None:
+    standup = _meeting_system_prompt(MeetingType.DAILY_STANDUP)
+    retro = _meeting_system_prompt(MeetingType.RETROSPECTIVE)
+    planning = _meeting_system_prompt(MeetingType.PLANNING)
+
+    assert "Standup Facilitator" in standup
+    assert "Retrospective Facilitator" in retro
+    assert "Planning Facilitator" in planning
+    assert standup != retro != planning
+    for prompt in (standup, retro, planning):
+        assert "never invent numbers" in prompt  # shared grounding survives
+        assert "Little's Law" in prompt  # knowledge base is embedded
+
+
+def test_meeting_system_prompt_appends_learned_guidance() -> None:
+    base = _meeting_system_prompt(MeetingType.PLANNING)
+    grown = _meeting_system_prompt(MeetingType.PLANNING, "Always show p95.")
+
+    assert grown.startswith(base)  # static base untouched; learning only appends
+    assert "Always show p95." in grown
+
+
+async def test_prepare_meeting_raises_advisor_error_on_bad_shape() -> None:
+    payload = {"choices": [{"message": {"content": json.dumps({"nope": 1})}}]}
+    advisor = _advisor_returning(httpx.Response(200, json=payload))
+
+    with pytest.raises(AdvisorError, match="unexpected shape"):
+        await advisor.prepare_meeting(_meeting_context(), meeting=MeetingType.PLANNING)
+
+
+async def test_prepare_meeting_raises_advisor_error_on_api_error() -> None:
+    advisor = _advisor_returning(httpx.Response(500, json={}))
+
+    with pytest.raises(AdvisorError, match="request failed"):
+        await advisor.prepare_meeting(_meeting_context(), meeting=MeetingType.RETROSPECTIVE)
+
+
+async def test_reflect_works_for_meeting_personas() -> None:
+    # _PERSONA_ROLE must cover meeting personas or reflect() raises KeyError.
+    payload = {
+        "choices": [
+            {"message": {"content": json.dumps({"guidance": "Lead with stuck items."})}}
+        ]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+    )
+
+    guidance = await advisor.reflect(
+        persona=Persona.DAILY_STANDUP,
+        feedback=[
+            AdviceFeedback(
+                persona=Persona.DAILY_STANDUP,
+                rating="up",
+                advice_summary="Good prep.",
+                created_at=_NOW,
+            )
+        ],
+        current_guidance=None,
+    )
+
+    assert guidance == "Lead with stuck items."
+    body = json.loads(captured[0].content)
+    assert "Standup Facilitator" in body["messages"][0]["content"]

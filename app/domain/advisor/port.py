@@ -4,9 +4,17 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona
+from app.domain.advisor.entities import (
+    AdviceFeedback,
+    DeliveryAdvice,
+    MeetingPrep,
+    MeetingType,
+    Persona,
+)
 from app.domain.forecasting.monte_carlo import DeliveryForecast
+from app.domain.metrics.aging import AgingWip
 from app.domain.metrics.distribution import LeadTimeDistribution
+from app.domain.metrics.health import DeliveryHealth
 from app.domain.metrics.summary import FlowMetrics
 
 
@@ -27,6 +35,16 @@ class DeliveryContext:
     forecast: DeliveryForecast
 
 
+@dataclass(frozen=True)
+class MeetingContext:
+    """Everything meeting prep may reason about — the advisor's delivery
+    context plus the health and aging views the MCP meeting_brief exposes."""
+
+    delivery: DeliveryContext
+    health: DeliveryHealth
+    aging: AgingWip
+
+
 class AdvisorPort(Protocol):
     """Reasoning adapter (an LLM). Explains metrics; never computes them.
 
@@ -41,6 +59,20 @@ class AdvisorPort(Protocol):
         persona: Persona = Persona.AGILE_COACH,
         guidance: str | None = None,
     ) -> DeliveryAdvice: ...
+
+    async def prepare_meeting(
+        self,
+        context: MeetingContext,
+        *,
+        meeting: MeetingType,
+        guidance: str | None = None,
+    ) -> MeetingPrep:
+        """Turn the meeting digest into a headline + talking points.
+
+        `guidance` is the meeting persona's learned note, same contract
+        as advise().
+        """
+        ...
 
     async def reflect(
         self,

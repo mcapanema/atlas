@@ -2,7 +2,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
+from app.domain.advisor.entities import (
+    DeliveryAdvice,
+    MeetingPrep,
+    MeetingType,
+    Persona,
+    Recommendation,
+    TalkingPoint,
+    meeting_persona,
+)
 
 
 def _recommendation(**overrides: object) -> Recommendation:
@@ -58,4 +66,44 @@ def test_persona_wire_values() -> None:
         "engineering_advisor",
         "project_advisor",
         "delivery_analyst",
+        "daily_standup",
+        "retrospective",
+        "planning",
     ]
+
+
+def test_meeting_persona_maps_each_meeting_type() -> None:
+    assert meeting_persona(MeetingType.DAILY_STANDUP) is Persona.DAILY_STANDUP
+    assert meeting_persona(MeetingType.RETROSPECTIVE) is Persona.RETROSPECTIVE
+    assert meeting_persona(MeetingType.PLANNING) is Persona.PLANNING
+
+
+def test_talking_point_rejects_blank_point() -> None:
+    with pytest.raises(ValueError, match="point"):
+        TalkingPoint(point="   ", detail="whatever")
+
+
+def test_talking_point_defaults() -> None:
+    tp = TalkingPoint(point="Unstick 'Fix login'", detail="6d against a 4d p85")
+    assert tp.evidence == ()
+    assert tp.needs_decision is False
+
+
+def test_meeting_prep_rejects_blank_headline() -> None:
+    with pytest.raises(ValueError, match="headline"):
+        MeetingPrep(
+            meeting=MeetingType.DAILY_STANDUP,
+            generated_at=datetime(2026, 7, 12, tzinfo=UTC),
+            headline="  ",
+            talking_points=(),
+        )
+
+
+def test_meeting_prep_rejects_naive_timestamp() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        MeetingPrep(
+            meeting=MeetingType.PLANNING,
+            generated_at=datetime(2026, 7, 12),  # noqa: DTZ001 — the point of the test
+            headline="Plan is at risk.",
+            talking_points=(),
+        )

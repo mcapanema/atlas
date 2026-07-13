@@ -161,3 +161,13 @@ as compact text, so analytics logic and error semantics live in exactly one
 place. `GET /api/recommendations/context` returns the advisor's digest as
 text for the same reason — a chat client brings its own LLM, so advice works
 without an OpenRouter key.
+
+Meeting preparation has two deliberate paths: **external** — the MCP prompts
+(`daily_standup`, `retrospective`, `planning`) instruct a connected chat AI
+(Claude/ChatGPT) to call Atlas's MCP tools; and **internal** — `GET
+/api/meetings/prep` builds the same digest (`MeetingContext` = advisor context
++ delivery health + aging WIP, rendered by `render_meeting_context`) and sends
+it to the OpenRouter advisor (`AdvisorPort.prepare_meeting`), so Atlas works
+stand-alone. Meeting types are backed by learnable personas (`daily_standup`,
+`retrospective`, `planning` in the `Persona` enum) that reuse the persona
+feedback/reflect/guidance machinery unchanged.

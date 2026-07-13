@@ -17,9 +17,18 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona, Recommendation
-from app.domain.advisor.port import AdvisorError, DeliveryContext
-from app.domain.advisor.render import render_context
+from app.domain.advisor.entities import (
+    AdviceFeedback,
+    DeliveryAdvice,
+    MeetingPrep,
+    MeetingType,
+    Persona,
+    Recommendation,
+    TalkingPoint,
+    meeting_persona,
+)
+from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
+from app.domain.advisor.render import render_context, render_meeting_context
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -45,6 +54,21 @@ _PERSONA_ROLE: dict[Persona, str] = {
         "You are Atlas's Delivery Analyst. Focus on the metrics themselves: "
         "distributions, trends, outliers, and historical comparisons — a deep, "
         "numbers-first read of the delivery data."
+    ),
+    Persona.DAILY_STANDUP: (
+        "You are Atlas's Standup Facilitator. Focus on today's execution: stuck "
+        "and blocked items, WIP discipline, and what needs a decision in the "
+        "next 24 hours."
+    ),
+    Persona.RETROSPECTIVE: (
+        "You are Atlas's Retrospective Facilitator. Focus on how the last "
+        "iteration actually flowed: trends, weak delivery-health components, "
+        "and open questions worth a team discussion."
+    ),
+    Persona.PLANNING: (
+        "You are Atlas's Planning Facilitator. Focus on whether the plan is "
+        "realistic: forecast dates, confidence against targets, and what to "
+        "drop or move to make commitments credible."
     ),
 }
 
@@ -99,6 +123,69 @@ Knowledge base:
     return prompt
 
 
+_MEETING_INSTRUCTIONS: dict[MeetingType, str] = {
+    MeetingType.DAILY_STANDUP: (
+        "Prepare talking points for today's daily standup. Report, in order: "
+        "items over the cycle-time p85 age line (by name), anything blocked, and "
+        "how WIP compares to the recent completion rate. At most 10 points, "
+        "ordered by what needs a decision in the meeting; mark those with "
+        "needs_decision. Flag anything the data cannot answer instead of guessing."
+    ),
+    MeetingType.RETROSPECTIVE: (
+        "Prepare talking points for a retrospective covering the flow window in "
+        "the metrics. Contrast that window against the trailing 90-day "
+        "distribution, call out the weakest delivery-health components, and "
+        "propose 2-3 discussion topics phrased as open questions for the team — "
+        "not verdicts — each grounded in a quoted number. Note explicitly where "
+        "the window is too small to trust a trend."
+    ),
+    MeetingType.PLANNING: (
+        "Prepare talking points for a planning session. Report the p50/p85/p95 "
+        "completion outlook and, when present, the confidence against the target "
+        "date; say plainly what would have to be dropped or moved for the plan "
+        "to be realistic. Recommend committing at p85, not p50, with a "
+        "one-sentence reason."
+    ),
+}
+
+
+def _meeting_system_prompt(meeting: MeetingType, guidance: str | None = None) -> str:
+    """Compose the meeting-prep prompt: persona role + task + knowledge + learning.
+
+    Same append-only learning contract as _system_prompt: the static parts
+    are the immutable safe base; guidance can only append.
+    """
+    prompt = f"""{_PERSONA_ROLE[meeting_persona(meeting)]} You help Engineering \
+Managers run better meetings using Lean and Kanban flow thinking.
+
+Ground every claim in the knowledge base below and in the metrics provided by \
+the user message. You never compute metrics yourself and never invent numbers: \
+every evidence entry must quote a value that literally appears in the provided \
+metrics (e.g. "wip=12", "lead time p85=8.0d").
+
+{_MEETING_INSTRUCTIONS[meeting]}
+
+Rules:
+- Write for an Engineering Manager: plain language, no jargon without a gloss.
+- Produce a one-sentence headline naming the single most important thing, then \
+the talking points, most important first.
+- Each talking point has a short point, a detail explaining it, and evidence \
+quoting the supporting values.
+- If the data is too sparse, say so in the headline and return fewer (or zero) \
+talking points rather than speculating.
+
+Knowledge base:
+
+{_knowledge()}"""
+    if guidance:
+        prompt += (
+            "\n\nLearned guidance (distilled from Engineering Manager feedback on "
+            "your past meeting preps; follow it unless it conflicts with the rules "
+            f"above):\n\n{guidance}"
+        )
+    return prompt
+
+
 class RecommendationOut(BaseModel):
     """Structured-output shape for one recommendation (wire format only)."""
 
@@ -131,6 +218,26 @@ class GuidanceOut(BaseModel):
     guidance: str
 
 
+class TalkingPointOut(BaseModel):
+    """Structured-output shape for one talking point (wire format only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    point: str
+    detail: str
+    evidence: list[str]
+    needs_decision: bool
+
+
+class MeetingPrepOut(BaseModel):
+    """Structured-output shape for a meeting prep (wire format only)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    headline: str
+    talking_points: list[TalkingPointOut]
+
+
 _ADVICE_FORMAT: dict[str, Any] = {
     "type": "json_schema",
     "json_schema": {
@@ -146,6 +253,15 @@ _GUIDANCE_FORMAT: dict[str, Any] = {
         "name": "persona_guidance",
         "strict": True,
         "schema": GuidanceOut.model_json_schema(),
+    },
+}
+
+_MEETING_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "meeting_prep",
+        "strict": True,
+        "schema": MeetingPrepOut.model_json_schema(),
     },
 }
 
@@ -287,6 +403,43 @@ class OpenRouterAdvisor:
                     evidence=tuple(r.evidence),
                 )
                 for r in parsed.recommendations
+            ),
+        )
+
+    async def prepare_meeting(
+        self,
+        context: MeetingContext,
+        *,
+        meeting: MeetingType,
+        guidance: str | None = None,
+    ) -> MeetingPrep:
+        # ponytail: no self-critique round for meeting prep — reuse advise()'s
+        # draft-critique-revise pattern here if prep quality ever demands it.
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": _meeting_system_prompt(meeting, guidance)},
+            {"role": "user", "content": render_meeting_context(context)},
+        ]
+        async with self._client_factory() as client:
+            content = await self._complete(client, messages, _MEETING_FORMAT)
+        try:
+            parsed = MeetingPrepOut.model_validate_json(content)
+        except ValidationError as exc:
+            logger.error("OpenRouter reply did not match the meeting-prep schema: %s", exc)
+            raise AdvisorError(
+                "OpenRouter returned meeting prep in an unexpected shape"
+            ) from exc
+        return MeetingPrep(
+            meeting=meeting,
+            generated_at=datetime.now(UTC),
+            headline=parsed.headline,
+            talking_points=tuple(
+                TalkingPoint(
+                    point=p.point,
+                    detail=p.detail,
+                    evidence=tuple(p.evidence),
+                    needs_decision=p.needs_decision,
+                )
+                for p in parsed.talking_points
             ),
         )
 
