@@ -4,7 +4,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona
+from app.domain.advisor.entities import (
+    AdviceFeedback,
+    DeliveryAdvice,
+    MeetingPrep,
+    MeetingType,
+    Persona,
+)
 from app.domain.forecasting.monte_carlo import DeliveryForecast
 from app.domain.metrics.aging import AgingWip
 from app.domain.metrics.distribution import LeadTimeDistribution
@@ -53,6 +59,20 @@ class AdvisorPort(Protocol):
         persona: Persona = Persona.AGILE_COACH,
         guidance: str | None = None,
     ) -> DeliveryAdvice: ...
+
+    async def prepare_meeting(
+        self,
+        context: MeetingContext,
+        *,
+        meeting: MeetingType,
+        guidance: str | None = None,
+    ) -> MeetingPrep:
+        """Turn the meeting digest into a headline + talking points.
+
+        `guidance` is the meeting persona's learned note, same contract
+        as advise().
+        """
+        ...
 
     async def reflect(
         self,
