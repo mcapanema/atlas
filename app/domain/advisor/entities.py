@@ -23,6 +23,25 @@ class Persona(StrEnum):
     PROJECT_ADVISOR = "project_advisor"
     DELIVERY_ANALYST = "delivery_analyst"
 
+    # Meeting personas: values match MeetingType so meeting preps plug into
+    # the same feedback/reflect/guidance machinery as the advisory personas.
+    DAILY_STANDUP = "daily_standup"
+    RETROSPECTIVE = "retrospective"
+    PLANNING = "planning"
+
+
+class MeetingType(StrEnum):
+    """A meeting the EM prepares for; each is backed by a learnable Persona."""
+
+    DAILY_STANDUP = "daily_standup"
+    RETROSPECTIVE = "retrospective"
+    PLANNING = "planning"
+
+
+def meeting_persona(meeting: MeetingType) -> Persona:
+    """The Persona that learns from feedback on this meeting type's preps."""
+    return Persona(meeting.value)
+
 
 @dataclass(frozen=True)
 class Recommendation:
@@ -55,6 +74,36 @@ class DeliveryAdvice:
             raise ValueError("generated_at must be timezone-aware")
         if not self.summary.strip():
             raise ValueError("summary must not be blank")
+
+
+@dataclass(frozen=True)
+class TalkingPoint:
+    """One meeting talking point, grounded in quoted metric values."""
+
+    point: str
+    detail: str
+    evidence: tuple[str, ...] = ()
+    needs_decision: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.point.strip():
+            raise ValueError("point must not be blank")
+
+
+@dataclass(frozen=True)
+class MeetingPrep:
+    """Meeting-prep output: a one-line headline + ordered talking points."""
+
+    meeting: MeetingType
+    generated_at: datetime
+    headline: str
+    talking_points: tuple[TalkingPoint, ...]
+
+    def __post_init__(self) -> None:
+        if self.generated_at.tzinfo is None:
+            raise ValueError("generated_at must be timezone-aware")
+        if not self.headline.strip():
+            raise ValueError("headline must not be blank")
 
 
 RATINGS = ("up", "down")
