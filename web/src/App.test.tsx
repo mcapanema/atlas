@@ -128,4 +128,17 @@ describe("App", () => {
       await screen.findByText("Project Dashboard", {}, { timeout: 5000 }),
     ).toBeInTheDocument();
   });
+
+  it("lists the Meetings entry in the Intelligence group and routes to it", async () => {
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter initialEntries={["/meetings"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("link", { name: "Meetings" })).toBeInTheDocument();
+    expect(await screen.findByText("Select a team to prepare a meeting.")).toBeInTheDocument();
+    expect(document.title).toBe("Atlas — Meetings");
+  });
 });

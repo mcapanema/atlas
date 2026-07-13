@@ -6,6 +6,7 @@ import { AppLayout } from "./components/AppLayout";
 import { AdvisorPage } from "./pages/AdvisorPage";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
 import { ExecutiveDashboardPage } from "./pages/ExecutiveDashboardPage";
+import { MeetingsPage } from "./pages/MeetingsPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { WorkItemPage } from "./pages/WorkItemPage";
 import { WorkItemsPage } from "./pages/WorkItemsPage";
@@ -32,6 +33,7 @@ export function App() {
           <Route path="/teams" element={<TeamDashboardPage />} />
           <Route path="/projects" element={<ProjectDashboardPage />} />
           <Route path="/advisor" element={<AdvisorPage />} />
+          <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/metrics" element={<Navigate to="/teams" replace />} />
           <Route path="/connectors" element={<ConnectorsPage />} />
         </Routes>

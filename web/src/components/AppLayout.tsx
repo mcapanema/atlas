@@ -8,6 +8,7 @@ import {
   MoonOutlined,
   ProfileOutlined,
   ProjectOutlined,
+  ScheduleOutlined,
   SunOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
@@ -44,6 +45,11 @@ const NAV: MenuProps["items"] = [
     label: "Intelligence",
     children: [
       { key: "/advisor", icon: <BulbOutlined />, label: <Link to="/advisor">Advisor</Link> },
+      {
+        key: "/meetings",
+        icon: <ScheduleOutlined />,
+        label: <Link to="/meetings">Meetings</Link>,
+      },
     ],
   },
   {
@@ -71,6 +77,7 @@ const TITLES: Record<string, string> = {
   projects: "Projects",
   "work-items": "Work Items",
   advisor: "Advisor",
+  meetings: "Meetings",
   organizations: "Organizations",
   connectors: "Connectors",
 };
