@@ -211,4 +211,81 @@ describe("MeetingsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Failed to load teams")).toBeInTheDocument());
   });
+
+  it("picks a team and meeting type from the selects and reflects it in the request", async () => {
+    mockFetch();
+
+    renderPage();
+
+    const comboboxes = await screen.findAllByRole("combobox");
+    fireEvent.mouseDown(comboboxes[0]);
+    fireEvent.click(await screen.findByTitle(teamFixture.name));
+
+    fireEvent.mouseDown(comboboxes[1]);
+    fireEvent.click(await screen.findByTitle("Retrospective"));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Sprint length (days)")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(
+        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
+      ).toContain(
+        `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
+      ),
+    );
+  });
+
+  it("sends an updated sprint length after changing the InputNumber", async () => {
+    mockFetch();
+
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=retrospective`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.change(screen.getByLabelText("Sprint length (days)"), {
+      target: { value: "21" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(
+        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
+      ).toContain(
+        `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=21`,
+      ),
+    );
+  });
+
+  it("submits a down-vote to the meeting persona with the prep headline", async () => {
+    mockFetch();
+
+    renderPage(`/meetings?team=${teamFixture.id}`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+    await waitFor(() =>
+      expect(screen.getByText("One item is past the p85 age line.")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Not helpful" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
+    );
+    const call = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
+    expect(String(call![0])).toBe("/api/personas/daily_standup/feedback");
+    expect(JSON.parse(String(call![1]!.body))).toEqual({
+      rating: "down",
+      comment: null,
+      advice_summary: "One item is past the p85 age line.",
+    });
+  });
 });
