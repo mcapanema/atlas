@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.advisor.entities import Persona
+from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
 from app.domain.work_items.entities import DEFAULT_STATE, WorkItemType
 
@@ -254,6 +254,24 @@ class AdviceContextRead(BaseModel):
     """The compact metrics digest the advisor reasons over, as plain text."""
 
     context: str
+
+
+class TalkingPointRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    point: str
+    detail: str
+    evidence: list[str]
+    needs_decision: bool
+
+
+class MeetingPrepRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    meeting: MeetingType
+    generated_at: datetime
+    headline: str
+    talking_points: list[TalkingPointRead]
 
 
 class MetricSnapshotRead(BaseModel):
