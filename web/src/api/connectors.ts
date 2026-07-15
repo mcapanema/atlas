@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "./client";
 
@@ -22,11 +22,16 @@ export function useLinearStatus() {
 }
 
 export function useLinearSync() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (organizationId: string) =>
+    // organization_id: null lets the server bootstrap the organization
+    // from the Linear workspace on first sync.
+    mutationFn: (organizationId?: string) =>
       apiFetch<SyncSummary>("/api/connectors/linear/sync", {
         method: "POST",
-        body: JSON.stringify({ organization_id: organizationId }),
+        body: JSON.stringify({ organization_id: organizationId ?? null }),
       }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["organizations"] }),
   });
 }
