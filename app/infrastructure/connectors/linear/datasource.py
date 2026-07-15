@@ -43,6 +43,12 @@ def _map_tolerantly[T](
     return mapped
 
 
+_ORGANIZATION_QUERY = """
+query Organization {
+  organization { name }
+}
+"""
+
 _TEAMS_QUERY = """
 query Teams($after: String) {
   teams(first: 100, after: $after) {
@@ -108,6 +114,16 @@ query Issues($after: String) {{
 class LinearDataSource:
     def __init__(self, client: LinearGraphQLClient) -> None:
         self._client = client
+
+    async def fetch_organization_name(self) -> str:
+        data = await self._client.execute(_ORGANIZATION_QUERY)
+        try:
+            name = data["organization"]["name"]
+        except (KeyError, TypeError) as exc:
+            raise LinearAPIError("Linear organization payload is malformed") from exc
+        if not isinstance(name, str):
+            raise LinearAPIError("Linear organization payload is malformed")
+        return name
 
     async def fetch_teams(self) -> list[SourceTeam]:
         return _map_tolerantly(await self._nodes(_TEAMS_QUERY, "teams"), map_team, "team")

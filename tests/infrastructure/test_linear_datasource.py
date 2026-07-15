@@ -198,3 +198,22 @@ async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch)
         await _datasource(handler).fetch_teams()
 
     assert calls == 3
+
+
+async def test_fetch_organization_name() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "organization" in body["query"]
+        return httpx.Response(
+            200, json={"data": {"organization": {"name": "Acme Corp"}}}
+        )
+
+    assert await _datasource(handler).fetch_organization_name() == "Acme Corp"
+
+
+async def test_fetch_organization_name_malformed_payload_is_api_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": {"organization": None}})
+
+    with pytest.raises(LinearAPIError, match="malformed"):
+        await _datasource(handler).fetch_organization_name()
