@@ -1,3 +1,4 @@
+from collections.abc import Set as AbstractSet
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from app.domain.metrics.distribution import (
 from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.history import FlowHistory, compute_flow_history
 from app.domain.metrics.summary import FlowMetrics, compute_flow_metrics
+from app.domain.work_items.entities import WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
 
@@ -21,10 +23,20 @@ class MetricsService:
         self._scope = ScopeSampleLoader(work_items, events)
 
     async def load_scope(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        types: AbstractSet[WorkItemType] | None = None,
+        exclude_states: AbstractSet[str] | None = None,
     ) -> ScopeSamples:
         """One scope load, shareable across the analytics calls via `scope=`."""
-        return await self._scope.load(team_id=team_id, project_id=project_id)
+        return await self._scope.load(
+            team_id=team_id,
+            project_id=project_id,
+            types=types,
+            exclude_states=exclude_states,
+        )
 
     async def get_flow_metrics(
         self,
