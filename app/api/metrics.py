@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
@@ -42,6 +43,38 @@ async def get_item_filters(
 ItemFiltersDep = Annotated[ItemFilters, Depends(get_item_filters)]
 
 
+@dataclass(frozen=True)
+class Period:
+    """An explicit start/end analysis window, mapped onto now+window_days.
+
+    Both dates inclusive: `now` is the midnight after `end`, so the domain's
+    (window_start, now] window covers start 00:00 through end 23:59:59.
+    """
+
+    now: datetime | None
+    window_days: int | None
+
+
+async def get_period(start: date | None = None, end: date | None = None) -> Period:
+    if (start is None) != (end is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Provide both start and end, or neither",
+        )
+    if start is None or end is None:
+        return Period(now=None, window_days=None)
+    if end < start:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="end must not be before start",
+        )
+    window_end = datetime.combine(end + timedelta(days=1), time.min, tzinfo=UTC)
+    return Period(now=window_end, window_days=(end - start).days + 1)
+
+
+PeriodDep = Annotated[Period, Depends(get_period)]
+
+
 def _stats_read(stats: DurationStats | None) -> DurationStatsRead | None:
     if stats is None:
         return None
@@ -59,6 +92,7 @@ async def get_flow_metrics(
     service: MetricsServiceDep,
     scope: ScopeDep,
     filters: ItemFiltersDep,
+    period: PeriodDep,
     window_days: int = Query(default=30, ge=1, le=365),
 ) -> FlowMetricsRead:
     samples = await service.load_scope(
@@ -67,7 +101,11 @@ async def get_flow_metrics(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
-    metrics = await service.get_flow_metrics(scope=samples, window_days=window_days)
+    metrics = await service.get_flow_metrics(
+        scope=samples,
+        window_days=period.window_days or window_days,
+        now=period.now,
+    )
     return FlowMetricsRead(
         window_start=metrics.window_start,
         window_end=metrics.window_end,
@@ -87,6 +125,7 @@ async def get_flow_history(
     service: MetricsServiceDep,
     scope: ScopeDep,
     filters: ItemFiltersDep,
+    period: PeriodDep,
     window_days: int = Query(default=90, ge=7, le=365),
 ) -> FlowHistoryRead:
     samples = await service.load_scope(
@@ -95,7 +134,11 @@ async def get_flow_history(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
-    history = await service.get_flow_history(scope=samples, window_days=window_days)
+    history = await service.get_flow_history(
+        scope=samples,
+        window_days=period.window_days or window_days,
+        now=period.now,
+    )
     return FlowHistoryRead.model_validate(history)
 
 
@@ -104,6 +147,7 @@ async def get_lead_time_distribution(
     service: MetricsServiceDep,
     scope: ScopeDep,
     filters: ItemFiltersDep,
+    period: PeriodDep,
     window_days: int = Query(default=90, ge=7, le=365),
 ) -> LeadTimeDistributionRead:
     samples = await service.load_scope(
@@ -113,7 +157,9 @@ async def get_lead_time_distribution(
         exclude_states=filters.exclude_states,
     )
     distribution = await service.get_lead_time_distribution(
-        scope=samples, window_days=window_days
+        scope=samples,
+        window_days=period.window_days or window_days,
+        now=period.now,
     )
     return LeadTimeDistributionRead.model_validate(distribution)
 
@@ -162,6 +208,7 @@ async def get_delivery_health(
     service: MetricsServiceDep,
     scope: ScopeDep,
     filters: ItemFiltersDep,
+    period: PeriodDep,
     window_days: int = Query(default=30, ge=7, le=365),
 ) -> DeliveryHealthRead:
     samples = await service.load_scope(
@@ -170,5 +217,9 @@ async def get_delivery_health(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
-    health = await service.get_delivery_health(scope=samples, window_days=window_days)
+    health = await service.get_delivery_health(
+        scope=samples,
+        window_days=period.window_days or window_days,
+        now=period.now,
+    )
     return DeliveryHealthRead.model_validate(health)

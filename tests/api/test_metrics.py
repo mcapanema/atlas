@@ -312,3 +312,53 @@ async def test_metrics_rejects_unknown_type(client: AsyncClient) -> None:
     team_id = await create_team(client)
     response = await client.get(f"/api/metrics?team_id={team_id}&types=epic")
     assert response.status_code == 422
+
+
+async def test_metrics_explicit_period(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post(
+            "/api/work-items", json={"team_id": team_id, "title": "Old but real"}
+        )
+    ).json()
+    for event_type, days in (("created", 45), ("completed", 40)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
+        )
+    start, end = days_ago(50)[:10], days_ago(35)[:10]
+
+    default = await client.get(f"/api/metrics?team_id={team_id}")
+    period = await client.get(f"/api/metrics?team_id={team_id}&start={start}&end={end}")
+
+    assert default.json()["completed"] == 0  # outside the default 30d window
+    body = period.json()
+    assert body["completed"] == 1
+    assert body["window_start"][:10] == start
+
+
+async def test_metrics_period_requires_both_bounds(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(f"/api/metrics?team_id={team_id}&start=2026-06-01")
+    assert response.status_code == 422
+    assert "both" in response.json()["detail"]
+
+
+async def test_metrics_period_rejects_inverted_range(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(
+        f"/api/metrics?team_id={team_id}&start=2026-06-10&end=2026-06-01"
+    )
+    assert response.status_code == 422
+
+
+async def test_history_honors_explicit_period(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    start, end = days_ago(50)[:10], days_ago(35)[:10]
+
+    response = await client.get(
+        f"/api/metrics/history?team_id={team_id}&start={start}&end={end}"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["window_start"][:10] == start
