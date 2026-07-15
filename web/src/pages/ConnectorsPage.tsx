@@ -14,6 +14,8 @@ export function ConnectorsPage() {
   const selectedOrgId = organizationId ?? organizations.data?.[0]?.id;
   const configured = status.data?.configured ?? false;
   const loadError = status.error ?? organizations.error;
+  const noOrganizations =
+    configured && !organizations.isLoading && (organizations.data ?? []).length === 0;
 
   return (
     <>
@@ -37,6 +39,12 @@ export function ConnectorsPage() {
                 message="Set ATLAS_LINEAR_API_KEY (a Linear personal API key) in the server environment, then restart Atlas."
               />
             )}
+            {noOrganizations && (
+              <Alert
+                type="info"
+                message="No organization yet — the first sync will create one from your Linear workspace."
+              />
+            )}
             <Space>
               <Select
                 style={{ width: 260 }}
@@ -50,9 +58,9 @@ export function ConnectorsPage() {
               />
               <Button
                 type="primary"
-                disabled={!configured || !selectedOrgId}
+                disabled={!configured}
                 loading={sync.isPending}
-                onClick={() => selectedOrgId && sync.mutate(selectedOrgId)}
+                onClick={() => sync.mutate(selectedOrgId)}
               >
                 Sync now
               </Button>

@@ -111,7 +111,7 @@ class IntegrationStatusRead(BaseModel):
 
 
 class SyncRequest(BaseModel):
-    organization_id: UUID
+    organization_id: UUID | None = None
 
 
 class SyncSummaryRead(BaseModel):

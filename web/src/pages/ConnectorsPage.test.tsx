@@ -99,4 +99,41 @@ describe("ConnectorsPage", () => {
     expect(screen.getByText("boom")).toBeInTheDocument();
     expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
   });
+
+  it("enables sync with no organizations and bootstraps one from Linear", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url === "/api/connectors/linear") return jsonResponse({ configured: true });
+        if (url === "/api/organizations") return jsonResponse([]);
+        if (url === "/api/connectors/linear/sync") {
+          expect(JSON.parse(String(init?.body))).toEqual({ organization_id: null });
+          return jsonResponse({
+            teams: 1,
+            projects: 0,
+            work_items: 0,
+            events: 0,
+            divergences: 0,
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+
+    renderWithClient(<ConnectorsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/first sync will create/i)).toBeInTheDocument(),
+    );
+    const button = screen.getByRole("button", { name: "Sync now" });
+    expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(screen.getByText("Teams")).toBeInTheDocument());
+    const orgCalls = fetchMock.mock.calls.filter(
+      (call) => String(call[0]) === "/api/organizations",
+    );
+    expect(orgCalls.length).toBeGreaterThan(1); // invalidated + refetched after sync
+  });
 });

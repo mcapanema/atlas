@@ -496,3 +496,35 @@ async def test_sync_batches_event_lookups() -> None:
     # One batched existence query for the whole run, zero per-event SELECTs.
     assert harness.events.single_lookup_calls == 0
     assert harness.events.batch_lookup_calls == 1
+
+
+async def test_sync_without_org_creates_one_from_source() -> None:
+    harness = Harness(full_source())
+
+    summary = await harness.service.sync()
+
+    orgs = await harness.organizations.list()
+    assert [o.name for o in orgs] == ["Acme Workspace"]
+    assert summary.teams == 1
+    team = await harness.teams.get_by_external_id("lt1")
+    assert team is not None and team.organization_id == orgs[0].id
+
+
+async def test_sync_without_org_reuses_the_single_existing_org() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+
+    await harness.service.sync()
+
+    assert [o.id for o in await harness.organizations.list()] == [org_id]
+    team = await harness.teams.get_by_external_id("lt1")
+    assert team is not None and team.organization_id == org_id
+
+
+async def test_sync_without_org_is_ambiguous_with_multiple_orgs() -> None:
+    harness = Harness(full_source())
+    await harness.organizations.add(Organization(name="A"))
+    await harness.organizations.add(Organization(name="B"))
+
+    with pytest.raises(ValueError, match="specify organization_id"):
+        await harness.service.sync()

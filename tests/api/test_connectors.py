@@ -147,3 +147,29 @@ async def test_sync_returns_502_when_source_fails(
 
     assert response.status_code == 502
     assert "Linear API returned HTTP 500" in response.json()["detail"]
+
+
+async def test_sync_without_organization_bootstraps_from_source(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+
+    response = await client.post("/api/connectors/linear/sync", json={})
+
+    assert response.status_code == 200
+    orgs = (await client.get("/api/organizations")).json()
+    assert [org["name"] for org in orgs] == ["Acme Workspace"]
+    teams = (await client.get("/api/teams")).json()
+    assert teams[0]["external_id"] == "lt1"
+
+
+async def test_sync_without_organization_is_422_when_ambiguous(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+    await client.post("/api/organizations", json={"name": "A"})
+    await client.post("/api/organizations", json={"name": "B"})
+
+    response = await client.post("/api/connectors/linear/sync", json={})
+
+    assert response.status_code == 422

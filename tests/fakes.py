@@ -166,10 +166,12 @@ class FakeDataSource:
         teams: list[SourceTeam] | None = None,
         projects: list[SourceProject] | None = None,
         work_items: list[SourceWorkItem] | None = None,
+        organization_name: str = "Acme Workspace",
     ) -> None:
         self.teams = teams or []
         self.projects = projects or []
         self.work_items = work_items or []
+        self.organization_name = organization_name
 
     async def fetch_teams(self) -> list[SourceTeam]:
         return self.teams
@@ -179,6 +181,9 @@ class FakeDataSource:
 
     async def fetch_work_items(self) -> list[SourceWorkItem]:
         return self.work_items
+
+    async def fetch_organization_name(self) -> str:
+        return self.organization_name
 
 
 class InMemoryMetricSnapshotRepository:

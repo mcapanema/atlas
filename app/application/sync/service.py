@@ -4,6 +4,7 @@ from uuid import UUID
 
 from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
+from app.domain.organizations.entities import Organization
 from app.domain.organizations.repository import OrganizationRepository
 from app.domain.projects.entities import Project
 from app.domain.projects.repository import ProjectRepository
@@ -44,7 +45,9 @@ class SyncService:
     Everything is matched by external_id: missing entities are created,
     changed ones updated, unchanged ones left alone. Events are immutable —
     insert if absent, never update. Running sync twice in a row is a no-op.
-    Projects and work items whose team can't be resolved are skipped.
+    Projects and work items whose team can't be resolved are skipped. When
+    no organization_id is given, sync reuses the single existing
+    organization or creates one named after the source workspace.
     """
 
     def __init__(
@@ -63,11 +66,10 @@ class SyncService:
         self._work_items = work_items
         self._events = events
 
-    async def sync(self, organization_id: UUID) -> SyncSummary:
-        if await self._organizations.get(organization_id) is None:
-            raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
-        logger.info("Sync started for organization %s", organization_id)
-        teams = await self._sync_teams(organization_id)
+    async def sync(self, organization_id: UUID | None = None) -> SyncSummary:
+        resolved = await self._resolve_organization(organization_id)
+        logger.info("Sync started for organization %s", resolved)
+        teams = await self._sync_teams(resolved)
         projects = await self._sync_projects()
         work_items, events, divergences = await self._sync_work_items()
         summary = SyncSummary(
@@ -80,7 +82,7 @@ class SyncService:
         logger.info(
             "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
             "events=%d divergences=%d",
-            organization_id,
+            resolved,
             summary.teams,
             summary.projects,
             summary.work_items,
@@ -88,6 +90,28 @@ class SyncService:
             summary.divergences,
         )
         return summary
+
+    async def _resolve_organization(self, organization_id: UUID | None) -> UUID:
+        if organization_id is not None:
+            if await self._organizations.get(organization_id) is None:
+                raise UnknownOrganizationError(
+                    f"Organization {organization_id} does not exist"
+                )
+            return organization_id
+        existing = await self._organizations.list()
+        if len(existing) == 1:
+            return existing[0].id
+        if len(existing) > 1:
+            # ValueError on purpose: the global handler answers 422 — the
+            # client's request is underspecified, not a missing resource.
+            raise ValueError("Multiple organizations exist; specify organization_id")
+        # First run: bootstrap the organization from the source workspace.
+        organization = Organization(name=await self._source.fetch_organization_name())
+        await self._organizations.add(organization)
+        logger.info(
+            "Created organization %r from the source workspace", organization.name
+        )
+        return organization.id
 
     async def _sync_teams(self, organization_id: UUID) -> int:
         written = 0
