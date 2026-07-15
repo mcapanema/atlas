@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Query
+from dataclasses import dataclass
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
@@ -13,8 +16,30 @@ from app.api.schemas import (
 )
 from app.api.scope import ScopeDep
 from app.domain.metrics.summary import DurationStats
+from app.domain.work_items.entities import WorkItemType
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+
+
+@dataclass(frozen=True)
+class ItemFilters:
+    """Optional work-item filters shared by every metrics endpoint."""
+
+    types: frozenset[WorkItemType] | None
+    exclude_states: frozenset[str] | None
+
+
+async def get_item_filters(
+    types: Annotated[list[WorkItemType] | None, Query()] = None,
+    exclude_states: Annotated[list[str] | None, Query()] = None,
+) -> ItemFilters:
+    return ItemFilters(
+        types=frozenset(types) if types else None,
+        exclude_states=frozenset(exclude_states) if exclude_states else None,
+    )
+
+
+ItemFiltersDep = Annotated[ItemFilters, Depends(get_item_filters)]
 
 
 def _stats_read(stats: DurationStats | None) -> DurationStatsRead | None:
@@ -33,11 +58,16 @@ def _stats_read(stats: DurationStats | None) -> DurationStatsRead | None:
 async def get_flow_metrics(
     service: MetricsServiceDep,
     scope: ScopeDep,
+    filters: ItemFiltersDep,
     window_days: int = Query(default=30, ge=1, le=365),
 ) -> FlowMetricsRead:
-    metrics = await service.get_flow_metrics(
-        team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
+    samples = await service.load_scope(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
     )
+    metrics = await service.get_flow_metrics(scope=samples, window_days=window_days)
     return FlowMetricsRead(
         window_start=metrics.window_start,
         window_end=metrics.window_end,
@@ -56,11 +86,16 @@ async def get_flow_metrics(
 async def get_flow_history(
     service: MetricsServiceDep,
     scope: ScopeDep,
+    filters: ItemFiltersDep,
     window_days: int = Query(default=90, ge=7, le=365),
 ) -> FlowHistoryRead:
-    history = await service.get_flow_history(
-        team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
+    samples = await service.load_scope(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
     )
+    history = await service.get_flow_history(scope=samples, window_days=window_days)
     return FlowHistoryRead.model_validate(history)
 
 
@@ -68,10 +103,17 @@ async def get_flow_history(
 async def get_lead_time_distribution(
     service: MetricsServiceDep,
     scope: ScopeDep,
+    filters: ItemFiltersDep,
     window_days: int = Query(default=90, ge=7, le=365),
 ) -> LeadTimeDistributionRead:
+    samples = await service.load_scope(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
+    )
     distribution = await service.get_lead_time_distribution(
-        team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
+        scope=samples, window_days=window_days
     )
     return LeadTimeDistributionRead.model_validate(distribution)
 
@@ -87,8 +129,16 @@ async def get_metric_snapshots(
 
 
 @router.get("/aging-wip", response_model=AgingWipRead)
-async def get_aging_wip(service: MetricsServiceDep, scope: ScopeDep) -> AgingWipRead:
-    aging = await service.get_aging_wip(team_id=scope.team_id, project_id=scope.project_id)
+async def get_aging_wip(
+    service: MetricsServiceDep, scope: ScopeDep, filters: ItemFiltersDep
+) -> AgingWipRead:
+    samples = await service.load_scope(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
+    )
+    aging = await service.get_aging_wip(scope=samples)
     return AgingWipRead(
         now=aging.now,
         cycle_time_p85_seconds=(
@@ -111,9 +161,14 @@ async def get_aging_wip(service: MetricsServiceDep, scope: ScopeDep) -> AgingWip
 async def get_delivery_health(
     service: MetricsServiceDep,
     scope: ScopeDep,
+    filters: ItemFiltersDep,
     window_days: int = Query(default=30, ge=7, le=365),
 ) -> DeliveryHealthRead:
-    health = await service.get_delivery_health(
-        team_id=scope.team_id, project_id=scope.project_id, window_days=window_days
+    samples = await service.load_scope(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
     )
+    health = await service.get_delivery_health(scope=samples, window_days=window_days)
     return DeliveryHealthRead.model_validate(health)
