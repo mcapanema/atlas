@@ -45,4 +45,41 @@ describe("MetricsFilterBar", () => {
     fireEvent.click(screen.getByTitle("bug"));
     expect(onChange).toHaveBeenCalledWith({ types: ["bug"] });
   });
+
+  it("clears type filters back to undefined", () => {
+    const onChange = vi.fn();
+    render(<MetricsFilterBar filters={{ types: ["bug"] }} onChange={onChange} />);
+    const clearIcon = document.querySelector(".ant-select-clear");
+    expect(clearIcon).not.toBeNull();
+    fireEvent.mouseDown(clearIcon as Element);
+    expect(onChange).toHaveBeenCalledWith({ types: undefined });
+  });
+
+  it("emits excluded state tags", () => {
+    const onChange = vi.fn();
+    render(<MetricsFilterBar filters={{}} onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Excluded states" });
+    fireEvent.mouseDown(input);
+    fireEvent.change(input, { target: { value: "canceled," } });
+    expect(onChange).toHaveBeenCalledWith({ excludeStates: ["canceled"] });
+  });
+
+  it("emits a custom range once both dates are picked", () => {
+    const onChange = vi.fn();
+    render(
+      <MetricsFilterBar
+        filters={{ start: "2026-06-01", end: "2026-06-30" }}
+        onChange={onChange}
+      />,
+    );
+    const startInput = screen.getByPlaceholderText("Start date");
+    const endInput = screen.getByPlaceholderText("End date");
+    fireEvent.mouseDown(startInput);
+    fireEvent.focus(startInput);
+    fireEvent.change(startInput, { target: { value: "2026-06-05" } });
+    fireEvent.keyDown(startInput, { key: "Enter" });
+    fireEvent.change(endInput, { target: { value: "2026-06-20" } });
+    fireEvent.keyDown(endInput, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith({ start: "2026-06-05", end: "2026-06-20" });
+  });
 });
