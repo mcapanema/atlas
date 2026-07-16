@@ -68,8 +68,14 @@ async def get_period(start: date | None = None, end: date | None = None) -> Peri
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="end must not be before start",
         )
+    window_days = (end - start).days + 1
+    if window_days > 365:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Range must not exceed 365 days",
+        )
     window_end = datetime.combine(end + timedelta(days=1), time.min, tzinfo=UTC)
-    return Period(now=window_end, window_days=(end - start).days + 1)
+    return Period(now=window_end, window_days=window_days)
 
 
 PeriodDep = Annotated[Period, Depends(get_period)]

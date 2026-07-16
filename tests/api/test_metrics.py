@@ -352,6 +352,14 @@ async def test_metrics_period_rejects_inverted_range(client: AsyncClient) -> Non
     assert response.status_code == 422
 
 
+async def test_metrics_period_rejects_range_over_365_days(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(
+        f"/api/metrics?team_id={team_id}&start=2020-01-01&end=2021-01-02"
+    )
+    assert response.status_code == 422
+
+
 async def test_history_honors_explicit_period(client: AsyncClient) -> None:
     team_id = await create_team(client)
     start, end = days_ago(50)[:10], days_ago(35)[:10]
