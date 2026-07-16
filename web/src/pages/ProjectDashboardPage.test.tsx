@@ -42,4 +42,19 @@ describe("ProjectDashboardPage", () => {
 
     await waitFor(() => expect(screen.getByText("Failed to load projects")).toBeInTheDocument());
   });
+
+  it("updates the URL when a filter changes", async () => {
+    mockMetricsFetch({ "/api/projects": [project] });
+
+    renderWithClient(<ProjectDashboardPage />, ["/projects"]);
+
+    fireEvent.mouseDown(await screen.findByRole("combobox"));
+    fireEvent.click(await screen.findByTitle("Apollo"));
+    await screen.findByText("Throughput (30d)");
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Analysis period" }));
+    fireEvent.click(screen.getByText("Last 90 days"));
+
+    await screen.findByText("Throughput (90d)");
+  });
 });

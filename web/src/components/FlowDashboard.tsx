@@ -12,6 +12,7 @@ import {
   type AgingItem,
   type DeliveryHealth,
   type DurationStats,
+  type MetricsFilters,
   type MetricsScope,
 } from "../api/metrics";
 import { useMetricSnapshots } from "../api/snapshots";
@@ -24,6 +25,7 @@ import {
 } from "../lib/charts";
 import { formatDay } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
+import { windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
@@ -55,10 +57,10 @@ function duration(stats: DurationStats | null, key: keyof DurationStats): string
  */
 function HealthStrip({
   health,
-  window: metricsWindow,
+  periodText,
 }: {
   health: DeliveryHealth;
-  window: { start: string; end: string } | null;
+  periodText: string | null;
 }) {
   const atRisk = health.band === "critical" || health.band === "warning";
   const reasons = atRisk
@@ -68,11 +70,7 @@ function HealthStrip({
     <section aria-label="Delivery health" className="health-strip">
       <div className="health-strip__row">
         <HealthBadge health={health} />
-        {metricsWindow && (
-          <span className="page-asof">
-            Last 30 days · {formatDay(metricsWindow.start)} – {formatDay(metricsWindow.end)}
-          </span>
-        )}
+        {periodText && <span className="page-asof">{periodText}</span>}
       </div>
       {atRisk && (
         <div className={`attention-card attention-card--${health.band}`}>
@@ -89,13 +87,19 @@ function HealthStrip({
   );
 }
 
-export function FlowDashboard({ scope }: { scope: MetricsScope }) {
-  const metrics = useFlowMetrics(scope);
-  const history = useFlowHistory(scope);
-  const distribution = useLeadTimeDistribution(scope);
-  const snapshots = useMetricSnapshots(scope);
-  const aging = useAgingWip(scope);
-  const health = useDeliveryHealth(scope);
+export function FlowDashboard({
+  scope,
+  filters = {},
+}: {
+  scope: MetricsScope;
+  filters?: MetricsFilters;
+}) {
+  const metrics = useFlowMetrics(scope, filters);
+  const history = useFlowHistory(scope, filters);
+  const distribution = useLeadTimeDistribution(scope, filters);
+  const snapshots = useMetricSnapshots(scope); // persisted trend: deliberately unfiltered
+  const aging = useAgingWip(scope, filters);
+  const health = useDeliveryHealth(scope, filters);
   const { mode } = useThemeMode();
 
   const cfdOption = useMemo(
@@ -131,23 +135,28 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
   }
 
   const data = metrics.data;
+  const statLabel = windowLabel(filters, 30);
+  const chartLabel = windowLabel(filters, 90);
+  const periodText =
+    filters.start && filters.end
+      ? `${formatDay(filters.start)} – ${formatDay(filters.end)}`
+      : data
+        ? `Last ${filters.windowDays ?? 30} days · ${formatDay(data.window_start)} – ${formatDay(data.window_end)}`
+        : null;
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
       {health.data && health.data.score != null && health.data.band != null && (
-        <HealthStrip
-          health={health.data}
-          window={data ? { start: data.window_start, end: data.window_end } : null}
-        />
+        <HealthStrip health={health.data} periodText={periodText} />
       )}
       {data && (
         <Row gutter={[16, 16]}>
-          <StatCard title="Throughput (30d)" value={data.completed} />
+          <StatCard title={`Throughput (${statLabel})`} value={data.completed} />
           <StatCard title="WIP (now)" value={data.wip} />
           <StatCard title="Lead time P50" value={duration(data.lead_time, "p50_seconds")} />
           <StatCard title="Lead time P85" value={duration(data.lead_time, "p85_seconds")} />
           <StatCard title="Cycle time P50" value={duration(data.cycle_time, "p50_seconds")} />
           <StatCard title="Cycle time P85" value={duration(data.cycle_time, "p85_seconds")} />
-          <StatCard title="Blocked time (30d)" value={formatSeconds(data.blocked_seconds)} />
+          <StatCard title={`Blocked time (${statLabel})`} value={formatSeconds(data.blocked_seconds)} />
           <StatCard
             title="Flow efficiency"
             value={
@@ -161,23 +170,23 @@ export function FlowDashboard({ scope }: { scope: MetricsScope }) {
       {cfdOption && throughputOption && wipOption && (
         <Row gutter={[16, 16]}>
           <Col xs={24}>
-            <Card title="Cumulative flow (90d)">
+            <Card title={`Cumulative flow (${chartLabel})`}>
               <EChart option={cfdOption} height={300} />
             </Card>
           </Col>
           <Col xs={24} lg={12}>
-            <Card title="Weekly throughput (90d)">
+            <Card title={`Weekly throughput (${chartLabel})`}>
               <EChart option={throughputOption} />
             </Card>
           </Col>
           <Col xs={24} lg={12}>
-            <Card title="WIP over time (90d)">
+            <Card title={`WIP over time (${chartLabel})`}>
               <EChart option={wipOption} />
             </Card>
           </Col>
           {distributionOption && (
             <Col xs={24} lg={12}>
-              <Card title="Lead time distribution (90d)">
+              <Card title={`Lead time distribution (${chartLabel})`}>
                 <EChart option={distributionOption} />
               </Card>
             </Col>

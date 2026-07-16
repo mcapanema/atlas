@@ -1,13 +1,15 @@
 import { Alert, Button, Empty, Table, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { HTMLAttributes, ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   useAllTeamsFlowMetrics,
   useAllTeamsHealth,
   type DeliveryHealth,
   type FlowMetrics,
+  type MetricsFilters,
 } from "../api/metrics";
 import {
   useAllTeamsForecastAccuracy,
@@ -17,10 +19,17 @@ import {
 } from "../api/snapshots";
 import { useTeams, type Team } from "../api/teams";
 import { HealthBadge } from "../components/HealthBadge";
+import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { Sparkline } from "../components/Sparkline";
 import { formatDay } from "../lib/dates";
 import { computeDelta, leadTimePulse, pickBaseline, type Delta, type Pulse } from "../lib/deltas";
 import { formatSeconds } from "../lib/duration";
+import {
+  applyFiltersToSearchParams,
+  filtersFromSearchParams,
+  isDefaultFilters,
+  windowLabel,
+} from "../lib/metricsFilters";
 
 const BAND_RANK: Record<string, number> = { critical: 0, warning: 1 };
 
@@ -115,108 +124,110 @@ function columnHelp(label: string, help: string) {
   );
 }
 
-const columns: ColumnsType<TeamRow> = [
-  {
-    title: "Team",
-    sorter: (a, b) => a.team.name.localeCompare(b.team.name),
-    render: (_, row) => <Link to={`/teams?team=${row.team.id}`}>{row.team.name}</Link>,
-  },
-  {
-    title: columnHelp(
-      "Health",
-      "Composite delivery health, 0–100 — higher is better. Click a score to see each component and its reason.",
-    ),
-    // Worst first by default: risk is the sort key of an executive view.
-    defaultSortOrder: "ascend",
-    sorter: (a, b) => (a.health?.score ?? 101) - (b.health?.score ?? 101),
-    render: (_, row) => cell(row.healthState, () => <HealthBadge health={row.health} />),
-  },
-  {
-    // Column headers drop the "(30d)" suffix — the window is stated once in
-    // the as-of line and restated per-column in each tooltip; at 1288px the
-    // suffixes were pushing the last column behind a horizontal scrollbar.
-    title: columnHelp("Throughput", "Work items completed in the last 30 days."),
-    sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
-    render: (_, row) =>
-      cell(row.metricsState, () =>
-        row.metrics ? (
-          <>
-            <span className="fig">{row.metrics.completed}</span>{" "}
-            <DeltaChip delta={row.throughputDelta} metric="throughput" />
-          </>
-        ) : (
-          "—"
-        ),
+function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
+  return [
+    {
+      title: "Team",
+      sorter: (a, b) => a.team.name.localeCompare(b.team.name),
+      render: (_, row) => <Link to={`/teams?team=${row.team.id}`}>{row.team.name}</Link>,
+    },
+    {
+      title: columnHelp(
+        "Health",
+        "Composite delivery health, 0–100 — higher is better. Click a score to see each component and its reason.",
       ),
-  },
-  {
-    title: columnHelp("WIP", "Work items in progress right now."),
-    sorter: (a, b) => (a.metrics?.wip ?? -1) - (b.metrics?.wip ?? -1),
-    render: (_, row) =>
-      cell(row.metricsState, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
-  },
-  {
-    title: columnHelp(
-      "Lead time P85",
-      "85% of items completed in the last 30 days took no longer than this, created → done.",
-    ),
-    sorter: (a, b) =>
-      (a.metrics?.lead_time?.p85_seconds ?? -1) - (b.metrics?.lead_time?.p85_seconds ?? -1),
-    render: (_, row) =>
-      cell(row.metricsState, () =>
-        row.metrics?.lead_time ? (
-          <>
-            <span className="fig">{formatSeconds(row.metrics.lead_time.p85_seconds)}</span>{" "}
-            <DeltaChip delta={row.leadDelta} metric="lead time" />
-          </>
-        ) : (
-          "—"
+      // Worst first by default: risk is the sort key of an executive view.
+      defaultSortOrder: "ascend",
+      sorter: (a, b) => (a.health?.score ?? 101) - (b.health?.score ?? 101),
+      render: (_, row) => cell(row.healthState, () => <HealthBadge health={row.health} />),
+    },
+    {
+      // Column headers drop the "(30d)" suffix — the window is stated once in
+      // the as-of line and restated per-column in each tooltip; at 1288px the
+      // suffixes were pushing the last column behind a horizontal scrollbar.
+      title: columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`),
+      sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
+      render: (_, row) =>
+        cell(row.metricsState, () =>
+          row.metrics ? (
+            <>
+              <span className="fig">{row.metrics.completed}</span>{" "}
+              <DeltaChip delta={row.throughputDelta} metric="throughput" />
+            </>
+          ) : (
+            "—"
+          ),
         ),
+    },
+    {
+      title: columnHelp("WIP", "Work items in progress right now."),
+      sorter: (a, b) => (a.metrics?.wip ?? -1) - (b.metrics?.wip ?? -1),
+      render: (_, row) =>
+        cell(row.metricsState, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
+    },
+    {
+      title: columnHelp(
+        "Lead time P85",
+        `85% of items completed in the last ${periodLabel} took no longer than this, created → done.`,
       ),
-  },
-  {
-    title: columnHelp(
-      "Flow efficiency",
-      "Share of cycle time spent actively working (not blocked), averaged over completed items in the last 30 days.",
-    ),
-    sorter: (a, b) => (a.metrics?.flow_efficiency ?? -1) - (b.metrics?.flow_efficiency ?? -1),
-    render: (_, row) =>
-      cell(row.metricsState, () =>
-        row.metrics?.flow_efficiency != null ? (
-          <span className="fig">{Math.round(row.metrics.flow_efficiency * 100)}%</span>
-        ) : (
-          "—"
+      sorter: (a, b) =>
+        (a.metrics?.lead_time?.p85_seconds ?? -1) - (b.metrics?.lead_time?.p85_seconds ?? -1),
+      render: (_, row) =>
+        cell(row.metricsState, () =>
+          row.metrics?.lead_time ? (
+            <>
+              <span className="fig">{formatSeconds(row.metrics.lead_time.p85_seconds)}</span>{" "}
+              <DeltaChip delta={row.leadDelta} metric="lead time" />
+            </>
+          ) : (
+            "—"
+          ),
         ),
+    },
+    {
+      title: columnHelp(
+        "Flow efficiency",
+        `Share of cycle time spent actively working (not blocked), averaged over completed items in the last ${periodLabel}.`,
       ),
-  },
-  {
-    title: columnHelp("Blocked time", "Total time items spent blocked in the last 30 days."),
-    sorter: (a, b) => (a.metrics?.blocked_seconds ?? -1) - (b.metrics?.blocked_seconds ?? -1),
-    render: (_, row) =>
-      cell(row.metricsState, () =>
-        row.metrics ? (
-          <span className="fig">{formatSeconds(row.metrics.blocked_seconds)}</span>
-        ) : (
-          "—"
+      sorter: (a, b) => (a.metrics?.flow_efficiency ?? -1) - (b.metrics?.flow_efficiency ?? -1),
+      render: (_, row) =>
+        cell(row.metricsState, () =>
+          row.metrics?.flow_efficiency != null ? (
+            <span className="fig">{Math.round(row.metrics.flow_efficiency * 100)}%</span>
+          ) : (
+            "—"
+          ),
         ),
-      ),
-  },
-  {
-    title: columnHelp(
-      "Forecast accuracy (P85)",
-      "Of past forecasts with a known real finish, the share that finished by their predicted P85 date. Calibrated forecasts land near 85% — higher means predictions run conservative, lower means optimistic. “—” means no forecasts evaluated yet.",
-    ),
-    sorter: (a, b) => (a.accuracy?.p85_hit_rate ?? -1) - (b.accuracy?.p85_hit_rate ?? -1),
-    render: (_, row) =>
-      cell(row.accuracyState, () =>
-        row.accuracy && row.accuracy.evaluated > 0 && row.accuracy.p85_hit_rate != null ? (
-          <span className="fig">{Math.round(row.accuracy.p85_hit_rate * 100)}%</span>
-        ) : (
-          "—"
+    },
+    {
+      title: columnHelp("Blocked time", `Total time items spent blocked in the last ${periodLabel}.`),
+      sorter: (a, b) => (a.metrics?.blocked_seconds ?? -1) - (b.metrics?.blocked_seconds ?? -1),
+      render: (_, row) =>
+        cell(row.metricsState, () =>
+          row.metrics ? (
+            <span className="fig">{formatSeconds(row.metrics.blocked_seconds)}</span>
+          ) : (
+            "—"
+          ),
         ),
+    },
+    {
+      title: columnHelp(
+        "Forecast accuracy (P85)",
+        "Of past forecasts with a known real finish, the share that finished by their predicted P85 date. Calibrated forecasts land near 85% — higher means predictions run conservative, lower means optimistic. “—” means no forecasts evaluated yet.",
       ),
-  },
-];
+      sorter: (a, b) => (a.accuracy?.p85_hit_rate ?? -1) - (b.accuracy?.p85_hit_rate ?? -1),
+      render: (_, row) =>
+        cell(row.accuracyState, () =>
+          row.accuracy && row.accuracy.evaluated > 0 && row.accuracy.p85_hit_rate != null ? (
+            <span className="fig">{Math.round(row.accuracy.p85_hit_rate * 100)}%</span>
+          ) : (
+            "—"
+          ),
+        ),
+    },
+  ];
+}
 
 function weakestComponent(health: DeliveryHealth) {
   return [...health.components].sort((a, b) => a.score - b.score)[0];
@@ -311,13 +322,21 @@ function AttentionSection({ rows }: { rows: TeamRow[] }) {
 
 export function ExecutiveDashboardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
+  const setFilters = (next: MetricsFilters) => {
+    const params = new URLSearchParams(searchParams);
+    applyFiltersToSearchParams(params, next);
+    setSearchParams(params);
+  };
+  const deltasEnabled = isDefaultFilters(filters);
   const teams = useTeams();
   const teamList = teams.data ?? [];
   // ponytail: four API calls per team (metrics, accuracy, health, snapshots);
   // add a portfolio endpoint when team count makes 4N round trips slow (~20+).
-  const metrics = useAllTeamsFlowMetrics(teamList);
+  const metrics = useAllTeamsFlowMetrics(teamList, filters);
   const accuracy = useAllTeamsForecastAccuracy(teamList);
-  const health = useAllTeamsHealth(teamList);
+  const health = useAllTeamsHealth(teamList, filters);
   const snapshots = useAllTeamsSnapshots(teamList);
 
   if (teams.isError) {
@@ -350,7 +369,7 @@ export function ExecutiveDashboardPage() {
     const teamMetrics = metrics[index]?.data;
     const teamSnapshots: MetricSnapshot[] = snapshots[index]?.data ?? [];
     const asOf = teamMetrics?.window_end;
-    const baseline = asOf ? pickBaseline(teamSnapshots, asOf, 30) : null;
+    const baseline = deltasEnabled && asOf ? pickBaseline(teamSnapshots, asOf, 30) : null;
     return {
       key: team.id,
       team,
@@ -387,6 +406,7 @@ export function ExecutiveDashboardPage() {
     }
   };
   const windowSource = rows.find((row) => row.metrics)?.metrics;
+  const tableColumns = buildColumns(windowLabel(filters, 30));
 
   return (
     <>
@@ -394,10 +414,14 @@ export function ExecutiveDashboardPage() {
       <Headline rows={rows} />
       {windowSource && (
         <p className="page-asof">
-          Last 30 days · {formatDay(windowSource.window_start)} –{" "}
-          {formatDay(windowSource.window_end)}
+          {filters.start && filters.end
+            ? `${formatDay(filters.start)} – ${formatDay(filters.end)}`
+            : `Last ${filters.windowDays ?? 30} days · ${formatDay(windowSource.window_start)} – ${formatDay(windowSource.window_end)}`}
         </p>
       )}
+      <div style={{ marginBottom: 16 }}>
+        <MetricsFilterBar filters={filters} onChange={setFilters} />
+      </div>
       {failedTeams.length > 0 && (
         <Alert
           type="warning"
@@ -413,7 +437,7 @@ export function ExecutiveDashboardPage() {
       <AttentionSection rows={rows} />
       <section aria-label="Delivery metrics by team">
         <Table
-          columns={columns}
+          columns={tableColumns}
           components={TABLE_COMPONENTS}
           dataSource={rows}
           loading={teams.isLoading}

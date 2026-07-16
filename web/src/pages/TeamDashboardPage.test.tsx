@@ -64,4 +64,32 @@ describe("TeamDashboardPage", () => {
       expect(screen.getByText("Select a team to see its dashboard.")).toBeInTheDocument(),
     );
   });
+
+  it("threads URL filters into the metrics requests and labels", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(
+      <TeamDashboardPage />,
+      [`/teams?team=${teamFixture.id}&window=90&types=story,bug&xstates=canceled`],
+    );
+
+    await screen.findByText("Throughput (90d)");
+
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    const flowUrl = urls.find((url) => url.startsWith("/api/metrics?"));
+    expect(flowUrl).toContain("window_days=90");
+    expect(flowUrl).toContain("types=story");
+    expect(flowUrl).toContain("types=bug");
+    expect(flowUrl).toContain("exclude_states=canceled");
+  });
+
+  it("updates the URL when a filter changes", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<TeamDashboardPage />, [`/teams?team=${teamFixture.id}`]);
+    await screen.findByText("Throughput (30d)");
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Analysis period" }));
+    fireEvent.click(screen.getByText("Last 90 days"));
+
+    await screen.findByText("Throughput (90d)");
+  });
 });

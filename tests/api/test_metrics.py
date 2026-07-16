@@ -234,3 +234,139 @@ async def test_delivery_health_for_unknown_team_is_404(client: AsyncClient) -> N
 
 async def test_delivery_health_requires_exactly_one_scope(client: AsyncClient) -> None:
     assert (await client.get("/api/metrics/health")).status_code == 422
+
+
+async def _seed_completed(
+    client: AsyncClient, team_id: str, *, title: str, type_: str = "task", state: str = "done"
+) -> None:
+    item = (
+        await client.post(
+            "/api/work-items",
+            json={"team_id": team_id, "title": title, "type": type_, "state": state},
+        )
+    ).json()
+    for event_type, days in (("created", 10), ("completed", 2)):
+        response = await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
+        )
+        assert response.status_code == 201
+
+
+async def test_metrics_types_filter(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    await _seed_completed(client, team_id, title="Feature", type_="story")
+    await _seed_completed(client, team_id, title="Chore", type_="task")
+
+    unfiltered = await client.get(f"/api/metrics?team_id={team_id}")
+    filtered = await client.get(f"/api/metrics?team_id={team_id}&types=story")
+
+    assert unfiltered.json()["completed"] == 2
+    assert filtered.json()["completed"] == 1
+
+
+async def test_metrics_exclude_states_filter(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post(
+            "/api/work-items",
+            json={"team_id": team_id, "title": "Junk", "state": "Canceled"},
+        )
+    ).json()
+    for event_type, days in (("created", 100), ("started", 99)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
+        )
+
+    unfiltered = await client.get(f"/api/metrics?team_id={team_id}")
+    filtered = await client.get(f"/api/metrics?team_id={team_id}&exclude_states=canceled")
+
+    assert unfiltered.json()["wip"] == 1  # the junk item pollutes WIP today
+    assert filtered.json()["wip"] == 0
+
+
+async def test_aging_wip_honors_item_filters(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post(
+            "/api/work-items",
+            json={"team_id": team_id, "title": "Zombie", "state": "Canceled"},
+        )
+    ).json()
+    for event_type, days in (("created", 50), ("started", 49)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
+        )
+
+    response = await client.get(
+        f"/api/metrics/aging-wip?team_id={team_id}&exclude_states=canceled"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+
+
+async def test_metrics_rejects_unknown_type(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(f"/api/metrics?team_id={team_id}&types=epic")
+    assert response.status_code == 422
+
+
+async def test_metrics_explicit_period(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post(
+            "/api/work-items", json={"team_id": team_id, "title": "Old but real"}
+        )
+    ).json()
+    for event_type, days in (("created", 45), ("completed", 40)):
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
+        )
+    start, end = days_ago(50)[:10], days_ago(35)[:10]
+
+    default = await client.get(f"/api/metrics?team_id={team_id}")
+    period = await client.get(f"/api/metrics?team_id={team_id}&start={start}&end={end}")
+
+    assert default.json()["completed"] == 0  # outside the default 30d window
+    body = period.json()
+    assert body["completed"] == 1
+    assert body["window_start"][:10] == start
+
+
+async def test_metrics_period_requires_both_bounds(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(f"/api/metrics?team_id={team_id}&start=2026-06-01")
+    assert response.status_code == 422
+    assert "both" in response.json()["detail"]
+
+
+async def test_metrics_period_rejects_inverted_range(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(
+        f"/api/metrics?team_id={team_id}&start=2026-06-10&end=2026-06-01"
+    )
+    assert response.status_code == 422
+
+
+async def test_metrics_period_rejects_range_over_365_days(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    response = await client.get(
+        f"/api/metrics?team_id={team_id}&start=2020-01-01&end=2021-01-02"
+    )
+    assert response.status_code == 422
+
+
+async def test_history_honors_explicit_period(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    start, end = days_ago(50)[:10], days_ago(35)[:10]
+
+    response = await client.get(
+        f"/api/metrics/history?team_id={team_id}&start={start}&end={end}"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["window_start"][:10] == start

@@ -7,13 +7,14 @@ copies of this loop is exactly where remaining-count bugs hide.
 """
 
 from collections import defaultdict
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from uuid import UUID
 
 from app.domain.events.entities import Event
 from app.domain.events.repository import EventRepository
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import WorkItem, WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
 
@@ -42,9 +43,21 @@ class ScopeSampleLoader:
         self._events = events
 
     async def load(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        types: AbstractSet[WorkItemType] | None = None,
+        exclude_states: AbstractSet[str] | None = None,
     ) -> ScopeSamples:
         items = await self._work_items.list(team_id=team_id, project_id=project_id)
+        # ponytail: in-Python filter over the scope's items; push into the
+        # repository query if scopes grow past what one list comfortably holds.
+        if types is not None:
+            items = [item for item in items if item.type in types]
+        if exclude_states is not None:
+            excluded = {state.casefold() for state in exclude_states}
+            items = [item for item in items if item.state.casefold() not in excluded]
         events = await self._events.list_for_work_items([item.id for item in items])
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
         for event in events:

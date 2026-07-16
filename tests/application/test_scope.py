@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from app.application.scope import ScopeSampleLoader
 from app.domain.events.entities import Event, EventType
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import WorkItem, WorkItemType
 from tests.fakes import InMemoryEventRepository, InMemoryWorkItemRepository
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
@@ -90,3 +90,43 @@ async def test_load_pairs_items_with_their_samples() -> None:
     assert [(item.id, sample) for item, sample in scope.items_with_samples] == [
         (done.id, scope.samples[0])
     ]
+
+
+async def test_load_filters_by_type() -> None:
+    team_id = uuid4()
+    story = WorkItem(team_id=team_id, title="Story", type=WorkItemType.STORY)
+    bug = WorkItem(team_id=team_id, title="Bug", type=WorkItemType.BUG)
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([story, bug]), InMemoryEventRepository([])
+    )
+
+    scope = await loader.load(team_id=team_id, types={WorkItemType.STORY})
+
+    assert scope.item_count == 1
+
+
+async def test_load_excludes_states_case_insensitively() -> None:
+    team_id = uuid4()
+    live = WorkItem(team_id=team_id, title="Live", state="in_progress")
+    junk = WorkItem(team_id=team_id, title="Junk", state="Canceled")
+    events = [_event(junk, EventType.CREATED, 10), _event(junk, EventType.STARTED, 9)]
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([live, junk]), InMemoryEventRepository(events)
+    )
+
+    scope = await loader.load(team_id=team_id, exclude_states={"canceled"})
+
+    assert scope.item_count == 1  # "Canceled" matched despite the capital C
+    assert scope.streams == []  # the junk item's events are gone too
+
+
+async def test_load_without_filters_is_unchanged() -> None:
+    team_id = uuid4()
+    item = WorkItem(team_id=team_id, title="Item", state="Canceled")
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([item]), InMemoryEventRepository([])
+    )
+
+    scope = await loader.load(team_id=team_id)
+
+    assert scope.item_count == 1

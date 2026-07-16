@@ -356,4 +356,58 @@ describe("ExecutiveDashboardPage", () => {
     });
     expect(badge).toHaveTextContent("82");
   });
+
+  it("threads URL filters into per-team metrics requests", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<ExecutiveDashboardPage />, ["/?window=90&xstates=canceled"]);
+
+    // `findByText(/Last 90 days/)` would also match MetricsFilterBar's period
+    // Select label, which renders from the URL alone before any fetch — wait
+    // on the as-of line specifically so this only resolves once flow metrics
+    // have actually loaded.
+    await waitFor(() =>
+      expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 90 days/),
+    );
+
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    const flowUrl = urls.find((url) => url.startsWith("/api/metrics?"));
+    expect(flowUrl).toContain("window_days=90");
+    expect(flowUrl).toContain("exclude_states=canceled");
+  });
+
+  it("updates the URL and requests when a filter changes", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<ExecutiveDashboardPage />);
+    await waitFor(() =>
+      expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 30 days/),
+    );
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Analysis period" }));
+    fireEvent.click(screen.getByText("Last 90 days"));
+
+    await waitFor(() =>
+      expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 90 days/),
+    );
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.startsWith("/api/metrics?") && url.includes("window_days=90"))).toBe(
+      true,
+    );
+  });
+
+  it("hides delta chips when filters are not the snapshot baseline", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<ExecutiveDashboardPage />, ["/?window=90"]);
+
+    // `findByText(/Last 90 days/)` would also match MetricsFilterBar's period
+    // Select label, which renders from the URL alone before any fetch — wait
+    // on the as-of line specifically so this only resolves once flow metrics
+    // have actually loaded.
+    await waitFor(() =>
+      expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 90 days/),
+    );
+
+    // metricsFixture.completed is 4 with a snapshot baseline of 3 — the default
+    // view renders a delta chip; a 90d view must not (snapshots are 30d).
+    expect(document.querySelector(".delta")).toBeNull();
+  });
 });
