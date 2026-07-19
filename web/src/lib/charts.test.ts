@@ -104,7 +104,7 @@ describe("buildForecastOption", () => {
     const series = option.series as Series[];
 
     expect(series[0].data).toEqual([400, 1600]);
-    expect((option.xAxis as { data: string[] }).data).toEqual(["2026-07-20", "2026-07-22"]);
+    expect((option.xAxis as { data: string[] }).data).toEqual(["20-07-2026", "22-07-2026"]);
   });
 });
 
@@ -116,7 +116,7 @@ test("lead time trend charts P50/P85 in days per snapshot day", () => {
   expect(series[0].data).toEqual([2, 2]);
   expect(series[1].data).toEqual([4, 5]);
   const xAxis = option.xAxis as { data: string[] };
-  expect(xAxis.data).toEqual(["2026-07-09", "2026-07-10"]);
+  expect(xAxis.data).toEqual(["09-07-2026", "10-07-2026"]);
 });
 
 test("lead time trend passes through null percentiles for snapshots with no data yet", () => {
