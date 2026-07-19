@@ -1,7 +1,8 @@
 import { DatePicker, Select, Space } from "antd";
 import dayjs from "dayjs";
 
-import type { MetricsFilters } from "../api/metrics";
+import type { MetricsFilters, MetricsScope } from "../api/metrics";
+import { useWorkItemStates } from "../api/workItems";
 
 const TYPE_OPTIONS = ["story", "task", "bug", "spike", "other"].map((value) => ({
   value,
@@ -17,11 +18,15 @@ const ISO = "YYYY-MM-DD";
 
 export function MetricsFilterBar({
   filters,
+  scope,
   onChange,
 }: {
   filters: MetricsFilters;
+  /** Omitted on the org-wide Executive Dashboard — states come from every team. */
+  scope?: MetricsScope;
   onChange: (filters: MetricsFilters) => void;
 }) {
+  const states = useWorkItemStates(scope);
   const custom = Boolean(filters.start && filters.end);
   const { start, end, windowDays, ...itemFilters } = filters;
   const periodValue = custom ? "custom" : String(windowDays ?? 30);
@@ -76,13 +81,15 @@ export function MetricsFilterBar({
         aria-label="Excluded states"
         mode="tags"
         allowClear
+        loading={states.isLoading}
         placeholder="Exclude states"
         style={{ minWidth: 170 }}
         value={filters.excludeStates ?? []}
         tokenSeparators={[","]}
-        options={[]}
-        onChange={(states) =>
-          onChange({ ...filters, excludeStates: states.length ? states : undefined })
+        // tags mode: fetched states are suggestions, any typed value still counts
+        options={(states.data ?? []).map((state) => ({ value: state, label: state }))}
+        onChange={(next) =>
+          onChange({ ...filters, excludeStates: next.length ? next : undefined })
         }
       />
     </Space>

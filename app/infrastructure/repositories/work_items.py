@@ -69,6 +69,19 @@ class SqlAlchemyWorkItemRepository:
         await self._session.merge(WorkItemModel.from_domain(work_item))
         await self._session.flush()
 
+    # Must stay above `list` — that method shadows the `list` builtin for every
+    # annotation below it in this class body, so `-> list[str]` would fail.
+    async def list_states(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[str]:
+        query = select(WorkItemModel.state).distinct().order_by(WorkItemModel.state)
+        if team_id is not None:
+            query = query.where(WorkItemModel.team_id == team_id)
+        if project_id is not None:
+            query = query.where(WorkItemModel.project_id == project_id)
+        result = await self._session.execute(query)
+        return list(result.scalars())
+
     async def list(
         self,
         *,

@@ -87,6 +87,14 @@ class InMemoryWorkItemRepository:
     async def update(self, work_item: WorkItem) -> None:
         self._items[work_item.id] = work_item
 
+    # Must stay above `list` — that method shadows the `list` builtin for every
+    # annotation below it in this class body, so `-> list[str]` would fail.
+    async def list_states(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[str]:
+        items = await self.list(team_id=team_id, project_id=project_id)
+        return sorted({item.state for item in items})
+
     async def list(
         self,
         *,

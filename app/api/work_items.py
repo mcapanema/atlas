@@ -57,6 +57,16 @@ async def create_work_item(
     return WorkItemRead.model_validate(item)
 
 
+@router.get("/states", response_model=list[str])
+async def list_work_item_states(
+    service: WorkItemServiceDep,
+    team_id: UUID | None = None,
+    project_id: UUID | None = None,
+) -> list[str]:
+    """Distinct states in scope — the selectable options for the state filter."""
+    return await service.list_states(team_id=team_id, project_id=project_id)
+
+
 @router.get("/{work_item_id}", response_model=WorkItemRead)
 async def get_work_item(work_item_id: UUID, service: WorkItemServiceDep) -> WorkItemRead:
     item = await service.get_work_item(work_item_id)

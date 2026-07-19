@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from app.application.work_items.service import WorkItemService
-from app.domain.work_items.entities import WorkItemType
+from app.domain.work_items.entities import WorkItem, WorkItemType
 from tests.fakes import InMemoryWorkItemRepository
 
 
@@ -55,3 +55,18 @@ async def test_list_paginates_and_counts() -> None:
 
     assert [i.title for i in page] == ["B", "C"]
     assert await service.count_work_items(team_id=team_id) == 3
+
+
+async def test_list_states_delegates_to_repository() -> None:
+    team_id = uuid4()
+    service = WorkItemService(
+        InMemoryWorkItemRepository(
+            [
+                WorkItem(team_id=team_id, title="A", state="done"),
+                WorkItem(team_id=team_id, title="B", state="backlog"),
+                WorkItem(team_id=uuid4(), title="C", state="archived"),
+            ]
+        )
+    )
+
+    assert await service.list_states(team_id=team_id) == ["backlog", "done"]

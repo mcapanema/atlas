@@ -83,6 +83,8 @@ export const forecastFixture = {
   confidence: null,
 };
 
+export const statesFixture = ["backlog", "in_progress", "done", "trash"];
+
 export const teamFixture = {
   id: "22222222-2222-2222-2222-222222222222",
   organization_id: "33333333-3333-3333-3333-333333333333",
@@ -161,6 +163,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     const url = String(input);
     for (const [prefix, body] of Object.entries(extraRoutes)) {
       if (url.startsWith(prefix)) return Promise.resolve(jsonResponse(body));
+    }
+    if (url.startsWith("/api/work-items/states")) {
+      return Promise.resolve(jsonResponse(statesFixture));
     }
     if (url.startsWith("/api/metrics/snapshots")) {
       return Promise.resolve(jsonResponse(snapshotsFixture));

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "./client";
+import type { MetricsScope } from "./metrics";
 
 export interface WorkItem {
   id: string;
@@ -59,5 +60,17 @@ export function useWorkItemTimeline(id: string) {
   return useQuery({
     queryKey: ["work-items", "timeline", id],
     queryFn: () => apiFetch<WorkItemTimeline>(`/api/work-items/${id}/timeline`),
+  });
+}
+
+/** Distinct states present in a scope — options for the exclude-states filter. */
+export function useWorkItemStates(scope: MetricsScope = {}) {
+  const params = new URLSearchParams();
+  if (scope.teamId) params.set("team_id", scope.teamId);
+  else if (scope.projectId) params.set("project_id", scope.projectId);
+  const query = params.toString();
+  return useQuery({
+    queryKey: ["work-items", "states", scope],
+    queryFn: () => apiFetch<string[]>(`/api/work-items/states${query ? `?${query}` : ""}`),
   });
 }
