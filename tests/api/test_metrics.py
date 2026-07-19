@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -370,3 +371,34 @@ async def test_history_honors_explicit_period(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["window_start"][:10] == start
+
+
+async def test_flow_history_reports_data_as_of(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
+    ).json()
+    await client.post(
+        "/api/events",
+        json={
+            "work_item_id": item["id"],
+            "type": "completed",
+            "occurred_at": days_ago(2),
+        },
+    )
+
+    body = (await client.get(f"/api/metrics/history?team_id={team_id}")).json()
+
+    # recorded_at is stamped at ingest, so it is ~now regardless of occurred_at.
+    assert body["data_as_of"] is not None
+    assert body["data_as_of"].startswith(datetime.now(UTC).strftime("%Y-%m-%d"))
+
+
+async def test_flow_history_data_as_of_is_null_for_an_empty_team(
+    client: AsyncClient,
+) -> None:
+    team_id = await create_team(client)
+
+    body = (await client.get(f"/api/metrics/history?team_id={team_id}")).json()
+
+    assert body["data_as_of"] is None

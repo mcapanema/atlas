@@ -191,6 +191,7 @@ class FlowHistoryRead(BaseModel):
     window_end: datetime
     days: list[DailyFlowCountRead]
     weeks: list[ThroughputBucketRead]
+    data_as_of: datetime | None
 
 
 class DurationBinRead(BaseModel):

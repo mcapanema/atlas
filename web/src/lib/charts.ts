@@ -110,7 +110,16 @@ export function buildThroughputOption(
 ): EChartsOption {
   const n = neutrals(mode);
   return {
-    tooltip: { trigger: "item" },
+    tooltip: {
+      trigger: "item",
+      // The axis can only fit the bucket's end date, which reads as "everything
+      // landed that day". The range is what the bar actually means.
+      formatter: (params: unknown) => {
+        const { dataIndex } = params as { dataIndex: number };
+        const week = weeks[dataIndex];
+        return `${formatDay(week.start)} – ${formatDay(week.end)}<br/>${week.completed} completed`;
+      },
+    },
     grid: { left: 48, right: 16, top: 16, bottom: 32 },
     xAxis: dayAxis(weeks.map((w) => formatDay(w.end)), n),
     yAxis: valueAxis(n),

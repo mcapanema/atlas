@@ -12,6 +12,7 @@ vi.mock("./EChart", () => ({
 import {
   agingWipFixture,
   healthFixture,
+  historyFixture,
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
@@ -193,6 +194,64 @@ describe("FlowDashboard", () => {
 
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
     expect(screen.queryByRole("region", { name: "Delivery health" })).toBeNull();
+  });
+
+  it("warns when the data is older than the window it is charting", async () => {
+    // extraRoutes keys are URL prefixes and values are raw bodies —
+    // mockMetricsFetch wraps them in jsonResponse itself, so don't pre-wrap.
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        data_as_of: "2026-07-07T00:00:00Z", // 72h before window_end
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/last synced/i);
+    expect(alert).toHaveTextContent("07-07-2026");
+    expect(alert).toHaveTextContent(/3 days/i);
+  });
+
+  it("uses the singular day when the data is only one day stale", async () => {
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        data_as_of: "2026-07-08T18:00:00Z", // 30h before window_end
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/1 day of this window/i);
+  });
+
+  it("says nothing about freshness when the data is current", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hides the throughput chart when the window holds a single bucket", async () => {
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        weeks: [
+          { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 41 },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    expect(screen.queryByText(/Weekly throughput/)).not.toBeInTheDocument();
+    expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
   });
 });
 

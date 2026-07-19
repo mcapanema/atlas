@@ -20,6 +20,7 @@ class FlowHistory:
     window_end: datetime
     days: tuple[DailyFlowCount, ...]
     weeks: tuple[ThroughputBucket, ...]
+    data_as_of: datetime | None
 
 
 def compute_flow_history(
@@ -32,9 +33,14 @@ def compute_flow_history(
         for stream in event_streams
         if (sample := derive_flow_sample(stream)) is not None
     ]
+    # The freshest thing we know about this scope. Events are append-only and
+    # recorded_at is stamped on ingest, so the newest one dates the last sync
+    # that touched this scope — no sync-log table needed.
+    recorded = [event.recorded_at for stream in event_streams for event in stream]
     return FlowHistory(
         window_start=window_start,
         window_end=now,
         days=tuple(daily_flow_counts(event_streams, start=window_start, end=now)),
         weeks=tuple(weekly_throughput(samples, end=now, weeks=max(1, window_days // 7))),
+        data_as_of=max(recorded, default=None),
     )
