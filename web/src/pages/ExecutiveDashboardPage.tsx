@@ -19,6 +19,7 @@ import {
 } from "../api/snapshots";
 import { useTeams, type Team } from "../api/teams";
 import { HealthBadge } from "../components/HealthBadge";
+import { HelpLabel } from "../components/HelpLabel";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { Sparkline } from "../components/Sparkline";
 import { formatDay } from "../lib/dates";
@@ -113,15 +114,7 @@ function DeltaChip({ delta, metric }: { delta: Delta | null; metric: string }) {
 
 /** Column header with a focus/hover definition — recognition over recall. */
 function columnHelp(label: string, help: string) {
-  return (
-    // Explicit focus trigger: hover-only definitions don't exist for
-    // keyboard users.
-    <Tooltip title={help} trigger={["hover", "focus"]}>
-      <span className="th-help" tabIndex={0}>
-        {label}
-      </span>
-    </Tooltip>
-  );
+  return <HelpLabel label={label} help={help} />;
 }
 
 function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
