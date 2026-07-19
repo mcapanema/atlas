@@ -23,8 +23,9 @@ import {
   buildThroughputOption,
   buildWipOption,
 } from "../lib/charts";
-import { formatDay } from "../lib/dates";
+import { formatDateTime, formatDay } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
+import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
 import { windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
@@ -143,8 +144,20 @@ export function FlowDashboard({
       : data
         ? `Last ${filters.windowDays ?? 30} days · ${formatDay(data.window_start)} – ${formatDay(data.window_end)}`
         : null;
+  const staleHours = history.data
+    ? stalenessHours(history.data.data_as_of, history.data.window_end)
+    : null;
+  const staleDays = staleHours === null ? 0 : Math.floor(staleHours / 24);
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
+      {history.data?.data_as_of && staleHours !== null && staleHours > STALE_AFTER_HOURS && (
+        <Alert
+          type="warning"
+          showIcon
+          message={`Data last synced ${formatDateTime(history.data.data_as_of)}`}
+          description={`The last ${staleDays} days of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
+        />
+      )}
       {health.data && health.data.score != null && health.data.band != null && (
         <HealthStrip health={health.data} periodText={periodText} />
       )}

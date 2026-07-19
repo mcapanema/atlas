@@ -52,6 +52,7 @@ export const historyFixture = {
     { day: "2026-07-10", todo: 1, in_progress: 2, done: 4 },
   ],
   weeks: [{ start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 4 }],
+  data_as_of: "2026-07-10T00:00:00Z",
 };
 
 export const distributionFixture = {

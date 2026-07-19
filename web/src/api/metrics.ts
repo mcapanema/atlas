@@ -32,6 +32,7 @@ export interface FlowHistory {
   window_end: string;
   days: DailyFlowCount[];
   weeks: ThroughputBucket[];
+  data_as_of: string | null;
 }
 
 export type MetricsScope = { teamId?: string; projectId?: string };

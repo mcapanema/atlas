@@ -12,6 +12,7 @@ vi.mock("./EChart", () => ({
 import {
   agingWipFixture,
   healthFixture,
+  historyFixture,
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
@@ -193,6 +194,33 @@ describe("FlowDashboard", () => {
 
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
     expect(screen.queryByRole("region", { name: "Delivery health" })).toBeNull();
+  });
+
+  it("warns when the data is older than the window it is charting", async () => {
+    // extraRoutes keys are URL prefixes and values are raw bodies —
+    // mockMetricsFetch wraps them in jsonResponse itself, so don't pre-wrap.
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        data_as_of: "2026-07-07T00:00:00Z", // 72h before window_end
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/last synced/i);
+    expect(alert).toHaveTextContent("07-07-2026");
+    expect(alert).toHaveTextContent(/3 days/i);
+  });
+
+  it("says nothing about freshness when the data is current", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 
