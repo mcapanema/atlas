@@ -237,11 +237,29 @@ describe("FlowDashboard", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("hides the throughput chart when the window holds a single bucket", async () => {
+  it("titles the throughput chart Daily when the buckets are one day each", async () => {
     mockMetricsFetch({
       "/api/metrics/history": {
         ...historyFixture,
-        weeks: [
+        bucket_days: 1,
+        buckets: [
+          { start: "2026-07-08T00:00:00Z", end: "2026-07-09T00:00:00Z", completed: 1 },
+          { start: "2026-07-09T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 2 },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} filters={{ windowDays: 7 }} />);
+
+    expect(await screen.findByText("Daily throughput (7d)")).toBeInTheDocument();
+    expect(screen.queryByText(/Weekly throughput/)).not.toBeInTheDocument();
+  });
+
+  it("still hides the chart when the window holds a single bucket", async () => {
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        buckets: [
           { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 41 },
         ],
       },
@@ -250,7 +268,9 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
-    expect(screen.queryByText(/Weekly throughput/)).not.toBeInTheDocument();
+    // Not /throughput/i — that also matches the ever-present "Throughput (30d)"
+    // stat tile. Scope to the chart card's title pattern instead.
+    expect(screen.queryByText(/(Daily|Weekly) throughput/)).not.toBeInTheDocument();
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
   });
 });

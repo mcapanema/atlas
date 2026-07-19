@@ -22,6 +22,7 @@ import {
   buildLeadTimeTrendOption,
   buildThroughputOption,
   buildWipOption,
+  throughputTitle,
 } from "../lib/charts";
 import { formatDateTime, formatDay } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
@@ -109,10 +110,11 @@ export function FlowDashboard({
   );
   const throughputOption = useMemo(
     // ponytail: one bucket is not a trend — it restates the Throughput stat
-    // tile as a single bar. Show the chart only once there is a shape to read.
+    // tile as a single bar. Short windows now bucket daily upstream, so this
+    // guard is a safety net rather than the common path.
     () =>
-      history.data && history.data.weeks.length > 1
-        ? buildThroughputOption(history.data.weeks, mode)
+      history.data && history.data.buckets.length > 1
+        ? buildThroughputOption(history.data.buckets, history.data.bucket_days, mode)
         : null,
     [history.data, mode],
   );
@@ -192,9 +194,9 @@ export function FlowDashboard({
               <EChart option={cfdOption} height={300} />
             </Card>
           </Col>
-          {throughputOption && (
+          {throughputOption && history.data && (
             <Col xs={24} lg={12}>
-              <Card title={`Weekly throughput (${chartLabel})`}>
+              <Card title={throughputTitle(history.data.bucket_days, chartLabel)}>
                 <EChart option={throughputOption} />
               </Card>
             </Col>
