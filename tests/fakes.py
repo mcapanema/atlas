@@ -6,6 +6,7 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
+import builtins
 from datetime import date, datetime
 from uuid import UUID
 
@@ -108,6 +109,14 @@ class InMemoryWorkItemRepository:
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> int:
         return len(await self.list(team_id=team_id, project_id=project_id))
+
+    # ponytail: builtins.list, not list — a method named `list` above shadows the
+    # bare builtin name for later annotations in this class body (runtime AND mypy).
+    async def list_states(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> builtins.list[str]:
+        items = await self.list(team_id=team_id, project_id=project_id)
+        return sorted({item.state for item in items})
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return self._items.get(work_item_id)

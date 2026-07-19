@@ -1,3 +1,4 @@
+import builtins
 from datetime import datetime
 from uuid import UUID
 
@@ -101,6 +102,19 @@ class SqlAlchemyWorkItemRepository:
             query = query.where(WorkItemModel.project_id == project_id)
         result = await self._session.execute(query)
         return int(result.scalar_one())
+
+    # ponytail: builtins.list, not list — a method named `list` above shadows the
+    # bare builtin name for later annotations in this class body (runtime AND mypy).
+    async def list_states(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> builtins.list[str]:
+        query = select(WorkItemModel.state).distinct().order_by(WorkItemModel.state)
+        if team_id is not None:
+            query = query.where(WorkItemModel.team_id == team_id)
+        if project_id is not None:
+            query = query.where(WorkItemModel.project_id == project_id)
+        result = await self._session.execute(query)
+        return list(result.scalars())
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         model = await self._session.get(WorkItemModel, work_item_id)

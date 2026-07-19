@@ -1,3 +1,4 @@
+import builtins
 from typing import Protocol
 from uuid import UUID
 
@@ -23,6 +24,12 @@ class WorkItemRepository(Protocol):
     async def count(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> int: ...
+
+    # ponytail: builtins.list, not list — a method named `list` above shadows the
+    # bare builtin name for later annotations in this class body (runtime AND mypy).
+    async def list_states(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> builtins.list[str]: ...
 
     async def get(self, work_item_id: UUID) -> WorkItem | None: ...
 

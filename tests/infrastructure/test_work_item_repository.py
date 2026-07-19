@@ -100,3 +100,27 @@ async def test_list_paginates_in_created_order(session: AsyncSession) -> None:
     assert [i.title for i in page] == ["B", "C"]
     assert await repo.count(team_id=team_id) == 3
     assert await repo.count() == 3
+
+
+async def test_list_states_returns_sorted_distinct_states(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    for state in ("in_progress", "backlog", "in_progress", "done"):
+        await repo.add(WorkItem(team_id=team_id, title=f"Item {state}", state=state))
+
+    assert await repo.list_states() == ["backlog", "done", "in_progress"]
+
+
+async def test_list_states_scopes_to_team_and_project(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    other_team_id = await _team_id(session)
+    project_id = await _project_id(session, team_id)
+    await repo.add(
+        WorkItem(team_id=team_id, project_id=project_id, title="Scoped", state="review")
+    )
+    await repo.add(WorkItem(team_id=team_id, title="Team only", state="triage"))
+    await repo.add(WorkItem(team_id=other_team_id, title="Elsewhere", state="archived"))
+
+    assert await repo.list_states(team_id=team_id) == ["review", "triage"]
+    assert await repo.list_states(project_id=project_id) == ["review"]
