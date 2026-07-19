@@ -214,6 +214,20 @@ describe("FlowDashboard", () => {
     expect(alert).toHaveTextContent(/3 days/i);
   });
 
+  it("uses the singular day when the data is only one day stale", async () => {
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        data_as_of: "2026-07-08T18:00:00Z", // 30h before window_end
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/1 day of this window/i);
+  });
+
   it("says nothing about freshness when the data is current", async () => {
     mockMetricsFetch();
 
