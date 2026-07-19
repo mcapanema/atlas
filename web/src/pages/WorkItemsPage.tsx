@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { useTeams } from "../api/teams";
 import { useWorkItems, WORK_ITEMS_PAGE_SIZE, type WorkItem } from "../api/workItems";
+import { formatDateTime } from "../lib/dates";
 
 export function WorkItemsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,7 +68,7 @@ export function WorkItemsPage() {
             {
               title: "Created",
               dataIndex: "created_at",
-              render: (createdAt: string) => new Date(createdAt).toLocaleString(),
+              render: (createdAt: string) => formatDateTime(createdAt),
             },
           ]}
         />
