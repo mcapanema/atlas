@@ -1,5 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({ options: [] as unknown[] }));
@@ -283,7 +282,7 @@ describe("FlowDashboard", () => {
     const trigger = await screen.findByText("Flow efficiency");
     expect(trigger).toHaveAttribute("tabindex", "0");
 
-    await userEvent.hover(trigger);
+    fireEvent.focus(trigger);
     expect(
       await screen.findByText(/Touch time divided by lead time/),
     ).toBeInTheDocument();
@@ -295,7 +294,7 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const trigger = await screen.findByText("Weekly throughput (90d)");
-    await userEvent.hover(trigger);
+    fireEvent.focus(trigger);
     expect(
       await screen.findByText(/Work items completed in each trailing 7-day bucket/),
     ).toBeInTheDocument();
