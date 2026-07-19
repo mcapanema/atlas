@@ -109,6 +109,10 @@ describe("buildWipOption", () => {
 
     expect(series[0].data).toEqual([1, 1]);
   });
+
+  it("labels the WIP y axis", () => {
+    expect((buildWipOption(days).yAxis as { name: string }).name).toBe("Items in progress");
+  });
 });
 
 describe("buildLeadTimeDistributionOption", () => {
@@ -123,6 +127,13 @@ describe("buildLeadTimeDistributionOption", () => {
     expect(series).toHaveLength(1);
     expect(series[0].data).toEqual([3, 0, 1]);
     expect((option.xAxis as { data: string[] }).data).toEqual(["0d", "1d", "2d"]);
+  });
+
+  it("labels the lead time distribution axes", () => {
+    const option = buildLeadTimeDistributionOption([{ start_days: 0, end_days: 1, count: 2 }]);
+
+    expect((option.xAxis as { name: string }).name).toBe("Lead time");
+    expect((option.yAxis as { name: string }).name).toBe("Items completed");
   });
 });
 

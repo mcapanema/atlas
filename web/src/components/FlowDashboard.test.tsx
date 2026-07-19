@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({ options: [] as unknown[] }));
@@ -272,6 +273,32 @@ describe("FlowDashboard", () => {
     // stat tile. Scope to the chart card's title pattern instead.
     expect(screen.queryByText(/(Daily|Weekly) throughput/)).not.toBeInTheDocument();
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
+  });
+
+  it("defines what each stat measures", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const trigger = await screen.findByText("Flow efficiency");
+    expect(trigger).toHaveAttribute("tabindex", "0");
+
+    await userEvent.hover(trigger);
+    expect(
+      await screen.findByText(/Touch time divided by lead time/),
+    ).toBeInTheDocument();
+  });
+
+  it("explains how the throughput chart is built", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const trigger = await screen.findByText("Weekly throughput (90d)");
+    await userEvent.hover(trigger);
+    expect(
+      await screen.findByText(/Work items completed in each trailing 7-day bucket/),
+    ).toBeInTheDocument();
   });
 });
 

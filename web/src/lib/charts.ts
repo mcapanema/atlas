@@ -151,9 +151,9 @@ export function buildWipOption(
   const n = neutrals(mode);
   return {
     tooltip: { trigger: "axis" },
-    grid: { left: 48, right: 16, top: 16, bottom: 32 },
+    grid: { left: 64, right: 16, top: 24, bottom: 32 },
     xAxis: dayAxis(days.map((d) => formatDay(d.day)), n),
-    yAxis: valueAxis(n),
+    yAxis: valueAxis(n, "Items in progress"),
     series: [
       {
         name: "WIP",
@@ -189,9 +189,9 @@ export function buildLeadTimeDistributionOption(
   const n = neutrals(mode);
   return {
     tooltip: { trigger: "item" },
-    grid: { left: 48, right: 16, top: 16, bottom: 32 },
-    xAxis: dayAxis(bins.map((b) => `${b.start_days}d`), n),
-    yAxis: valueAxis(n),
+    grid: { left: 64, right: 16, top: 24, bottom: 48 },
+    xAxis: dayAxis(bins.map((b) => `${b.start_days}d`), n, "Lead time"),
+    yAxis: valueAxis(n, "Items completed"),
     series: barSeries("Completed items", bins.map((b) => b.count)),
   };
 }
