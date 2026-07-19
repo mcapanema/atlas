@@ -190,7 +190,8 @@ class FlowHistoryRead(BaseModel):
     window_start: datetime
     window_end: datetime
     days: list[DailyFlowCountRead]
-    weeks: list[ThroughputBucketRead]
+    buckets: list[ThroughputBucketRead]
+    bucket_days: int
     data_as_of: datetime | None
 
 
