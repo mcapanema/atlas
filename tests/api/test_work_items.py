@@ -153,3 +153,30 @@ async def test_list_rejects_out_of_range_limit(client: AsyncClient) -> None:
     assert (await client.get("/api/work-items", params={"limit": 0})).status_code == 422
     assert (await client.get("/api/work-items", params={"limit": 501})).status_code == 422
     assert (await client.get("/api/work-items", params={"offset": -1})).status_code == 422
+
+
+async def test_list_states_returns_distinct_states_for_a_team(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    for state in ("in_progress", "backlog", "in_progress"):
+        response = await client.post(
+            "/api/work-items",
+            json={"team_id": team_id, "title": f"Item {state}", "state": state},
+        )
+        assert response.status_code == 201
+
+    response = await client.get("/api/work-items/states", params={"team_id": team_id})
+
+    assert response.status_code == 200
+    assert response.json() == ["backlog", "in_progress"]
+
+
+async def test_list_states_unscoped_returns_every_state(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    await client.post(
+        "/api/work-items", json={"team_id": team_id, "title": "A", "state": "shipped"}
+    )
+
+    response = await client.get("/api/work-items/states")
+
+    assert response.status_code == 200
+    assert "shipped" in response.json()

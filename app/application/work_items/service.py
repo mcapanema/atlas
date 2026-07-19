@@ -47,5 +47,10 @@ class WorkItemService:
     ) -> int:
         return await self._repository.count(team_id=team_id, project_id=project_id)
 
+    async def list_states(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[str]:
+        return await self._repository.list_states(team_id=team_id, project_id=project_id)
+
     async def get_work_item(self, work_item_id: UUID) -> WorkItem | None:
         return await self._repository.get(work_item_id)
