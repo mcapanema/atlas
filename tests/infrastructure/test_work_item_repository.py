@@ -124,3 +124,4 @@ async def test_list_states_scopes_to_team_and_project(session: AsyncSession) -> 
 
     assert await repo.list_states(team_id=team_id) == ["review", "triage"]
     assert await repo.list_states(project_id=project_id) == ["review"]
+    assert await repo.list_states(team_id=team_id, project_id=project_id) == ["review"]
