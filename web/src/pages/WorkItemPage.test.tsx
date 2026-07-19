@@ -24,7 +24,7 @@ const events = [
     id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     work_item_id: WORK_ITEM_ID,
     type: "created",
-    occurred_at: "2026-01-01T00:00:00Z",
+    occurred_at: "2026-06-10T09:05:00Z",
     from_state: null,
     to_state: null,
     external_id: null,
@@ -118,5 +118,18 @@ describe("WorkItemPage", () => {
     expect(screen.getAllByText("database is locked").length).toBeGreaterThan(0);
     expect(screen.queryByText("No events recorded yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Never blocked.")).not.toBeInTheDocument();
+  });
+
+  it("renders event and state-period timestamps as DD-MM-YYYY HH:mm", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
+      if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(events));
+      return Promise.resolve(jsonResponse(workItem));
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/10-06-2026 09:05/)).toBeInTheDocument();
   });
 });

@@ -151,7 +151,9 @@ describe("FlowDashboard", () => {
         name: "Health 82 of 100 — healthy. Show component reasons",
       }),
     ).toBeInTheDocument();
-    expect(within(strip).getByText("Last 30 days · Jun 10 – Jul 10")).toBeInTheDocument();
+    expect(
+      within(strip).getByText("Last 30 days · 10-06-2026 – 10-07-2026"),
+    ).toBeInTheDocument();
     // Healthy stays quiet — reasons live in the badge popover, not inline.
     expect(screen.queryByText(/lead time p95 is 1.8x p50/)).toBeNull();
   });

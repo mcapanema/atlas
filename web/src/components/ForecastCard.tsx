@@ -5,6 +5,7 @@ import { useForecast } from "../api/forecasts";
 import type { MetricsScope } from "../api/metrics";
 import { useForecastAccuracy } from "../api/snapshots";
 import { buildForecastOption } from "../lib/charts";
+import { DATE_FORMAT, formatDay } from "../lib/dates";
 import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
 import { StatCard } from "./StatCard";
@@ -39,13 +40,14 @@ export function ForecastCard({ scope }: { scope: MetricsScope }) {
       <Space direction="vertical" style={{ width: "100%" }} size="large">
         <Row gutter={[16, 16]}>
           <StatCard title="Remaining items" value={data.remaining} />
-          <StatCard title="P50 finish" value={data.completion.p50_date.slice(0, 10)} />
-          <StatCard title="P85 finish" value={data.completion.p85_date.slice(0, 10)} />
-          <StatCard title="P95 finish" value={data.completion.p95_date.slice(0, 10)} />
+          <StatCard title="P50 finish" value={formatDay(data.completion.p50_date)} />
+          <StatCard title="P85 finish" value={formatDay(data.completion.p85_date)} />
+          <StatCard title="P95 finish" value={formatDay(data.completion.p95_date)} />
         </Row>
         <Space>
           <span>Confidence of finishing by</span>
           <DatePicker
+            format={DATE_FORMAT}
             onChange={(value) => setTargetDate(value ? value.format("YYYY-MM-DD") : undefined)}
           />
           {data.confidence != null && (

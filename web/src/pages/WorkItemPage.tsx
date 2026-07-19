@@ -8,6 +8,7 @@ import {
   useWorkItem,
   useWorkItemTimeline,
 } from "../api/workItems";
+import { formatDateTime } from "../lib/dates";
 import { formatDuration } from "../lib/duration";
 
 function eventLabel(event: WorkItemEvent): string {
@@ -43,7 +44,7 @@ export function WorkItemPage() {
               <Tag color="blue">{workItem.data.state}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="Created">
-              {new Date(workItem.data.created_at).toLocaleString()}
+              {formatDateTime(workItem.data.created_at)}
             </Descriptions.Item>
             <Descriptions.Item label="External id">
               {workItem.data.external_id ?? "—"}
@@ -57,7 +58,7 @@ export function WorkItemPage() {
         ) : events.data?.length ? (
           <Timeline
             items={events.data.map((event) => ({
-              children: `${new Date(event.occurred_at).toLocaleString()} — ${eventLabel(event)}`,
+              children: `${formatDateTime(event.occurred_at)} — ${eventLabel(event)}`,
             }))}
           />
         ) : (
@@ -81,13 +82,13 @@ export function WorkItemPage() {
               {
                 title: "Entered",
                 dataIndex: "entered_at",
-                render: (enteredAt: string) => new Date(enteredAt).toLocaleString(),
+                render: (enteredAt: string) => formatDateTime(enteredAt),
               },
               {
                 title: "Exited",
                 dataIndex: "exited_at",
                 render: (exitedAt: string | null) =>
-                  exitedAt ? new Date(exitedAt).toLocaleString() : "current",
+                  exitedAt ? formatDateTime(exitedAt) : "current",
               },
               {
                 title: "Duration",
@@ -115,13 +116,13 @@ export function WorkItemPage() {
               {
                 title: "Blocked at",
                 dataIndex: "started_at",
-                render: (startedAt: string) => new Date(startedAt).toLocaleString(),
+                render: (startedAt: string) => formatDateTime(startedAt),
               },
               {
                 title: "Unblocked at",
                 dataIndex: "ended_at",
                 render: (endedAt: string | null) =>
-                  endedAt ? new Date(endedAt).toLocaleString() : "still blocked",
+                  endedAt ? formatDateTime(endedAt) : "still blocked",
               },
               {
                 title: "Duration",

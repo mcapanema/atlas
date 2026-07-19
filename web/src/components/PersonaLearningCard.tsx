@@ -2,6 +2,7 @@ import { Alert, Button, Card, List, Space, Typography } from "antd";
 
 import type { Persona } from "../api/advisor";
 import { useGuidance, useReflect, useRestoreGuidance } from "../api/personas";
+import { formatDay } from "../lib/dates";
 
 export function PersonaLearningCard({ persona }: { persona: Persona }) {
   const guidance = useGuidance(persona);
@@ -47,7 +48,7 @@ export function PersonaLearningCard({ persona }: { persona: Persona }) {
               {active.guidance}
             </Typography.Paragraph>
             <Typography.Text type="secondary">
-              v{active.version} · {new Date(active.created_at).toLocaleDateString()}
+              v{active.version} · {formatDay(active.created_at)}
             </Typography.Text>
           </>
         ) : (

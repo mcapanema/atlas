@@ -83,9 +83,9 @@ describe("MetricsFilterBar", () => {
     const endInput = screen.getByPlaceholderText("End date");
     fireEvent.mouseDown(startInput);
     fireEvent.focus(startInput);
-    fireEvent.change(startInput, { target: { value: "2026-06-05" } });
+    fireEvent.change(startInput, { target: { value: "05-06-2026" } });
     fireEvent.keyDown(startInput, { key: "Enter" });
-    fireEvent.change(endInput, { target: { value: "2026-06-20" } });
+    fireEvent.change(endInput, { target: { value: "20-06-2026" } });
     fireEvent.keyDown(endInput, { key: "Enter" });
     expect(onChange).toHaveBeenCalledWith({ start: "2026-06-05", end: "2026-06-20" });
   });

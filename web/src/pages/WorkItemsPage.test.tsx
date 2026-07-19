@@ -24,7 +24,7 @@ function mockApi() {
             type: "bug",
             state: "In Progress",
             external_id: null,
-            created_at: "2026-07-01T00:00:00Z",
+            created_at: "2026-06-10T14:32:07Z",
           },
         ],
         total: 1,
@@ -147,5 +147,12 @@ describe("WorkItemsPage", () => {
       const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
       expect(calls.some((url) => url.includes("offset=50"))).toBe(true);
     });
+  });
+
+  it("renders the created timestamp as DD-MM-YYYY HH:mm", async () => {
+    mockApi();
+
+    renderWithClient(<WorkItemsPage />, ["/work-items"]);
+    expect(await screen.findByText("10-06-2026 14:32")).toBeInTheDocument();
   });
 });

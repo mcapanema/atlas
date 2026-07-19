@@ -1,6 +1,7 @@
 import type { EChartsOption } from "echarts";
 
 import { palette, type ThemeMode } from "../theme/tokens";
+import { formatDay } from "./dates";
 
 export interface DailyFlowCount {
   day: string;
@@ -93,7 +94,7 @@ export function buildCfdOption(
     tooltip: { trigger: "axis" },
     legend: { bottom: 0, textStyle: { color: n.inkSecondary } },
     grid: { left: 48, right: 96, top: 16, bottom: 48 },
-    xAxis: dayAxis(days.map((d) => d.day), n),
+    xAxis: dayAxis(days.map((d) => formatDay(d.day)), n),
     yAxis: valueAxis(n),
     series: [
       band("Done", SERIES.done, days.map((d) => d.done)),
@@ -111,7 +112,7 @@ export function buildThroughputOption(
   return {
     tooltip: { trigger: "item" },
     grid: { left: 48, right: 16, top: 16, bottom: 32 },
-    xAxis: dayAxis(weeks.map((w) => w.end.slice(0, 10)), n),
+    xAxis: dayAxis(weeks.map((w) => formatDay(w.end)), n),
     yAxis: valueAxis(n),
     series: barSeries("Completed", weeks.map((w) => w.completed)),
   };
@@ -125,7 +126,7 @@ export function buildWipOption(
   return {
     tooltip: { trigger: "axis" },
     grid: { left: 48, right: 16, top: 16, bottom: 32 },
-    xAxis: dayAxis(days.map((d) => d.day), n),
+    xAxis: dayAxis(days.map((d) => formatDay(d.day)), n),
     yAxis: valueAxis(n),
     series: [
       {
@@ -194,7 +195,7 @@ export function buildLeadTimeTrendOption(
     tooltip: { trigger: "axis" },
     legend: { bottom: 0, textStyle: { color: n.inkSecondary } },
     grid: { left: 48, right: 16, top: 16, bottom: 48 },
-    xAxis: dayAxis(points.map((p) => p.captured_on), n),
+    xAxis: dayAxis(points.map((p) => formatDay(p.captured_on)), n),
     yAxis: valueAxis(n),
     series: [
       line("Lead time P50 (d)", BLUE, points.map((p) => toDays(p.lead_time_p50_seconds))),
@@ -214,8 +215,7 @@ export function buildForecastOption(
 ): EChartsOption {
   const n = neutrals(mode);
   const origin = new Date(windowEnd).getTime();
-  const label = (days: number) =>
-    new Date(origin + days * 86_400_000).toISOString().slice(0, 10);
+  const label = (days: number) => formatDay(new Date(origin + days * 86_400_000).toISOString());
   return {
     tooltip: { trigger: "item" },
     grid: { left: 48, right: 16, top: 16, bottom: 32 },

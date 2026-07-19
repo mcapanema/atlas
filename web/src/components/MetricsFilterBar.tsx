@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 
 import type { MetricsFilters, MetricsScope } from "../api/metrics";
 import { useWorkItemStates } from "../api/workItems";
+import { DATE_FORMAT } from "../lib/dates";
 
 const TYPE_OPTIONS = ["story", "task", "bug", "spike", "other"].map((value) => ({
   value,
@@ -56,10 +57,18 @@ export function MetricsFilterBar({
         <span role="group" aria-label="Custom date range">
           <DatePicker.RangePicker
             allowClear={false}
+            format={DATE_FORMAT}
             value={[dayjs(start), dayjs(end)]}
-            onChange={(_, [nextStart, nextEnd]) => {
+            // The dates render as DD-MM-YYYY but travel as ISO — format the
+            // dayjs values rather than reusing AntD's display strings.
+            onChange={(dates) => {
+              const [nextStart, nextEnd] = dates ?? [];
               if (nextStart && nextEnd) {
-                onChange({ ...itemFilters, start: nextStart, end: nextEnd });
+                onChange({
+                  ...itemFilters,
+                  start: nextStart.format(ISO),
+                  end: nextEnd.format(ISO),
+                });
               }
             }}
           />
