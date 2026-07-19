@@ -49,8 +49,8 @@ persisted events; these slices have no tables and no migrations.
 - **Metrics** (`app/domain/metrics/`): per-item `FlowSample`s
   (`samples.py`) fold into `TeamFlowMetrics` — Lead/Cycle Time
   percentiles, Throughput, WIP, Blocked Time, Flow Efficiency
-  (`summary.py`) — plus daily CFD phase counts (`cfd.py`), weekly
-  throughput buckets (`history.py`), and a lead-time histogram
+  (`summary.py`) — plus daily CFD phase counts (`cfd.py`), adaptive
+  daily/weekly throughput buckets (`history.py`), and a lead-time histogram
   (`distribution.py`). The metrics slice also computes Queue Time, Touch
   Time, Aging WIP, and a Delivery Health composite (predictability /
   efficiency / flow / stability / risk, each 0–100 with a reason string).

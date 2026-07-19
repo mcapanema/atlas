@@ -82,7 +82,7 @@ def test_bucketed_throughput_supports_daily_buckets() -> None:
     assert buckets[0].start == end - timedelta(days=3)
 
 
-def test_weekly_throughput_buckets_completions_oldest_first() -> None:
+def test_bucketed_throughput_weekly_buckets_completions_oldest_first() -> None:
     from app.domain.metrics.throughput import ThroughputBucket
 
     end = datetime(2026, 7, 10, tzinfo=UTC)
