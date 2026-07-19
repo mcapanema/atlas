@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { mockMetricsFetch, statesFixture } from "../test/fixtures";
+import { renderWithClient } from "../test/render";
 import { MetricsFilterBar } from "./MetricsFilterBar";
 
 function openSelect(label: string) {
@@ -8,9 +10,12 @@ function openSelect(label: string) {
 }
 
 describe("MetricsFilterBar", () => {
+  beforeEach(() => mockMetricsFetch());
+  afterEach(() => vi.restoreAllMocks());
+
   it("emits a preset window change", () => {
     const onChange = vi.fn();
-    render(<MetricsFilterBar filters={{}} onChange={onChange} />);
+    renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
     openSelect("Analysis period");
     fireEvent.click(screen.getByText("Last 90 days"));
     expect(onChange).toHaveBeenCalledWith({ windowDays: 90 });
@@ -18,7 +23,7 @@ describe("MetricsFilterBar", () => {
 
   it("switches to a custom range seeded with the last 30 days", () => {
     const onChange = vi.fn();
-    render(<MetricsFilterBar filters={{}} onChange={onChange} />);
+    renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
     openSelect("Analysis period");
     fireEvent.click(screen.getByText("Custom range"));
     const next = onChange.mock.calls[0][0];
@@ -27,7 +32,9 @@ describe("MetricsFilterBar", () => {
   });
 
   it("shows the range picker only when a range is active", () => {
-    const { rerender } = render(<MetricsFilterBar filters={{}} onChange={vi.fn()} />);
+    const { rerender } = renderWithClient(
+      <MetricsFilterBar filters={{}} onChange={vi.fn()} />,
+    );
     expect(screen.queryByLabelText("Custom date range")).toBeNull();
     rerender(
       <MetricsFilterBar
@@ -40,7 +47,7 @@ describe("MetricsFilterBar", () => {
 
   it("emits type filters", () => {
     const onChange = vi.fn();
-    render(<MetricsFilterBar filters={{}} onChange={onChange} />);
+    renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
     openSelect("Work item types");
     fireEvent.click(screen.getByTitle("bug"));
     expect(onChange).toHaveBeenCalledWith({ types: ["bug"] });
@@ -48,7 +55,7 @@ describe("MetricsFilterBar", () => {
 
   it("clears type filters back to undefined", () => {
     const onChange = vi.fn();
-    render(<MetricsFilterBar filters={{ types: ["bug"] }} onChange={onChange} />);
+    renderWithClient(<MetricsFilterBar filters={{ types: ["bug"] }} onChange={onChange} />);
     const clearIcon = document.querySelector(".ant-select-clear");
     expect(clearIcon).not.toBeNull();
     fireEvent.mouseDown(clearIcon as Element);
@@ -57,7 +64,7 @@ describe("MetricsFilterBar", () => {
 
   it("emits excluded state tags", () => {
     const onChange = vi.fn();
-    render(<MetricsFilterBar filters={{}} onChange={onChange} />);
+    renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
     const input = screen.getByRole("combobox", { name: "Excluded states" });
     fireEvent.mouseDown(input);
     fireEvent.change(input, { target: { value: "canceled," } });
@@ -66,7 +73,7 @@ describe("MetricsFilterBar", () => {
 
   it("emits a custom range once both dates are picked", () => {
     const onChange = vi.fn();
-    render(
+    renderWithClient(
       <MetricsFilterBar
         filters={{ start: "2026-06-01", end: "2026-06-30" }}
         onChange={onChange}
@@ -81,5 +88,35 @@ describe("MetricsFilterBar", () => {
     fireEvent.change(endInput, { target: { value: "2026-06-20" } });
     fireEvent.keyDown(endInput, { key: "Enter" });
     expect(onChange).toHaveBeenCalledWith({ start: "2026-06-05", end: "2026-06-20" });
+  });
+
+  it("offers the scope's states as selectable exclude options", async () => {
+    const onChange = vi.fn();
+    renderWithClient(
+      <MetricsFilterBar filters={{}} scope={{ teamId: "t1" }} onChange={onChange} />,
+    );
+    openSelect("Excluded states");
+
+    await waitFor(() =>
+      expect(screen.getByTitle(statesFixture[0])).toBeInTheDocument(),
+    );
+    for (const state of statesFixture) {
+      expect(screen.getByTitle(state)).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByTitle("trash"));
+
+    expect(onChange).toHaveBeenCalledWith({ excludeStates: ["trash"] });
+  });
+
+  it("still accepts a typed state that is not in the fetched options", async () => {
+    const onChange = vi.fn();
+    renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
+    const input = screen.getByRole("combobox", { name: "Excluded states" });
+
+    fireEvent.change(input, { target: { value: "wontfix" } });
+    await waitFor(() => expect(screen.getByTitle("wontfix")).toBeInTheDocument());
+    fireEvent.click(screen.getByTitle("wontfix"));
+
+    expect(onChange).toHaveBeenCalledWith({ excludeStates: ["wontfix"] });
   });
 });

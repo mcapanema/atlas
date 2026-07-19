@@ -43,7 +43,9 @@ export function TeamDashboardPage() {
             loading={teams.isLoading}
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
-          {teamId && <MetricsFilterBar filters={filters} onChange={setFilters} />}
+          {teamId && (
+            <MetricsFilterBar filters={filters} scope={{ teamId }} onChange={setFilters} />
+          )}
         </Space>
         {!teamId && <Alert type="info" message="Select a team to see its dashboard." />}
         {teamId && <FlowDashboard scope={{ teamId }} filters={filters} />}

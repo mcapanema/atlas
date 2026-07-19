@@ -6,6 +6,7 @@ import {
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
+  statesFixture,
   teamFixture,
 } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
@@ -173,6 +174,9 @@ describe("ExecutiveDashboardPage", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      if (url.startsWith("/api/work-items/states")) {
+        return Promise.resolve(jsonResponse(statesFixture));
+      }
       // Every query for the second team fails; the first team stays healthy.
       if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
       if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
@@ -204,6 +208,9 @@ describe("ExecutiveDashboardPage", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      if (url.startsWith("/api/work-items/states")) {
+        return Promise.resolve(jsonResponse(statesFixture));
+      }
       if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
       if (failedOnce) return new Promise(() => {}); // the retry hangs
       if (url.startsWith("/api/metrics?")) {

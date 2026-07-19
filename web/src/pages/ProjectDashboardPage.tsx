@@ -43,7 +43,13 @@ export function ProjectDashboardPage() {
             loading={projects.isLoading}
             options={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
           />
-          {projectId && <MetricsFilterBar filters={filters} onChange={setFilters} />}
+          {projectId && (
+            <MetricsFilterBar
+              filters={filters}
+              scope={{ projectId }}
+              onChange={setFilters}
+            />
+          )}
         </Space>
         {!projectId && <Alert type="info" message="Select a project to see its dashboard." />}
         {projectId && <FlowDashboard scope={{ projectId }} filters={filters} />}
