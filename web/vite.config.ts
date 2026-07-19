@@ -11,6 +11,9 @@ export default defineConfig({
     },
   },
   test: {
+    // formatDateTime renders local time; pin the zone so timestamp
+    // assertions don't depend on the machine running the suite.
+    env: { TZ: "UTC" },
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/test/setup.ts",

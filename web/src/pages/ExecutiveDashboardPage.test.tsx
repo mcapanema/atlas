@@ -101,7 +101,7 @@ describe("ExecutiveDashboardPage", () => {
     renderWithClient(<ExecutiveDashboardPage />);
 
     expect(await screen.findByText("All 2 teams healthy")).toBeInTheDocument();
-    expect(screen.getByText("Last 30 days · Jun 10 – Jul 10")).toBeInTheDocument();
+    expect(screen.getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
     // Healthy portfolio renders no attention section.
     expect(screen.queryByLabelText("Teams needing attention")).not.toBeInTheDocument();
   });
