@@ -222,6 +222,23 @@ describe("FlowDashboard", () => {
     await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("hides the throughput chart when the window holds a single bucket", async () => {
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        weeks: [
+          { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 41 },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    expect(screen.queryByText(/Weekly throughput/)).not.toBeInTheDocument();
+    expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
+  });
 });
 
 test("renders lead time trend from snapshots", async () => {

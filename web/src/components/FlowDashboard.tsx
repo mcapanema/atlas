@@ -108,7 +108,12 @@ export function FlowDashboard({
     [history.data, mode],
   );
   const throughputOption = useMemo(
-    () => (history.data ? buildThroughputOption(history.data.weeks, mode) : null),
+    // ponytail: one bucket is not a trend — it restates the Throughput stat
+    // tile as a single bar. Show the chart only once there is a shape to read.
+    () =>
+      history.data && history.data.weeks.length > 1
+        ? buildThroughputOption(history.data.weeks, mode)
+        : null,
     [history.data, mode],
   );
   const wipOption = useMemo(
@@ -180,18 +185,20 @@ export function FlowDashboard({
           <StatCard title="Touch time P50" value={duration(data.touch_time, "p50_seconds")} />
         </Row>
       )}
-      {cfdOption && throughputOption && wipOption && (
+      {cfdOption && wipOption && (
         <Row gutter={[16, 16]}>
           <Col xs={24}>
             <Card title={`Cumulative flow (${chartLabel})`}>
               <EChart option={cfdOption} height={300} />
             </Card>
           </Col>
-          <Col xs={24} lg={12}>
-            <Card title={`Weekly throughput (${chartLabel})`}>
-              <EChart option={throughputOption} />
-            </Card>
-          </Col>
+          {throughputOption && (
+            <Col xs={24} lg={12}>
+              <Card title={`Weekly throughput (${chartLabel})`}>
+                <EChart option={throughputOption} />
+              </Card>
+            </Col>
+          )}
           <Col xs={24} lg={12}>
             <Card title={`WIP over time (${chartLabel})`}>
               <EChart option={wipOption} />
