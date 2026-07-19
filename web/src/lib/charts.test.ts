@@ -66,6 +66,14 @@ describe("buildThroughputOption", () => {
     expect(series).toHaveLength(1);
     expect(series[0].data).toEqual([3]);
   });
+
+  it("names the bucket's full date range in the tooltip", () => {
+    const option = buildThroughputOption(weeks);
+    const formatter = (option.tooltip as { formatter: (p: { dataIndex: number }) => string })
+      .formatter;
+
+    expect(formatter({ dataIndex: 0 })).toBe("26-06-2026 – 03-07-2026<br/>3 completed");
+  });
 });
 
 describe("buildWipOption", () => {
