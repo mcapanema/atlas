@@ -160,7 +160,7 @@ export function FlowDashboard({
           type="warning"
           showIcon
           message={`Data last synced ${formatDateTime(history.data.data_as_of)}`}
-          description={`The last ${staleDays} days of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
+          description={`The last ${staleDays} day${staleDays === 1 ? "" : "s"} of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
         />
       )}
       {health.data && health.data.score != null && health.data.band != null && (
