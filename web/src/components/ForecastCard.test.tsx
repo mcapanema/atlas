@@ -23,8 +23,8 @@ describe("ForecastCard", () => {
 
     await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
     expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("2026-07-22")).toBeInTheDocument(); // P50 finish
-    expect(screen.getByText("2026-08-04")).toBeInTheDocument(); // P95 finish
+    expect(screen.getByText("22-07-2026")).toBeInTheDocument(); // P50 finish
+    expect(screen.getByText("04-08-2026")).toBeInTheDocument(); // P95 finish
     expect(screen.getByTestId("echart")).toBeInTheDocument();
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
     expect(urls).toContain("/api/forecasts?team_id=team-1");
@@ -58,7 +58,7 @@ describe("ForecastCard", () => {
 
     const input = screen.getByPlaceholderText("Select date");
     fireEvent.mouseDown(input);
-    fireEvent.change(input, { target: { value: "2026-09-01" } });
+    fireEvent.change(input, { target: { value: "01-09-2026" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
