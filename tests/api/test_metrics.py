@@ -117,8 +117,9 @@ async def test_flow_history_end_to_end(client: AsyncClient) -> None:
     assert len(body["days"]) == 91  # default 90-day window, inclusive
     assert body["days"][-1]["done"] == 1
     assert body["days"][-1]["in_progress"] == 0
-    assert len(body["weeks"]) == 12
-    assert sum(w["completed"] for w in body["weeks"]) == 1
+    assert body["bucket_days"] == 7
+    assert len(body["buckets"]) == 12
+    assert sum(b["completed"] for b in body["buckets"]) == 1
 
 
 async def test_flow_history_requires_exactly_one_scope(client: AsyncClient) -> None:
@@ -402,3 +403,16 @@ async def test_flow_history_data_as_of_is_null_for_an_empty_team(
     body = (await client.get(f"/api/metrics/history?team_id={team_id}")).json()
 
     assert body["data_as_of"] is None
+
+
+async def test_flow_history_buckets_a_short_window_daily(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+
+    response = await client.get(
+        f"/api/metrics/history?team_id={team_id}&window_days=7"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bucket_days"] == 1
+    assert len(body["buckets"]) == 7

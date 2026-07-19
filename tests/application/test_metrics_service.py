@@ -138,7 +138,7 @@ async def test_flow_history_for_team() -> None:
     assert history.window_end == NOW
     assert len(history.days) == 15
     assert history.days[-1].done == 1
-    assert sum(b.completed for b in history.weeks) == 1
+    assert sum(b.completed for b in history.buckets) == 1
 
 
 async def test_lead_time_distribution_for_team() -> None:
@@ -176,7 +176,7 @@ async def test_precomputed_scope_skips_repository_loading() -> None:
     distribution = await service.get_lead_time_distribution(now=NOW, scope=scope)
 
     assert metrics.completed == 1
-    assert sum(b.completed for b in history.weeks) == 1
+    assert sum(b.completed for b in history.buckets) == 1
     assert sum(b.count for b in distribution.bins) == 1
 
 
