@@ -8,14 +8,19 @@ import {
   buildLeadTimeTrendOption,
   buildThroughputOption,
   buildWipOption,
+  throughputTitle,
 } from "./charts";
 
 const days = [
   { day: "2026-07-01", todo: 2, in_progress: 1, done: 0 },
   { day: "2026-07-02", todo: 1, in_progress: 1, done: 1 },
 ];
-const weeks = [
+const buckets = [
   { start: "2026-06-26T00:00:00Z", end: "2026-07-03T00:00:00Z", completed: 3 },
+];
+const dailyBuckets = [
+  { start: "2026-07-08T00:00:00Z", end: "2026-07-09T00:00:00Z", completed: 1 },
+  { start: "2026-07-09T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 2 },
 ];
 
 interface Series {
@@ -59,20 +64,41 @@ describe("buildCfdOption", () => {
 });
 
 describe("buildThroughputOption", () => {
-  it("plots one bar per week", () => {
-    const option = buildThroughputOption(weeks);
+  it("plots one bar per bucket", () => {
+    const option = buildThroughputOption(buckets, 7);
     const series = option.series as Series[];
 
     expect(series).toHaveLength(1);
     expect(series[0].data).toEqual([3]);
   });
 
-  it("names the bucket's full date range in the tooltip", () => {
-    const option = buildThroughputOption(weeks);
+  it("names a weekly bucket's full date range in the tooltip", () => {
+    const option = buildThroughputOption(buckets, 7);
     const formatter = (option.tooltip as { formatter: (p: { dataIndex: number }) => string })
       .formatter;
 
     expect(formatter({ dataIndex: 0 })).toBe("26-06-2026 – 03-07-2026<br/>3 completed");
+  });
+
+  it("names only the day itself for a daily bucket", () => {
+    const option = buildThroughputOption(dailyBuckets, 1);
+    const formatter = (option.tooltip as { formatter: (p: { dataIndex: number }) => string })
+      .formatter;
+
+    expect(formatter({ dataIndex: 1 })).toBe("10-07-2026<br/>2 completed");
+  });
+
+  it("labels the y axis with the unit being counted", () => {
+    const option = buildThroughputOption(buckets, 7);
+
+    expect((option.yAxis as { name: string }).name).toBe("Items completed");
+  });
+});
+
+describe("throughputTitle", () => {
+  it("names the bucket size the chart is actually showing", () => {
+    expect(throughputTitle(1, "7d")).toBe("Daily throughput (7d)");
+    expect(throughputTitle(7, "90d")).toBe("Weekly throughput (90d)");
   });
 });
 

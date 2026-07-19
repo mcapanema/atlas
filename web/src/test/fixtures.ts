@@ -51,10 +51,11 @@ export const historyFixture = {
     { day: "2026-07-09", todo: 2, in_progress: 2, done: 3 },
     { day: "2026-07-10", todo: 1, in_progress: 2, done: 4 },
   ],
-  weeks: [
+  buckets: [
     { start: "2026-06-26T00:00:00Z", end: "2026-07-03T00:00:00Z", completed: 2 },
     { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 4 },
   ],
+  bucket_days: 7,
   data_as_of: "2026-07-10T00:00:00Z",
 };
 

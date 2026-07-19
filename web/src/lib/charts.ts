@@ -53,20 +53,26 @@ function neutrals(mode: ThemeMode): Neutrals {
   };
 }
 
-function dayAxis(labels: string[], n: Neutrals): EChartsOption["xAxis"] {
+function dayAxis(labels: string[], n: Neutrals, name?: string): EChartsOption["xAxis"] {
   return {
     type: "category",
     data: labels,
     axisLabel: { color: n.inkMuted },
     axisLine: { lineStyle: { color: n.baseline } },
+    name,
+    nameLocation: "middle",
+    nameGap: 28,
+    nameTextStyle: { color: n.inkMuted },
   };
 }
 
-function valueAxis(n: Neutrals): EChartsOption["yAxis"] {
+function valueAxis(n: Neutrals, name?: string): EChartsOption["yAxis"] {
   return {
     type: "value",
     axisLabel: { color: n.inkMuted },
     splitLine: { lineStyle: { color: n.gridline } },
+    name,
+    nameTextStyle: { color: n.inkMuted },
   };
 }
 
@@ -104,8 +110,14 @@ export function buildCfdOption(
   };
 }
 
+/** "Daily throughput (7d)" / "Weekly throughput (90d)" — name the bucket, not the window. */
+export function throughputTitle(bucketDays: number, windowLabel: string): string {
+  return `${bucketDays === 1 ? "Daily" : "Weekly"} throughput (${windowLabel})`;
+}
+
 export function buildThroughputOption(
-  weeks: ThroughputBucket[],
+  buckets: ThroughputBucket[],
+  bucketDays: number,
   mode: ThemeMode = "light",
 ): EChartsOption {
   const n = neutrals(mode);
@@ -113,17 +125,22 @@ export function buildThroughputOption(
     tooltip: {
       trigger: "item",
       // The axis can only fit the bucket's end date, which reads as "everything
-      // landed that day". The range is what the bar actually means.
+      // landed that day". For a multi-day bucket the range is what the bar
+      // actually means; for a one-day bucket the end date already is the day.
       formatter: (params: unknown) => {
         const { dataIndex } = params as { dataIndex: number };
-        const week = weeks[dataIndex];
-        return `${formatDay(week.start)} – ${formatDay(week.end)}<br/>${week.completed} completed`;
+        const bucket = buckets[dataIndex];
+        const when =
+          bucketDays === 1
+            ? formatDay(bucket.end)
+            : `${formatDay(bucket.start)} – ${formatDay(bucket.end)}`;
+        return `${when}<br/>${bucket.completed} completed`;
       },
     },
-    grid: { left: 48, right: 16, top: 16, bottom: 32 },
-    xAxis: dayAxis(weeks.map((w) => formatDay(w.end)), n),
-    yAxis: valueAxis(n),
-    series: barSeries("Completed", weeks.map((w) => w.completed)),
+    grid: { left: 64, right: 16, top: 24, bottom: 32 },
+    xAxis: dayAxis(buckets.map((b) => formatDay(b.end)), n),
+    yAxis: valueAxis(n, "Items completed"),
+    series: barSeries("Completed", buckets.map((b) => b.completed)),
   };
 }
 

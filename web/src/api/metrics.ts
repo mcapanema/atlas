@@ -31,7 +31,8 @@ export interface FlowHistory {
   window_start: string;
   window_end: string;
   days: DailyFlowCount[];
-  weeks: ThroughputBucket[];
+  buckets: ThroughputBucket[];
+  bucket_days: number;
   data_as_of: string | null;
 }
 
