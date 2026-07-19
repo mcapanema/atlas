@@ -22,14 +22,15 @@ class ThroughputBucket:
     completed: int
 
 
-def weekly_throughput(
-    samples: list[FlowSample], *, end: datetime, weeks: int
+def bucketed_throughput(
+    samples: list[FlowSample], *, end: datetime, count: int, bucket_days: int
 ) -> list[ThroughputBucket]:
-    """Trailing 7-day buckets ending at `end`, oldest first."""
+    """`count` trailing buckets of `bucket_days` each, ending at `end`, oldest first."""
+    size = timedelta(days=bucket_days)
     buckets: list[ThroughputBucket] = []
-    for i in range(weeks, 0, -1):
-        bucket_end = end - timedelta(days=7 * (i - 1))
-        bucket_start = bucket_end - timedelta(days=7)
+    for i in range(count, 0, -1):
+        bucket_end = end - size * (i - 1)
+        bucket_start = bucket_end - size
         buckets.append(
             ThroughputBucket(
                 start=bucket_start,

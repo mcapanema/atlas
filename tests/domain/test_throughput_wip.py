@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from app.domain.metrics.samples import FlowSample
-from app.domain.metrics.throughput import throughput
+from app.domain.metrics.throughput import bucketed_throughput, throughput
 from app.domain.metrics.wip import wip
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
@@ -57,8 +57,33 @@ def test_wip_ignores_items_started_after_the_instant() -> None:
     assert wip([future_start], at=NOW) == 0
 
 
+def test_bucketed_throughput_supports_daily_buckets() -> None:
+    end = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
+
+    def completed(offset: timedelta) -> FlowSample:
+        return FlowSample(
+            created_at=end - offset - timedelta(days=1),
+            started_at=None,
+            completed_at=end - offset,
+            blocked_time=timedelta(0),
+        )
+
+    samples = [
+        completed(timedelta(days=1)),
+        completed(timedelta(hours=2)),
+        completed(timedelta(hours=1)),
+    ]
+
+    buckets = bucketed_throughput(samples, end=end, count=3, bucket_days=1)
+
+    assert [b.completed for b in buckets] == [0, 1, 2]
+    assert buckets[-1].end == end
+    assert buckets[-1].start == end - timedelta(days=1)
+    assert buckets[0].start == end - timedelta(days=3)
+
+
 def test_weekly_throughput_buckets_completions_oldest_first() -> None:
-    from app.domain.metrics.throughput import ThroughputBucket, weekly_throughput
+    from app.domain.metrics.throughput import ThroughputBucket
 
     end = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -72,7 +97,7 @@ def test_weekly_throughput_buckets_completions_oldest_first() -> None:
 
     samples = [completed(1), completed(2), completed(10)]
 
-    buckets = weekly_throughput(samples, end=end, weeks=2)
+    buckets = bucketed_throughput(samples, end=end, count=2, bucket_days=7)
 
     assert [b.completed for b in buckets] == [1, 2]
     assert buckets[0] == ThroughputBucket(
