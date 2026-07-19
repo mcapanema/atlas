@@ -32,3 +32,33 @@ def test_history_for_no_streams_is_all_zeros() -> None:
     assert len(history.weeks) == 2
     assert all(c.todo == c.in_progress == c.done == 0 for c in history.days)
     assert all(b.completed == 0 for b in history.weeks)
+
+
+def test_history_reports_the_newest_recorded_at_as_data_as_of() -> None:
+    item = uuid4()
+    stale = datetime(2026, 7, 1, 9, 0, tzinfo=UTC)
+    fresh = datetime(2026, 7, 8, 9, 0, tzinfo=UTC)
+    stream = [
+        Event(
+            work_item_id=item,
+            type=EventType.CREATED,
+            occurred_at=NOW - timedelta(days=9),
+            recorded_at=stale,
+        ),
+        Event(
+            work_item_id=item,
+            type=EventType.COMPLETED,
+            occurred_at=NOW - timedelta(days=2),
+            recorded_at=fresh,
+        ),
+    ]
+
+    history = compute_flow_history([stream], now=NOW, window_days=90)
+
+    assert history.data_as_of == fresh
+
+
+def test_history_data_as_of_is_none_without_events() -> None:
+    history = compute_flow_history([], now=NOW, window_days=14)
+
+    assert history.data_as_of is None
