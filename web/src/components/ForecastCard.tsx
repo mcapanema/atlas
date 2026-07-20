@@ -26,6 +26,10 @@ export function ForecastCard({
 }) {
   const [targetDate, setTargetDate] = useState<string>();
   const [assumedRemaining, setAssumedRemaining] = useState<number>();
+  // Typed digits stay local until blur/Enter commit them to assumedRemaining —
+  // committing per keystroke would re-run the backend's 2,000-trial Monte
+  // Carlo simulation on every digit and throw away all but the last result.
+  const [draftRemaining, setDraftRemaining] = useState<number>();
   const forecast = useForecast(scope, { filters, targetDate, remaining: assumedRemaining });
   const accuracy = useForecastAccuracy(scope);
   const { mode } = useThemeMode();
@@ -96,11 +100,20 @@ export function ForecastCard({
               min={0}
               max={100000}
               placeholder={String(data.remaining)}
-              value={assumedRemaining}
-              onChange={(value) => setAssumedRemaining(value ?? undefined)}
+              value={draftRemaining}
+              onChange={(value) => setDraftRemaining(value ?? undefined)}
+              onBlur={() => setAssumedRemaining(draftRemaining)}
+              onPressEnter={() => setAssumedRemaining(draftRemaining)}
             />
             {assumedRemaining !== undefined && (
-              <Button type="link" size="small" onClick={() => setAssumedRemaining(undefined)}>
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  setDraftRemaining(undefined);
+                  setAssumedRemaining(undefined);
+                }}
+              >
                 Reset
               </Button>
             )}

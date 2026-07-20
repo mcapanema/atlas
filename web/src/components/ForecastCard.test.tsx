@@ -160,6 +160,42 @@ describe("ForecastCard", () => {
     );
   });
 
+  it("does not re-forecast on every keystroke, only once the value is committed", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input) =>
+        Promise.resolve(
+          jsonResponse(
+            String(input).includes("remaining=40")
+              ? { ...forecastFixture, remaining: 40 }
+              : forecastFixture,
+          ),
+        ),
+      );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    fetchSpy.mockClear();
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "4" } });
+    fireEvent.change(input, { target: { value: "40" } });
+
+    // Two intermediate values were typed but neither should have re-run the
+    // backend's Monte Carlo simulation — only a blur/Enter commit does.
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.filter((u) => u.includes("remaining="))).toEqual([
+      expect.stringContaining("remaining=40"),
+    ]);
+  });
+
   it("returns to the measured backlog when the assumption is cleared", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
       Promise.resolve(
