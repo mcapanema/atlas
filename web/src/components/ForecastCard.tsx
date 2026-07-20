@@ -2,7 +2,7 @@ import { Alert, Card, DatePicker, Row, Space, Statistic } from "antd";
 import { useMemo, useState } from "react";
 
 import { useForecast } from "../api/forecasts";
-import type { MetricsScope } from "../api/metrics";
+import type { MetricsFilters, MetricsScope } from "../api/metrics";
 import { useForecastAccuracy } from "../api/snapshots";
 import { buildForecastOption } from "../lib/charts";
 import { DATE_FORMAT, formatDay } from "../lib/dates";
@@ -10,9 +10,15 @@ import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
 import { StatCard } from "./StatCard";
 
-export function ForecastCard({ scope }: { scope: MetricsScope }) {
+export function ForecastCard({
+  scope,
+  filters,
+}: {
+  scope: MetricsScope;
+  filters?: MetricsFilters;
+}) {
   const [targetDate, setTargetDate] = useState<string>();
-  const forecast = useForecast(scope, targetDate);
+  const forecast = useForecast(scope, { filters, targetDate });
   const accuracy = useForecastAccuracy(scope);
   const { mode } = useThemeMode();
   const data = forecast.data;

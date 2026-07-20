@@ -317,7 +317,7 @@ export function FlowDashboard({
           />
         </Card>
       )}
-      <ForecastCard scope={scope} />
+      <ForecastCard scope={scope} filters={filters} />
     </Space>
   );
 }

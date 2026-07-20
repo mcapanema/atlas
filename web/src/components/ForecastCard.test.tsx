@@ -71,6 +71,25 @@ describe("ForecastCard", () => {
 
     await waitFor(() => expect(screen.getByText("Failed to load forecast")).toBeInTheDocument());
   });
+
+  it("forwards the page's item filters but never its period", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(
+      <ForecastCard
+        scope={{ teamId: "team-1" }}
+        filters={{ windowDays: 7, start: "2026-01-01", end: "2026-02-01", excludeStates: ["trash"] }}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    const url = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))[0];
+    expect(url).toContain("exclude_states=trash");
+    expect(url).not.toContain("start=");
+    expect(url).not.toContain("window_days=");
+  });
 });
 
 test("shows forecast accuracy once past forecasts resolved", async () => {
