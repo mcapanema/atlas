@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import type { OutcomeBucket } from "../lib/charts";
 import { apiFetch } from "./client";
@@ -49,5 +49,10 @@ export function useForecast(scope: MetricsScope, options: ForecastOptions = {}) 
     queryKey: ["forecasts", scope, filters?.types, filters?.excludeStates, targetDate ?? null, remaining ?? null],
     enabled: params !== null,
     queryFn: () => apiFetch<Forecast>(`/api/forecasts?${search.toString()}`),
+    // The `remaining` scenario override changes the query key on every
+    // keystroke; without this, `data` goes undefined mid-refetch and
+    // ForecastCard's `if (!data) return null` unmounts the whole card,
+    // dropping keyboard focus out of the input the user is still typing in.
+    placeholderData: keepPreviousData,
   });
 }

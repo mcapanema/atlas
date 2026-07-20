@@ -127,7 +127,37 @@ describe("ForecastCard", () => {
     await waitFor(() =>
       expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
     );
-    expect(screen.getByText("40")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("40")).toBeInTheDocument());
+  });
+
+  it("keeps the card (and the input's focus target) mounted while a scenario re-forecast is in flight", async () => {
+    let resolveScenario: (() => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("remaining=40")) {
+        return new Promise((resolve) => {
+          resolveScenario = () => resolve(jsonResponse({ ...forecastFixture, remaining: 40 }));
+        });
+      }
+      return Promise.resolve(jsonResponse(forecastFixture));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+
+    // The re-forecast request for remaining=40 is still in flight here. If the
+    // query has no data yet, the card must not unmount — an unmount here would
+    // recreate this input and drop a real user's keyboard focus mid-entry.
+    expect(screen.getByLabelText("Assume remaining items")).toBeInTheDocument();
+
+    resolveScenario?.();
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
   });
 
   it("returns to the measured backlog when the assumption is cleared", async () => {
