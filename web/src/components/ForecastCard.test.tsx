@@ -90,6 +90,70 @@ describe("ForecastCard", () => {
     expect(url).not.toContain("start=");
     expect(url).not.toContain("window_days=");
   });
+
+  it("defines the forecast method and each figure", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Completion forecast")).toBeInTheDocument());
+    fireEvent.focus(screen.getByText("Completion forecast"));
+    expect(
+      await screen.findByText(/2,000 simulations of the remaining work/),
+    ).toBeInTheDocument();
+
+    fireEvent.focus(screen.getByText("P85 finish"));
+    expect(await screen.findByText(/85% of simulations finished by then/)).toBeInTheDocument();
+  });
+
+  it("re-forecasts against an assumed backlog size and labels it as assumed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("remaining=40")) {
+        return Promise.resolve(jsonResponse({ ...forecastFixture, remaining: 40 }));
+      }
+      return Promise.resolve(jsonResponse(forecastFixture));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("40")).toBeInTheDocument();
+  });
+
+  it("returns to the measured backlog when the assumption is cleared", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      Promise.resolve(
+        jsonResponse(
+          String(input).includes("remaining=40")
+            ? { ...forecastFixture, remaining: 40 }
+            : forecastFixture,
+        ),
+      ),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+  });
 });
 
 test("shows forecast accuracy once past forecasts resolved", async () => {
