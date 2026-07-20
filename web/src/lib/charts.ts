@@ -234,19 +234,62 @@ export function buildLeadTimeTrendOption(
   };
 }
 
+/** Percentile finish dates, ISO — drawn on the histogram as reference lines. */
+export interface ForecastPercentiles {
+  p50Date: string;
+  p85Date: string;
+}
+
 export function buildForecastOption(
   outcomes: OutcomeBucket[],
   windowEnd: string,
+  percentiles: ForecastPercentiles,
   mode: ThemeMode = "light",
 ): EChartsOption {
   const n = neutrals(mode);
   const origin = new Date(windowEnd).getTime();
   const label = (days: number) => formatDay(new Date(origin + days * 86_400_000).toISOString());
+  const labels = outcomes.map((o) => label(o.days));
+  const total = outcomes.reduce((sum, o) => sum + o.trials, 0);
+
+  // A percentile day can land between two occupied buckets (outcomes at 10 and
+  // 12 days, P50 at 11). Snap forward to the first bucket at or after it and
+  // reuse that bucket's own axis label: keying a markLine on a date string the
+  // category axis never emitted would silently draw nothing.
+  const markAt = (iso: string, name: string) => {
+    const days = Math.round((new Date(iso).getTime() - origin) / 86_400_000);
+    const index = outcomes.findIndex((o) => o.days >= days);
+    return {
+      xAxis: labels[index === -1 ? labels.length - 1 : index],
+      label: { formatter: name, color: n.inkSecondary },
+      lineStyle: { color: n.inkSecondary, type: "dashed" as const },
+    };
+  };
+
+  const series = barSeries("Simulations", outcomes.map((o) => o.trials)) as [
+    Record<string, unknown>,
+  ];
+  series[0].markLine = {
+    silent: true,
+    symbol: "none",
+    data: [markAt(percentiles.p50Date, "P50"), markAt(percentiles.p85Date, "P85")],
+  };
+
   return {
-    tooltip: { trigger: "item" },
-    grid: { left: 48, right: 16, top: 16, bottom: 32 },
-    xAxis: dayAxis(outcomes.map((o) => label(o.days)), n),
-    yAxis: valueAxis(n),
-    series: barSeries("Trials", outcomes.map((o) => o.trials)),
+    tooltip: {
+      trigger: "item",
+      // "1600" on its own reads as a quantity of work. It is a count of
+      // simulated futures — say so, and give the share it represents.
+      formatter: (params: unknown) => {
+        const { dataIndex } = params as { dataIndex: number };
+        const bucket = outcomes[dataIndex];
+        const share = ((bucket.trials / total) * 100).toFixed(1);
+        return `${bucket.trials.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} simulations finished by ${labels[dataIndex]} (${share}%)`;
+      },
+    },
+    grid: { left: 56, right: 16, top: 32, bottom: 56 },
+    xAxis: dayAxis(labels, n, "Forecast finish date"),
+    yAxis: valueAxis(n, "Simulations"),
+    series: series as EChartsOption["series"],
   };
 }

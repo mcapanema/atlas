@@ -27,6 +27,7 @@ interface Series {
   name: string;
   stack?: string;
   data: number[];
+  markLine?: { data: unknown };
 }
 
 describe("buildCfdOption", () => {
@@ -138,18 +139,47 @@ describe("buildLeadTimeDistributionOption", () => {
 });
 
 describe("buildForecastOption", () => {
+  const outcomes = [
+    { days: 10, trials: 400 },
+    { days: 12, trials: 1600 },
+  ];
+  const percentiles = { p50Date: "2026-07-22T00:00:00Z", p85Date: "2026-07-23T00:00:00Z" };
+
   it("plots trials per completion date offset from the window end", () => {
-    const option = buildForecastOption(
-      [
-        { days: 10, trials: 400 },
-        { days: 12, trials: 1600 },
-      ],
-      "2026-07-10T00:00:00Z",
-    );
+    const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", percentiles);
     const series = option.series as Series[];
 
     expect(series[0].data).toEqual([400, 1600]);
     expect((option.xAxis as { data: string[] }).data).toEqual(["20-07-2026", "22-07-2026"]);
+  });
+
+  it("names both axes so the bars are not bare counts", () => {
+    const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", percentiles);
+
+    expect((option.xAxis as { name: string }).name).toBe("Forecast finish date");
+    expect((option.yAxis as { name: string }).name).toBe("Simulations");
+  });
+
+  it("marks P50 and P85, snapping each to the first bucket at or after it", () => {
+    // p50 = +12d lands exactly on the second bucket; p85 = +13d has no bucket
+    // of its own and must snap forward to the same one rather than vanish.
+    const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", percentiles);
+    const marks = (option.series as Series[])[0].markLine?.data as {
+      xAxis: string;
+      label: { formatter: string };
+    }[];
+
+    expect(marks.map((m) => m.label.formatter)).toEqual(["P50", "P85"]);
+    expect(marks.map((m) => m.xAxis)).toEqual(["22-07-2026", "22-07-2026"]);
+  });
+
+  it("spells out what one bar means", () => {
+    const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", percentiles);
+    const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter;
+
+    expect(formatter({ dataIndex: 0 })).toBe(
+      "400 of 2,000 simulations finished by 20-07-2026 (20.0%)",
+    );
   });
 });
 

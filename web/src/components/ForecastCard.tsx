@@ -25,7 +25,12 @@ export function ForecastCard({
   const outcomesOption = useMemo(
     () =>
       data?.completion
-        ? buildForecastOption(data.completion.outcomes, data.window_end, mode)
+        ? buildForecastOption(
+            data.completion.outcomes,
+            data.window_end,
+            { p50Date: data.completion.p50_date, p85Date: data.completion.p85_date },
+            mode,
+          )
         : null,
     [data, mode],
   );
