@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Set as AbstractSet
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from app.domain.forecasting.monte_carlo import (
     simulate_days_to_complete,
     summarize_completion,
 )
+from app.domain.work_items.entities import WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
 
@@ -20,6 +22,22 @@ class ForecastService:
 
     def __init__(self, work_items: WorkItemRepository, events: EventRepository) -> None:
         self._scope = ScopeSampleLoader(work_items, events)
+
+    async def load_scope(
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        types: AbstractSet[WorkItemType] | None = None,
+        exclude_states: AbstractSet[str] | None = None,
+    ) -> ScopeSamples:
+        """One filtered scope load, handed to `get_forecast` via `scope=`."""
+        return await self._scope.load(
+            team_id=team_id,
+            project_id=project_id,
+            types=types,
+            exclude_states=exclude_states,
+        )
 
     async def get_forecast(
         self,

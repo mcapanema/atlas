@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 
 from app.api.deps import ProjectServiceDep, TeamServiceDep
+from app.domain.work_items.entities import WorkItemType
 
 
 @dataclass(frozen=True)
@@ -43,3 +44,24 @@ async def get_scope(
 
 
 ScopeDep = Annotated[Scope, Depends(get_scope)]
+
+
+@dataclass(frozen=True)
+class ItemFilters:
+    """Optional work-item filters shared by every analytics endpoint."""
+
+    types: frozenset[WorkItemType] | None
+    exclude_states: frozenset[str] | None
+
+
+async def get_item_filters(
+    types: Annotated[list[WorkItemType] | None, Query()] = None,
+    exclude_states: Annotated[list[str] | None, Query()] = None,
+) -> ItemFilters:
+    return ItemFilters(
+        types=frozenset(types) if types else None,
+        exclude_states=frozenset(exclude_states) if exclude_states else None,
+    )
+
+
+ItemFiltersDep = Annotated[ItemFilters, Depends(get_item_filters)]
