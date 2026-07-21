@@ -37,7 +37,11 @@ describe("FlowDashboard", () => {
     // Wait for the full render (all 6 charts), not just the stat tiles: FlowDashboard's
     // loading skeleton gates ForecastCard's mount on metrics/history, so ForecastCard's
     // own forecast fetch only starts once they resolve — it lags behind metrics text.
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    // That multi-hop chain can exceed the default 1000ms waitFor timeout under CI load
+    // (same class of flake as App.test.tsx's lazy-route findByText).
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6), {
+      timeout: 5000,
+    });
     expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument(); // flow efficiency
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
