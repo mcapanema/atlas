@@ -71,6 +71,155 @@ describe("ForecastCard", () => {
 
     await waitFor(() => expect(screen.getByText("Failed to load forecast")).toBeInTheDocument());
   });
+
+  it("forwards the page's item filters but never its period", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(
+      <ForecastCard
+        scope={{ teamId: "team-1" }}
+        filters={{ windowDays: 7, start: "2026-01-01", end: "2026-02-01", excludeStates: ["trash"] }}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    const url = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))[0];
+    expect(url).toContain("exclude_states=trash");
+    expect(url).not.toContain("start=");
+    expect(url).not.toContain("window_days=");
+  });
+
+  it("defines the forecast method and each figure", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Completion forecast")).toBeInTheDocument());
+    fireEvent.focus(screen.getByText("Completion forecast"));
+    expect(
+      await screen.findByText(/2,000 simulations of the remaining work/),
+    ).toBeInTheDocument();
+
+    fireEvent.focus(screen.getByText("P85 finish"));
+    expect(await screen.findByText(/85% of simulations finished by then/)).toBeInTheDocument();
+  });
+
+  it("re-forecasts against an assumed backlog size and labels it as assumed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("remaining=40")) {
+        return Promise.resolve(jsonResponse({ ...forecastFixture, remaining: 40 }));
+      }
+      return Promise.resolve(jsonResponse(forecastFixture));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+    await waitFor(() => expect(screen.getByText("40")).toBeInTheDocument());
+  });
+
+  it("keeps the card (and the input's focus target) mounted while a scenario re-forecast is in flight", async () => {
+    let resolveScenario: (() => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("remaining=40")) {
+        return new Promise((resolve) => {
+          resolveScenario = () => resolve(jsonResponse({ ...forecastFixture, remaining: 40 }));
+        });
+      }
+      return Promise.resolve(jsonResponse(forecastFixture));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+
+    // The re-forecast request for remaining=40 is still in flight here. If the
+    // query has no data yet, the card must not unmount — an unmount here would
+    // recreate this input and drop a real user's keyboard focus mid-entry.
+    expect(screen.getByLabelText("Assume remaining items")).toBeInTheDocument();
+
+    resolveScenario?.();
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not re-forecast on every keystroke, only once the value is committed", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input) =>
+        Promise.resolve(
+          jsonResponse(
+            String(input).includes("remaining=40")
+              ? { ...forecastFixture, remaining: 40 }
+              : forecastFixture,
+          ),
+        ),
+      );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    fetchSpy.mockClear();
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "4" } });
+    fireEvent.change(input, { target: { value: "40" } });
+
+    // Two intermediate values were typed but neither should have re-run the
+    // backend's Monte Carlo simulation — only a blur/Enter commit does.
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(urls.filter((u) => u.includes("remaining="))).toEqual([
+      expect.stringContaining("remaining=40"),
+    ]);
+  });
+
+  it("returns to the measured backlog when the assumption is cleared", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      Promise.resolve(
+        jsonResponse(
+          String(input).includes("remaining=40")
+            ? { ...forecastFixture, remaining: 40 }
+            : forecastFixture,
+        ),
+      ),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+  });
 });
 
 test("shows forecast accuracy once past forecasts resolved", async () => {

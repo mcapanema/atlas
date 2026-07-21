@@ -9,7 +9,7 @@ from app.api.schemas import (
     ForecastRead,
     OutcomeBucketRead,
 )
-from app.api.scope import ScopeDep
+from app.api.scope import ItemFiltersDep, ScopeDep
 from app.domain.forecasting.monte_carlo import CompletionForecast
 
 router = APIRouter(prefix="/api/forecasts", tags=["forecasts"])
@@ -36,13 +36,19 @@ def _completion_read(
 async def get_forecast(
     service: ForecastServiceDep,
     scope: ScopeDep,
+    filters: ItemFiltersDep,
     window_days: int = Query(default=90, ge=7, le=365),
-    remaining: int | None = Query(default=None, ge=0),
+    remaining: int | None = Query(default=None, ge=0, le=100_000),
     target_date: date | None = None,
 ) -> ForecastRead:
-    forecast = await service.get_forecast(
+    samples = await service.load_scope(
         team_id=scope.team_id,
         project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
+    )
+    forecast = await service.get_forecast(
+        scope=samples,
         window_days=window_days,
         remaining=remaining,
         target_date=target_date,

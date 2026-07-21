@@ -15,32 +15,10 @@ from app.api.schemas import (
     LeadTimeDistributionRead,
     MetricSnapshotRead,
 )
-from app.api.scope import ScopeDep
+from app.api.scope import ItemFiltersDep, ScopeDep
 from app.domain.metrics.summary import DurationStats
-from app.domain.work_items.entities import WorkItemType
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
-
-
-@dataclass(frozen=True)
-class ItemFilters:
-    """Optional work-item filters shared by every metrics endpoint."""
-
-    types: frozenset[WorkItemType] | None
-    exclude_states: frozenset[str] | None
-
-
-async def get_item_filters(
-    types: Annotated[list[WorkItemType] | None, Query()] = None,
-    exclude_states: Annotated[list[str] | None, Query()] = None,
-) -> ItemFilters:
-    return ItemFilters(
-        types=frozenset(types) if types else None,
-        exclude_states=frozenset(exclude_states) if exclude_states else None,
-    )
-
-
-ItemFiltersDep = Annotated[ItemFilters, Depends(get_item_filters)]
 
 
 @dataclass(frozen=True)

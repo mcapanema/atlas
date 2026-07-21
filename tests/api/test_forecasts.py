@@ -100,3 +100,44 @@ async def test_forecast_for_unknown_team_is_404(client: AsyncClient) -> None:
     response = await client.get(f"/api/forecasts?team_id={uuid4()}")
 
     assert response.status_code == 404
+
+
+async def test_forecast_excludes_filtered_out_states(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    await _seed_history(client, team_id)
+    trash = (
+        await client.post(
+            "/api/work-items",
+            json={"team_id": team_id, "title": "Trash", "state": "trash"},
+        )
+    ).json()
+    assert trash["state"] == "trash"
+
+    unfiltered = (await client.get(f"/api/forecasts?team_id={team_id}")).json()
+    filtered = (
+        await client.get(f"/api/forecasts?team_id={team_id}&exclude_states=trash")
+    ).json()
+
+    assert unfiltered["remaining"] == 2
+    assert filtered["remaining"] == 1
+
+
+async def test_forecast_filters_by_work_item_type(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    await _seed_history(client, team_id)
+    await client.post(
+        "/api/work-items", json={"team_id": team_id, "title": "Bug", "type": "bug"}
+    )
+
+    response = await client.get(f"/api/forecasts?team_id={team_id}&types=bug")
+
+    assert response.status_code == 200
+    assert response.json()["remaining"] == 1
+
+
+async def test_forecast_rejects_an_absurd_remaining_override(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+
+    response = await client.get(f"/api/forecasts?team_id={team_id}&remaining=100001")
+
+    assert response.status_code == 422

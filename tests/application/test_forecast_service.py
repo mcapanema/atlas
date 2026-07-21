@@ -119,3 +119,15 @@ async def test_precomputed_scope_skips_repository_loading() -> None:
     forecast = await service.get_forecast(now=NOW, scope=scope)
 
     assert forecast.remaining == 2  # 3 in scope, 1 completed — all from `scope`
+
+
+async def test_load_scope_applies_exclude_states() -> None:
+    team_id = uuid4()
+    keep, drop = _item(team_id), WorkItem(team_id=team_id, title="Trash", state="trash")
+    service = ForecastService(
+        InMemoryWorkItemRepository([keep, drop]), InMemoryEventRepository([])
+    )
+
+    scope = await service.load_scope(team_id=team_id, exclude_states={"trash"})
+
+    assert scope.item_count == 1
