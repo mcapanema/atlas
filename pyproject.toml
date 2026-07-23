@@ -22,7 +22,7 @@ dev = [
     "ruff>=0.15.22",
     "mypy>=2.3.0",
     "pytest-cov>=7.1.0",
-    "pre-commit>=4.0",
+    "pre-commit>=4.6.1",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.
