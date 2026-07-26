@@ -16,7 +16,7 @@
     "@fontsource-variable/red-hat-display": "^5.2.8",
     "@fontsource-variable/red-hat-mono": "^5.2.8",
     "@fontsource-variable/red-hat-text": "^5.2.8",
-    "@tanstack/react-query": "^5.64.0",
+    "@tanstack/react-query": "^5.101.4",
     "antd": "^6.5.1",
     "dayjs": "^1.11.21",
     "echarts": "^6.1.0",
