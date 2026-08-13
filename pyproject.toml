@@ -10,7 +10,7 @@ dependencies = [
     "aiosqlite>=0.20",
     "alembic>=1.14",
     "pydantic>=2.10",
-    "pydantic-settings>=2.7",
+    "pydantic-settings>=2.15.0",
     "httpx>=0.28",
     "mcp>=1.28",
 ]
