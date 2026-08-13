@@ -5,7 +5,7 @@ description = "Atlas — Delivery Intelligence Platform"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.140.7",
-    "uvicorn[standard]>=0.51.0",
+    "uvicorn[standard]>=0.52.1",
     "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.20",
     "alembic>=1.14",
