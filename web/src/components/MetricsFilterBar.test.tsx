@@ -56,9 +56,9 @@ describe("MetricsFilterBar", () => {
   it("clears type filters back to undefined", () => {
     const onChange = vi.fn();
     renderWithClient(<MetricsFilterBar filters={{ types: ["bug"] }} onChange={onChange} />);
-    const clearIcon = document.querySelector(".ant-select-clear");
-    expect(clearIcon).not.toBeNull();
-    fireEvent.mouseDown(clearIcon as Element);
+    // antd >= 6.6 renders the clear affordance as <button aria-label="Clear">
+    // and clears on click (not mouseDown).
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(onChange).toHaveBeenCalledWith({ types: undefined });
   });
 
