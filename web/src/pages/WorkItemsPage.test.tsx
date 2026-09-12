@@ -103,13 +103,17 @@ describe("WorkItemsPage", () => {
       expect(calls.some((url) => url.includes(`team_id=${TEAM_ID}`))).toBe(true);
     });
 
-    const clearIcon = document.querySelector(".ant-select-clear");
-    expect(clearIcon).not.toBeNull();
-    fireEvent.mouseDown(clearIcon as Element);
+    const callsBeforeClear = vi.mocked(globalThis.fetch).mock.calls.length;
+    // antd >= 6.6 renders the clear affordance as <button aria-label="Clear">
+    // and clears on click (not mouseDown).
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
 
     await waitFor(() => {
-      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
-      expect(calls.some((url) => url.includes("/api/work-items?") && !url.includes("team_id"))).toBe(
+      const newCalls = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.slice(callsBeforeClear)
+        .map((c) => String(c[0]));
+      expect(newCalls.some((url) => url.includes("/api/work-items?") && !url.includes("team_id"))).toBe(
         true,
       );
     });
