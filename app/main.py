@@ -4,6 +4,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -120,7 +121,19 @@ def create_app() -> FastAPI:
         # custom headers, so the token rides in the path. No token, no route.
         mcp = mcp_server.build_mcp_server(app)
         app.state.mcp = mcp
-        app.mount(f"/mcp/{settings.mcp_token}", mcp.streamable_http_app())
+        # mcp 2.x moved these transport-mode kwargs off the MCPServer
+        # constructor onto streamable_http_app() itself.
+        app.mount(
+            f"/mcp/{settings.mcp_token}",
+            mcp.streamable_http_app(
+                stateless_http=True,
+                json_response=True,
+                streamable_http_path="/",
+                transport_security=TransportSecuritySettings(
+                    enable_dns_rebinding_protection=False
+                ),
+            ),
+        )
 
     mount_spa(app)  # catch-all — must be registered after all API routers
     return app

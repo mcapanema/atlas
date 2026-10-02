@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 import httpx
+import httpx2
 from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
@@ -37,14 +38,17 @@ async def running_app(
 
 @asynccontextmanager
 async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
+    # mcp 2.x's streamable_http_client takes an httpx2.AsyncClient (the SDK's
+    # own vendored httpx fork), not a plain httpx.AsyncClient — everything
+    # else in this file still talks to the app via regular httpx.
     async with (
-        httpx.AsyncClient(
-            transport=ASGITransport(app=app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app),
             follow_redirects=True,
         ) as http_client,
         streamable_http_client(
             f"http://test/mcp/{TOKEN}/", http_client=http_client
-        ) as (read, write, _),
+        ) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -95,7 +99,7 @@ async def test_list_scopes_tool(
             assert "list_scopes" in [t.name for t in tools.tools]
 
             result = await session.call_tool("list_scopes", {})
-            assert not result.isError
+            assert not result.is_error
             text = tool_text(result)
             assert "Acme" in text  # organization from create_team
             assert "Platform" in text  # team from create_team
@@ -112,7 +116,7 @@ async def test_meeting_brief_composes_digest(
 
         async with mcp_session(app) as session:
             result = await session.call_tool("meeting_brief", {"team_id": team_id})
-            assert not result.isError
+            assert not result.is_error
             text = tool_text(result)
             assert "Flow metrics" in text
             assert "Delivery health" in text
@@ -128,7 +132,7 @@ async def test_meeting_brief_scope_errors_surface(
         async with mcp_session(app) as session:
             # No scope at all -> the REST 422 detail must reach the model.
             result = await session.call_tool("meeting_brief", {})
-            assert result.isError
+            assert result.is_error
             assert "exactly one" in tool_text(result)
 
             # Unknown team -> the REST 404 detail must reach the model.
@@ -136,7 +140,7 @@ async def test_meeting_brief_scope_errors_surface(
                 "meeting_brief",
                 {"team_id": "00000000-0000-0000-0000-000000000000"},
             )
-            assert result.isError
+            assert result.is_error
             assert "not found" in tool_text(result)
 
 
@@ -155,15 +159,15 @@ async def test_drilldown_tools(
 
         async with mcp_session(app) as session:
             items = await session.call_tool("list_work_items", {"team_id": team_id})
-            assert not items.isError
+            assert not items.is_error
             assert "Fix login flake" in tool_text(items)
 
             aging = await session.call_tool("aging_wip", {"team_id": team_id})
-            assert not aging.isError
+            assert not aging.is_error
             assert "Aging WIP" in tool_text(aging)
 
             fc = await session.call_tool("forecast", {"team_id": team_id})
-            assert not fc.isError
+            assert not fc.is_error
             text = tool_text(fc)
             assert "Remaining:" in text
             assert "outcomes" not in text  # the raw bucket array must never leak
@@ -182,7 +186,7 @@ async def test_run_sync_surfaces_unconfigured_connector(
 
         async with mcp_session(app) as session:
             result = await session.call_tool("run_sync", {"organization_id": org_id})
-            assert result.isError
+            assert result.is_error
             # The 409-until-configured detail must reach the model verbatim.
             assert "ATLAS_LINEAR_API_KEY" in tool_text(result)
 
