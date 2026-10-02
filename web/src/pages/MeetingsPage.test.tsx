@@ -272,4 +272,30 @@ describe("MeetingsPage", () => {
       advice_summary: "One item is past the p85 age line.",
     });
   });
+
+  it("drops planning what-ifs from the request after switching to a retro", async () => {
+    mockFetch();
+
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=planning`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.change(screen.getByPlaceholderText("Planned scope (items)"), {
+      target: { value: "8" },
+    });
+    fireEvent.change(screen.getByLabelText("Target date"), {
+      target: { value: "2026-08-01" },
+    });
+    fireEvent.mouseDown(screen.getAllByRole("combobox")[1]);
+    fireEvent.click(await screen.findByTitle("Retrospective"));
+    await waitFor(() => expect(screen.getByLabelText("Sprint length (days)")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+        `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
+      ),
+    );
+  });
 });

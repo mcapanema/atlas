@@ -243,4 +243,24 @@ describe("AdvisorPage", () => {
 
     await waitFor(() => expect(screen.getByText("Failed to submit feedback")).toBeInTheDocument());
   });
+
+  it("re-arms feedback with an empty comment when advice is requested again", async () => {
+    mockFetch();
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+    await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText("Optional comment"), {
+      target: { value: "too generic" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Optional comment")).toHaveValue(""));
+    expect(screen.queryByText(/Thanks for the feedback/)).not.toBeInTheDocument();
+  });
 });
