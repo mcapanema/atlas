@@ -234,6 +234,20 @@ describe("FlowDashboard", () => {
     expect(alert).toHaveTextContent(/1 day of this window/i);
   });
 
+  it("tolerates exactly the staleness threshold without warning", async () => {
+    mockMetricsFetch({
+      "/api/metrics/history": {
+        ...historyFixture,
+        data_as_of: "2026-07-09T00:00:00Z", // exactly 24h before window_end
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("says nothing about freshness when the data is current", async () => {
     mockMetricsFetch();
 
