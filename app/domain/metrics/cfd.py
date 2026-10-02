@@ -22,11 +22,21 @@ class DailyFlowCount:
 
 
 def _advance(phase: str | None, event: Event) -> str:
-    """The item's phase after `event`, given its phase before it."""
+    """The item's phase after `event`, given its phase before it.
+
+    "canceled" is a hidden phase: closed undelivered items drop out of the
+    chart. Done stays done through a cancel (delivered work stays delivered).
+    """
     if event.type is EventType.STARTED:
         return "in_progress"
     if event.type is EventType.COMPLETED:
         return "done"
+    if phase == "done":
+        return phase
+    if event.type is EventType.STOPPED:
+        return "todo"
+    if event.type is EventType.CANCELED:
+        return "canceled"
     return phase if phase is not None else "todo"
 
 
@@ -52,7 +62,7 @@ def daily_flow_counts(
         key=lambda entry: (entry[0], entry[1]),
     )
     phases: dict[int, str] = {}
-    tally = {"todo": 0, "in_progress": 0, "done": 0}
+    tally = {"todo": 0, "in_progress": 0, "done": 0, "canceled": 0}
     counts: list[DailyFlowCount] = []
     pointer = 0
     day = start.astimezone(UTC).date()
