@@ -2,7 +2,8 @@
 
 Adapters. Everything database-, framework-, or connector-specific lives
 here — this is the only layer allowed to import SQLAlchemy, aiosqlite, or
-(in later phases) connector SDKs.
+connector SDKs. It never imports `app.application` or `app.api`
+(enforced by `tests/test_architecture.py`).
 
 ## Layout
 

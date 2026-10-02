@@ -78,7 +78,7 @@ undocumented env var is a landmine for the next person (or session).
 
 ## Non-negotiable constraints
 
-- Domain layer: zero framework imports, stdlib only.
+- Domain layer: zero framework imports, stdlib only. Layer import rules are enforced by `tests/test_architecture.py`.
 - Never return an ORM model from an API route — always a Pydantic DTO.
 - `uv run mypy` (strict), `uv run ruff check .`, and `uv run ruff format --check .` must pass.
 - Complexity ceilings are gates, not suggestions: ruff `C901` (max 10),
