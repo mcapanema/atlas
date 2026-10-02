@@ -50,6 +50,21 @@ def map_project(node: dict[str, Any]) -> SourceProject:
     )
 
 
+def _initial_state_type(node: dict[str, Any]) -> str | None:
+    """The Linear state type the issue was created in.
+
+    History has no creation entry: the earliest transition's fromState is
+    the initial state; with no transitions the issue never left its current
+    one. Sorted by createdAt — Linear's history order isn't relied on.
+    """
+    transitions = [e for e in node["history"]["nodes"] if e.get("toState") is not None]
+    if not transitions:
+        return str(node["state"]["type"])
+    earliest = min(transitions, key=lambda e: datetime.fromisoformat(e["createdAt"]))
+    from_state = earliest.get("fromState")
+    return str(from_state["type"]) if from_state else None
+
+
 def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset()) -> SourceWorkItem:
     created_at = datetime.fromisoformat(node["createdAt"])
     history_nodes = node["history"]["nodes"]
@@ -69,12 +84,35 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
             occurred_at=created_at,
         )
     ]
+    if _initial_state_type(node) == "started":
+        # Created straight into a started state: no history entry marks the
+        # start, so it starts at creation.
+        events.append(
+            SourceEvent(
+                external_id=f"{node['id']}:started",
+                type=EventType.STARTED,
+                occurred_at=created_at,
+            )
+        )
     for entry in history_nodes:
         events.extend(map_history_entry(entry, blocked_ids))
+    canceled_at = node.get("canceledAt")
+    if canceled_at:
+        # Keyed by time: a reopen-then-recancel carries a new canceledAt and
+        # must land as a new event (events are insert-only).
+        # ponytail: Canceled -> Todo without a restart leaves this event in
+        # place, so the item still reads canceled; emit a reopen signal from
+        # history if that ever matters.
+        events.append(
+            SourceEvent(
+                external_id=f"{node['id']}:canceled:{canceled_at}",
+                type=EventType.CANCELED,
+                occurred_at=datetime.fromisoformat(canceled_at),
+            )
+        )
     project = node.get("project")
-    # ponytail: only completedAt feeds completed_at — a canceled issue
-    # (canceledAt) is neither delivered throughput nor open work; exclude
-    # canceled items from scope counts if they ever skew forecasts.
+    # completedAt feeds completed_at (the sync synthesizes a missing
+    # COMPLETED from it); cancellation arrives as the CANCELED event above.
     completed_at = node.get("completedAt")
     return SourceWorkItem(
         external_id=node["id"],
@@ -96,9 +134,11 @@ def map_history_entry(
 ) -> list[SourceEvent]:
     """One issue-history entry → 0..n SourceEvents.
 
-    State transitions map as before. Blocked-label additions/removals map
-    to BLOCKED/UNBLOCKED with derived external_ids — Linear has no native
-    blocked event; the workspace's blocked label is the signal.
+    State transitions map as before; leaving a started state for a
+    non-started, non-completed one also emits a derived STOPPED.
+    Blocked-label additions/removals map to BLOCKED/UNBLOCKED with derived
+    external_ids — Linear has no native blocked event; the workspace's
+    blocked label is the signal.
 
     ponytail: labels present at issue creation produce no history entry,
     so an item born blocked reads as never blocked. Diff current labels
@@ -118,6 +158,19 @@ def map_history_entry(
                 to_state=to_state["name"],
             )
         )
+        if (
+            from_state is not None
+            and from_state["type"] == "started"
+            and to_state["type"] not in ("started", "completed")
+        ):
+            # Left progress without completing (moved back or canceled).
+            events.append(
+                SourceEvent(
+                    external_id=f"{entry['id']}:stopped",
+                    type=EventType.STOPPED,
+                    occurred_at=occurred_at,
+                )
+            )
     if blocked_ids & set(entry.get("addedLabelIds") or ()):
         events.append(
             SourceEvent(

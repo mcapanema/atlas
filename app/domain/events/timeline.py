@@ -7,7 +7,7 @@ waiting time) build on these periods rather than re-reading raw events.
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.domain.events.entities import Event, EventType
+from app.domain.events.entities import Event, EventType, event_order
 
 
 @dataclass(frozen=True)
@@ -38,13 +38,13 @@ class WorkItemTimeline:
 def derive_timeline(events: list[Event]) -> WorkItemTimeline:
     """Fold a Work Item's events into state periods and blocked periods.
 
-    Events are sorted by occurred_at defensively. State periods come from
+    Events are sorted by `event_order` defensively. State periods come from
     events carrying to_state; if the first such event also names a from_state
     and an earlier event exists (usually CREATED), the gap becomes the initial
     period — the time the item waited in its starting state. Blocked periods
     pair BLOCKED with the next UNBLOCKED; an unmatched BLOCKED stays open.
     """
-    ordered = sorted(events, key=lambda e: e.occurred_at)
+    ordered = sorted(events, key=event_order)
 
     state_periods: list[StatePeriod] = []
     for event in ordered:

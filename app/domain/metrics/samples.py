@@ -7,7 +7,7 @@ FlowSamples instead of re-reading event streams.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.domain.events.entities import Event, EventType
+from app.domain.events.entities import Event, EventType, event_order
 from app.domain.events.timeline import derive_timeline
 
 
@@ -19,33 +19,44 @@ class FlowSample:
     started_at: datetime | None
     completed_at: datetime | None
     blocked_time: timedelta
+    stopped_at: datetime | None = None
+    canceled: bool = False
 
 
 def derive_flow_sample(events: list[Event]) -> FlowSample | None:
     """Fold one work item's events into a FlowSample; None if it has no events.
 
     created_at is the first event; started_at the first STARTED; completed_at
-    the last COMPLETED, voided if a later STARTED reopened the item. Blocked
-    time sums blocked periods clipped to the cycle — from started_at (or the
-    first event, if never started) to completed_at; a still-open period on an
-    uncompleted item is not counted (unmeasurable).
+    the last COMPLETED, voided if a later STARTED reopened the item.
+    stopped_at is when an uncompleted item first left progress (the first STOPPED
+    or CANCELED since its latest STARTED or COMPLETED); canceled marks an item
+    closed without delivery. Blocked time sums blocked periods clipped to the
+    cycle — from started_at (or the first event, if never started) to
+    completed_at; a still-open period on an uncompleted item is not counted
+    (unmeasurable).
     """
     if not events:
         return None
-    ordered = sorted(events, key=lambda e: e.occurred_at)
+    ordered = sorted(events, key=event_order)
 
     started_at = next((e.occurred_at for e in ordered if e.type is EventType.STARTED), None)
 
-    # ponytail: a reopen is only visible as a STARTED after COMPLETED; a
-    # Done -> Cancelled move arrives as STATE_CHANGED and still counts as
-    # completed. Categorize state *types* in the domain if that ever skews
+    # ponytail: Done -> Todo isn't a reopen here (only a STARTED after
+    # COMPLETED is), so it stays completed; Done -> Canceled stays delivered
+    # by decision. Categorize state *types* in the domain if either skews
     # the numbers.
     completed_at: datetime | None = None
+    stopped_at: datetime | None = None
+    canceled = False
     for event in ordered:
         if event.type is EventType.COMPLETED:
-            completed_at = event.occurred_at
-        elif event.type is EventType.STARTED and completed_at is not None:
-            completed_at = None
+            completed_at, stopped_at, canceled = event.occurred_at, None, False
+        elif event.type is EventType.STARTED:
+            completed_at, stopped_at, canceled = None, None, False
+        elif event.type in (EventType.STOPPED, EventType.CANCELED) and completed_at is None:
+            if stopped_at is None:
+                stopped_at = event.occurred_at
+            canceled = canceled or event.type is EventType.CANCELED
 
     # Blocked time is measured inside the item's cycle: a label left on after
     # Done isn't blocked work, and pre-start blocking is already queue time.
@@ -64,4 +75,13 @@ def derive_flow_sample(events: list[Event]) -> FlowSample | None:
         started_at=started_at,
         completed_at=completed_at,
         blocked_time=blocked_time,
+        stopped_at=stopped_at,
+        canceled=canceled,
     )
+
+
+def in_progress(sample: FlowSample, at: datetime) -> bool:
+    """Started by `at`, and neither completed nor stopped (moved back/canceled) by it."""
+    if sample.started_at is None or sample.started_at > at:
+        return False
+    return all(ended is None or ended > at for ended in (sample.completed_at, sample.stopped_at))

@@ -16,9 +16,9 @@ from app.infrastructure.connectors.linear.mapping import (
 
 logger = logging.getLogger(__name__)
 
-# ponytail: 200 pages ≈ 10k issues per sync — far past today's target scale.
-# Raise it (or paginate per-team) if a workspace ever legitimately exceeds it.
-_MAX_PAGES = 200
+# ponytail: 1000 pages ≈ 50k issues (archived included) per sync — 5x the
+# largest workspace seen. Raise it (or paginate per-team) if one exceeds it.
+_MAX_PAGES = 1000
 
 
 def _map_tolerantly[T](
@@ -83,14 +83,19 @@ query Labels($after: String) {
 # ponytail: nested history capped at HISTORY_PAGE_SIZE entries per issue —
 # enough for any sane issue; map_issue logs a warning when the cap is hit.
 # Paginate history per-issue if one ever exceeds it.
+# Archived issues are included: Linear auto-archives closed issues, and
+# they are still delivered (or canceled) history. Trashed ones were
+# deleted and are skipped in fetch_work_items.
 _ISSUES_QUERY = f"""
 query Issues($after: String) {{
-  issues(first: 50, after: $after) {{
+  issues(first: 50, after: $after, includeArchived: true) {{
     nodes {{
       id
       title
       createdAt
       completedAt
+      canceledAt
+      trashed
       state {{ name type }}
       team {{ id }}
       project {{ id }}
@@ -136,8 +141,11 @@ class LinearDataSource:
     async def fetch_work_items(self) -> list[SourceWorkItem]:
         labels = await self._nodes(_LABELS_QUERY, "issueLabels")
         blocked_ids = blocked_label_ids(labels)
+        issues = [
+            node for node in await self._nodes(_ISSUES_QUERY, "issues") if not node.get("trashed")
+        ]
         return _map_tolerantly(
-            await self._nodes(_ISSUES_QUERY, "issues"),
+            issues,
             lambda node: map_issue(node, blocked_ids),
             "issue",
         )

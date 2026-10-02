@@ -10,12 +10,12 @@ AI layer explains these numbers, it never produces them (VISION:
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, event_order
 from app.domain.events.timeline import derive_timeline
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.lead_time import lead_times
-from app.domain.metrics.samples import FlowSample, derive_flow_sample
+from app.domain.metrics.samples import FlowSample, derive_flow_sample, in_progress
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.throughput import throughput
 from app.domain.metrics.wip import wip
@@ -114,18 +114,12 @@ def _risk(
     cycle_p85: timedelta | None,
 ) -> HealthComponent | None:
     """Share of in-progress items currently blocked or aging past cycle P85."""
-    in_progress = [
-        (sample, blocked)
-        for sample, blocked in item_states
-        if sample.started_at is not None
-        and sample.started_at <= now
-        and (sample.completed_at is None or sample.completed_at > now)
-    ]
-    if not in_progress:
+    open_items = [(sample, blocked) for sample, blocked in item_states if in_progress(sample, now)]
+    if not open_items:
         return None
     at_risk = sum(
         1
-        for sample, blocked in in_progress
+        for sample, blocked in open_items
         if blocked
         or (
             cycle_p85 is not None
@@ -135,9 +129,9 @@ def _risk(
     )
     return HealthComponent(
         name="risk",
-        score=_clamp(100 * (1 - at_risk / len(in_progress))),
+        score=_clamp(100 * (1 - at_risk / len(open_items))),
         reason=(
-            f"{at_risk} of {len(in_progress)} in-progress items "
+            f"{at_risk} of {len(open_items)} in-progress items "
             "blocked or aging past cycle p85"
         ),
     )
@@ -154,7 +148,7 @@ def compute_delivery_health(
         sample = derive_flow_sample(stream)
         if sample is None:
             continue
-        ordered = sorted(stream, key=lambda e: e.occurred_at)
+        ordered = sorted(stream, key=event_order)
         blocked_open = any(
             p.ended_at is None for p in derive_timeline(ordered).blocked_periods
         )

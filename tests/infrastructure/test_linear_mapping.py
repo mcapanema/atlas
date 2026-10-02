@@ -251,3 +251,111 @@ def test_map_issue_below_history_cap_does_not_warn(
         map_issue(ISSUE_NODE)
 
     assert not caplog.records
+
+
+def test_history_entry_leaving_started_for_backlog_also_emits_stopped() -> None:
+    events = map_history_entry(_entry("started", "backlog", "In Progress", "Backlog"))
+
+    assert [e.type for e in events] == [EventType.STATE_CHANGED, EventType.STOPPED]
+    assert events[1].external_id == "h1:stopped"
+    assert events[1].occurred_at == datetime(2026, 7, 2, 9, 0, tzinfo=UTC)
+
+
+def test_history_entry_leaving_started_for_canceled_also_emits_stopped() -> None:
+    events = map_history_entry(_entry("started", "canceled", "In Progress", "Canceled"))
+
+    assert [e.type for e in events] == [EventType.STATE_CHANGED, EventType.STOPPED]
+
+
+def test_history_entry_leaving_unstarted_for_canceled_emits_no_stopped() -> None:
+    [event] = map_history_entry(_entry("unstarted", "canceled", "Todo", "Canceled"))
+
+    assert event.type is EventType.STATE_CHANGED
+
+
+def test_map_issue_created_in_a_started_state_starts_at_creation() -> None:
+    # Linear returns history newest-first: the earliest transition is listed last.
+    node = {
+        **ISSUE_NODE,
+        "history": {
+            "nodes": [
+                {
+                    "id": "h3",
+                    "createdAt": "2026-07-04T09:00:00.000Z",
+                    "fromState": {"name": "In Review", "type": "started"},
+                    "toState": {"name": "Done", "type": "completed"},
+                },
+                {
+                    "id": "h2",
+                    "createdAt": "2026-07-02T09:00:00.000Z",
+                    "fromState": {"name": "In Progress", "type": "started"},
+                    "toState": {"name": "In Review", "type": "started"},
+                },
+            ]
+        },
+    }
+
+    item = map_issue(node)
+
+    started = [e for e in item.events if e.type is EventType.STARTED]
+    assert [e.external_id for e in started] == ["i1:started"]
+    assert started[0].occurred_at == item.created_at
+
+
+def test_map_issue_earliest_transition_decides_the_initial_state() -> None:
+    # Newest entry leaves a started state, but the earliest leaves Backlog:
+    # the item was created in Backlog, so no synthetic start.
+    node = {
+        **ISSUE_NODE,
+        "history": {
+            "nodes": [
+                {
+                    "id": "h3",
+                    "createdAt": "2026-07-04T09:00:00.000Z",
+                    "fromState": {"name": "In Progress", "type": "started"},
+                    "toState": {"name": "Done", "type": "completed"},
+                },
+                *ISSUE_NODE["history"]["nodes"],
+            ]
+        },
+    }
+
+    item = map_issue(node)
+
+    assert [e.external_id for e in item.events if e.type is EventType.STARTED] == ["h1"]
+
+
+def test_map_issue_created_in_started_without_transitions_uses_current_state() -> None:
+    item = map_issue({**ISSUE_NODE, "history": {"nodes": []}})
+
+    assert [e.type for e in item.events] == [EventType.CREATED, EventType.STARTED]
+    assert item.events[1].external_id == "i1:started"
+    assert item.events[1].occurred_at == item.created_at
+
+
+def test_map_issue_created_in_backlog_without_transitions_gets_no_start() -> None:
+    node = {
+        **ISSUE_NODE,
+        "state": {"name": "Backlog", "type": "backlog"},
+        "history": {"nodes": []},
+    }
+
+    assert [e.type for e in map_issue(node).events] == [EventType.CREATED]
+
+
+def test_map_issue_canceled_at_emits_canceled_keyed_by_time() -> None:
+    first = map_issue({**ISSUE_NODE, "canceledAt": "2026-07-05T09:00:00.000Z"})
+    again = map_issue({**ISSUE_NODE, "canceledAt": "2026-07-09T09:00:00.000Z"})
+
+    [canceled] = [e for e in first.events if e.type is EventType.CANCELED]
+    assert canceled.occurred_at == datetime(2026, 7, 5, 9, 0, tzinfo=UTC)
+    assert canceled.external_id == "i1:canceled:2026-07-05T09:00:00.000Z"
+    # Re-canceled after a reopen: a new canceledAt must yield a new event.
+    assert [e.external_id for e in again.events if e.type is EventType.CANCELED] == [
+        "i1:canceled:2026-07-09T09:00:00.000Z"
+    ]
+
+
+def test_map_issue_without_canceled_at_emits_no_canceled() -> None:
+    for node in (ISSUE_NODE, {**ISSUE_NODE, "canceledAt": None}):
+        assert not [e for e in map_issue(node).events if e.type is EventType.CANCELED]

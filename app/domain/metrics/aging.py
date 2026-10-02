@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from app.domain.metrics.cycle_time import cycle_times
-from app.domain.metrics.samples import FlowSample
+from app.domain.metrics.samples import FlowSample, in_progress
 from app.domain.metrics.stats import percentile
 from app.domain.work_items.entities import WorkItem
 
@@ -50,9 +50,7 @@ def compute_aging_wip(
     )
     aging: list[AgingItem] = []
     for item, sample in items_with_samples:
-        if sample.started_at is None or sample.started_at > now:
-            continue
-        if sample.completed_at is not None and sample.completed_at <= now:
+        if not in_progress(sample, now) or sample.started_at is None:
             continue
         age = now - sample.started_at
         aging.append(
