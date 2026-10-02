@@ -152,3 +152,26 @@ async def test_forecast_samples_only_the_scopes_observed_history() -> None:
     assert forecast.completion is not None
     assert forecast.completion.p50_days == 5
     assert forecast.completion.p95_days == 5
+
+
+async def test_forecast_remaining_excludes_canceled_items() -> None:
+    team_id = uuid4()
+    done, canceled, doing = _item(team_id), _item(team_id), _item(team_id)
+    service = ForecastService(
+        InMemoryWorkItemRepository([done, canceled, doing]),
+        InMemoryEventRepository(
+            [
+                _event(done, EventType.CREATED, 10),
+                _event(done, EventType.COMPLETED, 2),
+                _event(canceled, EventType.CREATED, 9),
+                _event(canceled, EventType.STARTED, 8),
+                _event(canceled, EventType.CANCELED, 3),
+                _event(doing, EventType.CREATED, 5),
+                _event(doing, EventType.STARTED, 4),
+            ]
+        ),
+    )
+
+    forecast = await service.get_forecast(team_id=team_id, now=NOW)
+
+    assert forecast.remaining == 1  # only `doing`; canceled is closed, not open work

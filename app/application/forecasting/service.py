@@ -53,18 +53,16 @@ class ForecastService:
     ) -> DeliveryForecast:
         """Forecast completion of the scope's open work from its trailing throughput.
 
-        `remaining` defaults to the scope's not-yet-completed item count
-        (items with no events count as open backlog). Deterministic: the
-        simulation runs with a fixed seed.
+        `remaining` defaults to the scope's open item count — neither completed
+        nor canceled (items with no events count as open backlog). Deterministic:
+        the simulation runs with a fixed seed.
         """
         window_end = now if now is not None else datetime.now(UTC)
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
 
-        completed = sum(1 for s in scope.samples if s.completed_at is not None)
-        scope_remaining = (
-            remaining if remaining is not None else scope.item_count - completed
-        )
+        closed = sum(1 for s in scope.samples if s.completed_at is not None or s.canceled)
+        scope_remaining = remaining if remaining is not None else scope.item_count - closed
 
         history_days = observed_history_days(scope.samples, end=window_end, days=window_days)
         daily = daily_throughput_samples(scope.samples, end=window_end, days=history_days)
