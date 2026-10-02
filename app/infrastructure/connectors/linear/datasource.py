@@ -91,6 +91,7 @@ query Issues($after: String) {{
       title
       createdAt
       completedAt
+      canceledAt
       state {{ name type }}
       team {{ id }}
       project {{ id }}

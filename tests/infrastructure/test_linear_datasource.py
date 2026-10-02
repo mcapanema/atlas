@@ -92,6 +92,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
         if "issueLabels(" in body["query"]:
             return _page("issueLabels", [])
         assert "completedAt" in body["query"]
+        assert "canceledAt" in body["query"]
         assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
         return _page("issues", [issue_node])
 
@@ -142,7 +143,9 @@ async def test_fetch_work_items_resolves_blocked_labels() -> None:
         "id": "i1",
         "title": "Fix login",
         "createdAt": "2026-07-01T10:00:00.000Z",
-        "state": {"name": "In Progress", "type": "started"},
+        # Backlog: a started current state with no transitions would add a
+        # synthetic STARTED, which this test isn't about.
+        "state": {"name": "Backlog", "type": "backlog"},
         "team": {"id": "t1"},
         "project": None,
         "history": {
