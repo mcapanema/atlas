@@ -287,9 +287,7 @@ def _message_content(response: httpx.Response) -> str:
     try:
         content = envelope["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise AdvisorError(
-            "OpenRouter response missing choices[0].message.content"
-        ) from exc
+        raise AdvisorError("OpenRouter response missing choices[0].message.content") from exc
     if not isinstance(content, str):
         raise AdvisorError("OpenRouter message content is not a string")
     return content
@@ -313,9 +311,7 @@ class OpenRouterAdvisor:
         # ponytail: a fresh connection per call, same as the Linear connector.
         # Hold a pooled AsyncClient (with aclose() on app shutdown) if
         # sustained-throughput latency ever matters.
-        self._client_factory = client_factory or (
-            lambda: httpx.AsyncClient(timeout=120.0)
-        )
+        self._client_factory = client_factory or (lambda: httpx.AsyncClient(timeout=120.0))
         self._api_key = api_key
         self._model = model
         self._self_critique = self_critique
@@ -425,9 +421,7 @@ class OpenRouterAdvisor:
             parsed = MeetingPrepOut.model_validate_json(content)
         except ValidationError as exc:
             logger.error("OpenRouter reply did not match the meeting-prep schema: %s", exc)
-            raise AdvisorError(
-                "OpenRouter returned meeting prep in an unexpected shape"
-            ) from exc
+            raise AdvisorError("OpenRouter returned meeting prep in an unexpected shape") from exc
         return MeetingPrep(
             meeting=meeting,
             generated_at=datetime.now(UTC),
@@ -478,9 +472,7 @@ numbers are never invented."""
             parsed = GuidanceOut.model_validate_json(content)
         except ValidationError as exc:
             logger.error("OpenRouter reply did not match the guidance schema: %s", exc)
-            raise AdvisorError(
-                "OpenRouter returned guidance in an unexpected shape"
-            ) from exc
+            raise AdvisorError("OpenRouter returned guidance in an unexpected shape") from exc
         if not parsed.guidance.strip():
             raise AdvisorError("OpenRouter returned empty guidance")
         return parsed.guidance

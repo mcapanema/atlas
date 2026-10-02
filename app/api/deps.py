@@ -124,9 +124,7 @@ def get_advisor_port() -> AdvisorPort:
 AdvisorPortDep = Annotated[AdvisorPort, Depends(get_advisor_port)]
 
 
-def get_advisor_service(
-    metrics: MetricsServiceDep, forecast: ForecastServiceDep
-) -> AdvisorService:
+def get_advisor_service(metrics: MetricsServiceDep, forecast: ForecastServiceDep) -> AdvisorService:
     return AdvisorService(metrics, forecast)
 
 

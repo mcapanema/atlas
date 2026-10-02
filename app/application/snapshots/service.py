@@ -78,13 +78,9 @@ class SnapshotService:
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> ForecastAccuracy:
         """Calibration of the scope's past forecasts against actual completions."""
-        snapshots = await self._forecast_snapshots.list(
-            team_id=team_id, project_id=project_id
-        )
+        snapshots = await self._forecast_snapshots.list(team_id=team_id, project_id=project_id)
         scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
-        completions = [
-            s.completed_at for s in scope.samples if s.completed_at is not None
-        ]
+        completions = [s.completed_at for s in scope.samples if s.completed_at is not None]
         return evaluate_forecast_accuracy(snapshots, completions)
 
     async def _capture(
@@ -95,9 +91,7 @@ class SnapshotService:
         project_id: UUID | None = None,
     ) -> int:
         today = at.date()
-        if await self._metric_snapshots.exists_on(
-            today, team_id=team_id, project_id=project_id
-        ):
+        if await self._metric_snapshots.exists_on(today, team_id=team_id, project_id=project_id):
             return 0
         scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
         metrics = await self._metrics.get_flow_metrics(

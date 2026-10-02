@@ -99,9 +99,7 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(DataSourceError)
-    async def data_source_error_handler(
-        request: Request, exc: DataSourceError
-    ) -> JSONResponse:
+    async def data_source_error_handler(request: Request, exc: DataSourceError) -> JSONResponse:
         # An upstream delivery system (Linear) failed — our fault to report,
         # not the client's: 502, never 500 or 422.
         logger.error("Data source failure on %s %s: %s", request.method, request.url.path, exc)
@@ -129,9 +127,7 @@ def create_app() -> FastAPI:
                 stateless_http=True,
                 json_response=True,
                 streamable_http_path="/",
-                transport_security=TransportSecuritySettings(
-                    enable_dns_rebinding_protection=False
-                ),
+                transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
             ),
         )
 

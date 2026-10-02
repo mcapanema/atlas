@@ -16,9 +16,7 @@ def _pair(
     sample = FlowSample(
         created_at=NOW - timedelta(days=30),
         started_at=NOW - timedelta(days=started_days) if started_days is not None else None,
-        completed_at=(
-            NOW - timedelta(days=completed_days) if completed_days is not None else None
-        ),
+        completed_at=(NOW - timedelta(days=completed_days) if completed_days is not None else None),
         blocked_time=timedelta(0),
     )
     return item, sample

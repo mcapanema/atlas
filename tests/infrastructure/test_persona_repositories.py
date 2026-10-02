@@ -70,7 +70,5 @@ async def test_duplicate_guidance_version_is_rejected(session: AsyncSession) -> 
     )
     with pytest.raises(IntegrityError):
         await repo.add(
-            PersonaGuidance(
-                persona=Persona.AGILE_COACH, version=1, guidance="b", created_at=_T1
-            )
+            PersonaGuidance(persona=Persona.AGILE_COACH, version=1, guidance="b", created_at=_T1)
         )

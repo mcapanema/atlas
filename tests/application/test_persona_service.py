@@ -86,9 +86,7 @@ async def test_add_guidance_honors_explicit_created_at() -> None:
     service, _, _ = _service()
     watermark = _T0 + timedelta(hours=2)
 
-    guidance = await service.add_guidance(
-        Persona.AGILE_COACH, "Be concise.", created_at=watermark
-    )
+    guidance = await service.add_guidance(Persona.AGILE_COACH, "Be concise.", created_at=watermark)
 
     assert guidance.created_at == watermark
 

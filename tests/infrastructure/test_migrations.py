@@ -12,9 +12,7 @@ from app.config import get_settings
 from app.infrastructure.database.base import Base
 
 
-def test_upgrade_head_matches_orm_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_upgrade_head_matches_orm_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Run every migration on a fresh DB and diff the result against the models.
 
     `uv run alembic check` as a test — model/migration drift fails the suite

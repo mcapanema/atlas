@@ -16,9 +16,7 @@ def _item(team_id: UUID) -> WorkItem:
 
 
 def _event(item: WorkItem, type_: EventType, days_ago: int) -> Event:
-    return Event(
-        work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago)
-    )
+    return Event(work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago))
 
 
 def _steady_service(team_id: UUID) -> ForecastService:
@@ -107,9 +105,7 @@ async def test_no_history_yields_no_forecast() -> None:
 
 async def test_precomputed_scope_skips_repository_loading() -> None:
     # Repositories are empty — remaining must come from the passed-in scope.
-    service = ForecastService(
-        InMemoryWorkItemRepository([]), InMemoryEventRepository([])
-    )
+    service = ForecastService(InMemoryWorkItemRepository([]), InMemoryEventRepository([]))
     item = _item(uuid4())
     stream = [_event(item, EventType.COMPLETED, 1)]
     sample = derive_flow_sample(stream)
@@ -124,9 +120,7 @@ async def test_precomputed_scope_skips_repository_loading() -> None:
 async def test_load_scope_applies_exclude_states() -> None:
     team_id = uuid4()
     keep, drop = _item(team_id), WorkItem(team_id=team_id, title="Trash", state="trash")
-    service = ForecastService(
-        InMemoryWorkItemRepository([keep, drop]), InMemoryEventRepository([])
-    )
+    service = ForecastService(InMemoryWorkItemRepository([keep, drop]), InMemoryEventRepository([]))
 
     scope = await service.load_scope(team_id=team_id, exclude_states={"trash"})
 
@@ -142,9 +136,7 @@ async def test_forecast_samples_only_the_scopes_observed_history() -> None:
     events = [_event(item, EventType.CREATED, 4) for item in items] + [
         _event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)
     ]
-    service = ForecastService(
-        InMemoryWorkItemRepository(items), InMemoryEventRepository(events)
-    )
+    service = ForecastService(InMemoryWorkItemRepository(items), InMemoryEventRepository(events))
 
     forecast = await service.get_forecast(team_id=team_id, remaining=5, now=NOW)
 

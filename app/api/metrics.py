@@ -152,9 +152,7 @@ async def get_lead_time_distribution(
 async def get_metric_snapshots(
     service: SnapshotServiceDep, scope: ScopeDep
 ) -> list[MetricSnapshotRead]:
-    snapshots = await service.get_metric_history(
-        team_id=scope.team_id, project_id=scope.project_id
-    )
+    snapshots = await service.get_metric_history(team_id=scope.team_id, project_id=scope.project_id)
     return [MetricSnapshotRead.model_validate(s) for s in snapshots]
 
 

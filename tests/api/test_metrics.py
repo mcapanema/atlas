@@ -9,9 +9,7 @@ from tests.api.helpers import create_team, days_ago
 
 async def test_team_flow_metrics_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
-    ).json()
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
     for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
         response = await client.post(
             "/api/events",
@@ -97,9 +95,7 @@ async def test_metrics_requires_exactly_one_scope(client: AsyncClient) -> None:
 
 async def test_flow_history_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
-    ).json()
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
     for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
         await client.post(
             "/api/events",
@@ -131,9 +127,7 @@ async def test_flow_history_requires_exactly_one_scope(client: AsyncClient) -> N
 
 async def test_lead_time_distribution_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
-    ).json()
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
     for type_, days in (("created", 10), ("completed", 2)):
         await client.post(
             "/api/events",
@@ -164,9 +158,7 @@ async def test_lead_time_distribution_requires_exactly_one_scope(client: AsyncCl
 
 async def test_flow_metrics_include_queue_and_touch_time(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
-    ).json()
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
     for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
         await client.post(
             "/api/events",
@@ -212,9 +204,7 @@ async def test_aging_wip_requires_exactly_one_scope(client: AsyncClient) -> None
 
 async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
-    ).json()
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
     for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
         await client.post(
             "/api/events",
@@ -302,9 +292,7 @@ async def test_aging_wip_honors_item_filters(client: AsyncClient) -> None:
             json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
         )
 
-    response = await client.get(
-        f"/api/metrics/aging-wip?team_id={team_id}&exclude_states=canceled"
-    )
+    response = await client.get(f"/api/metrics/aging-wip?team_id={team_id}&exclude_states=canceled")
 
     assert response.status_code == 200
     assert response.json()["items"] == []
@@ -319,9 +307,7 @@ async def test_metrics_rejects_unknown_type(client: AsyncClient) -> None:
 async def test_metrics_explicit_period(client: AsyncClient) -> None:
     team_id = await create_team(client)
     item = (
-        await client.post(
-            "/api/work-items", json={"team_id": team_id, "title": "Old but real"}
-        )
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Old but real"})
     ).json()
     for event_type, days in (("created", 45), ("completed", 40)):
         await client.post(
@@ -348,17 +334,13 @@ async def test_metrics_period_requires_both_bounds(client: AsyncClient) -> None:
 
 async def test_metrics_period_rejects_inverted_range(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    response = await client.get(
-        f"/api/metrics?team_id={team_id}&start=2026-06-10&end=2026-06-01"
-    )
+    response = await client.get(f"/api/metrics?team_id={team_id}&start=2026-06-10&end=2026-06-01")
     assert response.status_code == 422
 
 
 async def test_metrics_period_rejects_range_over_365_days(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    response = await client.get(
-        f"/api/metrics?team_id={team_id}&start=2020-01-01&end=2021-01-02"
-    )
+    response = await client.get(f"/api/metrics?team_id={team_id}&start=2020-01-01&end=2021-01-02")
     assert response.status_code == 422
 
 
@@ -366,9 +348,7 @@ async def test_history_honors_explicit_period(client: AsyncClient) -> None:
     team_id = await create_team(client)
     start, end = days_ago(50)[:10], days_ago(35)[:10]
 
-    response = await client.get(
-        f"/api/metrics/history?team_id={team_id}&start={start}&end={end}"
-    )
+    response = await client.get(f"/api/metrics/history?team_id={team_id}&start={start}&end={end}")
 
     assert response.status_code == 200
     assert response.json()["window_start"][:10] == start
@@ -376,9 +356,7 @@ async def test_history_honors_explicit_period(client: AsyncClient) -> None:
 
 async def test_flow_history_reports_data_as_of(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})
-    ).json()
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
     await client.post(
         "/api/events",
         json={
@@ -408,9 +386,7 @@ async def test_flow_history_data_as_of_is_null_for_an_empty_team(
 async def test_flow_history_buckets_a_short_window_daily(client: AsyncClient) -> None:
     team_id = await create_team(client)
 
-    response = await client.get(
-        f"/api/metrics/history?team_id={team_id}&window_days=7"
-    )
+    response = await client.get(f"/api/metrics/history?team_id={team_id}&window_days=7")
 
     assert response.status_code == 200
     body = response.json()

@@ -23,9 +23,7 @@ TRIALS = 2_000
 MAX_DAYS = 3650
 
 
-def daily_throughput_samples(
-    samples: list[FlowSample], *, end: datetime, days: int
-) -> list[int]:
+def daily_throughput_samples(samples: list[FlowSample], *, end: datetime, days: int) -> list[int]:
     """Completions per trailing 1-day bucket over (end - days, end], zeros included."""
     counts = [0] * days
     for sample in samples:

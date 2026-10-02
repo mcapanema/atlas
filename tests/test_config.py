@@ -42,9 +42,7 @@ def test_env_file_is_read(tmp_path: Path) -> None:
     assert Settings(_env_file=env_file).advisor_model == "model-from-dotenv"
 
 
-def test_real_env_var_beats_env_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_real_env_var_beats_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The documented contract (root CLAUDE.md): real env vars always win
     # over .env. tests/api/test_connectors.py's hermeticity relies on it.
     env_file = tmp_path / ".env"

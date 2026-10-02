@@ -245,9 +245,7 @@ async def test_work_item_type_change_is_updated() -> None:
 async def test_project_with_unknown_team_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(
-            projects=[
-                SourceProject(external_id="lp9", name="Orphan", team_external_id="missing")
-            ]
+            projects=[SourceProject(external_id="lp9", name="Orphan", team_external_id="missing")]
         )
     )
     org_id = await seed_org(harness)
@@ -309,9 +307,7 @@ async def test_project_with_null_team_external_id_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(
             teams=[SourceTeam(external_id="lt1", name="Platform")],
-            projects=[
-                SourceProject(external_id="lp9", name="Teamless", team_external_id=None)
-            ],
+            projects=[SourceProject(external_id="lp9", name="Teamless", team_external_id=None)],
         )
     )
     org_id = await seed_org(harness)
@@ -381,9 +377,7 @@ async def test_done_item_without_completion_event_gets_one_synthesized() -> None
     item = await harness.work_items.get_by_external_id("li2")
     assert item is not None
     completions = [
-        e
-        for e in await harness.events.list_for_work_item(item.id)
-        if e.type is EventType.COMPLETED
+        e for e in await harness.events.list_for_work_item(item.id) if e.type is EventType.COMPLETED
     ]
     assert len(completions) == 1
     assert completions[0].occurred_at == COMPLETED_AT

@@ -8,9 +8,7 @@ ORIGIN = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
 TEAM = uuid4()
 
 
-def _snapshot(
-    *, remaining: int = 2, p50: int | None = 5, p85: int | None = 10
-) -> ForecastSnapshot:
+def _snapshot(*, remaining: int = 2, p50: int | None = 5, p85: int | None = 10) -> ForecastSnapshot:
     return ForecastSnapshot(
         captured_on=ORIGIN.date(),
         window_days=90,
@@ -79,8 +77,8 @@ def test_no_snapshots_yields_empty_accuracy() -> None:
 
 
 def test_mixed_snapshots_average_hit_rates() -> None:
-    hit = _snapshot()                      # resolves at 4d: hits both
-    miss = _snapshot(p50=1, p85=3)         # resolves at 4d: misses both
+    hit = _snapshot()  # resolves at 4d: hits both
+    miss = _snapshot(p50=1, p85=3)  # resolves at 4d: misses both
 
     accuracy = evaluate_forecast_accuracy([hit, miss], _completions(2, 4))
 

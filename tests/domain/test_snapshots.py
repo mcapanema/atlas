@@ -8,9 +8,7 @@ from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 TEAM = uuid4()
 
 
-def _metric_snapshot(
-    team_id: UUID | None = TEAM, project_id: UUID | None = None
-) -> MetricSnapshot:
+def _metric_snapshot(team_id: UUID | None = TEAM, project_id: UUID | None = None) -> MetricSnapshot:
     return MetricSnapshot(
         captured_on=date(2026, 7, 11),
         window_days=30,

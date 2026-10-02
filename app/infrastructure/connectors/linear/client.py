@@ -63,9 +63,7 @@ class LinearGraphQLClient:
         self._base_url = base_url
         self._transport = transport
 
-    async def execute(
-        self, query: str, variables: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         attempt = 1
         while True:
             response = await self._post(query, variables)

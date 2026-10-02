@@ -10,9 +10,7 @@ async def _seed_history(client: AsyncClient, team_id: str) -> None:
     """Three completed items on recent distinct days, plus one open item."""
     for days in (1, 2, 3):
         item = (
-            await client.post(
-                "/api/work-items", json={"team_id": team_id, "title": f"Done {days}"}
-            )
+            await client.post("/api/work-items", json={"team_id": team_id, "title": f"Done {days}"})
         ).json()
         response = await client.post(
             "/api/events",
@@ -88,12 +86,8 @@ async def test_forecast_requires_exactly_one_scope(client: AsyncClient) -> None:
 
 async def test_forecast_validates_query_params(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    assert (
-        await client.get(f"/api/forecasts?team_id={team_id}&window_days=1")
-    ).status_code == 422
-    assert (
-        await client.get(f"/api/forecasts?team_id={team_id}&remaining=-1")
-    ).status_code == 422
+    assert (await client.get(f"/api/forecasts?team_id={team_id}&window_days=1")).status_code == 422
+    assert (await client.get(f"/api/forecasts?team_id={team_id}&remaining=-1")).status_code == 422
 
 
 async def test_forecast_for_unknown_team_is_404(client: AsyncClient) -> None:
@@ -114,9 +108,7 @@ async def test_forecast_excludes_filtered_out_states(client: AsyncClient) -> Non
     assert trash["state"] == "trash"
 
     unfiltered = (await client.get(f"/api/forecasts?team_id={team_id}")).json()
-    filtered = (
-        await client.get(f"/api/forecasts?team_id={team_id}&exclude_states=trash")
-    ).json()
+    filtered = (await client.get(f"/api/forecasts?team_id={team_id}&exclude_states=trash")).json()
 
     assert unfiltered["remaining"] == 2
     assert filtered["remaining"] == 1
@@ -125,9 +117,7 @@ async def test_forecast_excludes_filtered_out_states(client: AsyncClient) -> Non
 async def test_forecast_filters_by_work_item_type(client: AsyncClient) -> None:
     team_id = await create_team(client)
     await _seed_history(client, team_id)
-    await client.post(
-        "/api/work-items", json={"team_id": team_id, "title": "Bug", "type": "bug"}
-    )
+    await client.post("/api/work-items", json={"team_id": team_id, "title": "Bug", "type": "bug"})
 
     response = await client.get(f"/api/forecasts?team_id={team_id}&types=bug")
 

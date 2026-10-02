@@ -94,9 +94,7 @@ async def test_second_sync_same_day_does_not_duplicate_snapshots(
 ) -> None:
     team_id = await synced_team_id_factory()
     org = (await client.get("/api/organizations")).json()[0]
-    second = await client.post(
-        "/api/connectors/linear/sync", json={"organization_id": org["id"]}
-    )
+    second = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
     assert second.status_code == 200
 
     response = await client.get(f"/api/metrics/snapshots?team_id={team_id}")

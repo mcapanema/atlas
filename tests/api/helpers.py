@@ -21,9 +21,7 @@ async def create_work_item(
 ) -> str:
     if team_id is None:
         team_id = await create_team(client)
-    response = await client.post(
-        "/api/work-items", json={"team_id": team_id, "title": title}
-    )
+    response = await client.post("/api/work-items", json={"team_id": team_id, "title": title})
     assert response.status_code == 201
     work_item_id: str = response.json()["id"]
     return work_item_id

@@ -179,9 +179,7 @@ async def test_recommendations_unknown_team_is_404_without_llm_call(
     assert calls == []  # an unknown scope must not trigger a paid LLM call
 
 
-async def test_persona_is_forwarded_to_the_advisor(
-    client: AsyncClient, test_app: FastAPI
-) -> None:
+async def test_persona_is_forwarded_to_the_advisor(client: AsyncClient, test_app: FastAPI) -> None:
     personas: list[Persona] = []
 
     class RecordingPersonaAdvisor:
@@ -202,9 +200,7 @@ async def test_persona_is_forwarded_to_the_advisor(
     test_app.dependency_overrides[get_advisor_port] = lambda: RecordingPersonaAdvisor()
     team_id = await create_team(client)
 
-    response = await client.get(
-        f"/api/recommendations?team_id={team_id}&persona=delivery_analyst"
-    )
+    response = await client.get(f"/api/recommendations?team_id={team_id}&persona=delivery_analyst")
 
     assert response.status_code == 200
     assert personas == [Persona.DELIVERY_ANALYST]
@@ -214,9 +210,7 @@ async def test_unknown_persona_is_422(client: AsyncClient, test_app: FastAPI) ->
     test_app.dependency_overrides[get_advisor_port] = lambda: FakeAdvisor()
     team_id = await create_team(client)
 
-    response = await client.get(
-        f"/api/recommendations?team_id={team_id}&persona=fortune_teller"
-    )
+    response = await client.get(f"/api/recommendations?team_id={team_id}&persona=fortune_teller")
 
     assert response.status_code == 422
 

@@ -50,18 +50,14 @@ def linear_unconfigured(settings_env: Callable[..., None]) -> None:
     settings_env(linear_api_key="")
 
 
-async def test_status_reports_unconfigured(
-    client: AsyncClient, linear_unconfigured: None
-) -> None:
+async def test_status_reports_unconfigured(client: AsyncClient, linear_unconfigured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
     assert response.json() == {"configured": False}
 
 
-async def test_status_reports_configured(
-    client: AsyncClient, linear_configured: None
-) -> None:
+async def test_status_reports_configured(client: AsyncClient, linear_configured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
@@ -84,9 +80,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     test_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
 
-    first = await client.post(
-        "/api/connectors/linear/sync", json={"organization_id": org["id"]}
-    )
+    first = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
 
     assert first.status_code == 200
     assert first.json() == {
@@ -99,9 +93,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     teams = (await client.get("/api/teams")).json()
     assert teams[0]["external_id"] == "lt1"
 
-    second = await client.post(
-        "/api/connectors/linear/sync", json={"organization_id": org["id"]}
-    )
+    second = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
 
     assert second.json() == {
         "teams": 0,
@@ -141,9 +133,7 @@ async def test_sync_returns_502_when_source_fails(
     test_app.dependency_overrides[get_delivery_data_source] = FailingDataSource
     org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
 
-    response = await client.post(
-        "/api/connectors/linear/sync", json={"organization_id": org["id"]}
-    )
+    response = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
 
     assert response.status_code == 502
     assert "Linear API returned HTTP 500" in response.json()["detail"]

@@ -12,9 +12,7 @@ async def test_list_teams_empty(client: AsyncClient) -> None:
 
 async def test_create_then_list_team(client: AsyncClient) -> None:
     org_id = str(uuid4())
-    create = await client.post(
-        "/api/teams", json={"organization_id": org_id, "name": "Platform"}
-    )
+    create = await client.post("/api/teams", json={"organization_id": org_id, "name": "Platform"})
 
     assert create.status_code == 201
     body = create.json()
@@ -28,8 +26,6 @@ async def test_create_then_list_team(client: AsyncClient) -> None:
 
 
 async def test_create_rejects_empty_name(client: AsyncClient) -> None:
-    response = await client.post(
-        "/api/teams", json={"organization_id": str(uuid4()), "name": ""}
-    )
+    response = await client.post("/api/teams", json={"organization_id": str(uuid4()), "name": ""})
 
     assert response.status_code == 422

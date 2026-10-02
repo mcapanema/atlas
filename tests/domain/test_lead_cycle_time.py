@@ -14,9 +14,7 @@ def _sample(
 ) -> FlowSample:
     return FlowSample(
         created_at=NOW - timedelta(days=created_days_ago),
-        started_at=NOW - timedelta(days=started_days_ago)
-        if started_days_ago is not None
-        else None,
+        started_at=NOW - timedelta(days=started_days_ago) if started_days_ago is not None else None,
         completed_at=NOW - timedelta(days=completed_days_ago)
         if completed_days_ago is not None
         else None,

@@ -124,9 +124,9 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         lines.append("Teams:")
         lines += [f"- {t['id']}  {t['name']}" for t in teams] or ["- (none)"]
         lines.append("Projects:")
-        lines += [
-            f"- {p['id']}  {p['name']} (team {p['team_id']})" for p in projects
-        ] or ["- (none)"]
+        lines += [f"- {p['id']}  {p['name']} (team {p['team_id']})" for p in projects] or [
+            "- (none)"
+        ]
         return "\n".join(lines)
 
     @mcp.tool()
@@ -152,9 +152,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
             app, "GET", "/api/metrics/health", params={**scope, "window_days": window_days}
         )
         aging = await _api(app, "GET", "/api/metrics/aging-wip", params=scope)
-        return "\n\n".join(
-            [context["context"], _render_health(health), _render_aging(aging)]
-        )
+        return "\n\n".join([context["context"], _render_health(health), _render_aging(aging)])
 
     @mcp.tool()
     async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
@@ -188,9 +186,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         )
         if not page["items"]:
             return "No work items in scope."
-        lines = [
-            f"- {i['id']}  [{i['state']}] ({i['type']}) {i['title']}" for i in page["items"]
-        ]
+        lines = [f"- {i['id']}  [{i['state']}] ({i['type']}) {i['title']}" for i in page["items"]]
         lines.append(f"Showing {len(page['items'])} of {page['total']} (offset {offset}).")
         return "\n".join(lines)
 

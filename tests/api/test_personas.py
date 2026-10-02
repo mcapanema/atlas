@@ -107,18 +107,14 @@ async def test_reflect_409_when_unconfigured(
     assert "OPENROUTER" in response.json()["detail"]
 
 
-async def test_reflect_409_when_no_new_feedback(
-    client: AsyncClient, test_app: FastAPI
-) -> None:
+async def test_reflect_409_when_no_new_feedback(client: AsyncClient, test_app: FastAPI) -> None:
     test_app.dependency_overrides[get_advisor_port] = lambda: FakeReflectingAdvisor()
     response = await client.post("/api/personas/agile_coach/reflect")
     assert response.status_code == 409
     assert "feedback" in response.json()["detail"].lower()
 
 
-async def test_reflect_creates_a_guidance_version(
-    client: AsyncClient, test_app: FastAPI
-) -> None:
+async def test_reflect_creates_a_guidance_version(client: AsyncClient, test_app: FastAPI) -> None:
     fake = FakeReflectingAdvisor()
     test_app.dependency_overrides[get_advisor_port] = lambda: fake
     await _post_feedback(client)

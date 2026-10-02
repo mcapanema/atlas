@@ -64,9 +64,7 @@ class PersonaService:
         await self._guidance.add(guidance)
         return guidance
 
-    async def restore_guidance(
-        self, persona: Persona, version: int
-    ) -> PersonaGuidance | None:
+    async def restore_guidance(self, persona: Persona, version: int) -> PersonaGuidance | None:
         source = await self._guidance.get_version(persona, version)
         if source is None:
             return None
