@@ -4,6 +4,7 @@ import {
   applyFiltersToSearchParams,
   filtersFromSearchParams,
   isDefaultFilters,
+  periodText,
   windowLabel,
 } from "./metricsFilters";
 
@@ -57,5 +58,24 @@ describe("isDefaultFilters", () => {
     expect(isDefaultFilters({ start: "2026-06-01", end: "2026-06-30" })).toBe(false);
     expect(isDefaultFilters({ types: ["bug"] })).toBe(false);
     expect(isDefaultFilters({ excludeStates: ["canceled"] })).toBe(false);
+  });
+});
+
+describe("periodText", () => {
+  const window = { window_start: "2026-06-01T00:00:00Z", window_end: "2026-07-01T00:00:00Z" };
+
+  it("names a custom range by its own dates, window or not", () => {
+    const filters = { start: "2026-05-01", end: "2026-05-31" };
+    expect(periodText(filters, window)).toBe("01-05-2026 – 31-05-2026");
+    expect(periodText(filters, undefined)).toBe("01-05-2026 – 31-05-2026");
+  });
+
+  it("names a preset by its length and the window the API resolved", () => {
+    expect(periodText({ windowDays: 90 }, window)).toBe("Last 90 days · 01-06-2026 – 01-07-2026");
+    expect(periodText({}, window)).toBe("Last 30 days · 01-06-2026 – 01-07-2026");
+  });
+
+  it("is null for a preset until the window is known", () => {
+    expect(periodText({}, undefined)).toBeNull();
   });
 });
