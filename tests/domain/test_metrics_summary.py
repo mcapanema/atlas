@@ -35,11 +35,11 @@ def test_percentile_of_single_value_is_that_value() -> None:
 
 
 def test_percentile_rejects_empty_input_and_bad_p() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="at least one value"):
         percentile([], 50)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="p must be between 1 and 99"):
         percentile([1.0], 0)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="p must be between 1 and 99"):
         percentile([1.0], 100)
 
 

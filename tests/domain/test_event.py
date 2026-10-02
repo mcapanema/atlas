@@ -16,7 +16,8 @@ def test_event_defaults() -> None:
 
     assert isinstance(event.id, UUID)
     assert event.recorded_at.tzinfo == UTC
-    assert event.from_state is None and event.to_state is None
+    assert event.from_state is None
+    assert event.to_state is None
 
 
 def test_event_is_immutable() -> None:
@@ -31,7 +32,7 @@ def test_event_is_immutable() -> None:
 
 
 def test_event_rejects_naive_occurred_at() -> None:
-    with pytest.raises(ValueError, match="Event.occurred_at must be timezone-aware"):
+    with pytest.raises(ValueError, match=r"Event\.occurred_at must be timezone-aware"):
         Event(
             work_item_id=uuid4(),
             type=EventType.CREATED,

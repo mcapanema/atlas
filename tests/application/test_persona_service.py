@@ -43,7 +43,8 @@ async def test_add_guidance_increments_versions() -> None:
 
     assert (first.version, second.version) == (1, 2)
     active = await service.active_guidance(Persona.AGILE_COACH)
-    assert active is not None and active.guidance == "Lead with WIP."
+    assert active is not None
+    assert active.guidance == "Lead with WIP."
     assert [g.version for g in await service.list_guidance(Persona.AGILE_COACH)] == [2, 1]
 
 

@@ -73,7 +73,8 @@ async def test_feedback_roundtrip(client: AsyncClient) -> None:
     assert body["rating"] == "down"
     assert body["comment"] is None
     assert body["advice_summary"] == "Hire more people."
-    assert "id" in body and "created_at" in body
+    assert "id" in body
+    assert "created_at" in body
 
 
 async def test_feedback_unknown_persona_is_422(client: AsyncClient) -> None:

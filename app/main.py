@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             yield
     finally:
         engine = sessionmaker.kw["bind"]
-        assert isinstance(engine, AsyncEngine)  # narrow Any for mypy; always true
+        assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
         await engine.dispose()
 
 

@@ -19,7 +19,8 @@ async def test_create_then_list_team(client: AsyncClient) -> None:
     assert body["name"] == "Platform"
     assert body["organization_id"] == org_id
     assert body["external_id"] is None
-    assert "id" in body and "created_at" in body
+    assert "id" in body
+    assert "created_at" in body
 
     listed = await client.get("/api/teams")
     assert [t["name"] for t in listed.json()] == ["Platform"]

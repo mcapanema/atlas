@@ -85,9 +85,11 @@ async def test_first_sync_creates_everything() -> None:
 
     assert (summary.teams, summary.projects, summary.work_items, summary.events) == (1, 1, 1, 2)
     team = await harness.teams.get_by_external_id("lt1")
-    assert team is not None and team.organization_id == org_id
+    assert team is not None
+    assert team.organization_id == org_id
     project = await harness.projects.get_by_external_id("lp1")
-    assert project is not None and project.team_id == team.id
+    assert project is not None
+    assert project.team_id == team.id
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
     assert item.team_id == team.id
@@ -124,7 +126,8 @@ async def test_renamed_team_is_updated() -> None:
 
     assert summary.teams == 1
     team = await harness.teams.get_by_external_id("lt1")
-    assert team is not None and team.name == "Platform Engineering"
+    assert team is not None
+    assert team.name == "Platform Engineering"
     assert len(await harness.teams.list()) == 1
 
 
@@ -144,8 +147,8 @@ async def test_state_change_updates_work_item_and_appends_event() -> None:
             team_external_id=item_source.team_external_id,
             project_external_id=item_source.project_external_id,
             created_at=item_source.created_at,
-            events=item_source.events
-            + (
+            events=(
+                *item_source.events,
                 SourceEvent(
                     external_id="lh2",
                     type=EventType.COMPLETED,
@@ -162,7 +165,8 @@ async def test_state_change_updates_work_item_and_appends_event() -> None:
     assert summary.work_items == 1
     assert summary.events == 1
     item = await harness.work_items.get_by_external_id("li1")
-    assert item is not None and item.state == "Done"
+    assert item is not None
+    assert item.state == "Done"
     assert len(await harness.events.list_for_work_item(item.id)) == 3
 
 
@@ -181,7 +185,8 @@ async def test_project_reassigned_to_different_team_is_updated() -> None:
     assert summary.projects == 1
     new_team = await harness.teams.get_by_external_id("lt2")
     project = await harness.projects.get_by_external_id("lp1")
-    assert new_team is not None and project is not None
+    assert new_team is not None
+    assert project is not None
     assert project.team_id == new_team.id
 
 
@@ -211,7 +216,8 @@ async def test_work_item_reassigned_to_different_team_is_updated() -> None:
     assert summary.work_items == 1
     new_team = await harness.teams.get_by_external_id("lt2")
     item = await harness.work_items.get_by_external_id("li1")
-    assert new_team is not None and item is not None
+    assert new_team is not None
+    assert item is not None
     assert item.team_id == new_team.id
 
 
@@ -239,7 +245,8 @@ async def test_work_item_type_change_is_updated() -> None:
 
     assert summary.work_items == 1
     item = await harness.work_items.get_by_external_id("li1")
-    assert item is not None and item.type == WorkItemType.BUG
+    assert item is not None
+    assert item.type == WorkItemType.BUG
 
 
 async def test_project_with_unknown_team_is_skipped() -> None:
@@ -413,8 +420,8 @@ async def test_done_item_with_real_completion_event_is_not_a_divergence() -> Non
             project_external_id=None,
             created_at=item_source.created_at,
             completed_at=item_source.completed_at,
-            events=item_source.events
-            + (
+            events=(
+                *item_source.events,
                 SourceEvent(
                     external_id="lh9",
                     type=EventType.COMPLETED,
@@ -501,7 +508,8 @@ async def test_sync_without_org_creates_one_from_source() -> None:
     assert [o.name for o in orgs] == ["Acme Workspace"]
     assert summary.teams == 1
     team = await harness.teams.get_by_external_id("lt1")
-    assert team is not None and team.organization_id == orgs[0].id
+    assert team is not None
+    assert team.organization_id == orgs[0].id
 
 
 async def test_sync_without_org_reuses_the_single_existing_org() -> None:
@@ -512,7 +520,8 @@ async def test_sync_without_org_reuses_the_single_existing_org() -> None:
 
     assert [o.id for o in await harness.organizations.list()] == [org_id]
     team = await harness.teams.get_by_external_id("lt1")
-    assert team is not None and team.organization_id == org_id
+    assert team is not None
+    assert team.organization_id == org_id
 
 
 async def test_sync_without_org_is_ambiguous_with_multiple_orgs() -> None:

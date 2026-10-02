@@ -33,26 +33,26 @@ def test_recommendation_holds_fields() -> None:
 
 
 def test_recommendation_rejects_blank_title() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="title must not be blank"):
         _recommendation(title="   ")
 
 
 def test_recommendation_rejects_unknown_priority() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="priority must be one of"):
         _recommendation(priority="urgent")
 
 
 def test_advice_rejects_naive_generated_at() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="generated_at must be timezone-aware"):
         DeliveryAdvice(
-            generated_at=datetime(2026, 7, 10),  # naive — no tzinfo
+            generated_at=datetime(2026, 7, 10),  # noqa: DTZ001 — naive on purpose
             summary="ok",
             recommendations=(),
         )
 
 
 def test_advice_rejects_blank_summary() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="summary must not be blank"):
         DeliveryAdvice(
             generated_at=datetime(2026, 7, 10, tzinfo=UTC),
             summary="  ",

@@ -220,7 +220,8 @@ def test_system_prompt_varies_by_persona() -> None:
     assert "Delivery Analyst" in analyst
     assert coach != analyst
     # the shared grounding rules survive in every persona
-    assert "never invent numbers" in coach and "never invent numbers" in analyst
+    assert "never invent numbers" in coach
+    assert "never invent numbers" in analyst
 
 
 def test_render_context_includes_queue_and_touch_time() -> None:
@@ -298,7 +299,8 @@ async def test_reflect_returns_distilled_guidance_and_sends_feedback() -> None:
     assert body["response_format"]["json_schema"]["name"] == "persona_guidance"
     user_message = body["messages"][1]["content"]
     assert "staffing advice is out of my control" in user_message
-    assert "[down]" in user_message and "[up]" in user_message
+    assert "[down]" in user_message
+    assert "[up]" in user_message
     assert "Be concise." in user_message  # current guidance is offered for carry-over
     assert "Agile Coach" in body["messages"][0]["content"]
 

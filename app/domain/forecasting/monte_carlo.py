@@ -62,7 +62,7 @@ def simulate_days_to_complete(
         return [0] * trials
     if not any(daily_samples):
         return None
-    rng = Random(seed)
+    rng = Random(seed)  # noqa: S311 — seeded simulation, not cryptography
     results: list[int] = []
     for _ in range(trials):
         done = 0

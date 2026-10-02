@@ -49,7 +49,8 @@ async def test_get_by_external_id(session: AsyncSession) -> None:
 
     fetched = await repo.get_by_external_id("lin_i1")
 
-    assert fetched is not None and fetched.id == item.id
+    assert fetched is not None
+    assert fetched.id == item.id
     assert await repo.get_by_external_id("nope") is None
 
 

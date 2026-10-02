@@ -87,7 +87,7 @@ async def _api(
     return response.json()
 
 
-def build_mcp_server(app: FastAPI) -> MCPServer:
+def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 trivial nested tool closures
     """The MCP server, its tools closing over the FastAPI app they front."""
     # mcp 2.x: FastMCP was renamed to MCPServer, and the transport-mode
     # kwargs (stateless_http, json_response, streamable_http_path,
