@@ -283,3 +283,24 @@ def test_same_instant_start_and_completion_reads_completed() -> None:
     assert sample is not None
     assert sample.started_at == datetime(2026, 6, 3, tzinfo=UTC)
     assert sample.completed_at == datetime(2026, 6, 3, tzinfo=UTC)
+
+
+def test_stop_landing_after_the_cancel_keeps_the_item_canceled() -> None:
+    # Pins fold/CFD agreement for Linear's canceledAt-before-history skew.
+    t = datetime(2026, 6, 5, tzinfo=UTC)
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 3),
+            Event(work_item_id=WORK_ITEM_ID, type=EventType.CANCELED, occurred_at=t),
+            Event(
+                work_item_id=WORK_ITEM_ID,
+                type=EventType.STOPPED,
+                occurred_at=t + timedelta(milliseconds=100),
+            ),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.canceled is True
+    assert sample.stopped_at == t

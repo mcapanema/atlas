@@ -28,11 +28,12 @@ def derive_flow_sample(events: list[Event]) -> FlowSample | None:
 
     created_at is the first event; started_at the first STARTED; completed_at
     the last COMPLETED, voided if a later STARTED reopened the item.
-    stopped_at is when an uncompleted item last left progress (STOPPED or CANCELED
-    since its latest STARTED); canceled marks an item closed without delivery. Blocked
-    time sums blocked periods clipped to the cycle — from started_at (or the
-    first event, if never started) to completed_at; a still-open period on an
-    uncompleted item is not counted (unmeasurable).
+    stopped_at is when an uncompleted item first left progress (the first STOPPED
+    or CANCELED since its latest STARTED or COMPLETED); canceled marks an item
+    closed without delivery. Blocked time sums blocked periods clipped to the
+    cycle — from started_at (or the first event, if never started) to
+    completed_at; a still-open period on an uncompleted item is not counted
+    (unmeasurable).
     """
     if not events:
         return None

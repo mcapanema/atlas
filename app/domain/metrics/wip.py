@@ -1,4 +1,7 @@
-"""WIP: work items started but not completed at a point in time."""
+"""WIP: work items in progress at a point in time.
+
+In progress means started and not yet completed, moved back, or canceled.
+"""
 
 from datetime import datetime
 

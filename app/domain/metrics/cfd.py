@@ -26,7 +26,9 @@ def _advance(phase: str | None, event: Event) -> str:
     """The item's phase after `event`, given its phase before it.
 
     "canceled" is a hidden phase: closed undelivered items drop out of the
-    chart. Done stays done through a cancel (delivered work stays delivered).
+    chart. Done stays done through a cancel (delivered work stays delivered),
+    and a STOPPED never lifts an item out of "canceled" (the derived stop can
+    sort after the cancel when their timestamps skew or tie).
     """
     if event.type is EventType.STARTED:
         return "in_progress"
@@ -35,7 +37,7 @@ def _advance(phase: str | None, event: Event) -> str:
     if phase == "done":
         return phase
     if event.type is EventType.STOPPED:
-        return "todo"
+        return "todo" if phase != "canceled" else phase
     if event.type is EventType.CANCELED:
         return "canceled"
     return phase if phase is not None else "todo"

@@ -182,3 +182,60 @@ def test_same_instant_start_and_completion_counts_done() -> None:
     )
 
     assert [(c.todo, c.in_progress, c.done) for c in counts] == [(1, 0, 0), (0, 0, 1)]
+
+
+def test_canceled_item_stays_hidden_when_its_stop_lands_after_the_cancel() -> None:
+    # Linear's canceledAt can precede the "In Progress -> Canceled" history entry.
+    a = uuid4()
+    stream = [
+        _event(EventType.CREATED, 1, a),
+        _event(EventType.STARTED, 2, a),
+        Event(
+            work_item_id=a,
+            type=EventType.CANCELED,
+            occurred_at=datetime(2026, 7, 3, 12, 0, 0, 0, tzinfo=UTC),
+        ),
+        Event(
+            work_item_id=a,
+            type=EventType.STOPPED,
+            occurred_at=datetime(2026, 7, 3, 12, 0, 0, 100_000, tzinfo=UTC),
+        ),
+    ]
+
+    counts = daily_flow_counts(
+        [stream],
+        start=datetime(2026, 7, 1, tzinfo=UTC),
+        end=datetime(2026, 7, 3, 23, 0, tzinfo=UTC),
+    )
+
+    assert [(c.todo, c.in_progress, c.done) for c in counts] == [(1, 0, 0), (0, 1, 0), (0, 0, 0)]
+
+
+def test_canceled_item_reopened_or_completed_rejoins_the_chart() -> None:
+    a, b = uuid4(), uuid4()
+    streams = [
+        [
+            _event(EventType.CREATED, 1, a),
+            _event(EventType.STARTED, 2, a),
+            _event(EventType.CANCELED, 3, a),
+            _event(EventType.STARTED, 4, a),
+        ],
+        [
+            _event(EventType.CREATED, 1, b),
+            _event(EventType.CANCELED, 2, b),
+            _event(EventType.COMPLETED, 3, b),
+        ],
+    ]
+
+    counts = daily_flow_counts(
+        streams,
+        start=datetime(2026, 7, 1, tzinfo=UTC),
+        end=datetime(2026, 7, 4, 23, 0, tzinfo=UTC),
+    )
+
+    assert [(c.todo, c.in_progress, c.done) for c in counts] == [
+        (2, 0, 0),
+        (0, 1, 0),
+        (0, 0, 1),
+        (0, 1, 1),
+    ]
