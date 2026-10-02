@@ -6,6 +6,7 @@ from app.domain.forecasting.monte_carlo import (
     OutcomeBucket,
     daily_throughput_samples,
     delivery_confidence,
+    observed_history_days,
     simulate_days_to_complete,
     summarize_completion,
 )
@@ -90,3 +91,29 @@ def test_delivery_confidence_is_the_share_of_trials_within_target() -> None:
     assert delivery_confidence(trial_days, within_days=12) == 0.5
     assert delivery_confidence(trial_days, within_days=4) == 0.0
     assert delivery_confidence(trial_days, within_days=20) == 1.0
+
+
+def _created(days_ago: float) -> FlowSample:
+    return FlowSample(
+        created_at=NOW - timedelta(days=days_ago),
+        started_at=None,
+        completed_at=None,
+        blocked_time=timedelta(0),
+    )
+
+
+def test_observed_history_is_shortened_to_the_scopes_first_event() -> None:
+    # First seen 9.5 days ago: 10 observable days (the partial first day counts).
+    assert observed_history_days([_created(9.5), _created(3)], end=NOW, days=90) == 10
+
+
+def test_observed_history_is_capped_at_the_requested_window() -> None:
+    assert observed_history_days([_created(200)], end=NOW, days=90) == 90
+
+
+def test_observed_history_without_samples_keeps_the_window() -> None:
+    assert observed_history_days([], end=NOW, days=90) == 90
+
+
+def test_observed_history_is_at_least_one_day() -> None:
+    assert observed_history_days([_created(-2)], end=NOW, days=90) == 1

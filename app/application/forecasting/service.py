@@ -10,6 +10,7 @@ from app.domain.forecasting.monte_carlo import (
     DeliveryForecast,
     daily_throughput_samples,
     delivery_confidence,
+    observed_history_days,
     simulate_days_to_complete,
     summarize_completion,
 )
@@ -65,7 +66,8 @@ class ForecastService:
             remaining if remaining is not None else scope.item_count - completed
         )
 
-        daily = daily_throughput_samples(scope.samples, end=window_end, days=window_days)
+        history_days = observed_history_days(scope.samples, end=window_end, days=window_days)
+        daily = daily_throughput_samples(scope.samples, end=window_end, days=history_days)
         # ponytail: the 2k-trial simulation is pure CPU (~0.9s worst case) —
         # run it in a worker thread so the event loop (incl. /health) stays
         # responsive. Cache or precompute forecasts if it ever needs more.
@@ -80,7 +82,7 @@ class ForecastService:
                 within = (target_date - window_end.date()).days
                 confidence = delivery_confidence(trial_days, within_days=within)
         return DeliveryForecast(
-            window_start=window_end - timedelta(days=window_days),
+            window_start=window_end - timedelta(days=history_days),
             window_end=window_end,
             remaining=scope_remaining,
             completion=completion,

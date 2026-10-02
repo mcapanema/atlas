@@ -115,3 +115,37 @@ def test_open_blocked_period_without_completion_is_not_counted() -> None:
 
     assert sample is not None
     assert sample.blocked_time == timedelta(0)
+
+
+def test_blocked_time_stops_at_completion() -> None:
+    # Blocked label removed only after Done: the post-completion tail is not
+    # blocked work. Uncapped, it can exceed the cycle and zero out efficiency.
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.BLOCKED, 4),
+            _event(EventType.COMPLETED, 6),
+            _event(EventType.UNBLOCKED, 9),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.blocked_time == timedelta(days=2)
+
+
+def test_blocked_time_before_start_is_not_counted() -> None:
+    # Pre-start wait is already queue time; counting a blocked label there
+    # too would double-count it in queue time.
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.BLOCKED, 2),
+            _event(EventType.STARTED, 3),
+            _event(EventType.UNBLOCKED, 5),
+            _event(EventType.COMPLETED, 8),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.blocked_time == timedelta(days=2)

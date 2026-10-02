@@ -118,7 +118,7 @@ async def test_flow_history_end_to_end(client: AsyncClient) -> None:
     assert body["days"][-1]["done"] == 1
     assert body["days"][-1]["in_progress"] == 0
     assert body["bucket_days"] == 7
-    assert len(body["buckets"]) == 12
+    assert len(body["buckets"]) == 13  # ceil(90 / 7)
     assert sum(b["completed"] for b in body["buckets"]) == 1
 
 

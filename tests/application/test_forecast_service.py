@@ -131,3 +131,24 @@ async def test_load_scope_applies_exclude_states() -> None:
     scope = await service.load_scope(team_id=team_id, exclude_states={"trash"})
 
     assert scope.item_count == 1
+
+
+async def test_forecast_samples_only_the_scopes_observed_history() -> None:
+    # A scope first seen 4 days ago, finishing 1 item/day. The 86 days before
+    # it existed aren't zero-throughput days — sampling them made young
+    # teams' forecasts ~3x too pessimistic.
+    team_id = uuid4()
+    items = [_item(team_id) for _ in range(5)]
+    events = [_event(item, EventType.CREATED, 4) for item in items] + [
+        _event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)
+    ]
+    service = ForecastService(
+        InMemoryWorkItemRepository(items), InMemoryEventRepository(events)
+    )
+
+    forecast = await service.get_forecast(team_id=team_id, remaining=5, now=NOW)
+
+    assert forecast.window_start == NOW - timedelta(days=5)
+    assert forecast.completion is not None
+    assert forecast.completion.p50_days == 5
+    assert forecast.completion.p95_days == 5

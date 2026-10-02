@@ -204,7 +204,7 @@ export function FlowDashboard({
           <StatCard
             title={`Blocked time (${statLabel})`}
             value={formatSeconds(data.blocked_seconds)}
-            help={`Total time items spent carrying a blocked label in the last ${statLabel}, summed across all items.`}
+            help={`Time the items completed in the last ${statLabel} spent blocked while in progress (start to done), summed across items.`}
           />
           <StatCard
             title="Flow efficiency"
@@ -248,7 +248,7 @@ export function FlowDashboard({
                     help={
                       history.data.bucket_days === 1
                         ? "Work items completed on each day of the window. Windows of 21 days or fewer bucket per day."
-                        : "Work items completed in each trailing 7-day bucket, oldest first. Longer windows bucket per week to keep the shape readable."
+                        : "Work items completed in each trailing 7-day bucket, oldest first. Longer windows bucket per week to keep the shape readable; the oldest bucket is shorter when the window isn't a whole number of weeks."
                     }
                   />
                 }

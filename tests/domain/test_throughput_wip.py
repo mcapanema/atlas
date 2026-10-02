@@ -104,3 +104,16 @@ def test_bucketed_throughput_weekly_buckets_completions_oldest_first() -> None:
         start=end - timedelta(days=14), end=end - timedelta(days=7), completed=1
     )
     assert buckets[1].end == end
+
+
+def test_bucketed_throughput_clips_the_oldest_bucket_to_start() -> None:
+    end = datetime(2026, 7, 10, tzinfo=UTC)
+
+    buckets = bucketed_throughput(
+        [], end=end, count=2, bucket_days=7, start=end - timedelta(days=10)
+    )
+
+    assert buckets[0].start == end - timedelta(days=10)
+    assert buckets[0].end == end - timedelta(days=7)
+    assert buckets[1].start == end - timedelta(days=7)
+    assert buckets[1].end == end
