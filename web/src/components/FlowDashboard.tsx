@@ -204,7 +204,7 @@ export function FlowDashboard({
           <StatCard
             title={`Blocked time (${statLabel})`}
             value={formatSeconds(data.blocked_seconds)}
-            help={`Total time items spent carrying a blocked label in the last ${statLabel}, summed across all items.`}
+            help={`Time the items completed in the last ${statLabel} spent blocked while in progress (start to done), summed across items.`}
           />
           <StatCard
             title="Flow efficiency"

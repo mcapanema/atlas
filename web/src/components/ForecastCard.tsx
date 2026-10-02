@@ -14,7 +14,7 @@ import { StatCard } from "./StatCard";
 const METHOD_HELP =
   "Runs 2,000 simulations of the remaining work. Each simulated day draws a " +
   "completion count from this scope's actual daily throughput over the last 90 " +
-  "days, zero-throughput days included. Each bar is how many simulations " +
+  "days (or since its first activity, if more recent), zero-throughput days included. Each bar is how many simulations " +
   "finished on that date; the dashed lines mark P50 and P85.";
 
 export function ForecastCard({

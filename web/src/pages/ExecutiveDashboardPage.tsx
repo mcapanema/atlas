@@ -193,7 +193,7 @@ function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
         ),
     },
     {
-      title: columnHelp("Blocked time", `Total time items spent blocked in the last ${periodLabel}.`),
+      title: columnHelp("Blocked time", `Time the items completed in the last ${periodLabel} spent blocked while in progress (start to done), summed across items.`),
       sorter: (a, b) => (a.metrics?.blocked_seconds ?? -1) - (b.metrics?.blocked_seconds ?? -1),
       render: (_, row) =>
         cell(row.metricsState, () =>
