@@ -220,3 +220,43 @@ async def test_fetch_organization_name_malformed_payload_is_api_error() -> None:
 
     with pytest.raises(LinearAPIError, match="malformed"):
         await _datasource(handler).fetch_organization_name()
+
+
+async def test_fetch_work_items_includes_archived_and_skips_trashed() -> None:
+    def node(issue_id: str, **extra: object) -> dict[str, Any]:
+        return {
+            "id": issue_id,
+            "title": issue_id,
+            "createdAt": "2026-07-01T10:00:00.000Z",
+            "state": {"name": "Done", "type": "completed"},
+            "team": {"id": "t1"},
+            "project": None,
+            "history": {"nodes": []},
+            **extra,
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        # Linear auto-archives closed issues; they are still delivered history.
+        assert "includeArchived: true" in body["query"]
+        assert "trashed" in body["query"]
+        return _page(
+            "issues",
+            [
+                node("live", trashed=False),
+                node("archived", archivedAt="2026-08-01T00:00:00.000Z", trashed=False),
+                node("deleted", archivedAt="2026-08-02T00:00:00.000Z", trashed=True),
+            ],
+        )
+
+    items = await _datasource(handler).fetch_work_items()
+
+    assert [i.external_id for i in items] == ["live", "archived"]
+
+
+def test_page_ceiling_covers_a_large_workspace() -> None:
+    # 50 issues per page: the ceiling must comfortably exceed today's ~10k
+    # issues (incl. archived), or sync aborts before finishing.
+    assert datasource_module._MAX_PAGES * 50 >= 50_000
