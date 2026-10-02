@@ -182,8 +182,7 @@ export function MeetingsPage() {
             <Card size="small" title="Was this prep helpful?">
               {feedback.isSuccess ? (
                 <Typography.Text>
-                  Thanks for the feedback — it will shape this meeting persona's next
-                  reflection.
+                  Thanks for the feedback — it will shape this meeting persona's next reflection.
                 </Typography.Text>
               ) : (
                 <Space direction="vertical" style={{ width: "100%" }}>

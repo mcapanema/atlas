@@ -38,9 +38,7 @@ describe("ForecastCard", () => {
     renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
 
     await waitFor(() =>
-      expect(
-        screen.getByText("Not enough delivery history to forecast."),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("Not enough delivery history to forecast.")).toBeInTheDocument(),
     );
   });
 
@@ -80,7 +78,12 @@ describe("ForecastCard", () => {
     renderWithClient(
       <ForecastCard
         scope={{ teamId: "team-1" }}
-        filters={{ windowDays: 7, start: "2026-01-01", end: "2026-02-01", excludeStates: ["trash"] }}
+        filters={{
+          windowDays: 7,
+          start: "2026-01-01",
+          end: "2026-02-01",
+          excludeStates: ["trash"],
+        }}
       />,
     );
 
@@ -100,9 +103,7 @@ describe("ForecastCard", () => {
 
     await waitFor(() => expect(screen.getByText("Completion forecast")).toBeInTheDocument());
     fireEvent.focus(screen.getByText("Completion forecast"));
-    expect(
-      await screen.findByText(/2,000 simulations of the remaining work/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/2,000 simulations of the remaining work/)).toBeInTheDocument();
 
     fireEvent.focus(screen.getByText("P85 finish"));
     expect(await screen.findByText(/85% of simulations finished by then/)).toBeInTheDocument();
@@ -124,9 +125,7 @@ describe("ForecastCard", () => {
     fireEvent.change(input, { target: { value: "40" } });
     fireEvent.blur(input);
 
-    await waitFor(() =>
-      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText("40")).toBeInTheDocument());
   });
 
@@ -155,9 +154,7 @@ describe("ForecastCard", () => {
     expect(screen.getByLabelText("Assume remaining items")).toBeInTheDocument();
 
     resolveScenario?.();
-    await waitFor(() =>
-      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument());
   });
 
   it("does not re-forecast on every keystroke, only once the value is committed", async () => {
@@ -187,9 +184,7 @@ describe("ForecastCard", () => {
 
     fireEvent.blur(input);
 
-    await waitFor(() =>
-      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument());
     const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
     expect(urls.filter((u) => u.includes("remaining="))).toEqual([
       expect.stringContaining("remaining=40"),
@@ -212,9 +207,7 @@ describe("ForecastCard", () => {
     const input = screen.getByLabelText("Assume remaining items");
     fireEvent.change(input, { target: { value: "40" } });
     fireEvent.blur(input);
-    await waitFor(() =>
-      expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
 

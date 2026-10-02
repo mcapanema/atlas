@@ -76,10 +76,7 @@ function valueAxis(n: Neutrals, name?: string): EChartsOption["yAxis"] {
   };
 }
 
-export function buildCfdOption(
-  days: DailyFlowCount[],
-  mode: ThemeMode = "light",
-): EChartsOption {
+export function buildCfdOption(days: DailyFlowCount[], mode: ThemeMode = "light"): EChartsOption {
   const n = neutrals(mode);
   const band = (name: string, color: string, data: number[]) => ({
     name,
@@ -100,12 +97,27 @@ export function buildCfdOption(
     tooltip: { trigger: "axis" },
     legend: { bottom: 0, textStyle: { color: n.inkSecondary } },
     grid: { left: 48, right: 96, top: 16, bottom: 48 },
-    xAxis: dayAxis(days.map((d) => formatDay(d.day)), n),
+    xAxis: dayAxis(
+      days.map((d) => formatDay(d.day)),
+      n,
+    ),
     yAxis: valueAxis(n),
     series: [
-      band("Done", SERIES.done, days.map((d) => d.done)),
-      band("In progress", SERIES.inProgress, days.map((d) => d.in_progress)),
-      band("To do", SERIES.todo, days.map((d) => d.todo)),
+      band(
+        "Done",
+        SERIES.done,
+        days.map((d) => d.done),
+      ),
+      band(
+        "In progress",
+        SERIES.inProgress,
+        days.map((d) => d.in_progress),
+      ),
+      band(
+        "To do",
+        SERIES.todo,
+        days.map((d) => d.todo),
+      ),
     ],
   };
 }
@@ -138,21 +150,27 @@ export function buildThroughputOption(
       },
     },
     grid: { left: 64, right: 16, top: 24, bottom: 32 },
-    xAxis: dayAxis(buckets.map((b) => formatDay(b.end)), n),
+    xAxis: dayAxis(
+      buckets.map((b) => formatDay(b.end)),
+      n,
+    ),
     yAxis: valueAxis(n, "Items completed"),
-    series: barSeries("Completed", buckets.map((b) => b.completed)),
+    series: barSeries(
+      "Completed",
+      buckets.map((b) => b.completed),
+    ),
   };
 }
 
-export function buildWipOption(
-  days: DailyFlowCount[],
-  mode: ThemeMode = "light",
-): EChartsOption {
+export function buildWipOption(days: DailyFlowCount[], mode: ThemeMode = "light"): EChartsOption {
   const n = neutrals(mode);
   return {
     tooltip: { trigger: "axis" },
     grid: { left: 64, right: 16, top: 24, bottom: 32 },
-    xAxis: dayAxis(days.map((d) => formatDay(d.day)), n),
+    xAxis: dayAxis(
+      days.map((d) => formatDay(d.day)),
+      n,
+    ),
     yAxis: valueAxis(n, "Items in progress"),
     series: [
       {
@@ -190,9 +208,16 @@ export function buildLeadTimeDistributionOption(
   return {
     tooltip: { trigger: "item" },
     grid: { left: 64, right: 16, top: 24, bottom: 48 },
-    xAxis: dayAxis(bins.map((b) => `${b.start_days}d`), n, "Lead time"),
+    xAxis: dayAxis(
+      bins.map((b) => `${b.start_days}d`),
+      n,
+      "Lead time",
+    ),
     yAxis: valueAxis(n, "Items completed"),
-    series: barSeries("Completed items", bins.map((b) => b.count)),
+    series: barSeries(
+      "Completed items",
+      bins.map((b) => b.count),
+    ),
   };
 }
 
@@ -221,10 +246,17 @@ export function buildLeadTimeTrendOption(
     tooltip: { trigger: "axis" },
     legend: { bottom: 0, textStyle: { color: n.inkSecondary } },
     grid: { left: 48, right: 16, top: 16, bottom: 48 },
-    xAxis: dayAxis(points.map((p) => formatDay(p.captured_on)), n),
+    xAxis: dayAxis(
+      points.map((p) => formatDay(p.captured_on)),
+      n,
+    ),
     yAxis: valueAxis(n),
     series: [
-      line("Lead time P50 (d)", BLUE, points.map((p) => toDays(p.lead_time_p50_seconds))),
+      line(
+        "Lead time P50 (d)",
+        BLUE,
+        points.map((p) => toDays(p.lead_time_p50_seconds)),
+      ),
       line(
         "Lead time P85 (d)",
         SERIES.inProgress,
@@ -266,9 +298,10 @@ export function buildForecastOption(
     };
   };
 
-  const series = barSeries("Simulations", outcomes.map((o) => o.trials)) as [
-    Record<string, unknown>,
-  ];
+  const series = barSeries(
+    "Simulations",
+    outcomes.map((o) => o.trials),
+  ) as [Record<string, unknown>];
   series[0].markLine = {
     silent: true,
     symbol: "none",

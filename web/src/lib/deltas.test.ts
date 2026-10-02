@@ -23,11 +23,7 @@ const AS_OF = "2026-07-12T00:00:00Z";
 
 describe("pickBaseline", () => {
   it("picks the capture closest to the target day", () => {
-    const snapshots = [
-      snapshot("2026-06-10"),
-      snapshot("2026-06-13"),
-      snapshot("2026-07-11"),
-    ];
+    const snapshots = [snapshot("2026-06-10"), snapshot("2026-06-13"), snapshot("2026-07-11")];
     expect(pickBaseline(snapshots, AS_OF, 30)?.captured_on).toBe("2026-06-13");
   });
 

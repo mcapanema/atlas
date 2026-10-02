@@ -64,9 +64,7 @@ describe("AdvisorPage", () => {
 
     renderPage();
 
-    await waitFor(() =>
-      expect(screen.getByText(/Advisor is not configured/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Advisor is not configured/)).toBeInTheDocument());
   });
 
   it("does not fetch advice until the button is clicked", async () => {
@@ -142,9 +140,7 @@ describe("AdvisorPage", () => {
 
     renderPage(`/advisor?team=${teamFixture.id}&persona=delivery_analyst`);
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
 
     await waitFor(() =>
@@ -183,9 +179,7 @@ describe("AdvisorPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
       .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
@@ -212,9 +206,7 @@ describe("AdvisorPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Not helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
       .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
@@ -249,8 +241,6 @@ describe("AdvisorPage", () => {
     await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Failed to submit feedback")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Failed to submit feedback")).toBeInTheDocument());
   });
 });

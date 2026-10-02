@@ -31,7 +31,6 @@ export function useLinearSync() {
         method: "POST",
         body: JSON.stringify({ organization_id: organizationId ?? null }),
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["organizations"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations"] }),
   });
 }

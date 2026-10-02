@@ -20,9 +20,9 @@ describe("filtersFromSearchParams", () => {
   });
 
   it("reads a custom range only when both bounds are present", () => {
-    expect(
-      filtersFromSearchParams(new URLSearchParams("start=2026-06-01&end=2026-06-30")),
-    ).toEqual({ start: "2026-06-01", end: "2026-06-30" });
+    expect(filtersFromSearchParams(new URLSearchParams("start=2026-06-01&end=2026-06-30"))).toEqual(
+      { start: "2026-06-01", end: "2026-06-30" },
+    );
     expect(filtersFromSearchParams(new URLSearchParams("start=2026-06-01"))).toEqual({});
   });
 });

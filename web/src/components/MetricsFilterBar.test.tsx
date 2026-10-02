@@ -32,15 +32,10 @@ describe("MetricsFilterBar", () => {
   });
 
   it("shows the range picker only when a range is active", () => {
-    const { rerender } = renderWithClient(
-      <MetricsFilterBar filters={{}} onChange={vi.fn()} />,
-    );
+    const { rerender } = renderWithClient(<MetricsFilterBar filters={{}} onChange={vi.fn()} />);
     expect(screen.queryByLabelText("Custom date range")).toBeNull();
     rerender(
-      <MetricsFilterBar
-        filters={{ start: "2026-06-01", end: "2026-06-30" }}
-        onChange={vi.fn()}
-      />,
+      <MetricsFilterBar filters={{ start: "2026-06-01", end: "2026-06-30" }} onChange={vi.fn()} />,
     );
     expect(screen.getByLabelText("Custom date range")).toBeInTheDocument();
   });
@@ -74,10 +69,7 @@ describe("MetricsFilterBar", () => {
   it("emits a custom range once both dates are picked", () => {
     const onChange = vi.fn();
     renderWithClient(
-      <MetricsFilterBar
-        filters={{ start: "2026-06-01", end: "2026-06-30" }}
-        onChange={onChange}
-      />,
+      <MetricsFilterBar filters={{ start: "2026-06-01", end: "2026-06-30" }} onChange={onChange} />,
     );
     const startInput = screen.getByPlaceholderText("Start date");
     const endInput = screen.getByPlaceholderText("End date");
@@ -97,9 +89,7 @@ describe("MetricsFilterBar", () => {
     );
     openSelect("Excluded states");
 
-    await waitFor(() =>
-      expect(screen.getByTitle(statesFixture[0])).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTitle(statesFixture[0])).toBeInTheDocument());
     for (const state of statesFixture) {
       expect(screen.getByTitle(state)).toBeInTheDocument();
     }

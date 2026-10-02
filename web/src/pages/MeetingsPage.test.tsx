@@ -97,9 +97,7 @@ describe("MeetingsPage", () => {
     expect(screen.getByText("needs decision")).toBeInTheDocument();
     expect(screen.getByText("cycle-time p85 = 4.0d")).toBeInTheDocument();
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
-    expect(urls).toContain(
-      `/api/meetings/prep?team_id=${teamFixture.id}&meeting=daily_standup`,
-    );
+    expect(urls).toContain(`/api/meetings/prep?team_id=${teamFixture.id}&meeting=daily_standup`);
   });
 
   it("sends retro sprint days as window_days", async () => {
@@ -113,9 +111,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(
-        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
-      ).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
       ),
     );
@@ -138,9 +134,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(
-        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
-      ).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=planning&remaining=8&target_date=2026-08-01`,
       ),
     );
@@ -190,9 +184,7 @@ describe("MeetingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
       .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
@@ -224,15 +216,11 @@ describe("MeetingsPage", () => {
     fireEvent.mouseDown(comboboxes[1]);
     fireEvent.click(await screen.findByTitle("Retrospective"));
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Sprint length (days)")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByLabelText("Sprint length (days)")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(
-        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
-      ).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
       ),
     );
@@ -252,9 +240,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(
-        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
-      ).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=21`,
       ),
     );
@@ -275,9 +261,7 @@ describe("MeetingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Not helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
       .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));

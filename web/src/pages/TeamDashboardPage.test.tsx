@@ -67,10 +67,9 @@ describe("TeamDashboardPage", () => {
 
   it("threads URL filters into the metrics requests and labels", async () => {
     mockMetricsFetch({ "/api/teams": [teamFixture] });
-    renderWithClient(
-      <TeamDashboardPage />,
-      [`/teams?team=${teamFixture.id}&window=90&types=story,bug&xstates=canceled`],
-    );
+    renderWithClient(<TeamDashboardPage />, [
+      `/teams?team=${teamFixture.id}&window=90&types=story,bug&xstates=canceled`,
+    ]);
 
     await screen.findByText("Throughput (90d)");
 

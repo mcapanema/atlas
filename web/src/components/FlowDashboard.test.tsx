@@ -65,9 +65,9 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ projectId: "proj-1" }} />);
 
     await waitFor(() =>
-      expect(
-        vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0])),
-      ).toContain("/api/metrics?project_id=proj-1"),
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+        "/api/metrics?project_id=proj-1",
+      ),
     );
   });
 
@@ -156,9 +156,7 @@ describe("FlowDashboard", () => {
         name: "Health 82 of 100 — healthy. Show component reasons",
       }),
     ).toBeInTheDocument();
-    expect(
-      within(strip).getByText("Last 30 days · 10-06-2026 – 10-07-2026"),
-    ).toBeInTheDocument();
+    expect(within(strip).getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
     // Healthy stays quiet — reasons live in the badge popover, not inline.
     expect(screen.queryByText(/lead time p95 is 1.8x p50/)).toBeNull();
   });
@@ -170,7 +168,11 @@ describe("FlowDashboard", () => {
         score: 24,
         band: "critical",
         components: [
-          { name: "risk", score: 5, reason: "4 of 6 in-progress items blocked or aging past cycle p85" },
+          {
+            name: "risk",
+            score: 5,
+            reason: "4 of 6 in-progress items blocked or aging past cycle p85",
+          },
           { name: "flow", score: 30, reason: "completed 1 recently vs 5 in the prior half-window" },
           { name: "predictability", score: 60, reason: "lead time p95 is 2.9x p50" },
         ],
@@ -263,9 +265,7 @@ describe("FlowDashboard", () => {
     mockMetricsFetch({
       "/api/metrics/history": {
         ...historyFixture,
-        buckets: [
-          { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 41 },
-        ],
+        buckets: [{ start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 41 }],
       },
     });
 
@@ -287,9 +287,7 @@ describe("FlowDashboard", () => {
     expect(trigger).toHaveAttribute("tabindex", "0");
 
     fireEvent.focus(trigger);
-    expect(
-      await screen.findByText(/Touch time divided by lead time/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Touch time divided by lead time/)).toBeInTheDocument();
   });
 
   it("explains how the throughput chart is built", async () => {

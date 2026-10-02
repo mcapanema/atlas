@@ -74,9 +74,7 @@ export function ConnectorsPage() {
                 <Descriptions.Item label="Projects">{sync.data.projects}</Descriptions.Item>
                 <Descriptions.Item label="Work items">{sync.data.work_items}</Descriptions.Item>
                 <Descriptions.Item label="Events">{sync.data.events}</Descriptions.Item>
-                <Descriptions.Item label="Divergences">
-                  {sync.data.divergences}
-                </Descriptions.Item>
+                <Descriptions.Item label="Divergences">{sync.data.divergences}</Descriptions.Item>
               </Descriptions>
             )}
           </Space>

@@ -180,9 +180,18 @@ describe("ExecutiveDashboardPage", () => {
       // Every query for the second team fails; the first team stays healthy.
       if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
       if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
-      if (url.startsWith("/api/metrics/health")) return Promise.resolve(jsonResponse(healthFixture));
+      if (url.startsWith("/api/metrics/health"))
+        return Promise.resolve(jsonResponse(healthFixture));
       if (url.startsWith("/api/forecasts/accuracy")) {
-        return Promise.resolve(jsonResponse({ evaluated: 0, pending: 0, p50_hit_rate: null, p85_hit_rate: null, mean_abs_error_days: null }));
+        return Promise.resolve(
+          jsonResponse({
+            evaluated: 0,
+            pending: 0,
+            p50_hit_rate: null,
+            p85_hit_rate: null,
+            mean_abs_error_days: null,
+          }),
+        );
       }
       return Promise.resolve(jsonResponse(metricsFixture));
     });
@@ -217,8 +226,17 @@ describe("ExecutiveDashboardPage", () => {
         failedOnce = true;
         return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
       }
-      if (url.startsWith("/api/metrics/health")) return Promise.resolve(jsonResponse(healthFixture));
-      return Promise.resolve(jsonResponse({ evaluated: 0, pending: 0, p50_hit_rate: null, p85_hit_rate: null, mean_abs_error_days: null }));
+      if (url.startsWith("/api/metrics/health"))
+        return Promise.resolve(jsonResponse(healthFixture));
+      return Promise.resolve(
+        jsonResponse({
+          evaluated: 0,
+          pending: 0,
+          p50_hit_rate: null,
+          p85_hit_rate: null,
+          mean_abs_error_days: null,
+        }),
+      );
     });
 
     renderWithClient(<ExecutiveDashboardPage />);
@@ -278,9 +296,7 @@ describe("ExecutiveDashboardPage", () => {
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
-    const flat = await screen.findByLabelText(
-      "throughput unchanged versus prior 30-day window",
-    );
+    const flat = await screen.findByLabelText("throughput unchanged versus prior 30-day window");
     expect(flat.className).toContain("delta--flat");
   });
 
@@ -396,9 +412,9 @@ describe("ExecutiveDashboardPage", () => {
       expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 90 days/),
     );
     const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
-    expect(urls.some((url) => url.startsWith("/api/metrics?") && url.includes("window_days=90"))).toBe(
-      true,
-    );
+    expect(
+      urls.some((url) => url.startsWith("/api/metrics?") && url.includes("window_days=90")),
+    ).toBe(true);
   });
 
   it("hides delta chips when filters are not the snapshot baseline", async () => {

@@ -45,7 +45,6 @@ export function useAdvice(scope: MetricsScope, persona: Persona) {
     // Expensive LLM call — never auto-fetch; the page triggers refetch() explicitly.
     enabled: false,
     staleTime: Infinity,
-    queryFn: () =>
-      apiFetch<DeliveryAdvice>(`/api/recommendations?${param}&persona=${persona}`),
+    queryFn: () => apiFetch<DeliveryAdvice>(`/api/recommendations?${param}&persona=${persona}`),
   });
 }

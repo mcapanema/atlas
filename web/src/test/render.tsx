@@ -10,10 +10,7 @@ import { MemoryRouter } from "react-router-dom";
  * The router is harmless for components that don't route; pages that
  * need a location pass `initialEntries`.
  */
-export function renderWithClient(
-  ui: ReactElement,
-  initialEntries: string[] = ["/"],
-) {
+export function renderWithClient(ui: ReactElement, initialEntries: string[] = ["/"]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(ui, {
     wrapper: ({ children }: { children: ReactNode }) => (

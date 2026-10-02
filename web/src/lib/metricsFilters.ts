@@ -21,10 +21,7 @@ export function filtersFromSearchParams(params: URLSearchParams): MetricsFilters
   return filters;
 }
 
-export function applyFiltersToSearchParams(
-  params: URLSearchParams,
-  filters: MetricsFilters,
-): void {
+export function applyFiltersToSearchParams(params: URLSearchParams, filters: MetricsFilters): void {
   for (const key of KEYS) params.delete(key);
   if (filters.start && filters.end) {
     params.set("start", filters.start);

@@ -53,9 +53,7 @@ describe("PersonaLearningCard", () => {
 
     renderWithClient(<PersonaLearningCard persona="agile_coach" />);
 
-    await waitFor(() =>
-      expect(screen.getByText(/No learned guidance yet/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/No learned guidance yet/)).toBeInTheDocument());
   });
 
   it("shows the latest guidance and older versions", async () => {
@@ -63,9 +61,7 @@ describe("PersonaLearningCard", () => {
 
     renderWithClient(<PersonaLearningCard persona="agile_coach" />);
 
-    await waitFor(() =>
-      expect(screen.getByText("Lead with WIP limits.")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Lead with WIP limits.")).toBeInTheDocument());
     expect(screen.getByText(/v2/)).toBeInTheDocument();
     expect(screen.getByText(/v1: Be concise\./)).toBeInTheDocument();
   });
@@ -74,9 +70,7 @@ describe("PersonaLearningCard", () => {
     mockGuidanceFetch([]);
 
     renderWithClient(<PersonaLearningCard persona="agile_coach" />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Reflect now/ })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /Reflect now/ })).toBeEnabled());
 
     fireEvent.click(screen.getByRole("button", { name: /Reflect now/ }));
 
@@ -84,8 +78,7 @@ describe("PersonaLearningCard", () => {
       const calls = vi.mocked(globalThis.fetch).mock.calls;
       expect(
         calls.some(
-          (c) =>
-            String(c[0]) === "/api/personas/agile_coach/reflect" && c[1]?.method === "POST",
+          (c) => String(c[0]) === "/api/personas/agile_coach/reflect" && c[1]?.method === "POST",
         ),
       ).toBe(true);
     });
@@ -95,9 +88,7 @@ describe("PersonaLearningCard", () => {
     mockGuidanceFetch([], { reflectStatus: 409 });
 
     renderWithClient(<PersonaLearningCard persona="agile_coach" />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Reflect now/ })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /Reflect now/ })).toBeEnabled());
 
     fireEvent.click(screen.getByRole("button", { name: /Reflect now/ }));
 
@@ -116,9 +107,7 @@ describe("PersonaLearningCard", () => {
     await waitFor(() => {
       const calls = vi.mocked(globalThis.fetch).mock.calls;
       expect(
-        calls.some(
-          (c) => String(c[0]) === "/api/personas/agile_coach/guidance/1/restore",
-        ),
+        calls.some((c) => String(c[0]) === "/api/personas/agile_coach/guidance/1/restore"),
       ).toBe(true);
     });
   });

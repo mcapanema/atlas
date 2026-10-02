@@ -97,8 +97,7 @@ function DeltaChip({ delta, metric }: { delta: Delta | null; metric: string }) {
   if (!delta) return null;
   const arrow = delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "→";
   const tone = delta.good == null ? "flat" : delta.good ? "good" : "bad";
-  const pct =
-    delta.direction === "flat" ? "0%" : `${Math.round(Math.abs(delta.pct) * 100)}%`;
+  const pct = delta.direction === "flat" ? "0%" : `${Math.round(Math.abs(delta.pct) * 100)}%`;
   return (
     <Tooltip title={`vs prior 30d window (baseline ${formatDay(delta.baselineDate)})`}>
       <span
@@ -193,7 +192,10 @@ function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
         ),
     },
     {
-      title: columnHelp("Blocked time", `Time the items completed in the last ${periodLabel} spent blocked while in progress (start to done), summed across items.`),
+      title: columnHelp(
+        "Blocked time",
+        `Time the items completed in the last ${periodLabel} spent blocked while in progress (start to done), summed across items.`,
+      ),
       sorter: (a, b) => (a.metrics?.blocked_seconds ?? -1) - (b.metrics?.blocked_seconds ?? -1),
       render: (_, row) =>
         cell(row.metricsState, () =>
@@ -233,8 +235,7 @@ function Headline({ rows }: { rows: TeamRow[] }) {
   // name that count instead of silently shrinking the denominator. Pending
   // and failed teams are already covered by skeletons and the failure alert.
   const unscored = rows.filter(
-    (row) =>
-      row.healthState === "ready" && (row.health?.score == null || row.health?.band == null),
+    (row) => row.healthState === "ready" && (row.health?.score == null || row.health?.band == null),
   ).length;
   const note = unscored > 0 && (
     <span className="page-headline__note">

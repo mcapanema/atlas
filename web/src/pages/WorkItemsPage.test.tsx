@@ -51,9 +51,7 @@ describe("WorkItemsPage", () => {
     );
 
     const calls = vi.mocked(globalThis.fetch).mock.calls.map((call) => String(call[0]));
-    expect(
-      calls.some((url) => url.includes("limit=50") && url.includes("offset=0")),
-    ).toBe(true);
+    expect(calls.some((url) => url.includes("limit=50") && url.includes("offset=0"))).toBe(true);
   });
 
   it("reads the team filter and page from the URL", async () => {
@@ -113,9 +111,9 @@ describe("WorkItemsPage", () => {
         .mocked(globalThis.fetch)
         .mock.calls.slice(callsBeforeClear)
         .map((c) => String(c[0]));
-      expect(newCalls.some((url) => url.includes("/api/work-items?") && !url.includes("team_id"))).toBe(
-        true,
-      );
+      expect(
+        newCalls.some((url) => url.includes("/api/work-items?") && !url.includes("team_id")),
+      ).toBe(true);
     });
   });
 

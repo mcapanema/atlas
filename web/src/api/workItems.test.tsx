@@ -26,9 +26,7 @@ describe("useWorkItemStates", () => {
   });
 
   it("requests every state when unscoped", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(jsonResponse(["backlog"]));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(["backlog"]));
 
     const { result } = renderHook(() => useWorkItemStates({}), { wrapper });
 
