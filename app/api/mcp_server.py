@@ -16,8 +16,8 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI
-from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 _INSTRUCTIONS = (
     "Atlas is a delivery-intelligence platform for Engineering Managers: "
@@ -80,29 +80,33 @@ async def _api(
             detail = response.json().get("detail", response.text)
         except ValueError:
             detail = response.text
-        raise RuntimeError(f"Atlas API {response.status_code}: {detail}")
+        # mcp 2.x masks any exception that isn't ToolError/ResourceError/MCPError
+        # before it reaches the client (see mcp/server/mcpserver/tools/base.py) —
+        # ToolError is what carries the REST error detail through to the model.
+        raise ToolError(f"Atlas API {response.status_code}: {detail}")
     return response.json()
 
 
-def build_mcp_server(app: FastAPI) -> FastMCP:
+def build_mcp_server(app: FastAPI) -> MCPServer:
     """The MCP server, its tools closing over the FastAPI app they front."""
-    # stateless + json_response: every request self-contained, plain JSON
-    # replies — the simplest mode for connector clients and tests alike.
-    # streamable_http_path="/" so the endpoint is exactly the mount path.
-    # transport_security: FastMCP auto-enables Host/Origin allowlisting
-    # (DNS-rebinding protection) whenever host="127.0.0.1" (the default),
-    # rejecting any Host header outside 127.0.0.1/localhost/::1 — but this
-    # server is mounted inside Atlas's own app under whatever hostname
-    # Atlas is deployed at, never bound to its own localhost socket. The
-    # secret path token is the actual auth boundary (see module docstring),
-    # so the allowlist has no deployment-specific value here.
-    mcp = FastMCP(
+    # mcp 2.x: FastMCP was renamed to MCPServer, and the transport-mode
+    # kwargs (stateless_http, json_response, streamable_http_path,
+    # transport_security) moved off the constructor onto
+    # streamable_http_app() — see app/main.py's mount call for where those
+    # now live. stateless + json_response: every request self-contained,
+    # plain JSON replies — the simplest mode for connector clients and
+    # tests alike. streamable_http_path="/" so the endpoint is exactly the
+    # mount path. transport_security: MCPServer auto-enables Host/Origin
+    # allowlisting (DNS-rebinding protection) whenever host="127.0.0.1"
+    # (the default), rejecting any Host header outside
+    # 127.0.0.1/localhost/::1 — but this server is mounted inside Atlas's
+    # own app under whatever hostname Atlas is deployed at, never bound to
+    # its own localhost socket. The secret path token is the actual auth
+    # boundary (see module docstring), so the allowlist has no
+    # deployment-specific value here.
+    mcp = MCPServer(
         name="Atlas",
         instructions=_INSTRUCTIONS,
-        stateless_http=True,
-        json_response=True,
-        streamable_http_path="/",
-        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 
     @mcp.tool()

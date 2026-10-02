@@ -1,4 +1,4 @@
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 
 // jsdom does not implement matchMedia; antd's responsive Grid/Table
 // components call it on mount. Polyfill so components render in tests.

@@ -8,21 +8,21 @@ dependencies = [
     "uvicorn[standard]>=0.52.1",
     "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.20",
-    "alembic>=1.19.1",
+    "alembic>=1.20.0",
     "pydantic>=2.10",
     "pydantic-settings>=2.15.0",
     "httpx>=0.28",
-    "mcp>=1.28",
+    "mcp>=2.2.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
-    "ruff>=0.16.2",
-    "mypy>=2.3.0",
+    "ruff>=0.16.9",
+    "mypy>=2.3.1",
     "pytest-cov>=7.1.0",
-    "pre-commit>=4.6.1",
+    "pre-commit>=4.6.2",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.
