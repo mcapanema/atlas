@@ -7,7 +7,7 @@ FlowSamples instead of re-reading event streams.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.domain.events.entities import Event, EventType
+from app.domain.events.entities import Event, EventType, event_order
 from app.domain.events.timeline import derive_timeline
 
 
@@ -36,7 +36,7 @@ def derive_flow_sample(events: list[Event]) -> FlowSample | None:
     """
     if not events:
         return None
-    ordered = sorted(events, key=lambda e: e.occurred_at)
+    ordered = sorted(events, key=event_order)
 
     started_at = next((e.occurred_at for e in ordered if e.type is EventType.STARTED), None)
 

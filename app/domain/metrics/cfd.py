@@ -1,6 +1,7 @@
 """Cumulative flow: per-day counts of work items in each flow phase.
 
-Replays every item's events in one chronological pass, so past days stay
+Replays every item's events in one chronological pass (same-instant events
+replay in lifecycle order, see `event_order`), so past days stay
 correct even when an item is later reopened (FlowSample voids completed_at
 on reopen, which would rewrite history — see wip.py).
 """
@@ -8,7 +9,7 @@ on reopen, which would rewrite history — see wip.py).
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
-from app.domain.events.entities import Event, EventType
+from app.domain.events.entities import Event, EventType, event_order
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ def daily_flow_counts(
             for item_index, stream in enumerate(event_streams)
             for event in stream
         ),
-        key=lambda entry: (entry[0], entry[1]),
+        key=lambda entry: (event_order(entry[2]), entry[1]),
     )
     phases: dict[int, str] = {}
     tally = {"todo": 0, "in_progress": 0, "done": 0, "canceled": 0}

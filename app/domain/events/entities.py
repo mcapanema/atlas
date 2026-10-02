@@ -41,3 +41,16 @@ class Event:
     def __post_init__(self) -> None:
         if self.occurred_at.tzinfo is None:
             raise ValueError("Event.occurred_at must be timezone-aware")
+
+
+# Same-instant events replay in lifecycle order — a start precedes the
+# finish it led to. Linear automations can write several transitions with
+# one timestamp, and storage order must not decide whether an item is done.
+# ponytail: a genuine same-instant finish-then-reopen would read done; order
+# by the from/to state chain if that ever shows up in real data.
+_SAME_INSTANT_RANK = {EventType.CREATED: 0, EventType.STARTED: 1}
+
+
+def event_order(event: Event) -> tuple[datetime, int]:
+    """Sort key: chronological; ties go CREATED, STARTED, then the rest."""
+    return event.occurred_at, _SAME_INSTANT_RANK.get(event.type, 2)

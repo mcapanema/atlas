@@ -267,3 +267,19 @@ def test_completion_after_cancel_counts_as_delivered() -> None:
     assert sample.completed_at == datetime(2026, 6, 5, tzinfo=UTC)
     assert sample.canceled is False
     assert sample.stopped_at is None
+
+
+def test_same_instant_start_and_completion_reads_completed() -> None:
+    # Linear automations can write Todo -> In Progress and In Progress -> Done
+    # with one timestamp; storage order must not decide the outcome.
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.COMPLETED, 3),
+            _event(EventType.STARTED, 3),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.started_at == datetime(2026, 6, 3, tzinfo=UTC)
+    assert sample.completed_at == datetime(2026, 6, 3, tzinfo=UTC)

@@ -165,3 +165,20 @@ def test_canceled_item_leaves_the_chart_unless_already_done() -> None:
         (0, 0, 1),
         (0, 0, 1),
     ]
+
+
+def test_same_instant_start_and_completion_counts_done() -> None:
+    a = uuid4()
+    stream = [
+        _event(EventType.CREATED, 1, a),
+        _event(EventType.COMPLETED, 2, a),
+        _event(EventType.STARTED, 2, a),
+    ]
+
+    counts = daily_flow_counts(
+        [stream],
+        start=datetime(2026, 7, 1, tzinfo=UTC),
+        end=datetime(2026, 7, 2, 23, 0, tzinfo=UTC),
+    )
+
+    assert [(c.todo, c.in_progress, c.done) for c in counts] == [(1, 0, 0), (0, 0, 1)]

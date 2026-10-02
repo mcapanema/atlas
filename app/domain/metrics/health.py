@@ -10,7 +10,7 @@ AI layer explains these numbers, it never produces them (VISION:
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, event_order
 from app.domain.events.timeline import derive_timeline
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency
@@ -148,7 +148,7 @@ def compute_delivery_health(
         sample = derive_flow_sample(stream)
         if sample is None:
             continue
-        ordered = sorted(stream, key=lambda e: e.occurred_at)
+        ordered = sorted(stream, key=event_order)
         blocked_open = any(
             p.ended_at is None for p in derive_timeline(ordered).blocked_periods
         )
