@@ -6,7 +6,7 @@ for server state, React Router for routing.
 ## Commands (run from `web/`, or via `make <target>` from the repo root)
 
 `npm run dev` · `npm run build` · `npm run test` · `npm run test:coverage` ·
-`npm run typecheck` · `npm run lint`
+`npm run typecheck` · `npm run lint` · `npm run format` / `npm run format:check`
 
 ## Shape
 
@@ -30,6 +30,9 @@ for server state, React Router for routing.
 
 ## Conventions
 
+- Prettier (`printWidth: 100`, `.prettierrc.json`) formats everything in
+  `web/` except Markdown; `npm run format:check` gates CI and pre-commit.
+  Run `make format` (or `npm run format`) rather than hand-fixing style.
 - ESLint (flat config, `eslint.config.js`) + `tsc --noEmit` both gate CI —
   run `npm run lint` and `npm run typecheck` before committing (`make
   check` runs both, both sides).

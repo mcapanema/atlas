@@ -24,3 +24,12 @@ repos:
         language: system
         files: ^web/.*\.(ts|tsx)$
         pass_filenames: false
+      - id: prettier
+        name: prettier --check (web)
+        # Prettier resolves web/.prettierrc.json per file, so repo-relative
+        # staged paths work; web/.prettierignore is NOT consulted from the
+        # repo root, hence the explicit exclude mirroring it.
+        entry: web/node_modules/.bin/prettier --check --ignore-unknown
+        language: system
+        files: ^web/
+        exclude: ^web/(package-lock\.json|.*\.md|dist/.*|coverage/.*)$
