@@ -33,6 +33,12 @@ package = false
 pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Typo'd markers/config keys fail instead of silently no-op'ing; any warning
+# (a dependency deprecation included) fails the suite so it's fixed on the
+# bump that introduces it, not discovered on the bump that removes the API.
+addopts = ["--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
 
 # Coverage only engages when pytest is passed --cov (make test / CI);
 # bare `uv run pytest <path>` TDD runs skip it and the fail_under gate.
@@ -41,7 +47,7 @@ source = ["app"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 94
+fail_under = 95
 skip_covered = true
 show_missing = true
 
@@ -70,6 +76,15 @@ max-args = 7
 [tool.mypy]
 python_version = "3.13"
 strict = true
+warn_unreachable = true
+enable_error_code = [
+    "ignore-without-code",
+    "redundant-expr",
+    "truthy-bool",
+    "possibly-undefined",
+    "redundant-self",
+    "unused-awaitable",
+]
 files = ["app", "tests"]
 exclude = ["migrations/"]
 
