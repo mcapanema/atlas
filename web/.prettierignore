@@ -1,0 +1,5 @@
+dist
+coverage
+package-lock.json
+# Prettier rewraps inline code spans across lines in Markdown.
+*.md
