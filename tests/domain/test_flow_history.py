@@ -21,7 +21,7 @@ def test_history_composes_daily_counts_and_throughput() -> None:
     assert history.window_start == NOW - timedelta(days=90)
     assert len(history.days) == 91  # inclusive day range
     assert history.days[-1].done == 1
-    assert len(history.buckets) == 12  # 90 // 7
+    assert len(history.buckets) == 13  # ceil(90 / 7)
     assert sum(b.completed for b in history.buckets) == 1
 
 
@@ -38,7 +38,7 @@ def test_history_buckets_long_windows_weekly() -> None:
     history = compute_flow_history([], now=NOW, window_days=90)
 
     assert history.bucket_days == 7
-    assert len(history.buckets) == 12  # 90 // 7
+    assert len(history.buckets) == 13  # ceil(90 / 7)
 
 
 def test_history_buckets_short_windows_daily() -> None:
@@ -83,3 +83,29 @@ def test_history_data_as_of_is_none_without_events() -> None:
     history = compute_flow_history([], now=NOW, window_days=14)
 
     assert history.data_as_of is None
+
+
+def test_weekly_buckets_cover_the_whole_window() -> None:
+    # 30 days = 4 weeks + 2 days. Floor bucketing dropped those 2 days, so the
+    # chart summed fewer completions than the Throughput tile for the window.
+    item = uuid4()
+    stream = [
+        Event(
+            work_item_id=item,
+            type=EventType.CREATED,
+            occurred_at=NOW - timedelta(days=29, hours=12),
+        ),
+        Event(
+            work_item_id=item,
+            type=EventType.COMPLETED,
+            occurred_at=NOW - timedelta(days=29),
+        ),
+    ]
+
+    history = compute_flow_history([stream], now=NOW, window_days=30)
+
+    assert len(history.buckets) == 5
+    assert history.buckets[0].start == history.window_start
+    assert history.buckets[0].end == NOW - timedelta(days=28)
+    assert history.buckets[-1].end == NOW
+    assert sum(b.completed for b in history.buckets) == 1

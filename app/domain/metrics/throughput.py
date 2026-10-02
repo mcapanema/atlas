@@ -23,14 +23,25 @@ class ThroughputBucket:
 
 
 def bucketed_throughput(
-    samples: list[FlowSample], *, end: datetime, count: int, bucket_days: int
+    samples: list[FlowSample],
+    *,
+    end: datetime,
+    count: int,
+    bucket_days: int,
+    start: datetime | None = None,
 ) -> list[ThroughputBucket]:
-    """`count` trailing buckets of `bucket_days` each, ending at `end`, oldest first."""
+    """`count` trailing buckets of `bucket_days` each, ending at `end`, oldest first.
+
+    `start` clips the oldest bucket, so the buckets tile (start, end] exactly
+    when the window isn't a whole number of buckets.
+    """
     size = timedelta(days=bucket_days)
     buckets: list[ThroughputBucket] = []
     for i in range(count, 0, -1):
         bucket_end = end - size * (i - 1)
         bucket_start = bucket_end - size
+        if start is not None:
+            bucket_start = max(bucket_start, start)
         buckets.append(
             ThroughputBucket(
                 start=bucket_start,

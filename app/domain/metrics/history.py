@@ -30,10 +30,15 @@ DAILY_BUCKET_MAX_DAYS = 21
 
 
 def _bucketing(window_days: int) -> tuple[int, int]:
-    """(count, bucket_days) for the window — daily when short, weekly when long."""
+    """(count, bucket_days) for the window — daily when short, weekly when long.
+
+    Weekly count rounds up so the buckets cover the whole window (the oldest
+    is clipped to the window start); flooring dropped up to 6 days of
+    completions the Throughput tile still counted.
+    """
     if window_days <= DAILY_BUCKET_MAX_DAYS:
         return window_days, 1
-    return window_days // 7, 7
+    return -(-window_days // 7), 7
 
 
 def compute_flow_history(
@@ -56,7 +61,9 @@ def compute_flow_history(
         window_end=now,
         days=tuple(daily_flow_counts(event_streams, start=window_start, end=now)),
         buckets=tuple(
-            bucketed_throughput(samples, end=now, count=count, bucket_days=bucket_days)
+            bucketed_throughput(
+                samples, end=now, count=count, bucket_days=bucket_days, start=window_start
+            )
         ),
         bucket_days=bucket_days,
         data_as_of=max(recorded, default=None),
