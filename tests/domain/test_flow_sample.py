@@ -149,3 +149,121 @@ def test_blocked_time_before_start_is_not_counted() -> None:
 
     assert sample is not None
     assert sample.blocked_time == timedelta(days=2)
+
+
+def test_move_back_out_of_progress_stops_the_item() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.STOPPED, 5),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.started_at == datetime(2026, 6, 2, tzinfo=UTC)
+    assert sample.stopped_at == datetime(2026, 6, 5, tzinfo=UTC)
+    assert sample.canceled is False
+    assert sample.completed_at is None
+
+
+def test_restart_after_move_back_keeps_the_first_start() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.STOPPED, 5),
+            _event(EventType.STARTED, 9),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.started_at == datetime(2026, 6, 2, tzinfo=UTC)  # cycle runs from first start
+    assert sample.stopped_at is None
+
+
+def test_cancel_closes_an_uncompleted_item() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.CANCELED, 6),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.canceled is True
+    assert sample.stopped_at == datetime(2026, 6, 6, tzinfo=UTC)
+    assert sample.completed_at is None
+
+
+def test_cancel_after_move_back_keeps_the_move_back_time() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.STOPPED, 4),
+            _event(EventType.CANCELED, 7),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.canceled is True
+    assert sample.stopped_at == datetime(2026, 6, 4, tzinfo=UTC)
+
+
+def test_cancel_after_done_stays_delivered() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.COMPLETED, 5),
+            _event(EventType.CANCELED, 7),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.completed_at == datetime(2026, 6, 5, tzinfo=UTC)
+    assert sample.canceled is False
+    assert sample.stopped_at is None
+
+
+def test_restart_after_cancel_reopens_and_a_second_cancel_closes_again() -> None:
+    reopened = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.CANCELED, 4),
+            _event(EventType.STARTED, 6),
+        ]
+    )
+    recanceled = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
+            _event(EventType.CANCELED, 4),
+            _event(EventType.STARTED, 6),
+            _event(EventType.CANCELED, 9),
+        ]
+    )
+
+    assert reopened is not None and recanceled is not None
+    assert reopened.canceled is False
+    assert reopened.stopped_at is None
+    assert recanceled.canceled is True
+    assert recanceled.stopped_at == datetime(2026, 6, 9, tzinfo=UTC)
+
+
+def test_completion_after_cancel_counts_as_delivered() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.CANCELED, 3),
+            _event(EventType.COMPLETED, 5),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.completed_at == datetime(2026, 6, 5, tzinfo=UTC)
+    assert sample.canceled is False
+    assert sample.stopped_at is None

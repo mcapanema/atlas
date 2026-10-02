@@ -2,22 +2,15 @@
 
 from datetime import datetime
 
-from app.domain.metrics.samples import FlowSample
+from app.domain.metrics.samples import FlowSample, in_progress
 
 
 def wip(samples: list[FlowSample], *, at: datetime) -> int:
-    """Count samples in progress at `at`: started on or before it, not completed by it.
+    """Count samples in progress at `at` (see `in_progress`).
 
-    ponytail: a reopened item's completed_at is voided, so it counts as WIP
-    "now" (true) but also for past instants where it was actually done —
-    fine for the current-WIP stat this feeds; derive WIP history from full
-    event replay when Phase 4's CFD needs it.
+    ponytail: a reopened item's completed_at/stopped_at is voided, so it
+    counts as WIP "now" (true) but also for past instants where it was
+    actually done or parked — fine for the current-WIP stat this feeds; the
+    CFD replays full event history for past days.
     """
-    count = 0
-    for sample in samples:
-        if sample.started_at is None or sample.started_at > at:
-            continue
-        if sample.completed_at is not None and sample.completed_at <= at:
-            continue
-        count += 1
-    return count
+    return sum(1 for sample in samples if in_progress(sample, at))

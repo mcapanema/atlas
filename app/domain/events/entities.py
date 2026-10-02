@@ -17,6 +17,11 @@ class EventType(StrEnum):
     REVIEW = "review"
     MERGED = "merged"
     COMPLETED = "completed"
+    # Left a started state without completing (moved back, or canceled from
+    # progress) — ends WIP; a later STARTED resumes it.
+    STOPPED = "stopped"
+    # Closed without delivery. After a COMPLETED it changes nothing.
+    CANCELED = "canceled"
     STATE_CHANGED = "state_changed"
 
 

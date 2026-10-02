@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -54,3 +55,15 @@ def test_unstarted_and_completed_items_are_excluded() -> None:
     aging = compute_aging_wip([backlog, done], now=NOW)
 
     assert aging.items == ()
+
+
+def test_moved_back_and_canceled_items_are_excluded() -> None:
+    item, sample = _pair("Moved back", started_days=10, completed_days=None)
+    moved_back = (item, replace(sample, stopped_at=NOW - timedelta(days=4)))
+    item2, sample2 = _pair("Canceled", started_days=9, completed_days=None)
+    canceled = (item2, replace(sample2, stopped_at=NOW - timedelta(days=1), canceled=True))
+    doing = _pair("Doing", started_days=3, completed_days=None)
+
+    aging = compute_aging_wip([moved_back, canceled, doing], now=NOW)
+
+    assert [a.title for a in aging.items] == ["Doing"]

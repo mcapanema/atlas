@@ -66,3 +66,22 @@ def test_components_without_data_are_omitted() -> None:
     assert "predictability" not in names  # nothing completed in window
     assert "stability" not in names
     assert "risk" in names  # one unblocked, un-aged in-progress item -> score 100
+
+
+def test_canceled_blocked_item_is_not_in_progress_risk() -> None:
+    streams = [
+        _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
+        _stream(
+            (EventType.CREATED, 15),
+            (EventType.STARTED, 14),
+            (EventType.BLOCKED, 13),
+            (EventType.CANCELED, 12),
+        ),
+        _stream((EventType.CREATED, 4), (EventType.STARTED, 1)),  # fresh WIP, age 1d < p85 2d
+    ]
+
+    health = compute_delivery_health(streams, now=NOW)
+
+    risk = next(c for c in health.components if c.name == "risk")
+    assert risk.score == 100
+    assert "0 of 1" in risk.reason

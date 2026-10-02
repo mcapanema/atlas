@@ -179,7 +179,7 @@ export function FlowDashboard({
           <StatCard
             title="WIP (now)"
             value={data.wip}
-            help="Work items started but not yet completed, right now. Not an average over the window."
+            help="Work items in progress right now: started, and not yet completed, moved back, or canceled. Not an average over the window."
           />
           <StatCard
             title="Lead time P50"
