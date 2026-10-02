@@ -28,6 +28,9 @@ jobs:
       - name: Lint
         if: matrix.phase == 'lint'
         run: uv run ruff check .
+      - name: Format check
+        if: matrix.phase == 'lint'
+        run: uv run ruff format --check .
       - name: Security audit
         if: matrix.phase == 'security'
         run: uv run --with pip-audit pip-audit

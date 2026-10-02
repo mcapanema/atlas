@@ -79,7 +79,7 @@ undocumented env var is a landmine for the next person (or session).
 
 - Domain layer: zero framework imports, stdlib only.
 - Never return an ORM model from an API route — always a Pydantic DTO.
-- `uv run mypy` (strict) and `uv run ruff check .` must pass on `app/` and `tests/`.
+- `uv run mypy` (strict), `uv run ruff check .`, and `uv run ruff format --check .` must pass.
 - New backend code follows TDD: failing test first, then implementation.
 - Persistence stays portable to PostgreSQL — no SQLite-specific types/SQL
   outside `app/infrastructure/`.
