@@ -245,7 +245,8 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
         return (
             f"Sync complete: {summary['teams']} teams, {summary['projects']} projects, "
             f"{summary['work_items']} work items, {summary['events']} events, "
-            f"{summary['divergences']} divergences. Snapshots captured."
+            f"{summary['divergences']} divergences, {summary['deleted']} deleted. "
+            "Snapshots captured."
         )
 
     def _scope_clause(team: str) -> str:

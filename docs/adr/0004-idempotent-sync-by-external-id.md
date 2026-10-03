@@ -33,3 +33,4 @@ unique index first.
 - Items renamed or re-parented upstream converge on the next sync.
 - A second connector has a known, small migration cost (vendor namespacing)
   before it can ship.
+- Items that disappear upstream are pruned on the next sync (ADR-0009).

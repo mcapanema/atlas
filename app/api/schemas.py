@@ -122,6 +122,7 @@ class SyncSummaryRead(BaseModel):
     work_items: int
     events: int
     divergences: int
+    deleted: int
 
 
 class StatePeriodRead(BaseModel):
