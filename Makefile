@@ -1,4 +1,7 @@
 .DEFAULT_GOAL := help
+# Serial even under `make -j`: `deps` (npm ci wipes web/node_modules) must
+# finish before lint/test use it. `dev` parallelizes with shell `&`, not -j.
+.NOTPARALLEL:
 
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
 	deps fetch-base pre-push docker-build docker-up docker-down docker-logs
