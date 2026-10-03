@@ -48,7 +48,7 @@ for server state, React Router for routing.
   configured in `vite.config.ts`; `src/main.tsx` and `src/test/` helpers
   excluded as non-product code). Plain `npm run test` skips coverage for
   fast local loops. If the gate trips, add tests; only lower a threshold
-  with a reviewed justification.
+  with a reviewed justification. On top of the floors, `make test` and every PR's `frontend / test` check require ≥ 90% coverage of the changed lines under `src/` (diff-cover over `coverage/cobertura-coverage.xml`).
 - `npm run knip` gates CI: no unused files, dependencies, or exports
   (exports used inside their own file are fine — `knip.json`). Delete dead
   code rather than ignoring it. `npm run typecheck` also type-checks

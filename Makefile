@@ -3,6 +3,9 @@
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
 	docker-build docker-up docker-down docker-logs
 
+# Base for diff coverage; CI passes the PR's base branch instead.
+DIFF_COVER_BASE ?= origin/main
+
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
@@ -24,9 +27,11 @@ dev: ## Run backend + frontend dev servers together (Ctrl+C stops both)
 	(cd web && npm run dev) & \
 	wait
 
-test: ## Run backend and frontend test suites (with coverage gates)
+test: ## Run test suites (coverage floors + >=90% coverage of changed lines vs origin/main)
 	uv run pytest --cov -v
 	cd web && npm run test:coverage
+	uv run diff-cover coverage.xml --compare-branch=$(DIFF_COVER_BASE) --fail-under=90
+	uv run diff-cover web/coverage/cobertura-coverage.xml --compare-branch=$(DIFF_COVER_BASE) --fail-under=90
 
 lint: ## Lint, format-check, and dead-code-check backend and frontend
 	uv run ruff check .

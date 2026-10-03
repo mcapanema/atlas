@@ -25,6 +25,7 @@ __pycache__/
 .ruff_cache/
 atlas.db*
 .coverage
+coverage.xml
 htmlcov/
 
 # Node / frontend

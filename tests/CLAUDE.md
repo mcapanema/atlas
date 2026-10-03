@@ -56,6 +56,13 @@ test_...` functions need no `@pytest.mark.asyncio` decorator.
 loops; the gate would false-fail on partial runs anyway. If the gate
 trips, add tests; only lower `fail_under` with a reviewed justification.
 
+On top of the floor, `make test` and every PR's `backend / test` check run
+**diff coverage**: at least 90% of the `app/` lines your branch changed
+(vs `origin/main`; locally including uncommitted edits) must be executed by
+the suite. The PR's run summary lists the uncovered lines. A diff with no
+coverable lines passes. If it trips, add tests for the new code, don't
+lower the bar.
+
 The suite also runs with `filterwarnings = ["error"]`, `--strict-markers`,
 `--strict-config`, and `xfail_strict`: a new warning (usually a dependency
 deprecation) fails the run. Fix the cause; if a third-party warning truly

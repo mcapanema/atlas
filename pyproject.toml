@@ -23,6 +23,7 @@ dev = [
     "mypy>=2.3.1",
     "pytest-cov>=7.1.0",
     "pre-commit>=4.6.2",
+    "diff-cover>=10.6.0",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.
@@ -36,7 +37,10 @@ testpaths = ["tests"]
 # Typo'd markers/config keys fail instead of silently no-op'ing; any warning
 # (a dependency deprecation included) fails the suite so it's fixed on the
 # bump that introduces it, not discovered on the bump that removes the API.
-addopts = ["--strict-markers", "--strict-config"]
+# --cov-report only takes effect alongside --cov (make test / CI), so bare
+# TDD runs still skip coverage; with --cov it writes the terminal table plus
+# coverage.xml for diff-cover.
+addopts = ["--strict-markers", "--strict-config", "--cov-report=term", "--cov-report=xml"]
 xfail_strict = true
 filterwarnings = ["error"]
 

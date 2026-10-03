@@ -19,6 +19,8 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     coverage: {
       provider: "v8",
+      // text for the terminal, html for humans, cobertura for diff-cover.
+      reporter: ["text", "html", "cobertura"],
       include: ["src/**"],
       // main.tsx is bootstrap-only (createRoot().render()); test helpers
       // aren't product code.
