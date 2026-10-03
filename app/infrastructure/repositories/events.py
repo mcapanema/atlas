@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, select
+from sqlalchemy import ForeignKey, String, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -63,6 +63,12 @@ class SqlAlchemyEventRepository:
     async def add(self, event: Event) -> None:
         self._session.add(EventModel.from_domain(event))
         await self._session.flush()
+
+    async def delete_for_work_items(self, work_item_ids: list[UUID]) -> None:
+        for chunk in chunked(work_item_ids):
+            await self._session.execute(
+                delete(EventModel).where(EventModel.work_item_id.in_(chunk))
+            )
 
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
         result = await self._session.execute(

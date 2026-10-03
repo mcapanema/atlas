@@ -188,3 +188,28 @@ async def test_list_for_work_items_orders_across_chunks(
     events = await repo.list_for_work_items([item_a, item_b])
 
     assert [e.type for e in events] == [EventType.CREATED, EventType.STARTED]
+
+
+async def test_delete_for_work_items_removes_their_events_in_batches(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching, "BATCH_SIZE", 1)
+    repo = SqlAlchemyEventRepository(session)
+    first, second, kept = (
+        await _work_item_id(session),
+        await _work_item_id(session),
+        await _work_item_id(session),
+    )
+    for work_item_id in (first, second, kept):
+        await repo.add(
+            Event(
+                work_item_id=work_item_id,
+                type=EventType.CREATED,
+                occurred_at=datetime(2026, 7, 1, tzinfo=UTC),
+            )
+        )
+
+    await repo.delete_for_work_items([first, second])
+
+    remaining = await repo.list_for_work_items([first, second, kept])
+    assert [event.work_item_id for event in remaining] == [kept]
