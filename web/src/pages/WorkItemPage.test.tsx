@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse } from "../test/fixtures";
+import { jsonResponse, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { WorkItemPage } from "./WorkItemPage";
 
@@ -79,7 +79,7 @@ afterEach(() => {
 describe("WorkItemPage", () => {
   it("renders the event timeline, state periods, and blocked periods", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
       if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(events));
       return Promise.resolve(jsonResponse(workItem));
@@ -104,7 +104,7 @@ describe("WorkItemPage", () => {
 
   it("shows per-section errors instead of false empty states when secondary queries fail", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.endsWith("/timeline") || url.startsWith("/api/events")) {
         return Promise.resolve(jsonResponse({ detail: "database is locked" }, 500));
       }
@@ -122,7 +122,7 @@ describe("WorkItemPage", () => {
 
   it("renders event and state-period timestamps as DD-MM-YYYY HH:mm", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
       if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(events));
       return Promise.resolve(jsonResponse(workItem));

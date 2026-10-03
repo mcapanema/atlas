@@ -40,7 +40,6 @@ export function useMeetingPrep(
     // Expensive LLM call — never auto-fetch; the page triggers refetch() explicitly.
     enabled: false,
     staleTime: Infinity,
-    queryFn: () =>
-      apiFetch<MeetingPrep>(`/api/meetings/prep?${param}&${search.toString()}`),
+    queryFn: () => apiFetch<MeetingPrep>(`/api/meetings/prep?${param}&${search.toString()}`),
   });
 }

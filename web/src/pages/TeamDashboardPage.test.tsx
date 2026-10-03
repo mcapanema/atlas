@@ -5,7 +5,7 @@ vi.mock("../components/EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { jsonResponse, mockMetricsFetch, teamFixture } from "../test/fixtures";
+import { jsonResponse, mockMetricsFetch, teamFixture, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { TeamDashboardPage } from "./TeamDashboardPage";
 
@@ -43,7 +43,7 @@ describe("TeamDashboardPage", () => {
     renderPage(`/teams?team=${teamFixture.id}`);
 
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain(`/api/metrics?team_id=${teamFixture.id}`);
   });
 
@@ -67,14 +67,13 @@ describe("TeamDashboardPage", () => {
 
   it("threads URL filters into the metrics requests and labels", async () => {
     mockMetricsFetch({ "/api/teams": [teamFixture] });
-    renderWithClient(
-      <TeamDashboardPage />,
-      [`/teams?team=${teamFixture.id}&window=90&types=story,bug&xstates=canceled`],
-    );
+    renderWithClient(<TeamDashboardPage />, [
+      `/teams?team=${teamFixture.id}&window=90&types=story,bug&xstates=canceled`,
+    ]);
 
     await screen.findByText("Throughput (90d)");
 
-    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    const urls = vi.mocked(fetch).mock.calls.map((call) => requestUrl(call[0]));
     const flowUrl = urls.find((url) => url.startsWith("/api/metrics?"));
     expect(flowUrl).toContain("window_days=90");
     expect(flowUrl).toContain("types=story");

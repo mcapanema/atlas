@@ -8,9 +8,11 @@ afterEach(() => {
 
 describe("apiFetch", () => {
   it("merges caller headers with the JSON content type", async () => {
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
-    );
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
 
     await apiFetch("/api/things", { headers: { "X-Custom": "1" } });
 
@@ -20,9 +22,11 @@ describe("apiFetch", () => {
   });
 
   it("does not override a caller-supplied Content-Type", async () => {
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
-    );
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
 
     await apiFetch("/api/things", { headers: { "Content-Type": "text/plain" } });
 

@@ -51,7 +51,7 @@ def daily_flow_counts(
     Each day is measured at end-of-day (23:59:59.999999 UTC), clamped to
     `end` for the final day. One chronological pass over all events carries
     each item's phase forward — O(events·log(events) + days), replacing the
-    per-day replay that was O(days × events).
+    per-day replay that was O(days * events).
 
     ponytail: three phases derived from event types (not per-Workflow-State
     bands) — add stage-level bands if teams want per-state CFDs.

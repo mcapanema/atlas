@@ -51,14 +51,19 @@ async def test_duplicate_event_external_id_is_rejected(session: AsyncSession) ->
     repo = SqlAlchemyEventRepository(session)
     occurred = datetime(2026, 1, 1, tzinfo=UTC)
     await repo.add(
-        Event(work_item_id=item.id, type=EventType.CREATED, occurred_at=occurred,
-              external_id="lin_h1")
+        Event(
+            work_item_id=item.id, type=EventType.CREATED, occurred_at=occurred, external_id="lin_h1"
+        )
     )
 
     with pytest.raises(IntegrityError):
         await repo.add(
-            Event(work_item_id=item.id, type=EventType.STARTED, occurred_at=occurred,
-                  external_id="lin_h1")
+            Event(
+                work_item_id=item.id,
+                type=EventType.STARTED,
+                occurred_at=occurred,
+                external_id="lin_h1",
+            )
         )
 
 

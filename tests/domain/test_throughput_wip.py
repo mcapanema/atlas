@@ -15,9 +15,7 @@ def _sample(
 ) -> FlowSample:
     return FlowSample(
         created_at=NOW - timedelta(days=created_days_ago),
-        started_at=NOW - timedelta(days=started_days_ago)
-        if started_days_ago is not None
-        else None,
+        started_at=NOW - timedelta(days=started_days_ago) if started_days_ago is not None else None,
         completed_at=NOW - timedelta(days=completed_days_ago)
         if completed_days_ago is not None
         else None,
@@ -122,9 +120,7 @@ def test_bucketed_throughput_clips_the_oldest_bucket_to_start() -> None:
 
 def test_wip_excludes_items_moved_back_or_canceled_by_the_instant() -> None:
     moved_back = replace(_sample(20, 15, None), stopped_at=NOW - timedelta(days=3))
-    canceled = replace(
-        _sample(20, 15, None), stopped_at=NOW - timedelta(days=2), canceled=True
-    )
+    canceled = replace(_sample(20, 15, None), stopped_at=NOW - timedelta(days=2), canceled=True)
     stops_later = replace(_sample(20, 15, None), stopped_at=NOW + timedelta(days=1))
     doing = _sample(20, 15, None)
 

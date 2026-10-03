@@ -56,8 +56,7 @@ export function useAllTeamsForecastAccuracy(teams: Team[]) {
   return useQueries({
     queries: teams.map((team) => ({
       queryKey: ["forecasts", "accuracy", { teamId: team.id }],
-      queryFn: () =>
-        apiFetch<ForecastAccuracy>(`/api/forecasts/accuracy?team_id=${team.id}`),
+      queryFn: () => apiFetch<ForecastAccuracy>(`/api/forecasts/accuracy?team_id=${team.id}`),
     })),
   });
 }

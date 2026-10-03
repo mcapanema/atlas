@@ -79,9 +79,7 @@ def test_events_before_window_set_the_phase_on_day_one() -> None:
         end=datetime(2026, 7, 11, 23, 0, tzinfo=UTC),
     )
 
-    assert counts[0] == DailyFlowCount(
-        day=date(2026, 7, 10), todo=0, in_progress=1, done=0
-    )
+    assert counts[0] == DailyFlowCount(day=date(2026, 7, 10), todo=0, in_progress=1, done=0)
 
 
 def test_same_day_transitions_land_on_end_of_day_phase() -> None:

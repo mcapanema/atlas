@@ -16,9 +16,7 @@ def _item(team_id: UUID) -> WorkItem:
 
 
 def _event(item: WorkItem, type_: EventType, days_ago: int) -> Event:
-    return Event(
-        work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago)
-    )
+    return Event(work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago))
 
 
 async def test_team_metrics_across_completed_and_in_progress_items() -> None:
@@ -129,9 +127,7 @@ async def test_flow_history_for_team() -> None:
             occurred_at=NOW - timedelta(days=1),
         ),
     ]
-    service = MetricsService(
-        InMemoryWorkItemRepository([item]), InMemoryEventRepository(events)
-    )
+    service = MetricsService(InMemoryWorkItemRepository([item]), InMemoryEventRepository(events))
 
     history = await service.get_flow_history(team_id=team_id, window_days=14, now=NOW)
 

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, teamFixture } from "../test/fixtures";
+import { jsonResponse, teamFixture, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { AdvisorPage } from "./AdvisorPage";
 
@@ -22,7 +22,7 @@ const advice = {
 
 function mockFetch({ configured = true } = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
     if (url.startsWith("/api/recommendations/status")) {
       return Promise.resolve(jsonResponse({ configured }));
@@ -64,9 +64,7 @@ describe("AdvisorPage", () => {
 
     renderPage();
 
-    await waitFor(() =>
-      expect(screen.getByText(/Advisor is not configured/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Advisor is not configured/)).toBeInTheDocument());
   });
 
   it("does not fetch advice until the button is clicked", async () => {
@@ -75,7 +73,7 @@ describe("AdvisorPage", () => {
     renderPage(`/advisor?team=${teamFixture.id}`);
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls.some((u) => u.startsWith("/api/recommendations?"))).toBe(false);
   });
 
@@ -95,7 +93,7 @@ describe("AdvisorPage", () => {
 
   it("surfaces an advice generation failure", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
         return Promise.resolve(jsonResponse({ configured: true }));
@@ -142,13 +140,11 @@ describe("AdvisorPage", () => {
 
     renderPage(`/advisor?team=${teamFixture.id}&persona=delivery_analyst`);
 
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         `/api/recommendations?team_id=${teamFixture.id}&persona=delivery_analyst`,
       ),
     );
@@ -156,7 +152,7 @@ describe("AdvisorPage", () => {
 
   it("surfaces an advisor status failure instead of silently disabling the button", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/personas") && url.endsWith("/guidance")) {
         return Promise.resolve(jsonResponse([]));
@@ -183,15 +179,13 @@ describe("AdvisorPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
-      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
-    expect(String(call![0])).toBe("/api/personas/agile_coach/feedback");
+      .mock.calls.find((c) => requestUrl(c[0]).endsWith("/feedback"));
+    expect(requestUrl(call![0])).toBe("/api/personas/agile_coach/feedback");
     expect(call![1]!.method).toBe("POST");
-    expect(JSON.parse(String(call![1]!.body))).toEqual({
+    expect(JSON.parse(call![1]!.body as string)).toEqual({
       rating: "up",
       comment: null,
       advice_summary: "Flow is healthy.",
@@ -212,13 +206,11 @@ describe("AdvisorPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Not helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
-      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
-    expect(JSON.parse(String(call![1]!.body))).toEqual({
+      .mock.calls.find((c) => requestUrl(c[0]).endsWith("/feedback"));
+    expect(JSON.parse(call![1]!.body as string)).toEqual({
       rating: "down",
       comment: "too generic",
       advice_summary: "Flow is healthy.",
@@ -227,7 +219,7 @@ describe("AdvisorPage", () => {
 
   it("surfaces a feedback submission failure", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
         return Promise.resolve(jsonResponse({ configured: true }));
@@ -249,8 +241,26 @@ describe("AdvisorPage", () => {
     await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Failed to submit feedback")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Failed to submit feedback")).toBeInTheDocument());
+  });
+
+  it("re-arms feedback with an empty comment when advice is requested again", async () => {
+    mockFetch();
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+    await waitFor(() => expect(screen.getByText("Flow is healthy.")).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText("Optional comment"), {
+      target: { value: "too generic" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Optional comment")).toHaveValue(""));
+    expect(screen.queryByText(/Thanks for the feedback/)).not.toBeInTheDocument();
   });
 });

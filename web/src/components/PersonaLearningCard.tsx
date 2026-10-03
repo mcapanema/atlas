@@ -29,18 +29,10 @@ export function PersonaLearningCard({ persona }: { persona: Persona }) {
           />
         )}
         {reflect.isError && (
-          <Alert
-            type="warning"
-            message="Reflection failed"
-            description={reflect.error.message}
-          />
+          <Alert type="warning" message="Reflection failed" description={reflect.error.message} />
         )}
         {restore.isError && (
-          <Alert
-            type="warning"
-            message="Restore failed"
-            description={restore.error.message}
-          />
+          <Alert type="warning" message="Restore failed" description={restore.error.message} />
         )}
         {active ? (
           <>

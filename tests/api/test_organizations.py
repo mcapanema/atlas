@@ -17,7 +17,8 @@ async def test_create_then_list_organization(client: AsyncClient) -> None:
     assert create.status_code == 201
     body = create.json()
     assert body["name"] == "Acme"
-    assert "id" in body and "created_at" in body
+    assert "id" in body
+    assert "created_at" in body
 
     listed = await client.get("/api/organizations")
     assert [o["name"] for o in listed.json()] == ["Acme"]

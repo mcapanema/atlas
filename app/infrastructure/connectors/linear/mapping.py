@@ -28,11 +28,7 @@ def blocked_label_ids(label_nodes: list[dict[str, Any]]) -> set[str]:
     "Blocked", "blocked", "blocker: external". Promote to a Settings list
     if a workspace ever needs exact names.
     """
-    return {
-        node["id"]
-        for node in label_nodes
-        if "block" in str(node.get("name", "")).lower()
-    }
+    return {node["id"] for node in label_nodes if "block" in str(node.get("name", "")).lower()}
 
 
 def map_team(node: dict[str, Any]) -> SourceTeam:
@@ -70,8 +66,7 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
     history_nodes = node["history"]["nodes"]
     if len(history_nodes) >= HISTORY_PAGE_SIZE:
         logger.warning(
-            "Linear issue %s history hit the %d-entry page cap; "
-            "older events may be missing",
+            "Linear issue %s history hit the %d-entry page cap; older events may be missing",
             node["id"],
             HISTORY_PAGE_SIZE,
         )

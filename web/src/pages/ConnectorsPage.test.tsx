@@ -1,13 +1,13 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse } from "../test/fixtures";
+import { jsonResponse, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ConnectorsPage } from "./ConnectorsPage";
 
 function mockApi({ configured }: { configured: boolean }) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     if (url === "/api/connectors/linear") return jsonResponse({ configured });
     if (url === "/api/organizations")
       return jsonResponse([
@@ -49,15 +49,13 @@ describe("ConnectorsPage", () => {
 
     renderWithClient(<ConnectorsPage />);
 
-    await waitFor(() =>
-      expect(screen.getByText(/ATLAS_LINEAR_API_KEY/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/ATLAS_LINEAR_API_KEY/)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Sync now" })).toBeDisabled();
   });
 
   it("shows an error when sync fails", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url === "/api/connectors/linear") return jsonResponse({ configured: true });
       if (url === "/api/organizations")
         return jsonResponse([
@@ -83,7 +81,7 @@ describe("ConnectorsPage", () => {
 
   it("shows an error instead of 'Not configured' when the status fetch fails", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url === "/api/connectors/linear") {
         return jsonResponse({ detail: "boom" }, 500);
       }
@@ -101,30 +99,26 @@ describe("ConnectorsPage", () => {
   });
 
   it("enables sync with no organizations and bootstraps one from Linear", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input, init) => {
-        const url = String(input);
-        if (url === "/api/connectors/linear") return jsonResponse({ configured: true });
-        if (url === "/api/organizations") return jsonResponse([]);
-        if (url === "/api/connectors/linear/sync") {
-          expect(JSON.parse(String(init?.body))).toEqual({ organization_id: null });
-          return jsonResponse({
-            teams: 1,
-            projects: 0,
-            work_items: 0,
-            events: 0,
-            divergences: 0,
-          });
-        }
-        throw new Error(`Unexpected fetch: ${url}`);
-      });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = requestUrl(input);
+      if (url === "/api/connectors/linear") return jsonResponse({ configured: true });
+      if (url === "/api/organizations") return jsonResponse([]);
+      if (url === "/api/connectors/linear/sync") {
+        expect(JSON.parse(init?.body as string)).toEqual({ organization_id: null });
+        return jsonResponse({
+          teams: 1,
+          projects: 0,
+          work_items: 0,
+          events: 0,
+          divergences: 0,
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
 
     renderWithClient(<ConnectorsPage />);
 
-    await waitFor(() =>
-      expect(screen.getByText(/first sync will create/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/first sync will create/i)).toBeInTheDocument());
     const button = screen.getByRole("button", { name: "Sync now" });
     expect(button).toBeEnabled();
 
@@ -132,7 +126,7 @@ describe("ConnectorsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Teams")).toBeInTheDocument());
     const orgCalls = fetchMock.mock.calls.filter(
-      (call) => String(call[0]) === "/api/organizations",
+      (call) => requestUrl(call[0]) === "/api/organizations",
     );
     expect(orgCalls.length).toBeGreaterThan(1); // invalidated + refetched after sync
   });

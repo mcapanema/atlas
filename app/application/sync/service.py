@@ -94,9 +94,7 @@ class SyncService:
     async def _resolve_organization(self, organization_id: UUID | None) -> UUID:
         if organization_id is not None:
             if await self._organizations.get(organization_id) is None:
-                raise UnknownOrganizationError(
-                    f"Organization {organization_id} does not exist"
-                )
+                raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
             return organization_id
         existing = await self._organizations.list()
         if len(existing) == 1:
@@ -108,9 +106,7 @@ class SyncService:
         # First run: bootstrap the organization from the source workspace.
         organization = Organization(name=await self._source.fetch_organization_name())
         await self._organizations.add(organization)
-        logger.info(
-            "Created organization %r from the source workspace", organization.name
-        )
+        logger.info("Created organization %r from the source workspace", organization.name)
         return organization.id
 
     async def _sync_teams(self, organization_id: UUID) -> int:
@@ -165,9 +161,7 @@ class SyncService:
                 continue
             existing = projects_by_eid.get(source.external_id)
             if existing is None:
-                project = Project(
-                    team_id=team.id, name=source.name, external_id=source.external_id
-                )
+                project = Project(team_id=team.id, name=source.name, external_id=source.external_id)
                 await self._projects.add(project)
                 written += 1
             elif (existing.name, existing.team_id) != (source.name, team.id):
@@ -209,9 +203,7 @@ class SyncService:
             for source in sources
             if source.completed_at is not None
         ]
-        existing_event_eids = await self._events.existing_external_ids(
-            candidate_event_eids
-        )
+        existing_event_eids = await self._events.existing_external_ids(candidate_event_eids)
         for source in sources:
             team = teams_by_eid.get(source.team_external_id)
             if team is None:
@@ -255,9 +247,7 @@ class SyncService:
                     )
                     await self._work_items.update(work_item)
                     items_written += 1
-            written, diverged = await self._sync_events(
-                work_item.id, source, existing_event_eids
-            )
+            written, diverged = await self._sync_events(work_item.id, source, existing_event_eids)
             events_written += written
             divergences += diverged
         return items_written, events_written, divergences

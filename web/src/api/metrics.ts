@@ -52,10 +52,7 @@ export interface MetricsFilters {
   excludeStates?: string[];
 }
 
-export function metricsParams(
-  scope: MetricsScope,
-  filters: MetricsFilters = {},
-): string | null {
+export function metricsParams(scope: MetricsScope, filters: MetricsFilters = {}): string | null {
   const search = new URLSearchParams();
   if (scope.teamId) search.set("team_id", scope.teamId);
   else if (scope.projectId) search.set("project_id", scope.projectId);
@@ -110,8 +107,7 @@ export function useLeadTimeDistribution(scope: MetricsScope, filters: MetricsFil
   return useQuery({
     queryKey: ["metrics", "lead-time-distribution", scope, filters],
     enabled: params !== null,
-    queryFn: () =>
-      apiFetch<LeadTimeDistribution>(`/api/metrics/lead-time-distribution?${params}`),
+    queryFn: () => apiFetch<LeadTimeDistribution>(`/api/metrics/lead-time-distribution?${params}`),
   });
 }
 
@@ -166,7 +162,9 @@ export function useAllTeamsHealth(teams: Team[], filters: MetricsFilters = {}) {
     queries: teams.map((team) => ({
       queryKey: ["metrics", "health", { teamId: team.id }, filters],
       queryFn: () =>
-        apiFetch<DeliveryHealth>(`/api/metrics/health?${metricsParams({ teamId: team.id }, filters)}`),
+        apiFetch<DeliveryHealth>(
+          `/api/metrics/health?${metricsParams({ teamId: team.id }, filters)}`,
+        ),
     })),
   });
 }

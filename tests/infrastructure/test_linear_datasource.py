@@ -207,9 +207,7 @@ async def test_fetch_organization_name() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         assert "organization" in body["query"]
-        return httpx.Response(
-            200, json={"data": {"organization": {"name": "Acme Corp"}}}
-        )
+        return httpx.Response(200, json={"data": {"organization": {"name": "Acme Corp"}}})
 
     assert await _datasource(handler).fetch_organization_name() == "Acme Corp"
 

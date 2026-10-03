@@ -162,6 +162,5 @@ class LinearDataSource:
                 return nodes
             cursor = page_info["endCursor"]
         raise LinearAPIError(
-            f"Linear {root} pagination exceeded {_MAX_PAGES} pages; "
-            "aborting (possible cursor loop)"
+            f"Linear {root} pagination exceeded {_MAX_PAGES} pages; aborting (possible cursor loop)"
         )

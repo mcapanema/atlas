@@ -155,9 +155,7 @@ async def test_advise_raises_advisor_error_on_empty_choices() -> None:
 
 
 async def test_advise_raises_advisor_error_on_missing_content() -> None:
-    advisor = _advisor_returning(
-        httpx.Response(200, json={"choices": [{"message": {}}]})
-    )
+    advisor = _advisor_returning(httpx.Response(200, json={"choices": [{"message": {}}]}))
 
     with pytest.raises(AdvisorError, match="choices"):
         await advisor.advise(_context())
@@ -222,21 +220,32 @@ def test_system_prompt_varies_by_persona() -> None:
     assert "Delivery Analyst" in analyst
     assert coach != analyst
     # the shared grounding rules survive in every persona
-    assert "never invent numbers" in coach and "never invent numbers" in analyst
+    assert "never invent numbers" in coach
+    assert "never invent numbers" in analyst
 
 
 def test_render_context_includes_queue_and_touch_time() -> None:
     now = datetime(2026, 7, 10, tzinfo=UTC)
     start = now - timedelta(days=30)
     stats = DurationStats(
-        p50=timedelta(days=2), p75=timedelta(days=3), p85=timedelta(days=4),
-        p95=timedelta(days=5), mean=timedelta(days=2, hours=12),
+        p50=timedelta(days=2),
+        p75=timedelta(days=3),
+        p85=timedelta(days=4),
+        p95=timedelta(days=5),
+        mean=timedelta(days=2, hours=12),
     )
     context = DeliveryContext(
         flow=FlowMetrics(
-            window_start=start, window_end=now, completed=1, wip=0,
-            lead_time=stats, cycle_time=stats, blocked_time=timedelta(0),
-            flow_efficiency=1.0, queue_time=stats, touch_time=stats,
+            window_start=start,
+            window_end=now,
+            completed=1,
+            wip=0,
+            lead_time=stats,
+            cycle_time=stats,
+            blocked_time=timedelta(0),
+            flow_efficiency=1.0,
+            queue_time=stats,
+            touch_time=stats,
         ),
         distribution=LeadTimeDistribution(window_start=start, window_end=now, bins=()),
         forecast=DeliveryForecast(
@@ -270,9 +279,7 @@ def _feedback_entries() -> list[AdviceFeedback]:
 
 async def test_reflect_returns_distilled_guidance_and_sends_feedback() -> None:
     payload = {
-        "choices": [
-            {"message": {"content": json.dumps({"guidance": "Prefer WIP actions."})}}
-        ]
+        "choices": [{"message": {"content": json.dumps({"guidance": "Prefer WIP actions."})}}]
     }
     captured: list[httpx.Request] = []
     advisor = OpenRouterAdvisor(
@@ -292,7 +299,8 @@ async def test_reflect_returns_distilled_guidance_and_sends_feedback() -> None:
     assert body["response_format"]["json_schema"]["name"] == "persona_guidance"
     user_message = body["messages"][1]["content"]
     assert "staffing advice is out of my control" in user_message
-    assert "[down]" in user_message and "[up]" in user_message
+    assert "[down]" in user_message
+    assert "[up]" in user_message
     assert "Be concise." in user_message  # current guidance is offered for carry-over
     assert "Agile Coach" in body["messages"][0]["content"]
 
@@ -335,9 +343,7 @@ async def test_self_critique_runs_draft_critique_revise() -> None:
         httpx.Response(
             200,
             json={
-                "choices": [
-                    {"message": {"content": "Evidence 'wip=99' is not in the metrics."}}
-                ]
+                "choices": [{"message": {"content": "Evidence 'wip=99' is not in the metrics."}}]
             },
         ),
         httpx.Response(
@@ -412,9 +418,7 @@ def _prep_out() -> MeetingPrepOut:
 
 
 async def test_prepare_meeting_maps_structured_output_to_domain() -> None:
-    payload: dict[str, Any] = {
-        "choices": [{"message": {"content": _prep_out().model_dump_json()}}]
-    }
+    payload: dict[str, Any] = {"choices": [{"message": {"content": _prep_out().model_dump_json()}}]}
     captured: list[httpx.Request] = []
     advisor = OpenRouterAdvisor(
         api_key="test-key",
@@ -479,9 +483,7 @@ async def test_prepare_meeting_raises_advisor_error_on_api_error() -> None:
 async def test_reflect_works_for_meeting_personas() -> None:
     # _PERSONA_ROLE must cover meeting personas or reflect() raises KeyError.
     payload = {
-        "choices": [
-            {"message": {"content": json.dumps({"guidance": "Lead with stuck items."})}}
-        ]
+        "choices": [{"message": {"content": json.dumps({"guidance": "Lead with stuck items."})}}]
     }
     captured: list[httpx.Request] = []
     advisor = OpenRouterAdvisor(

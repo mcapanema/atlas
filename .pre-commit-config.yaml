@@ -1,4 +1,4 @@
-# Fast commit-time gate: ruff + eslint only — the checks that have actually
+# Fast commit-time gate: lint + format checks only — the checks that have actually
 # bitten us (a migration once shipped with 5 unnoticed lint violations).
 # mypy/pytest deliberately stay out: they belong in `make check`, not in a
 # hook that must stay near-instant. Install with `make hooks`.
@@ -10,6 +10,11 @@ repos:
         entry: uv run ruff check --force-exclude
         language: system
         types: [python]
+      - id: ruff-format
+        name: ruff format --check
+        entry: uv run ruff format --check --force-exclude
+        language: system
+        types: [python]
       - id: eslint
         name: eslint (web)
         # eslint resolves paths relative to web/, so staged repo-relative
@@ -19,3 +24,12 @@ repos:
         language: system
         files: ^web/.*\.(ts|tsx)$
         pass_filenames: false
+      - id: prettier
+        name: prettier --check (web)
+        # Prettier resolves web/.prettierrc.json per file, so repo-relative
+        # staged paths work; web/.prettierignore is NOT consulted from the
+        # repo root, hence the explicit exclude mirroring it.
+        entry: web/node_modules/.bin/prettier --check --ignore-unknown
+        language: system
+        files: ^web/
+        exclude: ^web/(package-lock\.json|.*\.md|dist/.*|coverage/.*)$

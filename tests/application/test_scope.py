@@ -14,9 +14,7 @@ def _item(team_id: UUID) -> WorkItem:
 
 
 def _event(item: WorkItem, type_: EventType, days_ago: int) -> Event:
-    return Event(
-        work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago)
-    )
+    return Event(work_item_id=item.id, type=type_, occurred_at=NOW - timedelta(days=days_ago))
 
 
 async def test_load_assembles_streams_samples_and_item_count() -> None:
@@ -48,9 +46,7 @@ async def test_load_streams_are_ordered_by_occurred_at() -> None:
         _event(item, EventType.COMPLETED, 2),
         _event(item, EventType.CREATED, 10),
     ]
-    loader = ScopeSampleLoader(
-        InMemoryWorkItemRepository([item]), InMemoryEventRepository(events)
-    )
+    loader = ScopeSampleLoader(InMemoryWorkItemRepository([item]), InMemoryEventRepository(events))
 
     scope = await loader.load(team_id=team_id)
 
@@ -123,9 +119,7 @@ async def test_load_excludes_states_case_insensitively() -> None:
 async def test_load_without_filters_is_unchanged() -> None:
     team_id = uuid4()
     item = WorkItem(team_id=team_id, title="Item", state="Canceled")
-    loader = ScopeSampleLoader(
-        InMemoryWorkItemRepository([item]), InMemoryEventRepository([])
-    )
+    loader = ScopeSampleLoader(InMemoryWorkItemRepository([item]), InMemoryEventRepository([]))
 
     scope = await loader.load(team_id=team_id)
 

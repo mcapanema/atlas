@@ -23,6 +23,7 @@ dev = [
     "mypy>=2.3.1",
     "pytest-cov>=7.1.0",
     "pre-commit>=4.6.2",
+    "diff-cover>=10.6.0",
 ]
 
 # Atlas is an application, not a distributable package — uv should not build/install it.
@@ -33,6 +34,15 @@ package = false
 pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Typo'd markers/config keys fail instead of silently no-op'ing; any warning
+# (a dependency deprecation included) fails the suite so it's fixed on the
+# bump that introduces it, not discovered on the bump that removes the API.
+# --cov-report only takes effect alongside --cov (make test / CI), so bare
+# TDD runs still skip coverage; with --cov it writes the terminal table plus
+# coverage.xml for diff-cover.
+addopts = ["--strict-markers", "--strict-config", "--cov-report=term", "--cov-report=xml"]
+xfail_strict = true
+filterwarnings = ["error"]
 
 # Coverage only engages when pytest is passed --cov (make test / CI);
 # bare `uv run pytest <path>` TDD runs skip it and the fail_under gate.
@@ -41,7 +51,7 @@ source = ["app"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 94
+fail_under = 95
 skip_covered = true
 show_missing = true
 
@@ -50,11 +60,35 @@ line-length = 100
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = [
+    "E", "F", "I", "UP", "B", "SIM",
+    "C90", "PLR0911", "PLR0912", "PLR0913", "PLR0915",
+    "RUF", "PT", "DTZ", "S", "N", "PERF", "PIE", "RET", "C4", "ERA", "T20",
+    "ASYNC", "BLE", "LOG", "G", "PGH", "FURB",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 7
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"app/api/**" = ["PLR0913"]
 
 [tool.mypy]
 python_version = "3.13"
 strict = true
+warn_unreachable = true
+enable_error_code = [
+    "ignore-without-code",
+    "redundant-expr",
+    "truthy-bool",
+    "possibly-undefined",
+    "redundant-self",
+    "unused-awaitable",
+]
 files = ["app", "tests"]
 exclude = ["migrations/"]
 

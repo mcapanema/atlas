@@ -67,7 +67,7 @@ def test_zero_remaining_completes_in_zero_days() -> None:
 
 
 def test_negative_remaining_is_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="remaining must be >= 0"):
         simulate_days_to_complete([1], remaining=-1)
 
 

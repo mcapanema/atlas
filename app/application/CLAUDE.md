@@ -5,7 +5,7 @@ Use cases / orchestration. Depends on `app/domain/` only — never import
 `SqlAlchemyOrganizationRepository`) here. A service takes the Domain ports
 its use cases need as constructor arguments; the concrete adapters are
 wired in by Presentation (`app/api/deps.py`, the composition root), not
-chosen here.
+chosen here. Enforced by `tests/test_architecture.py` (stdlib + `app.domain` + `app.application` only).
 
 ## Shape
 

@@ -131,8 +131,7 @@ def _risk(
         name="risk",
         score=_clamp(100 * (1 - at_risk / len(open_items))),
         reason=(
-            f"{at_risk} of {len(open_items)} in-progress items "
-            "blocked or aging past cycle p85"
+            f"{at_risk} of {len(open_items)} in-progress items blocked or aging past cycle p85"
         ),
     )
 
@@ -149,9 +148,7 @@ def compute_delivery_health(
         if sample is None:
             continue
         ordered = sorted(stream, key=event_order)
-        blocked_open = any(
-            p.ended_at is None for p in derive_timeline(ordered).blocked_periods
-        )
+        blocked_open = any(p.ended_at is None for p in derive_timeline(ordered).blocked_periods)
         item_states.append((sample, blocked_open))
     samples = [sample for sample, _ in item_states]
     in_window = [

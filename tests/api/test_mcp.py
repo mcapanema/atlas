@@ -46,9 +46,10 @@ async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
             transport=httpx2.ASGITransport(app=app),
             follow_redirects=True,
         ) as http_client,
-        streamable_http_client(
-            f"http://test/mcp/{TOKEN}/", http_client=http_client
-        ) as (read, write),
+        streamable_http_client(f"http://test/mcp/{TOKEN}/", http_client=http_client) as (
+            read,
+            write,
+        ),
         ClientSession(read, write) as session,
     ):
         await session.initialize()

@@ -21,10 +21,7 @@ export function filtersFromSearchParams(params: URLSearchParams): MetricsFilters
   return filters;
 }
 
-export function applyFiltersToSearchParams(
-  params: URLSearchParams,
-  filters: MetricsFilters,
-): void {
+export function applyFiltersToSearchParams(params: URLSearchParams, filters: MetricsFilters): void {
   for (const key of KEYS) params.delete(key);
   if (filters.start && filters.end) {
     params.set("start", filters.start);
@@ -51,4 +48,20 @@ export function isDefaultFilters(filters: MetricsFilters): boolean {
     !filters.types?.length &&
     !filters.excludeStates?.length
   );
+}
+
+/**
+ * The period a metrics page is showing: a custom range by its own dates,
+ * otherwise "Last N days · <start> – <end>" of the window the API resolved
+ * (null until that window has loaded).
+ */
+export function periodText(
+  filters: MetricsFilters,
+  window: { window_start: string; window_end: string } | undefined,
+): string | null {
+  if (filters.start && filters.end) {
+    return `${formatDay(filters.start)} – ${formatDay(filters.end)}`;
+  }
+  if (!window) return null;
+  return `Last ${filters.windowDays ?? 30} days · ${formatDay(window.window_start)} – ${formatDay(window.window_end)}`;
 }

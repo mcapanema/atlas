@@ -26,9 +26,7 @@ def _completion_read(
         p75_date=origin + timedelta(days=completion.p75_days),
         p85_date=origin + timedelta(days=completion.p85_days),
         p95_date=origin + timedelta(days=completion.p95_days),
-        outcomes=[
-            OutcomeBucketRead(days=o.days, trials=o.trials) for o in completion.outcomes
-        ],
+        outcomes=[OutcomeBucketRead(days=o.days, trials=o.trials) for o in completion.outcomes],
     )
 
 

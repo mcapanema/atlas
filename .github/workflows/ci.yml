@@ -5,29 +5,55 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: no job writes to the repository.
+permissions:
+  contents: read
+
+# A new push to a PR supersedes its in-flight run. Pushes to main get a
+# unique group (the run id), so no main run is ever cancelled or skipped.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: backend / ${{ matrix.phase }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         phase: [test, typecheck, lint, security]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history: diff coverage needs the merge base with the PR's base branch.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-      - run: uv sync
+      # --locked fails on a uv.lock that's stale vs pyproject.toml instead of
+      # silently resolving (and testing) a dependency set nobody reviewed.
+      - run: uv sync --locked
       - name: Test suite
         if: matrix.phase == 'test'
         run: uv run pytest --cov -v
+      - name: Diff coverage (changed lines ≥ 90%)
+        if: matrix.phase == 'test' && github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: >-
+          uv run diff-cover coverage.xml --compare-branch="origin/$BASE_REF"
+          --fail-under=90 --format markdown:"$GITHUB_STEP_SUMMARY"
       - name: Type check
         if: matrix.phase == 'typecheck'
         run: uv run mypy
       - name: Lint
         if: matrix.phase == 'lint'
         run: uv run ruff check .
+      - name: Format check
+        if: matrix.phase == 'lint'
+        run: uv run ruff format --check .
       - name: Security audit
         if: matrix.phase == 'security'
         run: uv run --with pip-audit pip-audit
@@ -35,6 +61,7 @@ jobs:
   frontend:
     name: frontend / ${{ matrix.phase }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -44,9 +71,13 @@ jobs:
         phase: [test, typecheck, lint, security]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history: diff coverage needs the merge base with the PR's base branch.
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: "lts/*"
+          # Same Node major the Dockerfile builds with — see web/.nvmrc.
+          node-version-file: web/.nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
@@ -56,12 +87,38 @@ jobs:
       - name: Build
         if: matrix.phase == 'test'
         run: npm run build
+      - uses: astral-sh/setup-uv@v7
+        if: matrix.phase == 'test' && github.event_name == 'pull_request'
+      - name: Diff coverage (changed lines ≥ 90%)
+        if: matrix.phase == 'test' && github.event_name == 'pull_request'
+        working-directory: .
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: >-
+          uv run --locked --only-group dev diff-cover web/coverage/cobertura-coverage.xml
+          --compare-branch="origin/$BASE_REF" --fail-under=90
+          --format markdown:"$GITHUB_STEP_SUMMARY"
       - name: Type check
         if: matrix.phase == 'typecheck'
         run: npm run typecheck
       - name: Lint
         if: matrix.phase == 'lint'
         run: npm run lint
+      - name: Format check
+        if: matrix.phase == 'lint'
+        run: npm run format:check
+      - name: Dead code (knip)
+        if: matrix.phase == 'lint'
+        run: npm run knip
       - name: Security audit
         if: matrix.phase == 'security'
         run: npm audit --audit-level=high
+
+  docker:
+    name: docker / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      # The production image, built exactly as deployed; nothing is pushed.
+      - run: docker build -t atlas:ci .

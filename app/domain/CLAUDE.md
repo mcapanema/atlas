@@ -2,7 +2,7 @@
 
 Pure Python. Zero framework imports — no FastAPI, SQLAlchemy, Pydantic,
 aiosqlite, or connector-specific code (Linear, GitHub, Slack, etc.), ever.
-This is the one rule in this repo that isn't negotiable.
+This is the one rule in this repo that isn't negotiable. `tests/test_architecture.py` fails the suite on any non-stdlib, non-`app.domain` import here — absolute or relative, module-level or function-local.
 
 ## Three slice shapes
 

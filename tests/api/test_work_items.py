@@ -42,9 +42,7 @@ async def test_list_filters_by_team(client: AsyncClient) -> None:
 
 
 async def test_create_rejects_empty_title(client: AsyncClient) -> None:
-    response = await client.post(
-        "/api/work-items", json={"team_id": str(uuid4()), "title": ""}
-    )
+    response = await client.post("/api/work-items", json={"team_id": str(uuid4()), "title": ""})
 
     assert response.status_code == 422
 
@@ -59,9 +57,7 @@ async def test_create_rejects_unknown_type(client: AsyncClient) -> None:
 
 
 async def test_create_work_item_404_for_unknown_team(client: AsyncClient) -> None:
-    response = await client.post(
-        "/api/work-items", json={"team_id": str(uuid4()), "title": "X"}
-    )
+    response = await client.post("/api/work-items", json={"team_id": str(uuid4()), "title": "X"})
 
     assert response.status_code == 404
 
@@ -104,9 +100,7 @@ async def test_timeline_derives_periods_from_events(client: AsyncClient) -> None
         {"type": "blocked", "occurred_at": "2026-01-04T00:00:00Z"},
         {"type": "unblocked", "occurred_at": "2026-01-05T00:00:00Z"},
     ]:
-        created = await client.post(
-            "/api/events", json={"work_item_id": work_item_id, **payload}
-        )
+        created = await client.post("/api/events", json={"work_item_id": work_item_id, **payload})
         assert created.status_code == 201
 
     response = await client.get(f"/api/work-items/{work_item_id}/timeline")

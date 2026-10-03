@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, teamFixture } from "../test/fixtures";
+import { jsonResponse, teamFixture, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { WorkItemsPage } from "./WorkItemsPage";
 
@@ -9,7 +9,7 @@ const TEAM_ID = teamFixture.id;
 
 function mockApi() {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     if (url.startsWith("/api/teams")) {
       return Promise.resolve(jsonResponse([teamFixture]));
     }
@@ -50,10 +50,8 @@ describe("WorkItemsPage", () => {
       "/work-items/11111111-1111-1111-1111-111111111111",
     );
 
-    const calls = vi.mocked(globalThis.fetch).mock.calls.map((call) => String(call[0]));
-    expect(
-      calls.some((url) => url.includes("limit=50") && url.includes("offset=0")),
-    ).toBe(true);
+    const calls = vi.mocked(globalThis.fetch).mock.calls.map((call) => requestUrl(call[0]));
+    expect(calls.some((url) => url.includes("limit=50") && url.includes("offset=0"))).toBe(true);
   });
 
   it("reads the team filter and page from the URL", async () => {
@@ -62,7 +60,7 @@ describe("WorkItemsPage", () => {
     renderWithClient(<WorkItemsPage />, [`/work-items?team=${TEAM_ID}&page=2`]);
 
     await waitFor(() => {
-      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
       expect(
         calls.some((url) => url.includes(`team_id=${TEAM_ID}`) && url.includes("offset=50")),
       ).toBe(true);
@@ -79,7 +77,7 @@ describe("WorkItemsPage", () => {
 
   it("renders an error alert when work items fail to load", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
     });
@@ -99,7 +97,7 @@ describe("WorkItemsPage", () => {
     fireEvent.click(await screen.findByTitle(teamFixture.name));
 
     await waitFor(() => {
-      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
       expect(calls.some((url) => url.includes(`team_id=${TEAM_ID}`))).toBe(true);
     });
 
@@ -112,16 +110,16 @@ describe("WorkItemsPage", () => {
       const newCalls = vi
         .mocked(globalThis.fetch)
         .mock.calls.slice(callsBeforeClear)
-        .map((c) => String(c[0]));
-      expect(newCalls.some((url) => url.includes("/api/work-items?") && !url.includes("team_id"))).toBe(
-        true,
-      );
+        .map((c) => requestUrl(c[0]));
+      expect(
+        newCalls.some((url) => url.includes("/api/work-items?") && !url.includes("team_id")),
+      ).toBe(true);
     });
   });
 
   it("changes page via the table pagination", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       return Promise.resolve(
         jsonResponse({
@@ -148,7 +146,7 @@ describe("WorkItemsPage", () => {
     fireEvent.click(screen.getByTitle("2"));
 
     await waitFor(() => {
-      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+      const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
       expect(calls.some((url) => url.includes("offset=50"))).toBe(true);
     });
   });

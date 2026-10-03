@@ -51,7 +51,8 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | Command | What it does |
 |---|---|
 | `make install` | install backend + frontend dependencies |
-| `make hooks` | install git pre-commit hooks (ruff + eslint on staged changes) |
+| `make hooks` | install git pre-commit hooks (ruff check/format, eslint, prettier on staged changes) |
+| `make format` | auto-format backend (ruff) and frontend (prettier) |
 | `make dev` | run backend + frontend dev servers together (Ctrl+C stops both) |
 | `make test` / `make lint` / `make typecheck` / `make security` | run one phase, both sides |
 | `make check` | full local CI gate — mirrors `.github/workflows/ci.yml` |
@@ -60,9 +61,15 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | `make docker-up` | run the whole stack in Docker (`docker-compose.yml`) |
 
 CI (`.github/workflows/ci.yml`) runs the same phases as `make check`, split
-into 8 parallel checks: `{backend, frontend} × {test, typecheck, lint, security}`.
-Dependabot (`.github/dependabot.yml`) opens weekly update PRs for `uv`, `npm`
-(`/web`), and GitHub Actions dependencies.
+into 9 parallel checks: `{backend, frontend} × {test, typecheck, lint, security}`
+plus `docker / build` (the production image, built but not pushed — run it
+locally with `make docker-build`). The `lint` phase also runs the format
+checks and, on the frontend, knip; on pull requests the `test` phase also
+gates diff coverage (≥ 90% of changed lines, per side). Dependabot (`.github/dependabot.yml`)
+opens weekly update PRs for `uv`, `npm` (`/web`), GitHub Actions, and the
+Dockerfile's base images — minor/patch bumps grouped into one PR per
+ecosystem, majors one PR each. Node's major version lives in `web/.nvmrc`
+(CI reads it; the Dockerfile's `node:` tag must match).
 
 ## Configuration
 
@@ -77,9 +84,13 @@ undocumented env var is a landmine for the next person (or session).
 
 ## Non-negotiable constraints
 
-- Domain layer: zero framework imports, stdlib only.
+- Domain layer: zero framework imports, stdlib only. Layer import rules are enforced by `tests/test_architecture.py`.
 - Never return an ORM model from an API route — always a Pydantic DTO.
-- `uv run mypy` (strict) and `uv run ruff check .` must pass on `app/` and `tests/`.
+- `uv run mypy` (strict), `uv run ruff check .`, and `uv run ruff format --check .` must pass.
+- Complexity ceilings are gates, not suggestions: ruff `C901` (max 10),
+  `PLR0911/0912/0913/0915`; ESLint `complexity`/`max-*` in `web/`. Over a
+  ceiling? Split the function. A suppression needs a line-level `noqa` /
+  `eslint-disable-next-line` with an em-dash reason.
 - New backend code follows TDD: failing test first, then implementation.
 - Persistence stays portable to PostgreSQL — no SQLite-specific types/SQL
   outside `app/infrastructure/`.

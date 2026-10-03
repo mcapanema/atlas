@@ -34,7 +34,8 @@ def test_healthy_scope_scores_high_with_all_five_components() -> None:
     health = compute_delivery_health(streams, now=NOW)
 
     assert health.band == "healthy"
-    assert health.score is not None and health.score >= 70
+    assert health.score is not None
+    assert health.score >= 70
     assert {c.name for c in health.components} == {
         "predictability",
         "efficiency",

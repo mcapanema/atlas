@@ -8,9 +8,7 @@ from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 TEAM = uuid4()
 
 
-def _metric_snapshot(
-    team_id: UUID | None = TEAM, project_id: UUID | None = None
-) -> MetricSnapshot:
+def _metric_snapshot(team_id: UUID | None = TEAM, project_id: UUID | None = None) -> MetricSnapshot:
     return MetricSnapshot(
         captured_on=date(2026, 7, 11),
         window_days=30,
@@ -35,9 +33,9 @@ def test_metric_snapshot_defaults_id_and_created_at() -> None:
 
 
 def test_metric_snapshot_requires_exactly_one_scope_id() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Exactly one of team_id or project_id"):
         _metric_snapshot(team_id=None)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Exactly one of team_id or project_id"):
         _metric_snapshot(project_id=uuid4())
 
 
@@ -52,7 +50,7 @@ def test_forecast_snapshot_requires_exactly_one_scope_id() -> None:
     )
 
     assert snapshot.team_id is None
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Exactly one of team_id or project_id"):
         ForecastSnapshot(
             captured_on=date(2026, 7, 11),
             window_days=90,

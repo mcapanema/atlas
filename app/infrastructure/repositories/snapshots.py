@@ -17,9 +17,7 @@ class MetricSnapshotModel(Base):
         # NULLs are distinct from each other in both SQLite and PostgreSQL, so
         # a project-scoped row (team_id NULL) never collides on the team index
         # and vice versa — each index only guards its own scope's rows.
-        Index(
-            "ix_metric_snapshots_team_captured_on", "team_id", "captured_on", unique=True
-        ),
+        Index("ix_metric_snapshots_team_captured_on", "team_id", "captured_on", unique=True),
         Index(
             "ix_metric_snapshots_project_captured_on",
             "project_id",
@@ -84,9 +82,7 @@ class MetricSnapshotModel(Base):
 class ForecastSnapshotModel(Base):
     __tablename__ = "forecast_snapshots"
     __table_args__ = (
-        Index(
-            "ix_forecast_snapshots_team_captured_on", "team_id", "captured_on", unique=True
-        ),
+        Index("ix_forecast_snapshots_team_captured_on", "team_id", "captured_on", unique=True),
         Index(
             "ix_forecast_snapshots_project_captured_on",
             "project_id",
@@ -161,9 +157,7 @@ class SqlAlchemyMetricSnapshotRepository:
         team_id: UUID | None = None,
         project_id: UUID | None = None,
     ) -> bool:
-        stmt = select(MetricSnapshotModel.id).where(
-            MetricSnapshotModel.captured_on == captured_on
-        )
+        stmt = select(MetricSnapshotModel.id).where(MetricSnapshotModel.captured_on == captured_on)
         if team_id is not None:
             stmt = stmt.where(MetricSnapshotModel.team_id == team_id)
         if project_id is not None:

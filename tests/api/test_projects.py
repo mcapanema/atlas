@@ -14,9 +14,7 @@ async def test_list_projects_empty(client: AsyncClient) -> None:
 
 async def test_create_then_list_project(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    create = await client.post(
-        "/api/projects", json={"team_id": team_id, "name": "Checkout"}
-    )
+    create = await client.post("/api/projects", json={"team_id": team_id, "name": "Checkout"})
 
     assert create.status_code == 201
     body = create.json()
@@ -28,9 +26,7 @@ async def test_create_then_list_project(client: AsyncClient) -> None:
 
 
 async def test_create_rejects_empty_name(client: AsyncClient) -> None:
-    response = await client.post(
-        "/api/projects", json={"team_id": str(uuid4()), "name": ""}
-    )
+    response = await client.post("/api/projects", json={"team_id": str(uuid4()), "name": ""})
 
     assert response.status_code == 422
 

@@ -8,6 +8,7 @@ import {
   mockMetricsFetch,
   statesFixture,
   teamFixture,
+  requestUrl,
 } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ExecutiveDashboardPage } from "./ExecutiveDashboardPage";
@@ -172,7 +173,7 @@ describe("ExecutiveDashboardPage", () => {
 
   it("names the teams whose data failed and offers a retry", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
       if (url.startsWith("/api/work-items/states")) {
         return Promise.resolve(jsonResponse(statesFixture));
@@ -180,9 +181,18 @@ describe("ExecutiveDashboardPage", () => {
       // Every query for the second team fails; the first team stays healthy.
       if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
       if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
-      if (url.startsWith("/api/metrics/health")) return Promise.resolve(jsonResponse(healthFixture));
+      if (url.startsWith("/api/metrics/health"))
+        return Promise.resolve(jsonResponse(healthFixture));
       if (url.startsWith("/api/forecasts/accuracy")) {
-        return Promise.resolve(jsonResponse({ evaluated: 0, pending: 0, p50_hit_rate: null, p85_hit_rate: null, mean_abs_error_days: null }));
+        return Promise.resolve(
+          jsonResponse({
+            evaluated: 0,
+            pending: 0,
+            p50_hit_rate: null,
+            p85_hit_rate: null,
+            mean_abs_error_days: null,
+          }),
+        );
       }
       return Promise.resolve(jsonResponse(metricsFixture));
     });
@@ -206,7 +216,7 @@ describe("ExecutiveDashboardPage", () => {
   it("re-skeletons failed cells while a retry is in flight", async () => {
     let failedOnce = false;
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/work-items/states")) {
         return Promise.resolve(jsonResponse(statesFixture));
@@ -217,8 +227,17 @@ describe("ExecutiveDashboardPage", () => {
         failedOnce = true;
         return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
       }
-      if (url.startsWith("/api/metrics/health")) return Promise.resolve(jsonResponse(healthFixture));
-      return Promise.resolve(jsonResponse({ evaluated: 0, pending: 0, p50_hit_rate: null, p85_hit_rate: null, mean_abs_error_days: null }));
+      if (url.startsWith("/api/metrics/health"))
+        return Promise.resolve(jsonResponse(healthFixture));
+      return Promise.resolve(
+        jsonResponse({
+          evaluated: 0,
+          pending: 0,
+          p50_hit_rate: null,
+          p85_hit_rate: null,
+          mean_abs_error_days: null,
+        }),
+      );
     });
 
     renderWithClient(<ExecutiveDashboardPage />);
@@ -232,7 +251,7 @@ describe("ExecutiveDashboardPage", () => {
 
   it("shows resolved figures instead of skeletons while other queries still load", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/metrics?")) return Promise.resolve(jsonResponse(metricsFixture));
       if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
@@ -278,15 +297,13 @@ describe("ExecutiveDashboardPage", () => {
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
-    const flat = await screen.findByLabelText(
-      "throughput unchanged versus prior 30-day window",
-    );
+    const flat = await screen.findByLabelText("throughput unchanged versus prior 30-day window");
     expect(flat.className).toContain("delta--flat");
   });
 
   it("renders skeletons, not em dashes, while metrics are in flight", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       return new Promise(() => {}); // every metric query stays pending
     });
@@ -376,7 +393,7 @@ describe("ExecutiveDashboardPage", () => {
       expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 90 days/),
     );
 
-    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    const urls = vi.mocked(fetch).mock.calls.map((call) => requestUrl(call[0]));
     const flowUrl = urls.find((url) => url.startsWith("/api/metrics?"));
     expect(flowUrl).toContain("window_days=90");
     expect(flowUrl).toContain("exclude_states=canceled");
@@ -395,10 +412,10 @@ describe("ExecutiveDashboardPage", () => {
     await waitFor(() =>
       expect(document.querySelector(".page-asof")).toHaveTextContent(/Last 90 days/),
     );
-    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
-    expect(urls.some((url) => url.startsWith("/api/metrics?") && url.includes("window_days=90"))).toBe(
-      true,
-    );
+    const urls = vi.mocked(fetch).mock.calls.map((call) => requestUrl(call[0]));
+    expect(
+      urls.some((url) => url.startsWith("/api/metrics?") && url.includes("window_days=90")),
+    ).toBe(true);
   });
 
   it("hides delta chips when filters are not the snapshot baseline", async () => {

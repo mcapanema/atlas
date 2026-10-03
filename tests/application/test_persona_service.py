@@ -43,7 +43,8 @@ async def test_add_guidance_increments_versions() -> None:
 
     assert (first.version, second.version) == (1, 2)
     active = await service.active_guidance(Persona.AGILE_COACH)
-    assert active is not None and active.guidance == "Lead with WIP."
+    assert active is not None
+    assert active.guidance == "Lead with WIP."
     assert [g.version for g in await service.list_guidance(Persona.AGILE_COACH)] == [2, 1]
 
 
@@ -86,9 +87,7 @@ async def test_add_guidance_honors_explicit_created_at() -> None:
     service, _, _ = _service()
     watermark = _T0 + timedelta(hours=2)
 
-    guidance = await service.add_guidance(
-        Persona.AGILE_COACH, "Be concise.", created_at=watermark
-    )
+    guidance = await service.add_guidance(Persona.AGILE_COACH, "Be concise.", created_at=watermark)
 
     assert guidance.created_at == watermark
 

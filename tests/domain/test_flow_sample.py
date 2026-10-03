@@ -247,7 +247,8 @@ def test_restart_after_cancel_reopens_and_a_second_cancel_closes_again() -> None
         ]
     )
 
-    assert reopened is not None and recanceled is not None
+    assert reopened is not None
+    assert recanceled is not None
     assert reopened.canceled is False
     assert reopened.stopped_at is None
     assert recanceled.canceled is True

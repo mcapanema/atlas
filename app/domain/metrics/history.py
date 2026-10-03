@@ -47,9 +47,7 @@ def compute_flow_history(
     """Compute chart series for the window (now - window_days, now]."""
     window_start = now - timedelta(days=window_days)
     samples = [
-        sample
-        for stream in event_streams
-        if (sample := derive_flow_sample(stream)) is not None
+        sample for stream in event_streams if (sample := derive_flow_sample(stream)) is not None
     ]
     # The freshest thing we know about this scope. Events are append-only and
     # recorded_at is stamped on ingest, so the newest one dates the last sync

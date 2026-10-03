@@ -5,10 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { useTeams } from "../api/teams";
 import { FlowDashboard } from "../components/FlowDashboard";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
-import {
-  applyFiltersToSearchParams,
-  filtersFromSearchParams,
-} from "../lib/metricsFilters";
+import { applyFiltersToSearchParams, filtersFromSearchParams } from "../lib/metricsFilters";
 import type { MetricsFilters } from "../api/metrics";
 
 export function TeamDashboardPage() {

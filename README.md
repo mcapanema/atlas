@@ -120,7 +120,7 @@ restarts in the `atlas-data` Docker volume. Stop with `make docker-down`.
 
 ## Option 2: Makefile (native)
 
-Prerequisites: Python 3.13+, `uv`, Node.js LTS, npm.
+Prerequisites: Python 3.13+, `uv`, Node.js (the major in `web/.nvmrc`), npm.
 
 ```bash
 make install   # install backend + frontend dependencies
@@ -170,14 +170,19 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ## Continuous Integration
 
 Every push and pull request runs backend and frontend checks in parallel,
-each split into four phases: test suite, type check, lint, and a dependency
-security audit (`pip-audit` for the backend, `npm audit` for the frontend).
-Run the same checks locally with `make check` (or individually — `make
-test`, `make typecheck`, `make lint`, `make security`).
+each split into four phases: test suite (with coverage floors, and on pull
+requests ≥ 90% coverage of the changed lines), type check,
+lint (including formatting, complexity ceilings, and — on the frontend —
+dead-code detection), and a dependency security audit (`pip-audit` for the
+backend, `npm audit` for the frontend). A ninth check builds the production
+Docker image. Run the same checks locally with `make check` (or
+individually — `make test`, `make typecheck`, `make lint`, `make security`;
+`make format` fixes formatting).
 
 [Dependabot](https://docs.github.com/en/code-security/dependabot) opens
-weekly PRs for outdated backend (`uv`), frontend (`npm`), and GitHub Actions
-dependencies — see `.github/dependabot.yml`.
+weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,
+and Docker base-image dependencies — minor/patch bumps grouped per
+ecosystem — see `.github/dependabot.yml`.
 
 ## Chat access from Claude & ChatGPT (MCP)
 

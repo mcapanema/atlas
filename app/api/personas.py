@@ -21,9 +21,7 @@ async def submit_feedback(
 
 
 @router.get("/{persona}/guidance", response_model=list[PersonaGuidanceRead])
-async def list_guidance(
-    persona: Persona, service: PersonaServiceDep
-) -> list[PersonaGuidanceRead]:
+async def list_guidance(persona: Persona, service: PersonaServiceDep) -> list[PersonaGuidanceRead]:
     versions = await service.list_guidance(persona)
     return [PersonaGuidanceRead.model_validate(g) for g in versions]
 

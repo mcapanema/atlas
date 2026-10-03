@@ -73,7 +73,4 @@ export const palette: Record<ThemeMode, Palette> = {
  */
 export const FONT_UI =
   "'Red Hat Text Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-export const FONT_DISPLAY =
-  "'Red Hat Display Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-export const FONT_MONO =
-  "'Red Hat Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace";
+export const FONT_MONO = "'Red Hat Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace";

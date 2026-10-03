@@ -9,9 +9,10 @@ def test_feedback_defaults_and_validity() -> None:
     )
     assert feedback.comment is None
     assert feedback.created_at.tzinfo is not None
-    assert feedback.id != AdviceFeedback(
-        persona=Persona.AGILE_COACH, rating="up", advice_summary="x"
-    ).id
+    assert (
+        feedback.id
+        != AdviceFeedback(persona=Persona.AGILE_COACH, rating="up", advice_summary="x").id
+    )
 
 
 def test_feedback_rejects_unknown_rating() -> None:
@@ -35,7 +36,5 @@ def test_guidance_rejects_blank_text() -> None:
 
 
 def test_guidance_defaults() -> None:
-    guidance = PersonaGuidance(
-        persona=Persona.DELIVERY_ANALYST, version=1, guidance="Be concise."
-    )
+    guidance = PersonaGuidance(persona=Persona.DELIVERY_ANALYST, version=1, guidance="Be concise.")
     assert guidance.created_at.tzinfo is not None

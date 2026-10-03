@@ -1,0 +1,8 @@
+# Mass-reformat commits, skipped by `git blame` (GitHub reads this file
+# automatically; locally, `make hooks` sets blame.ignoreRevsFile).
+
+# style: apply ruff format repo-wide
+1d01bc907877190a7094ba4b8dcb8a29bbfe38a3
+
+# style: apply prettier to web/ (printWidth 100)
+8333fc8a3142bec8d8c44ed6b8addab559041121

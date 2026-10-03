@@ -15,9 +15,7 @@ const days = [
   { day: "2026-07-01", todo: 2, in_progress: 1, done: 0 },
   { day: "2026-07-02", todo: 1, in_progress: 1, done: 1 },
 ];
-const buckets = [
-  { start: "2026-06-26T00:00:00Z", end: "2026-07-03T00:00:00Z", completed: 3 },
-];
+const buckets = [{ start: "2026-06-26T00:00:00Z", end: "2026-07-03T00:00:00Z", completed: 3 }];
 const dailyBuckets = [
   { start: "2026-07-08T00:00:00Z", end: "2026-07-09T00:00:00Z", completed: 1 },
   { start: "2026-07-09T00:00:00Z", end: "2026-07-10T00:00:00Z", completed: 2 },

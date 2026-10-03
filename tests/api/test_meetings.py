@@ -59,15 +59,11 @@ async def test_prep_409_when_unconfigured(
     client: AsyncClient, settings_env: Callable[..., None]
 ) -> None:
     settings_env(openrouter_api_key="")
-    response = await client.get(
-        f"/api/meetings/prep?team_id={uuid4()}&meeting=daily_standup"
-    )
+    response = await client.get(f"/api/meetings/prep?team_id={uuid4()}&meeting=daily_standup")
     assert response.status_code == 409
 
 
-async def test_prep_requires_exactly_one_scope(
-    client: AsyncClient, test_app: FastAPI
-) -> None:
+async def test_prep_requires_exactly_one_scope(client: AsyncClient, test_app: FastAPI) -> None:
     test_app.dependency_overrides[get_advisor_port] = lambda: FakeMeetingAdvisor()
     response = await client.get("/api/meetings/prep?meeting=daily_standup")
     assert response.status_code == 422
@@ -85,9 +81,7 @@ async def test_prep_unknown_team_is_404_without_llm_call(
 ) -> None:
     fake = FakeMeetingAdvisor()
     test_app.dependency_overrides[get_advisor_port] = lambda: fake
-    response = await client.get(
-        f"/api/meetings/prep?team_id={uuid4()}&meeting=daily_standup"
-    )
+    response = await client.get(f"/api/meetings/prep?team_id={uuid4()}&meeting=daily_standup")
     assert response.status_code == 404
     assert fake.contexts == []  # an unknown scope must not trigger a paid LLM call
 
@@ -96,9 +90,7 @@ async def test_prep_happy_path(client: AsyncClient, test_app: FastAPI) -> None:
     test_app.dependency_overrides[get_advisor_port] = lambda: FakeMeetingAdvisor()
     team_id = await create_team(client)
 
-    response = await client.get(
-        f"/api/meetings/prep?team_id={team_id}&meeting=daily_standup"
-    )
+    response = await client.get(f"/api/meetings/prep?team_id={team_id}&meeting=daily_standup")
 
     assert response.status_code == 200
     body = response.json()
@@ -117,8 +109,7 @@ async def test_prep_forwards_planning_what_ifs_to_the_forecast(
     team_id = await create_team(client)
 
     response = await client.get(
-        f"/api/meetings/prep?team_id={team_id}&meeting=planning"
-        "&remaining=8&target_date=2026-08-01"
+        f"/api/meetings/prep?team_id={team_id}&meeting=planning&remaining=8&target_date=2026-08-01"
     )
 
     assert response.status_code == 200
@@ -139,9 +130,7 @@ async def test_prep_forwards_meeting_persona_guidance(
     reflected = await client.post("/api/personas/daily_standup/reflect")
     assert reflected.status_code == 201
 
-    response = await client.get(
-        f"/api/meetings/prep?team_id={team_id}&meeting=daily_standup"
-    )
+    response = await client.get(f"/api/meetings/prep?team_id={team_id}&meeting=daily_standup")
 
     assert response.status_code == 200
     assert fake.guidance == ["Lead with stuck items."]
@@ -161,9 +150,7 @@ async def test_prep_502_when_advisor_fails(client: AsyncClient, test_app: FastAP
     test_app.dependency_overrides[get_advisor_port] = lambda: FailingAdvisor()
     team_id = await create_team(client)
 
-    response = await client.get(
-        f"/api/meetings/prep?team_id={team_id}&meeting=retrospective"
-    )
+    response = await client.get(f"/api/meetings/prep?team_id={team_id}&meeting=retrospective")
 
     assert response.status_code == 502
     assert "OpenRouter request failed" in response.json()["detail"]

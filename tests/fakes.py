@@ -50,9 +50,7 @@ class InMemoryTeamRepository:
         return self._teams.get(team_id)
 
     async def get_by_external_id(self, external_id: str) -> Team | None:
-        return next(
-            (t for t in self._teams.values() if t.external_id == external_id), None
-        )
+        return next((t for t in self._teams.values() if t.external_id == external_id), None)
 
 
 class InMemoryProjectRepository:
@@ -72,9 +70,7 @@ class InMemoryProjectRepository:
         return self._projects.get(project_id)
 
     async def get_by_external_id(self, external_id: str) -> Project | None:
-        return next(
-            (p for p in self._projects.values() if p.external_id == external_id), None
-        )
+        return next((p for p in self._projects.values() if p.external_id == external_id), None)
 
 
 class InMemoryWorkItemRepository:
@@ -112,18 +108,14 @@ class InMemoryWorkItemRepository:
         items = items[offset:]
         return items if limit is None else items[:limit]
 
-    async def count(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
-    ) -> int:
+    async def count(self, *, team_id: UUID | None = None, project_id: UUID | None = None) -> int:
         return len(await self.list(team_id=team_id, project_id=project_id))
 
     async def get(self, work_item_id: UUID) -> WorkItem | None:
         return self._items.get(work_item_id)
 
     async def get_by_external_id(self, external_id: str) -> WorkItem | None:
-        return next(
-            (i for i in self._items.values() if i.external_id == external_id), None
-        )
+        return next((i for i in self._items.values() if i.external_id == external_id), None)
 
 
 class InMemoryEventRepository:
@@ -152,9 +144,7 @@ class InMemoryEventRepository:
 
     async def get_by_external_id(self, external_id: str) -> Event | None:
         self.single_lookup_calls += 1
-        return next(
-            (e for e in self._events.values() if e.external_id == external_id), None
-        )
+        return next((e for e in self._events.values() if e.external_id == external_id), None)
 
     async def existing_external_ids(self, external_ids: list[str]) -> set[str]:
         self.batch_lookup_calls += 1
@@ -258,20 +248,14 @@ class InMemoryPersonaGuidanceRepository:
 
     async def get_version(self, persona: Persona, version: int) -> PersonaGuidance | None:
         return next(
-            (
-                g
-                for g in self._guidance.values()
-                if g.persona is persona and g.version == version
-            ),
+            (g for g in self._guidance.values() if g.persona is persona and g.version == version),
             None,
         )
 
 
 class InMemoryForecastSnapshotRepository:
     def __init__(self, snapshots: list[ForecastSnapshot] | None = None) -> None:
-        self._snapshots: dict[UUID, ForecastSnapshot] = {
-            s.id: s for s in snapshots or []
-        }
+        self._snapshots: dict[UUID, ForecastSnapshot] = {s.id: s for s in snapshots or []}
 
     async def add(self, snapshot: ForecastSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot

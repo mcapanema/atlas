@@ -124,9 +124,7 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(
-      await screen.findByText("Project Dashboard", {}, { timeout: 5000 }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Project Dashboard", {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it("lists the Meetings entry in the Intelligence group and routes to it", async () => {

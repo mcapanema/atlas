@@ -19,17 +19,21 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     coverage: {
       provider: "v8",
+      // text for the terminal, html for humans, cobertura for diff-cover.
+      reporter: ["text", "html", "cobertura"],
       include: ["src/**"],
       // main.tsx is bootstrap-only (createRoot().render()); test helpers
       // aren't product code.
       exclude: ["src/test/**", "src/**/*.test.*", "src/main.tsx"],
-      // Floors a few points under the 2026-07-11 measurement (97.1% lines,
-      // 93.8% branches, 96.7% funcs) — a regression guard, not a target.
+      // Floors ~1.5–2 points under the 2026-10-02 measurement (99.2% lines,
+      // 98.6% statements, 97.6% funcs, 92.0% branches) — a regression
+      // guard, not a target. Branches stay at 91: they were 91.01% before
+      // the complexity refactor and need real tests, not a padded floor.
       thresholds: {
-        lines: 95,
-        statements: 95,
+        lines: 97,
+        statements: 97,
         branches: 91,
-        functions: 94,
+        functions: 96,
       },
     },
   },

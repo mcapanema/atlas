@@ -15,9 +15,7 @@ class WorkItemModel(Base):
     __tablename__ = "work_items"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
-    team_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("teams.id"), nullable=False, index=True
-    )
+    team_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("teams.id"), nullable=False, index=True)
     project_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("projects.id"), nullable=True, index=True
     )
@@ -104,9 +102,7 @@ class SqlAlchemyWorkItemRepository:
         result = await self._session.execute(query)
         return [model.to_domain() for model in result.scalars()]
 
-    async def count(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
-    ) -> int:
+    async def count(self, *, team_id: UUID | None = None, project_id: UUID | None = None) -> int:
         query = select(func.count()).select_from(WorkItemModel)
         if team_id is not None:
             query = query.where(WorkItemModel.team_id == team_id)

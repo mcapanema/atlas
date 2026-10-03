@@ -12,7 +12,7 @@ def test_source_event_requires_timezone_aware_occurred_at() -> None:
         SourceEvent(
             external_id="h1",
             type=EventType.STARTED,
-            occurred_at=datetime(2026, 7, 1),  # naive on purpose
+            occurred_at=datetime(2026, 7, 1),  # noqa: DTZ001 — naive on purpose
         )
 
 

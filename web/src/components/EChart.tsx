@@ -1,6 +1,11 @@
 import type { EChartsOption } from "echarts";
 import { BarChart, LineChart } from "echarts/charts";
-import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from "echarts/components";
+import {
+  GridComponent,
+  LegendComponent,
+  MarkLineComponent,
+  TooltipComponent,
+} from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsType } from "echarts/core";
 import { LabelLayout } from "echarts/features";

@@ -57,9 +57,7 @@ class SqlAlchemyProjectRepository:
         await self._session.flush()
 
     async def list(self) -> list[Project]:
-        result = await self._session.execute(
-            select(ProjectModel).order_by(ProjectModel.created_at)
-        )
+        result = await self._session.execute(select(ProjectModel).order_by(ProjectModel.created_at))
         return [model.to_domain() for model in result.scalars()]
 
     async def get(self, project_id: UUID) -> Project | None:

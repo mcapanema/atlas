@@ -70,11 +70,7 @@ export interface Pulse {
  * Short-horizon lead-time-P85 pulse: the last `days` of snapshot captures.
  * Null with fewer than two usable points — a one-point "trend" is noise.
  */
-export function leadTimePulse(
-  snapshots: MetricSnapshot[],
-  asOf: string,
-  days = 7,
-): Pulse | null {
+export function leadTimePulse(snapshots: MetricSnapshot[], asOf: string, days = 7): Pulse | null {
   const cutoff = new Date(asOf).getTime() - days * DAY_MS;
   const points = [...snapshots]
     .filter((snapshot) => capturedAt(snapshot) >= cutoff)

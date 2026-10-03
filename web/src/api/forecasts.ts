@@ -46,7 +46,14 @@ export function useForecast(scope: MetricsScope, options: ForecastOptions = {}) 
   if (targetDate) search.set("target_date", targetDate);
   if (remaining !== undefined) search.set("remaining", String(remaining));
   return useQuery({
-    queryKey: ["forecasts", scope, filters?.types, filters?.excludeStates, targetDate ?? null, remaining ?? null],
+    queryKey: [
+      "forecasts",
+      scope,
+      filters?.types,
+      filters?.excludeStates,
+      targetDate ?? null,
+      remaining ?? null,
+    ],
     enabled: params !== null,
     queryFn: () => apiFetch<Forecast>(`/api/forecasts?${search.toString()}`),
     // The `remaining` scenario override changes the query key on every

@@ -5,10 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { useProjects } from "../api/projects";
 import { FlowDashboard } from "../components/FlowDashboard";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
-import {
-  applyFiltersToSearchParams,
-  filtersFromSearchParams,
-} from "../lib/metricsFilters";
+import { applyFiltersToSearchParams, filtersFromSearchParams } from "../lib/metricsFilters";
 import type { MetricsFilters } from "../api/metrics";
 
 export function ProjectDashboardPage() {
@@ -44,11 +41,7 @@ export function ProjectDashboardPage() {
             options={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
           />
           {projectId && (
-            <MetricsFilterBar
-              filters={filters}
-              scope={{ projectId }}
-              onChange={setFilters}
-            />
+            <MetricsFilterBar filters={filters} scope={{ projectId }} onChange={setFilters} />
           )}
         </Space>
         {!projectId && <Alert type="info" message="Select a project to see its dashboard." />}

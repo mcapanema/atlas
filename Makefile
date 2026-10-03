@@ -1,7 +1,10 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install hooks migrate dev test lint typecheck security check build run clean \
+.PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
 	docker-build docker-up docker-down docker-logs
+
+# Base for diff coverage; CI passes the PR's base branch instead.
+DIFF_COVER_BASE ?= origin/main
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -11,8 +14,9 @@ install: ## Install backend and frontend dependencies
 	cd web && npm ci
 	test -f .env || cp .env.example .env
 
-hooks: ## Install git pre-commit hooks (ruff + eslint on staged changes)
+hooks: ## Install pre-commit hooks (ruff, eslint, prettier) + blame-ignore for reformat commits
 	uv run pre-commit install
+	git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 migrate: ## Apply database migrations
 	uv run alembic upgrade head
@@ -23,13 +27,20 @@ dev: ## Run backend + frontend dev servers together (Ctrl+C stops both)
 	(cd web && npm run dev) & \
 	wait
 
-test: ## Run backend and frontend test suites (with coverage gates)
+test: ## Run test suites (coverage floors + >=90% coverage of changed lines vs origin/main)
 	uv run pytest --cov -v
 	cd web && npm run test:coverage
+	uv run diff-cover coverage.xml --compare-branch=$(DIFF_COVER_BASE) --fail-under=90
+	uv run diff-cover web/coverage/cobertura-coverage.xml --compare-branch=$(DIFF_COVER_BASE) --fail-under=90
 
-lint: ## Lint backend and frontend
+lint: ## Lint, format-check, and dead-code-check backend and frontend
 	uv run ruff check .
-	cd web && npm run lint
+	uv run ruff format --check .
+	cd web && npm run lint && npm run format:check && npm run knip
+
+format: ## Auto-format backend (ruff) and frontend (prettier)
+	uv run ruff format .
+	cd web && npm run format
 
 typecheck: ## Type-check backend and frontend
 	uv run mypy

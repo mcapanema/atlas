@@ -49,7 +49,8 @@ async def test_get_by_external_id(session: AsyncSession) -> None:
 
     fetched = await repo.get_by_external_id("lin_i1")
 
-    assert fetched is not None and fetched.id == item.id
+    assert fetched is not None
+    assert fetched.id == item.id
     assert await repo.get_by_external_id("nope") is None
 
 
@@ -116,9 +117,7 @@ async def test_list_states_scopes_to_team_and_project(session: AsyncSession) -> 
     team_id = await _team_id(session)
     other_team_id = await _team_id(session)
     project_id = await _project_id(session, team_id)
-    await repo.add(
-        WorkItem(team_id=team_id, project_id=project_id, title="Scoped", state="review")
-    )
+    await repo.add(WorkItem(team_id=team_id, project_id=project_id, title="Scoped", state="review"))
     await repo.add(WorkItem(team_id=team_id, title="Team only", state="triage"))
     await repo.add(WorkItem(team_id=other_team_id, title="Elsewhere", state="archived"))
 

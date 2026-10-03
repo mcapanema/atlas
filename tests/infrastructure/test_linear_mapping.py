@@ -225,29 +225,19 @@ def test_map_issue_without_completed_at_is_open() -> None:
 def test_map_issue_at_history_cap_logs_truncation_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    entries = [
-        {**_entry("backlog", "started"), "id": f"h{i}"}
-        for i in range(HISTORY_PAGE_SIZE)
-    ]
+    entries = [{**_entry("backlog", "started"), "id": f"h{i}"} for i in range(HISTORY_PAGE_SIZE)]
     node = {**ISSUE_NODE, "history": {"nodes": entries}}
 
-    with caplog.at_level(
-        logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"
-    ):
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
         map_issue(node)
 
-    assert any(
-        "history hit" in r.getMessage() and "i1" in r.getMessage()
-        for r in caplog.records
-    )
+    assert any("history hit" in r.getMessage() and "i1" in r.getMessage() for r in caplog.records)
 
 
 def test_map_issue_below_history_cap_does_not_warn(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(
-        logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"
-    ):
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
         map_issue(ISSUE_NODE)
 
     assert not caplog.records

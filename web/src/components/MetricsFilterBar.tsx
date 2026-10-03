@@ -82,9 +82,7 @@ export function MetricsFilterBar({
         style={{ minWidth: 160 }}
         value={filters.types ?? []}
         options={TYPE_OPTIONS}
-        onChange={(types) =>
-          onChange({ ...filters, types: types.length ? types : undefined })
-        }
+        onChange={(types) => onChange({ ...filters, types: types.length ? types : undefined })}
       />
       <Select
         aria-label="Excluded states"
@@ -97,9 +95,7 @@ export function MetricsFilterBar({
         tokenSeparators={[","]}
         // tags mode: fetched states are suggestions, any typed value still counts
         options={(states.data ?? []).map((state) => ({ value: state, label: state }))}
-        onChange={(next) =>
-          onChange({ ...filters, excludeStates: next.length ? next : undefined })
-        }
+        onChange={(next) => onChange({ ...filters, excludeStates: next.length ? next : undefined })}
       />
     </Space>
   );

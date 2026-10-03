@@ -58,9 +58,7 @@ class SqlAlchemyTeamRepository:
         await self._session.flush()
 
     async def list(self) -> list[Team]:
-        result = await self._session.execute(
-            select(TeamModel).order_by(TeamModel.created_at)
-        )
+        result = await self._session.execute(select(TeamModel).order_by(TeamModel.created_at))
         return [model.to_domain() for model in result.scalars()]
 
     async def get(self, team_id: UUID) -> Team | None:
