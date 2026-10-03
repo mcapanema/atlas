@@ -93,8 +93,18 @@ async def test_metrics_scoped_by_project() -> None:
     events = [
         Event(
             work_item_id=in_project.id,
+            type=EventType.CREATED,
+            occurred_at=NOW - timedelta(days=2),
+        ),
+        Event(
+            work_item_id=in_project.id,
             type=EventType.COMPLETED,
             occurred_at=NOW - timedelta(days=1),
+        ),
+        Event(
+            work_item_id=outside.id,
+            type=EventType.CREATED,
+            occurred_at=NOW - timedelta(days=2),
         ),
         Event(
             work_item_id=outside.id,

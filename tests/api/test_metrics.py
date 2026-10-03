@@ -75,6 +75,14 @@ async def test_metrics_scoped_by_project(client: AsyncClient) -> None:
             "/api/events",
             json={
                 "work_item_id": item["id"],
+                "type": "created",
+                "occurred_at": days_ago(2),
+            },
+        )
+        await client.post(
+            "/api/events",
+            json={
+                "work_item_id": item["id"],
                 "type": "completed",
                 "occurred_at": days_ago(1),
             },
@@ -357,6 +365,14 @@ async def test_history_honors_explicit_period(client: AsyncClient) -> None:
 async def test_flow_history_reports_data_as_of(client: AsyncClient) -> None:
     team_id = await create_team(client)
     item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
+    await client.post(
+        "/api/events",
+        json={
+            "work_item_id": item["id"],
+            "type": "created",
+            "occurred_at": days_ago(3),
+        },
+    )
     await client.post(
         "/api/events",
         json={

@@ -124,3 +124,30 @@ async def test_load_without_filters_is_unchanged() -> None:
     scope = await loader.load(team_id=team_id)
 
     assert scope.item_count == 1
+
+
+async def test_load_leaves_born_done_items_out_of_every_count() -> None:
+    team_id = uuid4()
+    logged, done, still_open = _item(team_id), _item(team_id), _item(team_id)
+    events = [
+        _event(logged, EventType.CREATED, 4),
+        _event(logged, EventType.COMPLETED, 4),  # completed at its creation instant
+        _event(done, EventType.CREATED, 10),
+        _event(done, EventType.COMPLETED, 2),
+        _event(still_open, EventType.CREATED, 5),
+    ]
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([logged, done, still_open]),
+        InMemoryEventRepository(events),
+    )
+
+    scope = await loader.load(team_id=team_id)
+
+    assert scope.item_count == 2
+    assert len(scope.streams) == 2
+    assert [item for item, _ in scope.items_with_samples] == [done, still_open]
+    assert not any(sample.born_done for sample in scope.samples)
+    # Forecast remaining (item_count minus closed) is unchanged: the logged
+    # item was closed anyway.
+    closed = sum(1 for sample in scope.samples if sample.completed_at is not None)
+    assert scope.item_count - closed == 1

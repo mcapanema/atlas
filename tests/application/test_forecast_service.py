@@ -22,7 +22,9 @@ def _event(item: WorkItem, type_: EventType, days_ago: int) -> Event:
 def _steady_service(team_id: UUID) -> ForecastService:
     """Three items, one completed on each of the last three days."""
     items = [_item(team_id) for _ in range(3)]
-    events = [_event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)]
+    events = [_event(item, EventType.CREATED, 10) for item in items] + [
+        _event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)
+    ]
     return ForecastService(InMemoryWorkItemRepository(items), InMemoryEventRepository(events))
 
 
@@ -133,9 +135,14 @@ async def test_forecast_samples_only_the_scopes_observed_history() -> None:
     # teams' forecasts ~3x too pessimistic.
     team_id = uuid4()
     items = [_item(team_id) for _ in range(5)]
-    events = [_event(item, EventType.CREATED, 4) for item in items] + [
-        _event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)
-    ]
+    events = (
+        [_event(item, EventType.CREATED, 4) for item in items]
+        + [
+            _event(item, EventType.STARTED, 4)
+            for item in items  # none born done
+        ]
+        + [_event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)]
+    )
     service = ForecastService(InMemoryWorkItemRepository(items), InMemoryEventRepository(events))
 
     forecast = await service.get_forecast(team_id=team_id, remaining=5, now=NOW)

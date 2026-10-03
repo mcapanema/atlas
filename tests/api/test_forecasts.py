@@ -12,6 +12,14 @@ async def _seed_history(client: AsyncClient, team_id: str) -> None:
         item = (
             await client.post("/api/work-items", json={"team_id": team_id, "title": f"Done {days}"})
         ).json()
+        await client.post(
+            "/api/events",
+            json={
+                "work_item_id": item["id"],
+                "type": "created",
+                "occurred_at": days_ago(10),
+            },
+        )
         response = await client.post(
             "/api/events",
             json={
