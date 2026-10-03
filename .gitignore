@@ -41,3 +41,6 @@ graphify-out
 # Ignore impecable directory
 .impeccable
 node_modules
+
+# Personal Claude Code memory (session tooling)
+CLAUDE.local.md
