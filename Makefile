@@ -55,7 +55,11 @@ security: ## Audit backend and frontend dependencies for known vulnerabilities
 
 check: deps fetch-base lint typecheck test build security docker-build ## Run the full CI gate locally: every ci.yml job (Docker must be running)
 
-deps: web/node_modules/.package-lock.json ## Install exactly what the lockfiles pin, like CI (fails on a stale lockfile)
+deps: web/node_modules/.package-lock.json ## Sync deps to the lockfiles like CI (fails on a stale lockfile; warns on a Node mismatch)
+	@# ponytail: warn, don't fail — no Node version manager is assumed. Upgrade
+	@# path: fail here once everyone runs web/.nvmrc's major (nvm/fnm/volta).
+	@want=$$(tr -d 'v \n' < web/.nvmrc | cut -d. -f1); have=$$(node -p 'process.versions.node.split(".")[0]'); \
+	[ "$$have" = "$$want" ] || echo "warning: Node $$have here but CI uses Node $$want (web/.nvmrc); results can differ."
 	uv sync --locked
 
 # npm's own install marker. npm ci only re-runs when package.json or the
