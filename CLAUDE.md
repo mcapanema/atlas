@@ -61,9 +61,15 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | `make docker-up` | run the whole stack in Docker (`docker-compose.yml`) |
 
 CI (`.github/workflows/ci.yml`) runs the same phases as `make check`, split
-into 8 parallel checks: `{backend, frontend} × {test, typecheck, lint, security}`.
-Dependabot (`.github/dependabot.yml`) opens weekly update PRs for `uv`, `npm`
-(`/web`), and GitHub Actions dependencies.
+into 9 parallel checks: `{backend, frontend} × {test, typecheck, lint, security}`
+plus `docker / build` (the production image, built but not pushed — run it
+locally with `make docker-build`). The `lint` phase also runs the format
+checks and, on the frontend, knip; on pull requests the `test` phase also
+gates diff coverage (≥ 90% of changed lines, per side). Dependabot (`.github/dependabot.yml`)
+opens weekly update PRs for `uv`, `npm` (`/web`), GitHub Actions, and the
+Dockerfile's base images — minor/patch bumps grouped into one PR per
+ecosystem, majors one PR each. Node's major version lives in `web/.nvmrc`
+(CI reads it; the Dockerfile's `node:` tag must match).
 
 ## Configuration
 

@@ -1,16 +1,34 @@
 version: 2
 updates:
+  # Minor/patch bumps arrive as one grouped PR per ecosystem instead of a
+  # dozen PRs that conflict with each other on the lockfile. Majors stay
+  # separate — they're the bumps that break things (e.g. mcp 1.x -> 2.x).
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "npm"
     directory: "/web"
     schedule:
       interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Dockerfile base images (node, python, uv) — pinned tags, so bumpable.
+  - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
