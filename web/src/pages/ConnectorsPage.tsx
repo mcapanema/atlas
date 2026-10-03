@@ -6,12 +6,13 @@ import { useOrganizations } from "../api/organizations";
 
 function SyncSummaryTable({ summary }: { summary: SyncSummary }) {
   return (
-    <Descriptions column={5} bordered size="small">
+    <Descriptions column={6} bordered size="small">
       <Descriptions.Item label="Teams">{summary.teams}</Descriptions.Item>
       <Descriptions.Item label="Projects">{summary.projects}</Descriptions.Item>
       <Descriptions.Item label="Work items">{summary.work_items}</Descriptions.Item>
       <Descriptions.Item label="Events">{summary.events}</Descriptions.Item>
       <Descriptions.Item label="Divergences">{summary.divergences}</Descriptions.Item>
+      <Descriptions.Item label="Deleted">{summary.deleted}</Descriptions.Item>
     </Descriptions>
   );
 }

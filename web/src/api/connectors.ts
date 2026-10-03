@@ -12,6 +12,7 @@ export interface SyncSummary {
   work_items: number;
   events: number;
   divergences: number;
+  deleted: number;
 }
 
 export function useLinearStatus() {
