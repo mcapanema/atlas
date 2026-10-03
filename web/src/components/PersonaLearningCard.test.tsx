@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse } from "../test/fixtures";
+import { jsonResponse, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { PersonaLearningCard } from "./PersonaLearningCard";
 
@@ -23,7 +23,7 @@ function mockGuidanceFetch(
   { reflectStatus = 201 }: { reflectStatus?: number } = {},
 ) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-    const url = String(input);
+    const url = requestUrl(input);
     const method = init?.method ?? "GET";
     if (url === "/api/personas/agile_coach/guidance" && method === "GET") {
       return Promise.resolve(jsonResponse(versions));
@@ -78,7 +78,8 @@ describe("PersonaLearningCard", () => {
       const calls = vi.mocked(globalThis.fetch).mock.calls;
       expect(
         calls.some(
-          (c) => String(c[0]) === "/api/personas/agile_coach/reflect" && c[1]?.method === "POST",
+          (c) =>
+            requestUrl(c[0]) === "/api/personas/agile_coach/reflect" && c[1]?.method === "POST",
         ),
       ).toBe(true);
     });
@@ -107,7 +108,7 @@ describe("PersonaLearningCard", () => {
     await waitFor(() => {
       const calls = vi.mocked(globalThis.fetch).mock.calls;
       expect(
-        calls.some((c) => String(c[0]) === "/api/personas/agile_coach/guidance/1/restore"),
+        calls.some((c) => requestUrl(c[0]) === "/api/personas/agile_coach/guidance/1/restore"),
       ).toBe(true);
     });
   });

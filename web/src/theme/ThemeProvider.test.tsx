@@ -44,7 +44,7 @@ describe("ThemeProvider", () => {
 
   it("ignores garbage in storage and falls back to the OS preference", () => {
     window.localStorage.setItem("atlas-theme", "solarized");
-    const original = window.matchMedia;
+    const original = window.matchMedia.bind(window);
     vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
       ...original(query),
       matches: query === "(prefers-color-scheme: dark)",

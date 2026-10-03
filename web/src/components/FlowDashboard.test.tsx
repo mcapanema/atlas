@@ -16,6 +16,7 @@ import {
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
+  requestUrl,
 } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
@@ -52,7 +53,7 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Completion forecast")).toBeInTheDocument();
     expect(screen.getAllByTestId("echart")).toHaveLength(6);
 
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain("/api/metrics?team_id=team-1");
     expect(urls).toContain("/api/metrics/history?team_id=team-1");
     expect(urls).toContain("/api/metrics/lead-time-distribution?team_id=team-1");
@@ -65,7 +66,7 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ projectId: "proj-1" }} />);
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         "/api/metrics?project_id=proj-1",
       ),
     );

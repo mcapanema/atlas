@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, teamFixture } from "../test/fixtures";
+import { jsonResponse, teamFixture, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { MeetingsPage } from "./MeetingsPage";
 
@@ -21,7 +21,7 @@ const prep = {
 
 function mockFetch({ configured = true } = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
     if (url.startsWith("/api/recommendations/status")) {
       return Promise.resolve(jsonResponse({ configured }));
@@ -76,7 +76,7 @@ describe("MeetingsPage", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
     );
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls.some((u) => u.startsWith("/api/meetings/prep"))).toBe(false);
   });
 
@@ -96,7 +96,7 @@ describe("MeetingsPage", () => {
     expect(screen.getByText("Unstick 'Fix login'")).toBeInTheDocument();
     expect(screen.getByText("needs decision")).toBeInTheDocument();
     expect(screen.getByText("cycle-time p85 = 4.0d")).toBeInTheDocument();
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain(`/api/meetings/prep?team_id=${teamFixture.id}&meeting=daily_standup`);
   });
 
@@ -111,7 +111,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
       ),
     );
@@ -134,7 +134,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=planning&remaining=8&target_date=2026-08-01`,
       ),
     );
@@ -142,7 +142,7 @@ describe("MeetingsPage", () => {
 
   it("surfaces a prep generation failure", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
         return Promise.resolve(jsonResponse({ configured: true }));
@@ -187,9 +187,9 @@ describe("MeetingsPage", () => {
     await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
-      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
-    expect(String(call![0])).toBe("/api/personas/daily_standup/feedback");
-    expect(JSON.parse(String(call![1]!.body))).toEqual({
+      .mock.calls.find((c) => requestUrl(c[0]).endsWith("/feedback"));
+    expect(requestUrl(call![0])).toBe("/api/personas/daily_standup/feedback");
+    expect(JSON.parse(call![1]!.body as string)).toEqual({
       rating: "up",
       comment: null,
       advice_summary: "One item is past the p85 age line.",
@@ -220,7 +220,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
       ),
     );
@@ -240,7 +240,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=21`,
       ),
     );
@@ -264,9 +264,9 @@ describe("MeetingsPage", () => {
     await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
     const call = vi
       .mocked(globalThis.fetch)
-      .mock.calls.find((c) => String(c[0]).endsWith("/feedback"));
-    expect(String(call![0])).toBe("/api/personas/daily_standup/feedback");
-    expect(JSON.parse(String(call![1]!.body))).toEqual({
+      .mock.calls.find((c) => requestUrl(c[0]).endsWith("/feedback"));
+    expect(requestUrl(call![0])).toBe("/api/personas/daily_standup/feedback");
+    expect(JSON.parse(call![1]!.body as string)).toEqual({
       rating: "down",
       comment: null,
       advice_summary: "One item is past the p85 age line.",
@@ -293,7 +293,7 @@ describe("MeetingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 
     await waitFor(() =>
-      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))).toContain(
+      expect(vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))).toContain(
         `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`,
       ),
     );

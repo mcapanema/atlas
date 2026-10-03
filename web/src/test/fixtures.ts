@@ -165,7 +165,7 @@ export const healthFixture = {
 
 export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-    const url = String(input);
+    const url = requestUrl(input);
     for (const [prefix, body] of Object.entries(extraRoutes)) {
       if (url.startsWith(prefix)) return Promise.resolve(jsonResponse(body));
     }
@@ -198,4 +198,14 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
+}
+
+/**
+ * The URL a fetch mock was called with. Plain string coercion happens to work
+ * for the string URLs the app passes today, but yields "[object Request]" the
+ * day a caller passes a Request — which is why typed lint forbids it.
+ */
+export function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  return input instanceof URL ? input.href : input.url;
 }

@@ -5,7 +5,13 @@ vi.mock("./EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { accuracyFixture, forecastFixture, jsonResponse, mockMetricsFetch } from "../test/fixtures";
+import {
+  accuracyFixture,
+  forecastFixture,
+  jsonResponse,
+  mockMetricsFetch,
+  requestUrl,
+} from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ForecastCard } from "./ForecastCard";
 
@@ -26,7 +32,7 @@ describe("ForecastCard", () => {
     expect(screen.getByText("22-07-2026")).toBeInTheDocument(); // P50 finish
     expect(screen.getByText("04-08-2026")).toBeInTheDocument(); // P95 finish
     expect(screen.getByTestId("echart")).toBeInTheDocument();
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain("/api/forecasts?team_id=team-1");
   });
 
@@ -44,7 +50,7 @@ describe("ForecastCard", () => {
 
   it("fetches confidence for a picked target date", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.includes("target_date=2026-09-01")) {
         return Promise.resolve(jsonResponse({ ...forecastFixture, confidence: 0.82 }));
       }
@@ -88,7 +94,7 @@ describe("ForecastCard", () => {
     );
 
     await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
-    const url = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]))[0];
+    const url = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]))[0];
     expect(url).toContain("exclude_states=trash");
     expect(url).not.toContain("start=");
     expect(url).not.toContain("window_days=");
@@ -111,7 +117,7 @@ describe("ForecastCard", () => {
 
   it("re-forecasts against an assumed backlog size and labels it as assumed", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.includes("remaining=40")) {
         return Promise.resolve(jsonResponse({ ...forecastFixture, remaining: 40 }));
       }
@@ -132,7 +138,7 @@ describe("ForecastCard", () => {
   it("keeps the card (and the input's focus target) mounted while a scenario re-forecast is in flight", async () => {
     let resolveScenario: (() => void) | undefined;
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
-      const url = String(input);
+      const url = requestUrl(input);
       if (url.includes("remaining=40")) {
         return new Promise((resolve) => {
           resolveScenario = () => resolve(jsonResponse({ ...forecastFixture, remaining: 40 }));
@@ -163,7 +169,7 @@ describe("ForecastCard", () => {
       .mockImplementation((input) =>
         Promise.resolve(
           jsonResponse(
-            String(input).includes("remaining=40")
+            requestUrl(input).includes("remaining=40")
               ? { ...forecastFixture, remaining: 40 }
               : forecastFixture,
           ),
@@ -185,7 +191,7 @@ describe("ForecastCard", () => {
     fireEvent.blur(input);
 
     await waitFor(() => expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument());
-    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    const urls = fetchSpy.mock.calls.map((c) => requestUrl(c[0]));
     expect(urls.filter((u) => u.includes("remaining="))).toEqual([
       expect.stringContaining("remaining=40"),
     ]);
@@ -195,7 +201,7 @@ describe("ForecastCard", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
       Promise.resolve(
         jsonResponse(
-          String(input).includes("remaining=40")
+          requestUrl(input).includes("remaining=40")
             ? { ...forecastFixture, remaining: 40 }
             : forecastFixture,
         ),

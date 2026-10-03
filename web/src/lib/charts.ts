@@ -323,6 +323,6 @@ export function buildForecastOption(
     grid: { left: 56, right: 16, top: 32, bottom: 56 },
     xAxis: dayAxis(labels, n, "Forecast finish date"),
     yAxis: valueAxis(n, "Simulations"),
-    series: series as EChartsOption["series"],
+    series,
   };
 }

@@ -3,7 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse } from "../test/fixtures";
+import { jsonResponse, requestUrl } from "../test/fixtures";
 import { useWorkItemStates } from "./workItems";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -22,7 +22,7 @@ describe("useWorkItemStates", () => {
     const { result } = renderHook(() => useWorkItemStates({ teamId: "t1" }), { wrapper });
 
     await waitFor(() => expect(result.current.data).toEqual(["backlog", "done"]));
-    expect(String(fetchSpy.mock.calls[0][0])).toBe("/api/work-items/states?team_id=t1");
+    expect(requestUrl(fetchSpy.mock.calls[0][0])).toBe("/api/work-items/states?team_id=t1");
   });
 
   it("requests every state when unscoped", async () => {
@@ -31,6 +31,6 @@ describe("useWorkItemStates", () => {
     const { result } = renderHook(() => useWorkItemStates({}), { wrapper });
 
     await waitFor(() => expect(result.current.data).toEqual(["backlog"]));
-    expect(String(fetchSpy.mock.calls[0][0])).toBe("/api/work-items/states");
+    expect(requestUrl(fetchSpy.mock.calls[0][0])).toBe("/api/work-items/states");
   });
 });

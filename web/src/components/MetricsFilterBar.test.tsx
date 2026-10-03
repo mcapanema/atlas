@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { MetricsFilters } from "../api/metrics";
 import { mockMetricsFetch, statesFixture } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { MetricsFilterBar } from "./MetricsFilterBar";
@@ -22,7 +23,7 @@ describe("MetricsFilterBar", () => {
   });
 
   it("switches to a custom range seeded with the last 30 days", () => {
-    const onChange = vi.fn();
+    const onChange = vi.fn<(filters: MetricsFilters) => void>();
     renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
     openSelect("Analysis period");
     fireEvent.click(screen.getByText("Custom range"));

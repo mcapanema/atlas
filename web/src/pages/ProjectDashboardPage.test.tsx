@@ -5,7 +5,7 @@ vi.mock("../components/EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { jsonResponse, mockMetricsFetch } from "../test/fixtures";
+import { jsonResponse, mockMetricsFetch, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ProjectDashboardPage } from "./ProjectDashboardPage";
 
@@ -31,7 +31,7 @@ describe("ProjectDashboardPage", () => {
     fireEvent.click(await screen.findByTitle("Apollo"));
 
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => String(c[0]));
+    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain(`/api/metrics?project_id=${project.id}`);
   });
 

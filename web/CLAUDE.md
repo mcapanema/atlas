@@ -33,9 +33,16 @@ for server state, React Router for routing.
 - Prettier (`printWidth: 100`, `.prettierrc.json`) formats everything in
   `web/` except Markdown; `npm run format:check` gates CI and pre-commit.
   Run `make format` (or `npm run format`) rather than hand-fixing style.
-- ESLint (flat config, `eslint.config.js`) + `tsc --noEmit` both gate CI —
-  run `npm run lint` and `npm run typecheck` before committing (`make
-  check` runs both, both sides).
+- ESLint (flat config, `eslint.config.js`) is type-aware
+  (`typescript-eslint` `recommendedTypeChecked`) and enforces complexity
+  ceilings on product code: cyclomatic `complexity` 12, `max-depth` 4,
+  `max-params` 4, `max-nested-callbacks` 3, `max-lines-per-function` 120,
+  `max-lines` 400 (tests exempt). Over a ceiling? Extract a subcomponent,
+  hook, or pure helper in `src/lib/` — see `FlowDashboard.tsx` /
+  `lib/teamRows.ts` for the pattern — don't disable the rule. `npm run
+  lint` and `npm run typecheck` both gate CI (`make check` runs both, both
+  sides). Tests read a fetch mock's URL with `requestUrl()` from
+  `src/test/fixtures.ts`, never `String(input)`.
 - `npm run test:coverage` is what `make test` and CI run — v8 coverage
   with thresholds (95% lines/statements, 91% branches, 94% functions,
   configured in `vite.config.ts`; `src/main.tsx` and `src/test/` helpers
