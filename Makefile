@@ -64,7 +64,8 @@ fetch-base: # refresh the diff-coverage base so it measures only this branch's l
 	git fetch --quiet origin
 
 pre-push: ## Full CI gate on exactly the commit being pushed (run by the pre-push hook)
-	@if [ -n "$$PRE_COMMIT_TO_REF" ] && [ "$$PRE_COMMIT_TO_REF" != "$$(git rev-parse HEAD)" ]; then \
+	@# ^{commit} peels an annotated tag to the commit it points at.
+	@if [ -n "$$PRE_COMMIT_TO_REF" ] && [ "$$(git rev-parse "$$PRE_COMMIT_TO_REF^{commit}")" != "$$(git rev-parse HEAD)" ]; then \
 		echo "pre-push: pushing $$PRE_COMMIT_TO_REF but this checkout is at $$(git rev-parse HEAD)."; \
 		echo "Push from the worktree that has the branch checked out, so the gate checks what you push."; \
 		exit 1; \
