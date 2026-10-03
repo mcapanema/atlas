@@ -298,4 +298,28 @@ describe("MeetingsPage", () => {
       ),
     );
   });
+
+  it("re-arms feedback with an empty comment when a meeting is prepared again", async () => {
+    mockFetch();
+
+    renderPage(`/meetings?team=${teamFixture.id}`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+    await waitFor(() =>
+      expect(screen.getByText("One item is past the p85 age line.")).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByPlaceholderText("Optional comment"), {
+      target: { value: "too generic" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Helpful" }));
+    await waitFor(() => expect(screen.getByText(/Thanks for the feedback/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Optional comment")).toHaveValue(""));
+    expect(screen.queryByText(/Thanks for the feedback/)).not.toBeInTheDocument();
+  });
 });

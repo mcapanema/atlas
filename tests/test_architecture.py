@@ -31,6 +31,12 @@ def _imports(layer_dir: Path) -> list[tuple[str, str]]:
                 base = package.rsplit(".", node.level - 1)[0] if node.level else ""
                 module = ".".join(part for part in (base, node.module) if part)
                 found.append((f"{location}:{node.lineno}", module))
+                # `from app import api` imports the submodule `app.api` too.
+                found.extend(
+                    (f"{location}:{node.lineno}", f"{module}.{a.name}")
+                    for a in node.names
+                    if a.name != "*"
+                )
     return found
 
 
@@ -51,6 +57,7 @@ def test_scanner_reports_function_local_imports(tmp_path: Path) -> None:
     assert sorted(_imports(layer)) == [
         ("domain/leaky.py:1", "json"),
         ("domain/leaky.py:5", "sqlalchemy"),
+        ("domain/leaky.py:5", "sqlalchemy.select"),
     ]
 
 
@@ -62,9 +69,22 @@ def test_scanner_resolves_relative_imports(tmp_path: Path) -> None:
     )
     assert sorted(_imports(layer)) == [
         ("domain/metrics/leaky.py:1", "app.domain.metrics"),
+        ("domain/metrics/leaky.py:1", "app.domain.metrics.stats"),
         ("domain/metrics/leaky.py:2", "app.domain.teams"),
+        ("domain/metrics/leaky.py:2", "app.domain.teams.entities"),
         ("domain/metrics/leaky.py:3", "app.infrastructure"),
+        ("domain/metrics/leaky.py:3", "app.infrastructure.db"),
     ]
+
+
+def test_scanner_reports_layer_imported_via_package_name(tmp_path: Path) -> None:
+    layer = tmp_path / "app" / "infrastructure"
+    layer.mkdir(parents=True)
+    (layer / "leaky.py").write_text("from app import api\nfrom .. import api as sibling\n")
+    leaks = [
+        loc for loc, module in _imports(layer) if _is_under(module, ("app.application", "app.api"))
+    ]
+    assert leaks == ["infrastructure/leaky.py:1", "infrastructure/leaky.py:2"]
 
 
 def test_domain_imports_only_stdlib_and_itself() -> None:

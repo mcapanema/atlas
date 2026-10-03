@@ -28,7 +28,15 @@ updates:
         update-types: ["minor", "patch"]
 
   # Dockerfile base images (node, python, uv) — pinned tags, so bumpable.
+  # Runtime majors (and Python minors) move together with web/.nvmrc and
+  # .python-version, which CI tests against — so Dependabot only does
+  # patch/minor bumps of them here.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

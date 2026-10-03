@@ -25,7 +25,7 @@ export default defineConfig({
       // main.tsx is bootstrap-only (createRoot().render()); test helpers
       // aren't product code.
       exclude: ["src/test/**", "src/**/*.test.*", "src/main.tsx"],
-      // Floors ~1.5 points under the 2026-10-02 measurement (99.2% lines,
+      // Floors ~1.5–2 points under the 2026-10-02 measurement (99.2% lines,
       // 98.6% statements, 97.6% funcs, 92.0% branches) — a regression
       // guard, not a target. Branches stay at 91: they were 91.01% before
       // the complexity refactor and need real tests, not a padded floor.

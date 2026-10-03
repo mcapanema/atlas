@@ -9,10 +9,11 @@ on:
 permissions:
   contents: read
 
-# A new push to a PR supersedes its in-flight run; runs on main always finish.
+# A new push to a PR supersedes its in-flight run. Pushes to main get a
+# unique group (the run id), so no main run is ever cancelled or skipped.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   backend:

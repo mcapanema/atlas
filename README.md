@@ -120,7 +120,7 @@ restarts in the `atlas-data` Docker volume. Stop with `make docker-down`.
 
 ## Option 2: Makefile (native)
 
-Prerequisites: Python 3.13+, `uv`, Node.js LTS, npm.
+Prerequisites: Python 3.13+, `uv`, Node.js (the major in `web/.nvmrc`), npm.
 
 ```bash
 make install   # install backend + frontend dependencies

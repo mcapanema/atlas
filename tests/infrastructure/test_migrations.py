@@ -44,7 +44,8 @@ def test_every_migration_downgrades_and_reapplies(
 
     A broken downgrade() is otherwise only discovered mid-rollback. Ending on a
     second upgrade also catches a downgrade that leaves residue (an index or
-    table it forgot to drop) which would make the re-upgrade collide.
+    table it forgot to drop) which would make the re-upgrade collide, and a
+    final drift check catches residue that survives the re-upgrade silently.
     """
     db_path = tmp_path / "roundtrip.db"
     monkeypatch.setenv("ATLAS_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
@@ -60,7 +61,10 @@ def test_every_migration_downgrades_and_reapplies(
     engine = create_engine(f"sqlite:///{db_path}")
     try:
         with engine.connect() as connection:
-            revision = MigrationContext.configure(connection).get_current_revision()
+            context = MigrationContext.configure(connection)
+            revision = context.get_current_revision()
+            diff = compare_metadata(context, Base.metadata)
     finally:
         engine.dispose()
     assert revision == ScriptDirectory.from_config(config).get_current_head()
+    assert diff == [], f"Schema drifted after downgrade/re-upgrade:\n{diff}"
