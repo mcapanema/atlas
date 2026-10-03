@@ -73,6 +73,11 @@ pre-push: ## Full CI gate on exactly the commit being pushed (run by the pre-pus
 		echo "pre-push: uncommitted changes would be checked instead of the pushed commit; commit or stash them."; \
 		exit 1; \
 	}
+	@test -z "$$(git ls-files --others --exclude-standard)" || { \
+		echo "pre-push: untracked files would be checked but not pushed; add or remove them:"; \
+		git ls-files --others --exclude-standard; \
+		exit 1; \
+	}
 	$(MAKE) check
 
 build: ## Build the frontend for production (single-service mode)

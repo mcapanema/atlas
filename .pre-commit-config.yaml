@@ -7,7 +7,7 @@
 #   `git push --no-verify` skips it.
 # ponytail: pre-push checks the working tree, guarded to equal the pushed
 # commit (pre-commit stashes unstaged edits first; `make pre-push` refuses
-# staged ones); untracked files still count. Upgrade path if that bites: run
+# staged and untracked ones). Upgrade path if the refusals chafe: run
 # `make check` in a throwaway `git worktree add` of $PRE_COMMIT_TO_REF.
 default_install_hook_types: [pre-commit, pre-push]
 # Hooks without `stages` run at commit time only, not again on push.
