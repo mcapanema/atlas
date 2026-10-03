@@ -9,6 +9,9 @@
 # commit (pre-commit stashes unstaged edits first; `make pre-push` refuses
 # staged and untracked ones). Upgrade path if the refusals chafe: run
 # `make check` in a throwaway `git worktree add` of $PRE_COMMIT_TO_REF.
+# Multi-ref pushes (`git push origin a b`, `--all`): pre-commit runs the
+# hook for the first ref with new commits only; push branches one at a time
+# to gate each.
 default_install_hook_types: [pre-commit, pre-push]
 # Hooks without `stages` run at commit time only, not again on push.
 default_stages: [pre-commit]
