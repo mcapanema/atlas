@@ -305,3 +305,63 @@ def test_stop_landing_after_the_cancel_keeps_the_item_canceled() -> None:
     assert sample is not None
     assert sample.canceled is True
     assert sample.stopped_at == t
+
+
+def test_completed_at_creation_without_a_start_is_born_done() -> None:
+    sample = derive_flow_sample([_event(EventType.CREATED, 1), _event(EventType.COMPLETED, 1)])
+
+    assert sample is not None
+    assert sample.born_done
+    assert sample.completed_at == datetime(2026, 6, 1, tzinfo=UTC)
+
+
+def test_backfilled_created_done_beside_a_later_synthesized_completion_is_born_done() -> None:
+    # A re-sync adds the creation-instant COMPLETED to items that already
+    # carry sync's completedAt-stamped one, a few ms after creation.
+    synthesized = Event(
+        work_item_id=WORK_ITEM_ID,
+        type=EventType.COMPLETED,
+        occurred_at=datetime(2026, 6, 1, 0, 0, 0, 250_000, tzinfo=UTC),
+    )
+    sample = derive_flow_sample(
+        [_event(EventType.CREATED, 1), synthesized, _event(EventType.COMPLETED, 1)]
+    )
+
+    assert sample is not None
+    assert sample.born_done
+
+
+def test_created_done_then_restarted_is_flow_not_born_done() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.COMPLETED, 1),
+            _event(EventType.STARTED, 3, from_state="Done", to_state="In Progress"),
+            _event(EventType.COMPLETED, 5, from_state="In Progress", to_state="Done"),
+        ]
+    )
+
+    assert sample is not None
+    assert not sample.born_done
+    assert sample.started_at == datetime(2026, 6, 3, tzinfo=UTC)
+    assert sample.completed_at == datetime(2026, 6, 5, tzinfo=UTC)
+
+
+def test_completion_after_creation_is_not_born_done() -> None:
+    sample = derive_flow_sample([_event(EventType.CREATED, 1), _event(EventType.COMPLETED, 2)])
+
+    assert sample is not None
+    assert not sample.born_done
+
+
+def test_start_and_completion_at_creation_is_not_born_done() -> None:
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 1),
+            _event(EventType.COMPLETED, 1),
+        ]
+    )
+
+    assert sample is not None
+    assert not sample.born_done
