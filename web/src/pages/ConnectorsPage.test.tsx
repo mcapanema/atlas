@@ -18,7 +18,14 @@ function mockApi({ configured }: { configured: boolean }) {
         },
       ]);
     if (url === "/api/connectors/linear/sync")
-      return jsonResponse({ teams: 1, projects: 2, work_items: 3, events: 42, divergences: 7 });
+      return jsonResponse({
+        teams: 1,
+        projects: 2,
+        work_items: 3,
+        events: 42,
+        divergences: 7,
+        deleted: 9,
+      });
     throw new Error(`Unexpected fetch: ${url}`);
   });
 }
@@ -42,6 +49,8 @@ describe("ConnectorsPage", () => {
     await waitFor(() => expect(screen.getByText("42")).toBeInTheDocument());
     expect(screen.getByText("Divergences")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.getByText("Deleted")).toBeInTheDocument();
+    expect(screen.getByText("9")).toBeInTheDocument();
   });
 
   it("shows setup instructions and disables sync when not configured", async () => {
@@ -111,6 +120,7 @@ describe("ConnectorsPage", () => {
           work_items: 0,
           events: 0,
           divergences: 0,
+          deleted: 0,
         });
       }
       throw new Error(`Unexpected fetch: ${url}`);

@@ -37,6 +37,9 @@ class SyncSummary:
     # Items whose source state said done while their history had no
     # completion event; sync synthesized the terminal event for them.
     divergences: int
+    # Atlas work items (with their events) whose source item is gone —
+    # deleted or trashed upstream (ADR-0009).
+    deleted: int
 
 
 class SyncService:
@@ -45,7 +48,8 @@ class SyncService:
     Everything is matched by external_id: missing entities are created,
     changed ones updated, unchanged ones left alone. Events are immutable —
     insert if absent, never update. Running sync twice in a row is a no-op.
-    Projects and work items whose team can't be resolved are skipped. When
+    Work items the source no longer returns are deleted with their events
+    (ADR-0009). Projects and work items whose team can't be resolved are skipped. When
     no organization_id is given, sync reuses the single existing
     organization or creates one named after the source workspace.
     """
@@ -71,23 +75,25 @@ class SyncService:
         logger.info("Sync started for organization %s", resolved)
         teams = await self._sync_teams(resolved)
         projects = await self._sync_projects()
-        work_items, events, divergences = await self._sync_work_items()
+        work_items, events, divergences, deleted = await self._sync_work_items()
         summary = SyncSummary(
             teams=teams,
             projects=projects,
             work_items=work_items,
             events=events,
             divergences=divergences,
+            deleted=deleted,
         )
         logger.info(
             "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
-            "events=%d divergences=%d",
+            "events=%d divergences=%d deleted=%d",
             resolved,
             summary.teams,
             summary.projects,
             summary.work_items,
             summary.events,
             summary.divergences,
+            summary.deleted,
         )
         return summary
 
@@ -176,7 +182,7 @@ class SyncService:
                 written += 1
         return written
 
-    async def _sync_work_items(self) -> tuple[int, int, int]:
+    async def _sync_work_items(self) -> tuple[int, int, int, int]:
         items_written = 0
         events_written = 0
         divergences = 0
@@ -250,7 +256,43 @@ class SyncService:
             written, diverged = await self._sync_events(work_item.id, source, existing_event_eids)
             events_written += written
             divergences += diverged
-        return items_written, events_written, divergences
+        deleted = await self._prune_vanished(sources, teams_by_eid, items_by_eid)
+        return items_written, events_written, divergences, deleted
+
+    async def _prune_vanished(
+        self,
+        sources: list[SourceWorkItem],
+        teams_by_eid: dict[str, Team],
+        items_by_eid: dict[str, WorkItem],
+    ) -> int:
+        """Delete synced items the source no longer returns (deleted or trashed upstream).
+
+        Scoped to teams that returned live work this run: a team the
+        credentials can no longer see returns nothing, which is lost access,
+        not deletion — so an empty fetch deletes nothing. Items without an
+        external_id never came from the source and are never touched.
+
+        ponytail: a node the datasource skips as malformed reads as vanished
+        and is deleted; the next clean sync recreates it from source history.
+        A team whose every issue was deleted upstream keeps its items — prune
+        per team only if that ever shows up.
+        """
+        live = {source.external_id for source in sources}
+        live_team_ids = {
+            teams_by_eid[source.team_external_id].id
+            for source in sources
+            if source.team_external_id in teams_by_eid
+        }
+        vanished = [
+            item.id
+            for external_id, item in items_by_eid.items()
+            if external_id not in live and item.team_id in live_team_ids
+        ]
+        if vanished:
+            await self._events.delete_for_work_items(vanished)
+            await self._work_items.delete(vanished)
+            logger.info("Deleted %d work item(s) gone from the source", len(vanished))
+        return len(vanished)
 
     async def _sync_events(
         self, work_item_id: UUID, source: SourceWorkItem, existing: set[str]

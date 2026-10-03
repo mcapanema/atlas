@@ -349,3 +349,61 @@ def test_map_issue_canceled_at_emits_canceled_keyed_by_time() -> None:
 def test_map_issue_without_canceled_at_emits_no_canceled() -> None:
     for node in (ISSUE_NODE, {**ISSUE_NODE, "canceledAt": None}):
         assert not [e for e in map_issue(node).events if e.type is EventType.CANCELED]
+
+
+def test_map_issue_created_in_a_completed_state_completes_at_creation() -> None:
+    node = {
+        **ISSUE_NODE,
+        "state": {"name": "Done", "type": "completed"},
+        "completedAt": "2026-07-01T10:00:00.120Z",
+        "history": {"nodes": []},
+    }
+
+    item = map_issue(node)
+
+    assert [e.type for e in item.events] == [EventType.CREATED, EventType.COMPLETED]
+    assert item.events[1].external_id == "i1:created-done"
+    assert item.events[1].occurred_at == item.created_at
+
+
+def test_map_issue_created_done_then_moved_within_done_still_completes_at_creation() -> None:
+    node = {
+        **ISSUE_NODE,
+        "state": {"name": "Released", "type": "completed"},
+        "history": {
+            "nodes": [
+                {
+                    "id": "h5",
+                    "createdAt": "2026-07-03T09:00:00.000Z",
+                    "fromState": {"name": "Done", "type": "completed"},
+                    "toState": {"name": "Released", "type": "completed"},
+                }
+            ]
+        },
+    }
+
+    item = map_issue(node)
+
+    completed = [e for e in item.events if e.type is EventType.COMPLETED]
+    assert [e.external_id for e in completed] == ["i1:created-done"]
+
+
+def test_map_issue_created_in_todo_and_completed_later_gets_no_created_done() -> None:
+    node = {
+        **ISSUE_NODE,
+        "state": {"name": "Done", "type": "completed"},
+        "history": {
+            "nodes": [
+                {
+                    "id": "h6",
+                    "createdAt": "2026-07-01T10:00:30.000Z",
+                    "fromState": {"name": "Todo", "type": "unstarted"},
+                    "toState": {"name": "Done", "type": "completed"},
+                }
+            ]
+        },
+    }
+
+    completed = [e for e in map_issue(node).events if e.type is EventType.COMPLETED]
+
+    assert [e.external_id for e in completed] == ["h6"]

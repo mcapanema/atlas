@@ -89,6 +89,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
         "work_items": 1,
         "events": 1,
         "divergences": 0,
+        "deleted": 0,
     }
     teams = (await client.get("/api/teams")).json()
     assert teams[0]["external_id"] == "lt1"
@@ -101,6 +102,7 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
         "work_items": 0,
         "events": 0,
         "divergences": 0,
+        "deleted": 0,
     }
 
 

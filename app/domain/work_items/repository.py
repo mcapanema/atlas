@@ -11,6 +11,10 @@ class WorkItemRepository(Protocol):
 
     async def update(self, work_item: WorkItem) -> None: ...
 
+    async def delete(self, work_item_ids: list[UUID]) -> None:
+        """Delete these work items; unknown ids are ignored. Delete their events first."""
+        ...
+
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
     async def list_states(

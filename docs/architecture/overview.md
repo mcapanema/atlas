@@ -104,7 +104,7 @@ against actual completions. Served from `GET /api/metrics/snapshots`
   `SourceWorkItem`, `SourceEvent` in `source.py`). `SyncService`
   (`app/application/sync/service.py`) upserts snapshots into the domain
   model idempotently, matching on `external_id` — running sync twice is a
-  no-op (ADR-0004).
+  no-op (ADR-0004) — and deletes items the source no longer returns (ADR-0009).
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
 
@@ -125,11 +125,15 @@ and the Connectors page in the frontend. Blocked work is inferred from the
 workspace's blocked label: the datasource resolves label ids whose name
 contains "block" and the mapper turns label add/remove history into
 BLOCKED/UNBLOCKED events, which feed blocked time and flow efficiency.
-Issues created directly in a started-type state start at creation; leaving a
-started state for a non-started, non-completed one emits STOPPED (ends WIP);
-`canceledAt` emits CANCELED (closed undelivered, excluded from WIP and
-forecast remaining, while Done → Canceled stays delivered). Archived issues
-are synced and trashed ones skipped. All of these use derived external ids,
+Issues created directly in a started-type state start at creation, and
+issues created directly in a completed-type state (logged after the fact)
+complete at creation (`:created-done`), which analytics treat as records, not
+flow: `ScopeSampleLoader` leaves these born-done items out of every metric;
+leaving a started state for a non-started, non-completed one emits STOPPED
+(ends WIP); `canceledAt` emits CANCELED (closed undelivered, excluded from WIP
+and forecast remaining, while Done → Canceled stays delivered). Archived issues
+are synced and trashed ones skipped; already-synced issues that are trashed or
+deleted upstream are pruned (ADR-0009). All of these use derived external ids,
 so a re-sync backfills existing data.
 
 ## AI adapter

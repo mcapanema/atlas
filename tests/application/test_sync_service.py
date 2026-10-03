@@ -8,7 +8,7 @@ from app.application.sync.service import SyncService, UnknownOrganizationError
 from app.domain.events.entities import EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
-from app.domain.work_items.entities import WorkItemType
+from app.domain.work_items.entities import WorkItem, WorkItemType
 from tests.fakes import (
     FakeDataSource,
     InMemoryEventRepository,
@@ -531,3 +531,105 @@ async def test_sync_without_org_is_ambiguous_with_multiple_orgs() -> None:
 
     with pytest.raises(ValueError, match="specify organization_id"):
         await harness.service.sync()
+
+
+def _todo(external_id: str, team_external_id: str = "lt1") -> SourceWorkItem:
+    return SourceWorkItem(
+        external_id=external_id,
+        title=f"Item {external_id}",
+        type=WorkItemType.TASK,
+        state="Todo",
+        team_external_id=team_external_id,
+        project_external_id=None,
+        created_at=CREATED_AT,
+        events=(
+            SourceEvent(
+                external_id=f"{external_id}:created",
+                type=EventType.CREATED,
+                occurred_at=CREATED_AT,
+            ),
+        ),
+    )
+
+
+async def test_item_gone_from_source_is_deleted_with_its_events() -> None:
+    source = full_source()
+    source.work_items = [*source.work_items, _todo("li2")]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    gone = await harness.work_items.get_by_external_id("li2")
+    assert gone is not None
+    source.work_items = source.work_items[:1]  # li2 deleted or trashed upstream
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.deleted == 1
+    assert await harness.work_items.get_by_external_id("li2") is None
+    assert await harness.events.list_for_work_item(gone.id) == []
+    assert await harness.work_items.get_by_external_id("li1") is not None
+    assert (await harness.service.sync(org_id)).deleted == 0  # idempotent
+
+
+async def test_empty_fetch_deletes_nothing() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = []
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.deleted == 0
+    assert await harness.work_items.get_by_external_id("li1") is not None
+
+
+async def test_team_with_no_live_items_keeps_its_items() -> None:
+    # Credentials that lost a team's access see none of its issues; that's
+    # lost visibility, not deletion.
+    source = full_source()
+    source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Private")]
+    source.work_items = [*source.work_items, _todo("li2", team_external_id="lt2")]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = source.work_items[:1]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.deleted == 0
+    assert await harness.work_items.get_by_external_id("li2") is not None
+
+
+async def test_items_without_external_id_are_never_pruned() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    team = await harness.teams.get_by_external_id("lt1")
+    assert team is not None
+    manual = WorkItem(team_id=team.id, title="Logged via the events API")
+    await harness.work_items.add(manual)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.deleted == 0
+    assert await harness.work_items.get(manual.id) is not None
+
+
+async def test_item_moved_to_another_team_upstream_is_not_pruned() -> None:
+    source = full_source()
+    source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Mobile")]
+    source.work_items = [*source.work_items, _todo("li2")]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = [source.work_items[0], _todo("li2", team_external_id="lt2")]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.deleted == 0
+    moved = await harness.work_items.get_by_external_id("li2")
+    lt2 = await harness.teams.get_by_external_id("lt2")
+    assert moved is not None
+    assert lt2 is not None
+    assert moved.team_id == lt2.id

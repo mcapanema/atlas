@@ -116,7 +116,7 @@ function FlowStats({ data, statLabel }: { data: FlowMetrics; statLabel: string }
       <StatCard
         title={`Throughput (${statLabel})`}
         value={data.completed}
-        help={`Work items completed in the last ${statLabel}. Counted at the moment an item reached a done state.`}
+        help={`Work items completed in the last ${statLabel}. Counted at the moment an item reached a done state. Items created already done (logged after the fact) are left out of every metric.`}
       />
       <StatCard
         title="WIP (now)"

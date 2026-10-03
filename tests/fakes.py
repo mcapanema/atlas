@@ -83,6 +83,10 @@ class InMemoryWorkItemRepository:
     async def update(self, work_item: WorkItem) -> None:
         self._items[work_item.id] = work_item
 
+    async def delete(self, work_item_ids: list[UUID]) -> None:
+        for work_item_id in work_item_ids:
+            self._items.pop(work_item_id, None)
+
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
     async def list_states(
@@ -128,6 +132,14 @@ class InMemoryEventRepository:
 
     async def add(self, event: Event) -> None:
         self._events[event.id] = event
+
+    async def delete_for_work_items(self, work_item_ids: list[UUID]) -> None:
+        doomed = set(work_item_ids)
+        self._events = {
+            event_id: event
+            for event_id, event in self._events.items()
+            if event.work_item_id not in doomed
+        }
 
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
         return sorted(

@@ -23,8 +23,9 @@ class ScopeSamples:
     """One scope load: per-item event streams, derived samples, item count.
 
     `streams` holds one occurred_at-ordered event list per work item that
-    has events. `item_count` counts every item in the scope, including
-    eventless backlog — it is the forecast's remaining-work denominator.
+    has events, born-done items excluded. `item_count` counts every item in the scope, including
+    eventless backlog but not born-done records — it is the forecast's
+    remaining-work denominator.
     `items_with_samples` pairs each evented item with its derived sample
     (aging WIP needs item identity).
     """
@@ -64,17 +65,22 @@ class ScopeSampleLoader:
             by_item[event.work_item_id].append(event)
         streams: list[list[Event]] = []
         items_with_samples: list[tuple[WorkItem, FlowSample]] = []
+        born_done = 0
         for item in items:
             stream = by_item[item.id]
-            if not stream:
+            sample = derive_flow_sample(stream)
+            if sample is None:
+                continue
+            if sample.born_done:
+                # Logged already done: a record of work, not flow Atlas
+                # observed. It leaves every metric, remaining included.
+                born_done += 1
                 continue
             streams.append(stream)
-            sample = derive_flow_sample(stream)
-            if sample is not None:
-                items_with_samples.append((item, sample))
+            items_with_samples.append((item, sample))
         return ScopeSamples(
             streams=streams,
             samples=[sample for _, sample in items_with_samples],
-            item_count=len(items),
+            item_count=len(items) - born_done,
             items_with_samples=items_with_samples,
         )

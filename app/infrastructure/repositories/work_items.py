@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, func, select
+from sqlalchemy import ForeignKey, String, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -9,6 +9,7 @@ from sqlalchemy.types import Uuid
 from app.domain.work_items.entities import WorkItem, WorkItemType
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
+from app.infrastructure.repositories.batching import chunked
 
 
 class WorkItemModel(Base):
@@ -66,6 +67,10 @@ class SqlAlchemyWorkItemRepository:
     async def update(self, work_item: WorkItem) -> None:
         await self._session.merge(WorkItemModel.from_domain(work_item))
         await self._session.flush()
+
+    async def delete(self, work_item_ids: list[UUID]) -> None:
+        for chunk in chunked(work_item_ids):
+            await self._session.execute(delete(WorkItemModel).where(WorkItemModel.id.in_(chunk)))
 
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.

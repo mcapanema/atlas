@@ -21,6 +21,28 @@ class FlowSample:
     blocked_time: timedelta
     stopped_at: datetime | None = None
     canceled: bool = False
+    born_done: bool = False
+
+
+def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
+    """Created already completed: a CREATED, then a COMPLETED at its instant, never started.
+
+    Connectors stamp an item logged straight into a done state that way (the
+    Linear mapping's `:created-done`). It's a record of work, not flow Atlas
+    observed. The first event must be a CREATED: a completion with no recorded
+    creation means "creation unknown", not "created done". Later completions
+    don't matter: a re-sync backfills the creation-instant one beside sync's
+    completedAt-stamped one.
+    """
+    created = ordered[0]
+    return (
+        created.type is EventType.CREATED
+        and started_at is None
+        and any(
+            event.type is EventType.COMPLETED and event.occurred_at == created.occurred_at
+            for event in ordered
+        )
+    )
 
 
 def derive_flow_sample(events: list[Event]) -> FlowSample | None:
@@ -30,7 +52,8 @@ def derive_flow_sample(events: list[Event]) -> FlowSample | None:
     the last COMPLETED, voided if a later STARTED reopened the item.
     stopped_at is when an uncompleted item first left progress (the first STOPPED
     or CANCELED since its latest STARTED or COMPLETED); canceled marks an item
-    closed without delivery. Blocked time sums blocked periods clipped to the
+    closed without delivery. born_done marks an item created already completed and
+    never started (see _born_done). Blocked time sums blocked periods clipped to the
     cycle — from started_at (or the first event, if never started) to
     completed_at; a still-open period on an uncompleted item is not counted
     (unmeasurable).
@@ -77,6 +100,7 @@ def derive_flow_sample(events: list[Event]) -> FlowSample | None:
         blocked_time=blocked_time,
         stopped_at=stopped_at,
         canceled=canceled,
+        born_done=_born_done(ordered, started_at),
     )
 
 
