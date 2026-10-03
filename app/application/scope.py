@@ -23,7 +23,7 @@ class ScopeSamples:
     """One scope load: per-item event streams, derived samples, item count.
 
     `streams` holds one occurred_at-ordered event list per work item that
-    has events. `item_count` counts every item in the scope, including
+    has events, born-done items excluded. `item_count` counts every item in the scope, including
     eventless backlog but not born-done records — it is the forecast's
     remaining-work denominator.
     `items_with_samples` pairs each evented item with its derived sample

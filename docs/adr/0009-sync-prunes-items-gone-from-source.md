@@ -35,3 +35,7 @@ reports the count as `deleted`.
 - A team whose every issue was deleted upstream keeps its items.
 - Events recorded through the events API on a pruned item are deleted with
   it and cannot be recovered.
+- `external_id` is not vendor-namespaced (ADR-0004), so a work item created
+  through the REST API with an `external_id` in a Linear-synced team is
+  treated as synced and is pruned on the next sync if Linear doesn't return
+  that id. The real fix is ADR-0004's planned `source` column.

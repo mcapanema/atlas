@@ -129,11 +129,11 @@ Issues created directly in a started-type state start at creation, and
 issues created directly in a completed-type state (logged after the fact)
 complete at creation (`:created-done`), which analytics treat as records, not
 flow: `ScopeSampleLoader` leaves these born-done items out of every metric;
-leaving a
-started state for a non-started, non-completed one emits STOPPED (ends WIP);
-`canceledAt` emits CANCELED (closed undelivered, excluded from WIP and
-forecast remaining, while Done → Canceled stays delivered). Archived issues
-are synced and trashed ones skipped. All of these use derived external ids,
+leaving a started state for a non-started, non-completed one emits STOPPED
+(ends WIP); `canceledAt` emits CANCELED (closed undelivered, excluded from WIP
+and forecast remaining, while Done → Canceled stays delivered). Archived issues
+are synced and trashed ones skipped; already-synced issues that are trashed or
+deleted upstream are pruned (ADR-0009). All of these use derived external ids,
 so a re-sync backfills existing data.
 
 ## AI adapter
