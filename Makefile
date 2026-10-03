@@ -28,10 +28,10 @@ test: ## Run backend and frontend test suites (with coverage gates)
 	uv run pytest --cov -v
 	cd web && npm run test:coverage
 
-lint: ## Lint and format-check backend and frontend
+lint: ## Lint, format-check, and dead-code-check backend and frontend
 	uv run ruff check .
 	uv run ruff format --check .
-	cd web && npm run lint && npm run format:check
+	cd web && npm run lint && npm run format:check && npm run knip
 
 format: ## Auto-format backend (ruff) and frontend (prettier)
 	uv run ruff format .

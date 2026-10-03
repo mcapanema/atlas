@@ -6,7 +6,7 @@ for server state, React Router for routing.
 ## Commands (run from `web/`, or via `make <target>` from the repo root)
 
 `npm run dev` · `npm run build` · `npm run test` · `npm run test:coverage` ·
-`npm run typecheck` · `npm run lint` · `npm run format` / `npm run format:check`
+`npm run typecheck` · `npm run lint` · `npm run format` / `npm run format:check` · `npm run knip`
 
 ## Shape
 
@@ -44,11 +44,15 @@ for server state, React Router for routing.
   sides). Tests read a fetch mock's URL with `requestUrl()` from
   `src/test/fixtures.ts`, never `String(input)`.
 - `npm run test:coverage` is what `make test` and CI run — v8 coverage
-  with thresholds (95% lines/statements, 91% branches, 94% functions,
+  with thresholds (97% lines/statements, 91% branches, 96% functions,
   configured in `vite.config.ts`; `src/main.tsx` and `src/test/` helpers
   excluded as non-product code). Plain `npm run test` skips coverage for
   fast local loops. If the gate trips, add tests; only lower a threshold
   with a reviewed justification.
+- `npm run knip` gates CI: no unused files, dependencies, or exports
+  (exports used inside their own file are fine — `knip.json`). Delete dead
+  code rather than ignoring it. `npm run typecheck` also type-checks
+  `vite.config.ts` via `tsc -p tsconfig.node.json`.
 - Tests use Vitest + React Testing Library. Any component using
   `useQuery`/`useMutation` needs a provider wrapper in
   its test — use `renderWithClient(ui, initialEntries?)` from

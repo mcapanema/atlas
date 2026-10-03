@@ -68,6 +68,9 @@ jobs:
       - name: Format check
         if: matrix.phase == 'lint'
         run: npm run format:check
+      - name: Dead code (knip)
+        if: matrix.phase == 'lint'
+        run: npm run knip
       - name: Security audit
         if: matrix.phase == 'security'
         run: npm audit --audit-level=high
