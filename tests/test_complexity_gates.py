@@ -1,11 +1,11 @@
 """Canary for the complexity ceilings CI's lint job enforces.
 
 `ruff check .` gates C901/PLR09xx with the ceilings in pyproject.toml. If a
-rule is dropped from `select` or exempted too broadly, `ruff check` would stay
-green and the gate would vanish silently, so this test lints a grossly
-over-complex function and fails unless every ceiling still fires. It
-deliberately doesn't pin the ceiling values: tuning them is legitimate,
-removing them isn't.
+rule is dropped from `select` or exempted too broadly (per-file-ignores,
+excludes), `ruff check` would stay green and the gate would vanish silently,
+so this test lints a grossly over-complex function and fails unless every
+ceiling still fires. It deliberately doesn't pin the ceiling values: tuning
+them is legitimate, removing them isn't.
 """
 
 import json
@@ -29,6 +29,8 @@ def _ruff_codes(source: str, filename: str) -> set[str]:
             "ruff",
             "check",
             "--exit-zero",
+            # Honor excludes for the stdin path, as `ruff check .` does for files.
+            "--force-exclude",
             "--output-format",
             "json",
             "--stdin-filename",
