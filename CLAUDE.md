@@ -51,16 +51,18 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | `make run` | build frontend + serve single-service production mode |
 | `make docker-up` | run the whole stack in Docker (`docker-compose.yml`) |
 
-On pull requests CI also gates diff coverage: ≥ 90% of changed lines, per
-side. CI and Dependabot are summarized in `README.md`.
+On pull requests CI also gates diff coverage of the changed lines, per side
+(threshold: diff-cover's `--fail-under` in the `Makefile` and `ci.yml`). CI
+and Dependabot are summarized in `README.md`.
 
 ## Non-negotiable constraints
 
 - Domain layer: zero framework imports, stdlib only.
 - Never return an ORM model from an API route — always a Pydantic DTO.
 - `uv run mypy` (strict), `uv run ruff check .`, and `uv run ruff format --check .` must pass.
-- Complexity ceilings are gates, not suggestions: ruff `C901` (max 10),
-  `PLR0911/0912/0913/0915`; ESLint `complexity`/`max-*` in `web/`. Over a
+- Complexity ceilings are gates, not suggestions: ruff `C901` and
+  `PLR0911/0912/0913/0915` (limits in `pyproject.toml`); ESLint
+  `complexity`/`max-*` in `web/` (`eslint.config.js`). Over a
   ceiling? Split the function. A suppression needs a line-level `noqa` /
   `eslint-disable-next-line` with an em-dash reason.
 - New backend code follows TDD: failing test first, then implementation.
@@ -93,8 +95,8 @@ applies everywhere.
 
 ## Keeping CLAUDE.md files current
 
-These files are part of the codebase — fix drift in the same PR that causes
-or notices it.
+These files are part of the codebase: update a CLAUDE.md in the same commit
+as the change that makes it stale, and fix drift you notice in the same PR.
 
 - Place each rule at the lowest level that still triggers when it's
   needed: cross-cutting → this file; one directory's convention → that
@@ -102,8 +104,8 @@ or notices it.
 - Document the pattern plus one exemplar, never a list of concepts or
   services — a new vertical slice updates `docs/architecture/overview.md`,
   not the layer CLAUDE.md files.
-- Point at the source of truth for values (thresholds, ceilings, versions)
-  instead of copying numbers into prose.
+- Point at the source of truth for tunable values (thresholds, ceilings,
+  pinned versions) instead of copying numbers into prose.
 - State what *is*; no "today/later" or phase-relative wording — git history
   holds the past.
 - A new top-level directory with its own conventions gets a CLAUDE.md and a
