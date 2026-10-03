@@ -17,6 +17,9 @@ enterprise chrome, landing-page aesthetics.
 (what `make test`/CI run) · `typecheck` · `lint` · `format` /
 `format:check` · `knip`
 
+Node's major version lives in `.nvmrc` (CI reads it); the root
+`Dockerfile`'s `node:` tag must match — change them together.
+
 ## Shape
 
 - `src/api/<concept>.ts` — a `use<Concept>s()` TanStack Query hook + the
@@ -26,13 +29,15 @@ enterprise chrome, landing-page aesthetics.
   its grouped `NAV` items and in `App.tsx`'s `<Routes>`.
 - `src/theme/` — the design system. `tokens.ts` is the single source of
   truth for both modes' palette and font stacks; `antdTheme.ts` maps it
-  onto AntD; `src/index.css` uses AntD's `--ant-*` variables. Never
-  hard-code a color. Mode comes from `useThemeMode()`.
+  onto AntD; `src/index.css` uses AntD's `--ant-*` variables; mode comes
+  from `useThemeMode()`. Color literals exist only for the palette-validated
+  chart series (`charts.ts`) and first-paint mirrors (`index.css`).
 - Fonts: Red Hat superfamily only (`@fontsource-variable/*` in `main.tsx`)
   — Text for UI, Display for headings, Mono for metric figures.
 - Charts: Apache ECharts — pure option builders in `src/lib/charts.ts`,
-  rendered by `src/components/EChart.tsx`. Read both files' header
-  comments before adding a chart or series type.
+  rendered by `src/components/EChart.tsx`. Read the comments atop
+  `charts.ts` and above `echarts.use(...)` in `EChart.tsx` before adding a
+  chart or series type.
 
 ## Gates
 

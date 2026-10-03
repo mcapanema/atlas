@@ -43,7 +43,7 @@ def test_env_file_is_read(tmp_path: Path) -> None:
 
 
 def test_real_env_var_beats_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The documented contract (root CLAUDE.md): real env vars always win
+    # The documented contract (Settings docstring, app/config.py): real env vars always win
     # over .env. tests/api/test_connectors.py's hermeticity relies on it.
     env_file = tmp_path / ".env"
     env_file.write_text("ATLAS_ADVISOR_MODEL=model-from-dotenv\n")

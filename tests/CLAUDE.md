@@ -51,9 +51,10 @@ test_...` functions need no `@pytest.mark.asyncio` decorator.
 ## Coverage
 
 `make test` and CI run `uv run pytest --cov` (branch coverage over `app/`,
-floor = `fail_under` in `pyproject.toml`), then diff-cover: ≥ 90% of the
-`app/` lines your branch changed vs `origin/main` (locally including
-uncommitted edits) must be executed. Plain `uv run pytest <path>` skips
+floor = `fail_under` in `pyproject.toml`). `make test` and every PR's
+`backend / test` check then run diff-cover: ≥ 90% of the `app/` lines your
+branch changed vs `origin/main` (locally including uncommitted edits) must
+be executed. Plain `uv run pytest <path>` skips
 coverage — use it for TDD loops; the gates would false-fail on partial runs.
 If either gate trips, add tests; only lower `fail_under` with a reviewed
 justification.

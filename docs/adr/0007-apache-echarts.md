@@ -32,4 +32,4 @@ Apache ECharts (canvas renderer), wrapped exactly once:
   `charts.test.ts` asserts on option contents.
 - A new chart type must register its module in `EChart.tsx` — a missing
   registration fails at runtime, not in tests (documented in
-  `web/CLAUDE.md`).
+  `web/src/components/EChart.tsx`).
