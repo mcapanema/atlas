@@ -1,3 +1,15 @@
+// Pure ECharts option builders (no React, no DOM) — charts.test.ts asserts on
+// their output. Conventions:
+// - A new chart or component type must also be registered in
+//   ../components/EChart.tsx, which imports from echarts/core: a missing
+//   registration fails at runtime, not in jsdom tests.
+// - Import only types from "echarts" — never the full runtime package.
+// - Series colors are palette-validated: don't swap them casually, and keep
+//   the CFD's legend + end labels (contrast relief for the aqua/yellow bands).
+// - Neutral furniture (axes, gridlines, legends) comes from ../theme/tokens:
+//   every builder takes a trailing `mode` param (default "light"); callers
+//   pass useThemeMode().mode and include it in their useMemo deps.
+
 import type { EChartsOption } from "echarts";
 
 import { palette, type ThemeMode } from "../theme/tokens";

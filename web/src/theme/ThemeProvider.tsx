@@ -5,6 +5,8 @@ import { buildThemeConfig } from "./antdTheme";
 import { ThemeModeContext } from "./context";
 import type { ThemeMode } from "./tokens";
 
+// web/index.html's inline pre-paint script mirrors this key and initialMode() —
+// change both together.
 const STORAGE_KEY = "atlas-theme";
 
 function initialMode(): ThemeMode {
