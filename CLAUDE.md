@@ -46,7 +46,7 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | `make format` | auto-format backend (ruff) and frontend (prettier) |
 | `make dev` | run backend + frontend dev servers together (Ctrl+C stops both) |
 | `make test` / `make lint` / `make typecheck` / `make security` | run one phase, both sides |
-| `make check` | full local CI gate — mirrors `.github/workflows/ci.yml` |
+| `make check` | full local CI gate — every `.github/workflows/ci.yml` job, incl. lockfile-exact deps + Docker build |
 | `make migrate` | apply Alembic migrations |
 | `make run` | build frontend + serve single-service production mode |
 | `make docker-up` | run the whole stack in Docker (`docker-compose.yml`) |

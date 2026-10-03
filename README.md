@@ -175,9 +175,10 @@ requests ≥ 90% coverage of the changed lines), type check,
 lint (including formatting, complexity ceilings, and — on the frontend —
 dead-code detection), and a dependency security audit (`pip-audit` for the
 backend, `npm audit` for the frontend). A ninth check builds the production
-Docker image. Run the same checks locally with `make check` (or
-individually — `make test`, `make typecheck`, `make lint`, `make security`;
-`make format` fixes formatting).
+Docker image. `make check` runs all nine locally, starting from the same
+lockfile-exact dependencies CI installs (Docker must be running), or run
+them individually: `make test`, `make typecheck`, `make lint`,
+`make security`; `make format` fixes formatting.
 
 [Dependabot](https://docs.github.com/en/code-security/dependabot) opens
 weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,

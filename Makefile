@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
-	docker-build docker-up docker-down docker-logs
+	deps fetch-base docker-build docker-up docker-down docker-logs
 
 # Base for diff coverage; CI passes the PR's base branch instead.
 DIFF_COVER_BASE ?= origin/main
@@ -50,7 +50,18 @@ security: ## Audit backend and frontend dependencies for known vulnerabilities
 	uv run --with pip-audit pip-audit
 	cd web && npm audit --audit-level=high
 
-check: lint typecheck test build security ## Run the full CI gate locally
+check: deps fetch-base lint typecheck test build security docker-build ## Run the full CI gate locally: every ci.yml job (Docker must be running)
+
+deps: web/node_modules/.package-lock.json ## Install exactly what the lockfiles pin, like CI (fails on a stale lockfile)
+	uv sync --locked
+
+# npm's own install marker. npm ci only re-runs when package.json or the
+# lockfile changed since the last install, and it fails if the two disagree.
+web/node_modules/.package-lock.json: web/package.json web/package-lock.json
+	cd web && npm ci
+
+fetch-base: # refresh the diff-coverage base so it measures only this branch's lines
+	git fetch --quiet origin
 
 build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build
