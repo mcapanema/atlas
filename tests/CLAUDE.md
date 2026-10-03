@@ -5,6 +5,10 @@ Mirrors `app/`'s structure 1:1 (`tests/domain/`, `tests/application/`,
 failing test in the matching subdirectory first, watch it fail for the
 right reason, then implement.
 
+Repo-wide gate tests sit at the `tests/` root instead, because they guard
+the codebase or its tooling rather than one layer. Exemplar:
+`test_architecture.py`, which enforces the layer import rules.
+
 ## Fixtures (`conftest.py`)
 
 - `sessionmaker` — a fresh in-memory SQLite engine (`StaticPool`, single

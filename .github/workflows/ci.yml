@@ -48,7 +48,7 @@ jobs:
       - name: Type check
         if: matrix.phase == 'typecheck'
         run: uv run mypy
-      - name: Lint
+      - name: Lint (incl. complexity ceilings)
         if: matrix.phase == 'lint'
         run: uv run ruff check .
       - name: Format check
