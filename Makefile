@@ -1,4 +1,7 @@
 .DEFAULT_GOAL := help
+# Serial even under `make -j`: `deps` (npm ci wipes web/node_modules) must
+# finish before lint/test use it. `dev` parallelizes with shell `&`, not -j.
+.NOTPARALLEL:
 
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
 	deps fetch-base pre-push docker-build docker-up docker-down docker-logs
@@ -52,7 +55,11 @@ security: ## Audit backend and frontend dependencies for known vulnerabilities
 
 check: deps fetch-base lint typecheck test build security docker-build ## Run the full CI gate locally: every ci.yml job (Docker must be running)
 
-deps: web/node_modules/.package-lock.json ## Install exactly what the lockfiles pin, like CI (fails on a stale lockfile)
+deps: web/node_modules/.package-lock.json ## Sync deps to the lockfiles like CI (fails on a stale lockfile; warns on a Node mismatch)
+	@# ponytail: warn, don't fail — no Node version manager is assumed. Upgrade
+	@# path: fail here once everyone runs web/.nvmrc's major (nvm/fnm/volta).
+	@want=$$(tr -d 'v \n' < web/.nvmrc | cut -d. -f1); have=$$(node -p 'process.versions.node.split(".")[0]'); \
+	[ "$$have" = "$$want" ] || echo "warning: Node $$have here but CI uses Node $$want (web/.nvmrc); results can differ."
 	uv sync --locked
 
 # npm's own install marker. npm ci only re-runs when package.json or the
@@ -64,7 +71,8 @@ fetch-base: # refresh the diff-coverage base so it measures only this branch's l
 	git fetch --quiet origin
 
 pre-push: ## Full CI gate on exactly the commit being pushed (run by the pre-push hook)
-	@if [ -n "$$PRE_COMMIT_TO_REF" ] && [ "$$PRE_COMMIT_TO_REF" != "$$(git rev-parse HEAD)" ]; then \
+	@# ^{commit} peels an annotated tag to the commit it points at.
+	@if [ -n "$$PRE_COMMIT_TO_REF" ] && [ "$$(git rev-parse "$$PRE_COMMIT_TO_REF^{commit}")" != "$$(git rev-parse HEAD)" ]; then \
 		echo "pre-push: pushing $$PRE_COMMIT_TO_REF but this checkout is at $$(git rev-parse HEAD)."; \
 		echo "Push from the worktree that has the branch checked out, so the gate checks what you push."; \
 		exit 1; \

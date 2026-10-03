@@ -9,6 +9,9 @@
 # commit (pre-commit stashes unstaged edits first; `make pre-push` refuses
 # staged and untracked ones). Upgrade path if the refusals chafe: run
 # `make check` in a throwaway `git worktree add` of $PRE_COMMIT_TO_REF.
+# Multi-ref pushes (`git push origin a b`, `--all`): pre-commit runs the
+# hook for the first ref with new commits only; push branches one at a time
+# to gate each.
 default_install_hook_types: [pre-commit, pre-push]
 # Hooks without `stages` run at commit time only, not again on push.
 default_stages: [pre-commit]
@@ -43,6 +46,16 @@ repos:
         language: system
         files: ^web/
         exclude: ^web/(package-lock\.json|.*\.md|dist/.*|coverage/.*)$
+      - id: pre-push-installed
+        name: pre-push hook installed
+        # Clones whose hooks predate the pre-push stage still run this file at
+        # commit time; this tells them (once per commit) to run `make hooks`.
+        entry: >-
+          sh -c 'test -f "$(git rev-parse --git-path hooks)/pre-push" ||
+          { echo "pre-push hook missing — run: make hooks"; exit 1; }'
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: make-check
         name: make check (full CI gate)
         entry: make pre-push

@@ -175,12 +175,17 @@ requests ≥ 90% coverage of the changed lines), type check,
 lint (including formatting, complexity ceilings, and — on the frontend —
 dead-code detection), and a dependency security audit (`pip-audit` for the
 backend, `npm audit` for the frontend). A ninth check builds the production
-Docker image. `make check` runs all nine locally, starting from the same
-lockfile-exact dependencies CI installs (Docker must be running), or run
-them individually: `make test`, `make typecheck`, `make lint`,
+Docker image. `make check` runs all nine locally, after syncing
+dependencies to the lockfiles the way CI does (Docker must be running), or
+run them individually: `make test`, `make typecheck`, `make lint`,
 `make security`; `make format` fixes formatting.
 `make hooks` installs a pre-push hook that runs `make check` on the commit
-being pushed (`git push --no-verify` skips it).
+being pushed (`git push --no-verify` skips it). Expect side effects:
+`uv sync --locked` removes packages added ad hoc with `uv pip install`;
+after a package-file change `npm ci` reinstalls `web/node_modules`, which
+breaks a running `make dev` until restarted; and during the hook's run
+(about 40s) pre-commit stashes your unstaged edits, so files briefly look
+reverted — don't edit them until the push finishes.
 
 [Dependabot](https://docs.github.com/en/code-security/dependabot) opens
 weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,
