@@ -4,12 +4,12 @@ version = "0.1.0"
 description = "Atlas — Delivery Intelligence Platform"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.141.1",
-    "uvicorn[standard]>=0.52.1",
-    "sqlalchemy[asyncio]>=2.0.51",
+    "fastapi>=0.142.2",
+    "uvicorn[standard]>=0.54.0",
+    "sqlalchemy[asyncio]>=2.1.1",
     "aiosqlite>=0.20",
     "alembic>=1.20.0",
-    "pydantic>=2.10",
+    "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "httpx>=0.28",
     "mcp>=2.2.0",
