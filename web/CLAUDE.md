@@ -46,9 +46,10 @@ Node's major version lives in `.nvmrc` (CI reads it); the root
   (`eslint.config.js`). Over one? Extract a subcomponent, hook, or pure
   helper in `src/lib/` (pattern: `FlowDashboard.tsx` + `lib/teamRows.ts`) —
   don't disable the rule.
-- Coverage floors live in `vite.config.ts`; PRs also need ≥ 90% of changed
-  `src/` lines covered. If a gate trips, add tests — only lower a floor
-  with a reviewed justification.
+- Coverage floors live in `vite.config.ts`; PRs also gate coverage of the
+  changed `src/` lines (diff-cover's `--fail-under` in the root `Makefile`).
+  If a gate trips, add tests — only lower a floor with a reviewed
+  justification.
 - `knip`: no unused files, dependencies, or exports — delete dead code
   rather than ignoring it.
 
