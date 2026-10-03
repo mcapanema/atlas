@@ -2,7 +2,7 @@
 
 # Pinned so Dependabot's docker ecosystem can bump them (an unpinned tag
 # can't be bumped — or reproduced). Node major tracks web/.nvmrc.
-FROM ghcr.io/astral-sh/uv:0.11.23 AS uv
+FROM ghcr.io/astral-sh/uv:0.12.22 AS uv
 
 # --- Frontend build -----------------------------------------------------
 FROM node:24-alpine AS frontend-build
