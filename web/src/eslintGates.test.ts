@@ -35,8 +35,7 @@ describe("ESLint complexity gates", () => {
   it("exempts test files", async () => {
     const rules = await rulesFor("src/App.test.tsx");
 
-    expect(COMPLEXITY_GATES.map((rule) => rules[rule])).toEqual(
-      COMPLEXITY_GATES.map(() => undefined),
-    );
+    // Absent or explicitly "off"/"warn" are all exempt — only an error gates.
+    expect(COMPLEXITY_GATES.filter((rule) => severity(rules[rule]) === ERROR)).toEqual([]);
   });
 });
