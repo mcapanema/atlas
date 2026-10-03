@@ -23,7 +23,7 @@ connector SDKs. It never imports `app.application` or `app.api`
   Alembic autogenerate and for `tests/conftest.py`'s
   `Base.metadata.create_all`. Forgetting to add the import here means your
   new table silently doesn't exist in tests or migrations.
-- `connectors/<vendor>/` — one package per external system (today:
+- `connectors/<vendor>/` — one package per external system (e.g.
   `linear/`), containing the vendor API client, pure payload→`Source*`
   mapping functions, and the `DeliveryDataSource` adapter. Vendor payloads
   and SDK types must never leave this package.
@@ -37,6 +37,10 @@ connector SDKs. It never imports `app.application` or `app.api`
   production; a no-op when `web/dist` doesn't exist (dev mode). Must be the
   *last* thing registered in `create_app()` — it's a catch-all route and
   would otherwise swallow API 404s.
+
+Changed or added a model? Follow the workflow in `migrations/CLAUDE.md` in
+the same commit — `tests/infrastructure/test_migrations.py` fails on
+model/migration drift.
 
 ## Portability
 

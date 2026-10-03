@@ -51,19 +51,14 @@ test_...` functions need no `@pytest.mark.asyncio` decorator.
 ## Coverage
 
 `make test` and CI run `uv run pytest --cov` (branch coverage over `app/`,
-`fail_under = 95`, configured in `pyproject.toml`). Plain
-`uv run pytest <path>` skips coverage entirely — keep using it for TDD
-loops; the gate would false-fail on partial runs anyway. If the gate
-trips, add tests; only lower `fail_under` with a reviewed justification.
+floor = `fail_under` in `pyproject.toml`), then diff-cover: ≥ 90% of the
+`app/` lines your branch changed vs `origin/main` (locally including
+uncommitted edits) must be executed. Plain `uv run pytest <path>` skips
+coverage — use it for TDD loops; the gates would false-fail on partial runs.
+If either gate trips, add tests; only lower `fail_under` with a reviewed
+justification.
 
-On top of the floor, `make test` and every PR's `backend / test` check run
-**diff coverage**: at least 90% of the `app/` lines your branch changed
-(vs `origin/main`; locally including uncommitted edits) must be executed by
-the suite. The PR's run summary lists the uncovered lines. A diff with no
-coverable lines passes. If it trips, add tests for the new code, don't
-lower the bar.
-
-The suite also runs with `filterwarnings = ["error"]`, `--strict-markers`,
+The suite runs with `filterwarnings = ["error"]`, `--strict-markers`,
 `--strict-config`, and `xfail_strict`: a new warning (usually a dependency
 deprecation) fails the run. Fix the cause; if a third-party warning truly
 can't be fixed yet, add a targeted `ignore:<message>:<Category>` entry to
