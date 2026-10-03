@@ -179,6 +179,8 @@ Docker image. `make check` runs all nine locally, starting from the same
 lockfile-exact dependencies CI installs (Docker must be running), or run
 them individually: `make test`, `make typecheck`, `make lint`,
 `make security`; `make format` fixes formatting.
+`make hooks` installs a pre-push hook that runs `make check` on the commit
+being pushed (`git push --no-verify` skips it).
 
 [Dependabot](https://docs.github.com/en/code-security/dependabot) opens
 weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,

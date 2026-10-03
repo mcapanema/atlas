@@ -1,7 +1,16 @@
-# Fast commit-time gate: lint + format checks only — the checks that have actually
-# bitten us (a migration once shipped with 5 unnoticed lint violations).
-# mypy/pytest deliberately stay out: they belong in `make check`, not in a
-# hook that must stay near-instant. Install with `make hooks`.
+# Two stages, both installed by `make hooks`:
+# - pre-commit (fast): lint + format checks only — the checks that have
+#   actually bitten us (a migration once shipped with 5 unnoticed lint
+#   violations). mypy/pytest stay out so commits stay near-instant.
+# - pre-push (thorough): `make pre-push` runs the full CI gate (`make check`)
+#   on the commit being pushed, so a PR never goes up red.
+#   `git push --no-verify` skips it.
+# ponytail: pre-push checks the working tree, guarded to equal the pushed
+# commit; untracked files still count. Upgrade path if that bites: run
+# `make check` in a throwaway `git worktree add` of $PRE_COMMIT_TO_REF.
+default_install_hook_types: [pre-commit, pre-push]
+# Hooks without `stages` run at commit time only, not again on push.
+default_stages: [pre-commit]
 repos:
   - repo: local
     hooks:
@@ -33,3 +42,10 @@ repos:
         language: system
         files: ^web/
         exclude: ^web/(package-lock\.json|.*\.md|dist/.*|coverage/.*)$
+      - id: make-check
+        name: make check (full CI gate)
+        entry: make pre-push
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true

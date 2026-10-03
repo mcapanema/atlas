@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
-	deps fetch-base docker-build docker-up docker-down docker-logs
+	deps fetch-base pre-push docker-build docker-up docker-down docker-logs
 
 # Base for diff coverage; CI passes the PR's base branch instead.
 DIFF_COVER_BASE ?= origin/main
@@ -14,7 +14,7 @@ install: ## Install backend and frontend dependencies
 	cd web && npm ci
 	test -f .env || cp .env.example .env
 
-hooks: ## Install pre-commit hooks (ruff, eslint, prettier) + blame-ignore for reformat commits
+hooks: ## Install git hooks: pre-commit (ruff, eslint, prettier) + pre-push (make check) + blame-ignore
 	uv run pre-commit install
 	git config blame.ignoreRevsFile .git-blame-ignore-revs
 
@@ -62,6 +62,18 @@ web/node_modules/.package-lock.json: web/package.json web/package-lock.json
 
 fetch-base: # refresh the diff-coverage base so it measures only this branch's lines
 	git fetch --quiet origin
+
+pre-push: ## Full CI gate on exactly the commit being pushed (run by the pre-push hook)
+	@if [ -n "$$PRE_COMMIT_TO_REF" ] && [ "$$PRE_COMMIT_TO_REF" != "$$(git rev-parse HEAD)" ]; then \
+		echo "pre-push: pushing $$PRE_COMMIT_TO_REF but this checkout is at $$(git rev-parse HEAD)."; \
+		echo "Push from the worktree that has the branch checked out, so the gate checks what you push."; \
+		exit 1; \
+	fi
+	@git diff --quiet HEAD || { \
+		echo "pre-push: uncommitted changes would be checked instead of the pushed commit; commit or stash them."; \
+		exit 1; \
+	}
+	$(MAKE) check
 
 build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build

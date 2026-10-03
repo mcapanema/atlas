@@ -42,7 +42,7 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | Command | What it does |
 |---|---|
 | `make install` | install backend + frontend dependencies |
-| `make hooks` | install git pre-commit hooks (ruff check/format, eslint, prettier on staged changes) |
+| `make hooks` | install git hooks: pre-commit (ruff check/format, eslint, prettier on staged changes) + pre-push (`make check` on the pushed commit) |
 | `make format` | auto-format backend (ruff) and frontend (prettier) |
 | `make dev` | run backend + frontend dev servers together (Ctrl+C stops both) |
 | `make test` / `make lint` / `make typecheck` / `make security` | run one phase, both sides |
