@@ -25,16 +25,23 @@ class FlowSample:
 
 
 def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
-    """Created already completed: a COMPLETED at the creation instant, never started.
+    """Created already completed: a CREATED, then a COMPLETED at its instant, never started.
 
     Connectors stamp an item logged straight into a done state that way (the
     Linear mapping's `:created-done`). It's a record of work, not flow Atlas
-    observed. Later completions don't matter: a re-sync backfills the
-    creation-instant one beside sync's completedAt-stamped one.
+    observed. The first event must be a CREATED: a completion with no recorded
+    creation means "creation unknown", not "created done". Later completions
+    don't matter: a re-sync backfills the creation-instant one beside sync's
+    completedAt-stamped one.
     """
-    created_at = ordered[0].occurred_at
-    return started_at is None and any(
-        event.type is EventType.COMPLETED and event.occurred_at == created_at for event in ordered
+    created = ordered[0]
+    return (
+        created.type is EventType.CREATED
+        and started_at is None
+        and any(
+            event.type is EventType.COMPLETED and event.occurred_at == created.occurred_at
+            for event in ordered
+        )
     )
 
 

@@ -315,6 +315,15 @@ def test_completed_at_creation_without_a_start_is_born_done() -> None:
     assert sample.completed_at == datetime(2026, 6, 1, tzinfo=UTC)
 
 
+def test_lone_completion_without_a_created_event_is_not_born_done() -> None:
+    # A completion recorded without its creation: creation unknown, not born done.
+    sample = derive_flow_sample([_event(EventType.COMPLETED, 1)])
+
+    assert sample is not None
+    assert not sample.born_done
+    assert sample.completed_at == datetime(2026, 6, 1, tzinfo=UTC)
+
+
 def test_backfilled_created_done_beside_a_later_synthesized_completion_is_born_done() -> None:
     # A re-sync adds the creation-instant COMPLETED to items that already
     # carry sync's completedAt-stamped one, a few ms after creation.
