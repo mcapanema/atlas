@@ -101,7 +101,7 @@ jobs:
       - name: Type check
         if: matrix.phase == 'typecheck'
         run: npm run typecheck
-      - name: Lint
+      - name: Lint (incl. complexity ceilings)
         if: matrix.phase == 'lint'
         run: npm run lint
       - name: Format check
