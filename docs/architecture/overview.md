@@ -125,7 +125,11 @@ and the Connectors page in the frontend. Blocked work is inferred from the
 workspace's blocked label: the datasource resolves label ids whose name
 contains "block" and the mapper turns label add/remove history into
 BLOCKED/UNBLOCKED events, which feed blocked time and flow efficiency.
-Issues created directly in a started-type state start at creation; leaving a
+Issues created directly in a started-type state start at creation, and
+issues created directly in a completed-type state (logged after the fact)
+complete at creation (`:created-done`), which analytics treat as records, not
+flow: `ScopeSampleLoader` leaves these born-done items out of every metric;
+leaving a
 started state for a non-started, non-completed one emits STOPPED (ends WIP);
 `canceledAt` emits CANCELED (closed undelivered, excluded from WIP and
 forecast remaining, while Done → Canceled stays delivered). Archived issues

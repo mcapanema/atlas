@@ -61,6 +61,42 @@ def _initial_state_type(node: dict[str, Any]) -> str | None:
     return str(from_state["type"]) if from_state else None
 
 
+# Events implied by the state type an issue was created in. Linear's history
+# has no creation entry, so these stamp it: born started → STARTED at
+# creation; born completed (logged after the fact) → COMPLETED at creation,
+# which analytics read as a record, not flow (FlowSample.born_done).
+_BORN_IN = {
+    "started": ("started", EventType.STARTED),
+    "completed": ("created-done", EventType.COMPLETED),
+}
+
+
+def _initial_events(node: dict[str, Any], created_at: datetime) -> list[SourceEvent]:
+    """CREATED, plus the STARTED/COMPLETED its initial state implies.
+
+    Deterministic derived external_ids keep re-syncs idempotent and let a
+    re-sync backfill items synced before an event kind existed.
+    """
+    events = [
+        SourceEvent(
+            external_id=f"{node['id']}:created",
+            type=EventType.CREATED,
+            occurred_at=created_at,
+        )
+    ]
+    implied = _BORN_IN.get(_initial_state_type(node) or "")
+    if implied is not None:
+        suffix, event_type = implied
+        events.append(
+            SourceEvent(
+                external_id=f"{node['id']}:{suffix}",
+                type=event_type,
+                occurred_at=created_at,
+            )
+        )
+    return events
+
+
 def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset()) -> SourceWorkItem:
     created_at = datetime.fromisoformat(node["createdAt"])
     history_nodes = node["history"]["nodes"]
@@ -70,25 +106,7 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
             node["id"],
             HISTORY_PAGE_SIZE,
         )
-    events = [
-        # Linear's history doesn't include creation — synthesize it, with a
-        # deterministic external_id so re-syncs stay idempotent.
-        SourceEvent(
-            external_id=f"{node['id']}:created",
-            type=EventType.CREATED,
-            occurred_at=created_at,
-        )
-    ]
-    if _initial_state_type(node) == "started":
-        # Created straight into a started state: no history entry marks the
-        # start, so it starts at creation.
-        events.append(
-            SourceEvent(
-                external_id=f"{node['id']}:started",
-                type=EventType.STARTED,
-                occurred_at=created_at,
-            )
-        )
+    events = _initial_events(node, created_at)
     for entry in history_nodes:
         events.extend(map_history_entry(entry, blocked_ids))
     canceled_at = node.get("canceledAt")
