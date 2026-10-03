@@ -3,86 +3,68 @@
 React 19 + TypeScript + Vite frontend. Ant Design for UI, TanStack Query
 for server state, React Router for routing.
 
-## Commands (run from `web/`, or via `make <target>` from the repo root)
+**Before any UI/UX design change, read `../PRODUCT.md`.** Register:
+**product** — a sharp, analytical, dense instrument for Engineering Managers
+(references: Linear, Grafana/Datadog, Stripe Dashboard). Numbers are the
+interface; density with hierarchy; honest uncertainty; earned familiarity;
+signal over status. WCAG 2.1 AA; charts/status must not rely on color
+alone. Avoid: stock-AntD admin-template look, executive BI gloss,
+enterprise chrome, landing-page aesthetics.
 
-`npm run dev` · `npm run build` · `npm run test` · `npm run test:coverage` ·
-`npm run typecheck` · `npm run lint` · `npm run format` / `npm run format:check` · `npm run knip`
+## Commands (from `web/`, or `make <target>` from the repo root)
+
+`npm run dev` · `build` · `test` (fast, no coverage) · `test:coverage`
+(what `make test`/CI run) · `typecheck` · `lint` · `format` /
+`format:check` · `knip`
+
+Node's major version lives in `.nvmrc` (CI reads it); the root
+`Dockerfile`'s `node:` tag must match — change them together.
 
 ## Shape
 
 - `src/api/<concept>.ts` — a `use<Concept>s()` TanStack Query hook + the
   concept's TS type, built on `src/api/client.ts`'s `apiFetch<T>(path)`.
-- `src/pages/<Concept>Page.tsx` — one page per concept, an Ant Design
-  component consuming the query hook.
-- `src/components/AppLayout.tsx` — the sidebar shell; add new pages to its
-  grouped `NAV` items and to the `<Routes>` in `App.tsx`.
-- `src/theme/` — the design system: `tokens.ts` (OKLCH-derived palette for
-  both modes + font stacks, single source of truth), `antdTheme.ts`
-  (maps tokens onto AntD's compact/dark algorithms; the final
-  `restoreTypeRamp` mapping step is load-bearing — compact alone rebases
-  the font map on `fontSizeSM`, deriving a 10px app-wide base from the
-  13px seed), `ThemeProvider.tsx` +
-  `context.ts` (`useThemeMode()`; mode persists to `localStorage` under
-  `atlas-theme`, defaults to the OS preference — `index.html` mirrors that
-  logic pre-paint). Global CSS lives in `src/index.css` and references
-  AntD's `--ant-*` CSS variables instead of restating colors; the body
-  bg/ink literals there deliberately mirror `tokens.ts` — change together.
+- `src/pages/<Concept>Page.tsx` — one page per concept.
+- `src/components/AppLayout.tsx` — the sidebar shell; a new page goes in
+  its grouped `NAV` items and in `App.tsx`'s `<Routes>`.
+- `src/theme/` — the design system. `tokens.ts` is the single source of
+  truth for both modes' palette and font stacks; `antdTheme.ts` maps it
+  onto AntD; `src/index.css` uses AntD's `--ant-*` variables; mode comes
+  from `useThemeMode()`. Color literals exist only for the palette-validated
+  chart series (`charts.ts`) and first-paint mirrors (`index.css`).
+- Fonts: Red Hat superfamily only (`@fontsource-variable/*` in `main.tsx`)
+  — Text for UI, Display for headings, Mono for metric figures.
+- Charts: Apache ECharts — pure option builders in `src/lib/charts.ts`,
+  rendered by `src/components/EChart.tsx`. Read the comments atop
+  `charts.ts` and above `echarts.use(...)` in `EChart.tsx` before adding a
+  chart or series type.
 
-## Conventions
+## Gates
 
-- Prettier (`printWidth: 100`, `.prettierrc.json`) formats everything in
-  `web/` except Markdown; `npm run format:check` gates CI and pre-commit.
-  Run `make format` (or `npm run format`) rather than hand-fixing style.
-- ESLint (flat config, `eslint.config.js`) is type-aware
-  (`typescript-eslint` `recommendedTypeChecked`) and enforces complexity
-  ceilings on product code: cyclomatic `complexity` 12, `max-depth` 4,
-  `max-params` 4, `max-nested-callbacks` 3, `max-lines-per-function` 120,
-  `max-lines` 400 (tests exempt). Over a ceiling? Extract a subcomponent,
-  hook, or pure helper in `src/lib/` — see `FlowDashboard.tsx` /
-  `lib/teamRows.ts` for the pattern — don't disable the rule. `npm run
-  lint` and `npm run typecheck` both gate CI (`make check` runs both, both
-  sides). Tests read a fetch mock's URL with `requestUrl()` from
-  `src/test/fixtures.ts`, never `String(input)`.
-- `npm run test:coverage` is what `make test` and CI run — v8 coverage
-  with thresholds (97% lines/statements, 91% branches, 96% functions,
-  configured in `vite.config.ts`; `src/main.tsx` and `src/test/` helpers
-  excluded as non-product code). Plain `npm run test` skips coverage for
-  fast local loops. If the gate trips, add tests; only lower a threshold
-  with a reviewed justification. On top of the floors, `make test` and every PR's `frontend / test` check require ≥ 90% coverage of the changed lines under `src/` (diff-cover over `coverage/cobertura-coverage.xml`).
-- `npm run knip` gates CI: no unused files, dependencies, or exports
-  (exports used inside their own file are fine — `knip.json`). Delete dead
-  code rather than ignoring it. `npm run typecheck` also type-checks
-  `vite.config.ts` via `tsc -p tsconfig.node.json`.
-- Tests use Vitest + React Testing Library. Any component using
-  `useQuery`/`useMutation` needs a provider wrapper in
-  its test — use `renderWithClient(ui, initialEntries?)` from
-  `src/test/render.tsx` (fresh QueryClient with retries off + MemoryRouter);
-  a bare `render()` throws "No QueryClient set". Shared response fixtures
-  (`jsonResponse`, `teamFixture`, `mockMetricsFetch(extraRoutes?)`) live in
-  `src/test/fixtures.ts` — don't re-declare them per file. Ant Design's `Table` needs
-  `window.matchMedia`, polyfilled once in `src/test/setup.ts` — don't
-  re-polyfill per test file.
-- `tsconfig.json` intentionally has no `references` entry to
-  `tsconfig.node.json` — adding one breaks `tsc -b` (TS6306/TS6310, since
-  `tsconfig.node.json` isn't `composite: true`). Don't re-add it without
-  also making `tsconfig.node.json` composite (which then needs
-  `outDir`/`tsBuildInfoFile` to avoid leaking build artifacts into `web/`).
-- Charts are Apache ECharts via `src/components/EChart.tsx` (lifecycle
-  wrapper) + pure option builders in `src/lib/charts.ts`. `EChart.tsx`
-  imports from `echarts/core` and registers only the modules the builders
-  use — a new chart/component type in `charts.ts` needs its module
-  registered in `EChart.tsx` (missing registration fails at runtime, not
-  in jsdom tests). Type-only imports from `"echarts"` are fine; runtime
-  imports of the full `"echarts"` package are not. jsdom has no
-  canvas: tests that render a page containing charts must
+- Formatting is Prettier: run `make format`, never hand-fix style.
+- ESLint (type-aware) enforces complexity ceilings on product code
+  (`eslint.config.js`). Over one? Extract a subcomponent, hook, or pure
+  helper in `src/lib/` (pattern: `FlowDashboard.tsx` + `lib/teamRows.ts`) —
+  don't disable the rule.
+- Coverage floors live in `vite.config.ts`; PRs also need ≥ 90% of changed
+  `src/` lines covered. If a gate trips, add tests — only lower a floor
+  with a reviewed justification.
+- `knip`: no unused files, dependencies, or exports — delete dead code
+  rather than ignoring it.
+
+## Tests
+
+Vitest + React Testing Library.
+
+- A component using `useQuery`/`useMutation` renders via
+  `renderWithClient(ui, initialEntries?)` from `src/test/render.tsx` — a
+  bare `render()` throws "No QueryClient set".
+- Shared fixtures (`jsonResponse`, `teamFixture`,
+  `mockMetricsFetch(extraRoutes?)`, `requestUrl()`) live in
+  `src/test/fixtures.ts` — don't re-declare them per file. Read a fetch
+  mock's URL with `requestUrl()`, never `String(input)`.
+- `window.matchMedia` (needed by AntD's `Table`) is polyfilled once in
+  `src/test/setup.ts` — don't re-polyfill.
+- jsdom has no canvas: a test rendering a page with charts must
   `vi.mock("../components/EChart")`; only `charts.test.ts` asserts on
-  option contents. Series colors in `charts.ts` are palette-validated —
-  don't swap them casually, and keep the CFD's legend + end labels
-  (contrast relief for the aqua/yellow bands). Neutral chart furniture
-  (axes, gridlines, legends) comes from `src/theme/tokens.ts`: every
-  option builder takes a trailing `mode` param (default `"light"`) —
-  components pass `useThemeMode().mode` and include it in `useMemo` deps.
-- Fonts are the Red Hat superfamily (`@fontsource-variable/*`, imported in
-  `main.tsx`): Text for UI (AntD `fontFamily`), Display for headings
-  (element selectors in `index.css`), Mono for metric figures
-  (`.ant-statistic-content`). Don't introduce other families.
+  option contents.

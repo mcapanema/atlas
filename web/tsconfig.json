@@ -1,4 +1,8 @@
 {
+  // No "references" entry to tsconfig.node.json on purpose: it isn't
+  // composite, so a reference breaks `tsc -b` (TS6306/TS6310). Making it
+  // composite also needs outDir/tsBuildInfoFile, or build artifacts leak
+  // into web/.
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,

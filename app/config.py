@@ -4,7 +4,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application configuration, overridable via ATLAS_* environment variables."""
+    """Application configuration, overridable via ATLAS_* environment variables.
+
+    Loaded from real environment variables and (in dev) a gitignored `.env`;
+    a real env var always wins over `.env`. `.env.example` is the source of
+    truth for which variables exist: a new field needs a matching, commented
+    entry there in the same commit.
+    """
 
     model_config = SettingsConfigDict(env_prefix="ATLAS_", env_file=".env", extra="ignore")
 

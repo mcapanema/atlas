@@ -1,43 +1,29 @@
 # app/application/
 
-Use cases / orchestration. Depends on `app/domain/` only — never import
-`app.infrastructure` or a concrete adapter (e.g.
-`SqlAlchemyOrganizationRepository`) here. A service takes the Domain ports
-its use cases need as constructor arguments; the concrete adapters are
-wired in by Presentation (`app/api/deps.py`, the composition root), not
-chosen here. Enforced by `tests/test_architecture.py` (stdlib + `app.domain` + `app.application` only).
+Use cases / orchestration. Imports only stdlib, `app.domain`, and
+`app.application` (`tests/test_architecture.py`) — never `app.infrastructure`
+or a concrete adapter. No FastAPI/Pydantic either: services operate on
+Domain entities, not DTOs.
 
 ## Shape
 
-One subpackage per concept: `<concept>/service.py`, a plain class named
-`<Concept>Service` whose methods are the use cases. Constructor shapes
-vary with the use case — the rule is "the ports this use case needs", not
-"one repository":
+One subpackage per concept: `<concept>/service.py`, a plain
+`<Concept>Service` class whose methods are the use cases. Its constructor
+takes exactly the Domain ports those use cases need — a repository
+`Protocol`, an external-system port, or sibling services it composes. The
+concrete adapters are wired in by `app/api/deps.py` (the composition root),
+never chosen here. Exemplars: `organizations/service.py` (CRUD over one
+repository), `sync/service.py` (repositories + the `DeliveryDataSource`
+port).
 
-- CRUD services take their concept's repository Protocol.
-- `SyncService` takes the repositories it upserts into plus the
-  `DeliveryDataSource` port.
-- `MetricsService` and `ForecastService` take repositories and share the
-  scope-loading assembler below.
-- `AdvisorService` composes sibling services (`MetricsService`,
-  `ForecastService`). The `AdvisorPort` is called at the presentation layer,
-  not in the service.
-- `SnapshotService` composes `MetricsService`/`ForecastService` (like the
-  advisor) plus the team/project repositories and both snapshot ports —
-  it is the only service that writes what the analytics computed.
-
-No FastAPI/Pydantic here either — services operate on Domain entities,
-not DTOs.
-
-One shared exception: `scope.py` holds `ScopeSampleLoader`/`ScopeSamples`,
-the single scope-load assembler the metrics, forecasting, and advisor
-services share. Extend it rather than re-implementing the items+events
-loading loop inside a service — a semantic drift between two copies of
-that loop is how remaining-count bugs hide.
+- Analytics services load a scope's items + events through `scope.py`'s
+  `ScopeSampleLoader` — extend it rather than re-implementing that loop
+  inside a service.
+- `AdvisorService` assembles the advisor's inputs from sibling services;
+  the `AdvisorPort` itself is called in Presentation, not in the service.
 
 ## Testing
 
-Test services against a hand-written in-memory fake implementing the same
-Protocol (the shared fakes live in tests/fakes.py) — never against the real
-SQLAlchemy adapter or a live DB. That's what proves this layer doesn't
-secretly depend on Infrastructure.
+Test services against the shared in-memory fakes in `tests/fakes.py` —
+never the real SQLAlchemy adapter or a live DB. That's what proves this
+layer doesn't secretly depend on Infrastructure.
