@@ -116,12 +116,12 @@ export interface AgingItem {
   title: string;
   state: string;
   age_seconds: number;
-  over_p85: boolean;
+  over_percentile: boolean;
 }
 
 export interface AgingWip {
   now: string;
-  cycle_time_p85_seconds: number | null;
+  cycle_time_percentile_seconds: number | null;
   items: AgingItem[];
   percentile: number;
 }

@@ -309,12 +309,12 @@ class AgingItemRead(BaseModel):
     title: str
     state: str
     age_seconds: float
-    over_p85: bool
+    over_percentile: bool
 
 
 class AgingWipRead(BaseModel):
     now: datetime
-    cycle_time_p85_seconds: float | None
+    cycle_time_percentile_seconds: float | None
     items: list[AgingItemRead]
     percentile: int
 

@@ -112,10 +112,10 @@ def test_aging_flag_and_reference_follow_the_aging_percentile() -> None:
     at_p50 = compute_aging_wip(pairs, now=NOW, aging_percentile=50)
 
     assert at_p85.percentile == 85
-    assert not at_p85.items[0].over_p85  # 6d < p85 7.1d
+    assert not at_p85.items[0].over_percentile  # 6d < p85 7.1d
     assert at_p50.percentile == 50
-    assert at_p50.items[0].over_p85  # 6d > p50 5d
-    assert at_p50.cycle_time_p85 == timedelta(days=5)
+    assert at_p50.items[0].over_percentile  # 6d > p50 5d
+    assert at_p50.cycle_time_percentile == timedelta(days=5)
 
 
 def test_daily_bucket_cut_over_follows_the_rule() -> None:

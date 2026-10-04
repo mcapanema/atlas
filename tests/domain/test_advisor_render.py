@@ -120,7 +120,7 @@ def _aging_item(title: str, days: int, over: bool) -> AgingItem:
         title=title,
         state="In Progress",
         age=timedelta(days=days),
-        over_p85=over,
+        over_percentile=over,
     )
 
 
@@ -138,7 +138,7 @@ def test_render_meeting_context_includes_health_and_aging() -> None:
         ),
         aging=AgingWip(
             now=_NOW,
-            cycle_time_p85=timedelta(days=4),
+            cycle_time_percentile=timedelta(days=4),
             items=(_aging_item("Fix login", 6, True),),
         ),
     )
@@ -158,7 +158,7 @@ def test_render_meeting_context_handles_missing_health_and_empty_aging() -> None
         health=DeliveryHealth(
             window_start=_START, window_end=_NOW, score=None, band=None, components=()
         ),
-        aging=AgingWip(now=_NOW, cycle_time_p85=None, items=()),
+        aging=AgingWip(now=_NOW, cycle_time_percentile=None, items=()),
     )
 
     text = render_meeting_context(context)
@@ -174,7 +174,7 @@ def test_render_meeting_context_caps_aging_at_ten_items() -> None:
         health=DeliveryHealth(
             window_start=_START, window_end=_NOW, score=None, band=None, components=()
         ),
-        aging=AgingWip(now=_NOW, cycle_time_p85=None, items=items),
+        aging=AgingWip(now=_NOW, cycle_time_percentile=None, items=items),
     )
 
     text = render_meeting_context(context)

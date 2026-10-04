@@ -23,19 +23,19 @@ class AgingItem:
     title: str
     state: str
     age: timedelta
-    over_p85: bool
+    over_percentile: bool
 
 
 @dataclass(frozen=True)
 class AgingWip:
     """In-progress items at `now`, oldest first, with the cycle-time reference line.
 
-    `cycle_time_p85` (and AgingItem.over_p85) keep their names for API
-    stability; the percentile is `percentile`, the team's aging_percentile.
+    `cycle_time_percentile` is the completed cycle time at `percentile`, the
+    team's aging_percentile (85 by default).
     """
 
     now: datetime
-    cycle_time_p85: timedelta | None
+    cycle_time_percentile: timedelta | None
     items: tuple[AgingItem, ...]
     percentile: int = 85
 
@@ -49,7 +49,7 @@ def compute_aging_wip(
     """Age of every item in progress at `now` (started, not completed).
 
     The reference line is the scope's completed cycle-time percentile at
-    `aging_percentile`; over_p85 is False everywhere when there is no
+    `aging_percentile`; over_percentile is False everywhere when there is no
     completed history to compare against.
     """
     completed = cycle_times([sample for _, sample in items_with_samples])
@@ -69,8 +69,10 @@ def compute_aging_wip(
                 title=item.title,
                 state=item.state,
                 age=age,
-                over_p85=limit is not None and age > limit,
+                over_percentile=limit is not None and age > limit,
             )
         )
     aging.sort(key=lambda a: a.age, reverse=True)
-    return AgingWip(now=now, cycle_time_p85=limit, items=tuple(aging), percentile=aging_percentile)
+    return AgingWip(
+        now=now, cycle_time_percentile=limit, items=tuple(aging), percentile=aging_percentile
+    )

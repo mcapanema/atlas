@@ -187,8 +187,10 @@ async def get_aging_wip(
     aging = await service.get_aging_wip(scope=samples)
     return AgingWipRead(
         now=aging.now,
-        cycle_time_p85_seconds=(
-            aging.cycle_time_p85.total_seconds() if aging.cycle_time_p85 is not None else None
+        cycle_time_percentile_seconds=(
+            aging.cycle_time_percentile.total_seconds()
+            if aging.cycle_time_percentile is not None
+            else None
         ),
         percentile=aging.percentile,
         items=[
@@ -197,7 +199,7 @@ async def get_aging_wip(
                 title=item.title,
                 state=item.state,
                 age_seconds=item.age.total_seconds(),
-                over_p85=item.over_p85,
+                over_percentile=item.over_percentile,
             )
             for item in aging.items
         ],

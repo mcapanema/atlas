@@ -49,7 +49,8 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
     { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
     {
       title: "",
-      render: (_, item) => (item.over_p85 ? <Tag color="red">over P{percentile}</Tag> : null),
+      render: (_, item) =>
+        item.over_percentile ? <Tag color="red">over P{percentile}</Tag> : null,
     },
   ];
 }

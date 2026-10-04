@@ -138,7 +138,7 @@ export const accuracyFixture = {
 
 export const agingWipFixture = {
   now: "2026-07-10T00:00:00Z",
-  cycle_time_p85_seconds: 259200,
+  cycle_time_percentile_seconds: 259200,
   percentile: 85,
   items: [
     {
@@ -146,7 +146,7 @@ export const agingWipFixture = {
       title: "Stuck item",
       state: "in_progress",
       age_seconds: 518400,
-      over_p85: true,
+      over_percentile: true,
     },
   ],
 };

@@ -195,10 +195,10 @@ async def test_aging_wip_end_to_end(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["cycle_time_p85_seconds"] is None
+    assert body["cycle_time_percentile_seconds"] is None
     (aging_item,) = body["items"]
     assert aging_item["title"] == "Stuck"
-    assert aging_item["over_p85"] is False
+    assert aging_item["over_percentile"] is False
     assert aging_item["age_seconds"] > 5 * 86400
 
 

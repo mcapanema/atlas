@@ -29,11 +29,11 @@ def test_lists_in_progress_items_oldest_first_with_p85_flag() -> None:
 
     aging = compute_aging_wip([young, done, old], now=NOW)
 
-    assert aging.cycle_time_p85 == timedelta(days=7)
+    assert aging.cycle_time_percentile == timedelta(days=7)
     assert [a.title for a in aging.items] == ["Old", "Young"]
     assert aging.items[0].age == timedelta(days=10)
-    assert aging.items[0].over_p85 is True
-    assert aging.items[1].over_p85 is False
+    assert aging.items[0].over_percentile is True
+    assert aging.items[1].over_percentile is False
     assert aging.items[0].work_item_id == old[0].id
 
 
@@ -42,8 +42,8 @@ def test_no_completed_history_means_no_p85_and_no_flags() -> None:
 
     aging = compute_aging_wip([doing], now=NOW)
 
-    assert aging.cycle_time_p85 is None
-    assert aging.items[0].over_p85 is False
+    assert aging.cycle_time_percentile is None
+    assert aging.items[0].over_percentile is False
 
 
 def test_unstarted_and_completed_items_are_excluded() -> None:

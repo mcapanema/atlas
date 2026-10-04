@@ -47,14 +47,14 @@ def _render_aging(aging: dict[str, Any], limit: int = 10) -> str:
     items = aging["items"]
     if not items:
         return "Aging WIP: nothing in progress."
-    p85 = aging["cycle_time_p85_seconds"]
+    p85 = aging["cycle_time_percentile_seconds"]
     header = "Aging WIP"
     if p85 is not None:
         header += f" (cycle-time p85 = {p85 / _DAY_SECONDS:.1f}d)"
     lines = [header + ":"]
     for item in items[:limit]:
         age = item["age_seconds"] / _DAY_SECONDS
-        flag = " [over p85]" if item["over_p85"] else ""
+        flag = " [over p85]" if item["over_percentile"] else ""
         lines.append(f"- {item['title']} — {item['state']}, {age:.1f}d{flag}")
     if len(items) > limit:
         lines.append(f"... and {len(items) - limit} more (use aging_wip for the full list)")

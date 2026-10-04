@@ -399,7 +399,7 @@ def _meeting_context() -> MeetingContext:
                 HealthComponent(name="efficiency", score=42, reason="flow efficiency 42%"),
             ),
         ),
-        aging=AgingWip(now=_NOW, cycle_time_p85=timedelta(days=4), items=()),
+        aging=AgingWip(now=_NOW, cycle_time_percentile=timedelta(days=4), items=()),
     )
 
 

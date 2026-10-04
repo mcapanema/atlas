@@ -89,11 +89,11 @@ def render_meeting_context(context: MeetingContext) -> str:
         blocks.append("Aging WIP: nothing in progress.")
     else:
         header = "Aging WIP"
-        if aging.cycle_time_p85 is not None:
-            header += f" (cycle-time p85 = {_days(aging.cycle_time_p85)})"
+        if aging.cycle_time_percentile is not None:
+            header += f" (cycle-time p85 = {_days(aging.cycle_time_percentile)})"
         lines = [header + ":"]
         for item in aging.items[:_AGING_LIMIT]:
-            flag = " [over p85]" if item.over_p85 else ""
+            flag = " [over p85]" if item.over_percentile else ""
             lines.append(f"- {item.title} — {item.state}, {_days(item.age)}{flag}")
         if len(aging.items) > _AGING_LIMIT:
             lines.append(f"... and {len(aging.items) - _AGING_LIMIT} more")
