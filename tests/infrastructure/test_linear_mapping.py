@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 
 from app.domain.events.entities import EventType
+from app.domain.work_items.entities import StateType
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
-    blocked_label_ids,
     map_history_entry,
     map_issue,
     map_project,
@@ -81,9 +81,6 @@ def test_history_entry_without_to_state_is_skipped() -> None:
     assert map_history_entry(entry) == []
 
 
-BLOCKED_IDS = frozenset({"lbl-blocked"})
-
-
 def _label_entry(added: list[str], removed: list[str]) -> dict[str, Any]:
     return {
         "id": "h9",
@@ -93,76 +90,6 @@ def _label_entry(added: list[str], removed: list[str]) -> dict[str, Any]:
         "addedLabelIds": added,
         "removedLabelIds": removed,
     }
-
-
-def test_blocked_label_added_emits_blocked() -> None:
-    [event] = map_history_entry(_label_entry(["lbl-blocked"], []), BLOCKED_IDS)
-
-    assert event.type is EventType.BLOCKED
-    assert event.external_id == "h9:blocked"
-    assert event.from_state is None
-    assert event.to_state is None
-    assert event.occurred_at == datetime(2026, 7, 2, 11, 0, tzinfo=UTC)
-
-
-def test_blocked_label_removed_emits_unblocked() -> None:
-    [event] = map_history_entry(_label_entry([], ["lbl-blocked"]), BLOCKED_IDS)
-
-    assert event.type is EventType.UNBLOCKED
-    assert event.external_id == "h9:unblocked"
-
-
-def test_non_blocked_label_changes_emit_nothing() -> None:
-    assert map_history_entry(_label_entry(["lbl-bug"], ["lbl-chore"]), BLOCKED_IDS) == []
-
-
-def test_label_changes_without_blocked_ids_emit_nothing() -> None:
-    assert map_history_entry(_label_entry(["lbl-blocked"], [])) == []
-
-
-def test_state_change_and_blocked_label_in_one_entry_emits_both() -> None:
-    entry = {
-        **_entry("backlog", "started", "Backlog", "In Progress"),
-        "addedLabelIds": ["lbl-blocked"],
-    }
-
-    events = map_history_entry(entry, BLOCKED_IDS)
-
-    assert [e.type for e in events] == [EventType.STARTED, EventType.BLOCKED]
-    assert events[0].external_id == "h1"
-    assert events[1].external_id == "h1:blocked"
-
-
-def test_blocked_label_ids_matches_block_substring_case_insensitively() -> None:
-    ids = blocked_label_ids(
-        [
-            {"id": "l1", "name": "Blocked"},
-            {"id": "l2", "name": "blocker: external"},
-            {"id": "l3", "name": "bug"},
-        ]
-    )
-
-    assert ids == {"l1", "l2"}
-
-
-def test_map_issue_threads_blocked_ids_through_history() -> None:
-    node = {
-        **ISSUE_NODE,
-        "history": {
-            "nodes": [
-                *ISSUE_NODE["history"]["nodes"],
-                _label_entry(["lbl-blocked"], []),
-            ]
-        },
-    }
-
-    item = map_issue(node, BLOCKED_IDS)
-
-    assert [e.type for e in item.events] == [
-        EventType.CREATED,
-        EventType.STARTED,
-        EventType.BLOCKED,
-    ]
 
 
 ISSUE_NODE: dict[str, Any] = {
@@ -419,21 +346,122 @@ def test_map_issue_created_in_todo_and_completed_later_gets_no_created_done() ->
     assert [e.external_id for e in completed] == ["h6"]
 
 
-def test_blocked_label_ids_matches_whole_words_only() -> None:
-    ids = blocked_label_ids(
-        [
-            {"id": "l1", "name": "Blocked"},
-            {"id": "l2", "name": "blocker: external"},
-            {"id": "l3", "name": "Blocking"},
-            {"id": "l4", "name": "regras-blockly"},
-            {"id": "l5", "name": "unblock-me-later"},
-            {"id": "l6", "name": "block"},
-            {"id": "l7", "name": "blocked_by"},
-            {"id": "l8", "name": "Blockers"},
-            {"id": "l9", "name": "blocker_external"},
-            {"id": "l10", "name": "blocks"},
-            {"id": "l11", "name": "unblocked"},
-        ]
+LABELS = {"lbl-blocked": "Blocked", "lbl-bug": "Bug"}
+
+
+def test_label_changes_map_to_raw_label_events_with_names() -> None:
+    events = map_history_entry(_label_entry(["lbl-blocked"], ["lbl-bug"]), LABELS)
+
+    assert [(e.type, e.external_id, e.detail) for e in events] == [
+        (EventType.LABEL_ADDED, "h9:label-added:lbl-blocked", "Blocked"),
+        (EventType.LABEL_REMOVED, "h9:label-removed:lbl-bug", "Bug"),
+    ]
+    assert events[0].occurred_at == datetime(2026, 7, 2, 11, 0, tzinfo=UTC)
+
+
+def test_a_deleted_label_is_skipped() -> None:
+    assert map_history_entry(_label_entry(["lbl-gone"], []), LABELS) == []
+
+
+def test_transition_events_carry_state_types() -> None:
+    [event] = map_history_entry(_entry("backlog", "started", "Backlog", "In Progress"))
+
+    assert (event.from_state_type, event.to_state_type) == (StateType.BACKLOG, StateType.STARTED)
+
+
+def _relation_entry(*changes: tuple[str, str]) -> dict[str, Any]:
+    return {
+        "id": "h7",
+        "createdAt": "2026-10-02T14:51:38.794Z",
+        "fromState": None,
+        "toState": None,
+        "relationChanges": [{"type": code, "identifier": ident} for code, ident in changes],
+    }
+
+
+def test_blocked_side_relation_codes_map_to_blocker_events() -> None:
+    events = map_history_entry(
+        _relation_entry(("ab", "DEP-1"), ("bo", "DEP-2"), ("rb", "DEP-3"), ("br", "DEP-4"))
     )
 
-    assert ids == {"l1", "l2", "l3", "l6", "l7", "l8", "l9"}
+    assert [(e.type, e.detail, e.external_id) for e in events] == [
+        (EventType.BLOCKER_ADDED, "DEP-1", "h7:blocker:ab:DEP-1"),
+        (EventType.BLOCKER_ADDED, "DEP-2", "h7:blocker:bo:DEP-2"),
+        (EventType.BLOCKER_CLEARED, "DEP-3", "h7:blocker:rb:DEP-3"),
+        (EventType.BLOCKER_CLEARED, "DEP-4", "h7:blocker:br:DEP-4"),
+    ]
+
+
+def test_blocker_side_and_non_blocking_codes_are_ignored(caplog: pytest.LogCaptureFixture) -> None:
+    codes = ["ax", "rx", "xr", "xo", "ar", "rr", "ad", "am", "rd", "rm"]
+
+    with caplog.at_level(logging.WARNING):
+        events = map_history_entry(_relation_entry(*((code, "X-1") for code in codes)))
+
+    assert events == []
+    assert caplog.records == []
+
+
+def test_an_unknown_blocking_code_warns_once(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        map_history_entry(_relation_entry(("bz", "X-1")))
+        map_history_entry(_relation_entry(("bz", "X-2")))
+
+    assert sum("bz" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_labels_present_at_creation_are_added_at_creation() -> None:
+    node = {
+        **ISSUE_NODE,
+        "labelIds": ["lbl-blocked", "lbl-bug"],
+        "history": {
+            "nodes": [
+                *ISSUE_NODE["history"]["nodes"],
+                # lbl-bug is first mentioned by a removal: it was there from the start
+                {**_label_entry([], ["lbl-bug"]), "createdAt": "2026-07-03T00:00:00.000Z"},
+            ]
+        },
+    }
+
+    item = map_issue(node, {**LABELS, "lbl-new": "New"})
+    born = [
+        e
+        for e in item.events
+        if e.external_id.endswith(("label-born:lbl-blocked", "label-born:lbl-bug"))
+    ]
+
+    assert [(e.type, e.detail, e.occurred_at) for e in born] == [
+        (EventType.LABEL_ADDED, "Blocked", datetime(2026, 7, 1, 10, 0, tzinfo=UTC)),
+        (EventType.LABEL_ADDED, "Bug", datetime(2026, 7, 1, 10, 0, tzinfo=UTC)),
+    ]
+
+
+def test_map_issue_carries_state_type_labels_and_parent() -> None:
+    node = {**ISSUE_NODE, "labelIds": ["lbl-bug", "lbl-gone"], "parent": {"id": "i0"}}
+
+    item = map_issue(node, LABELS)
+
+    assert (item.state_type, item.labels, item.parent_external_id) == (
+        StateType.STARTED,
+        ("Bug",),
+        "i0",
+    )
+
+
+def test_node_without_new_optional_keys_maps_normally() -> None:
+    # Review focus 1: a skipped node reads as vanished and sync deletes it.
+    node = {
+        **ISSUE_NODE,
+        "labelIds": None,
+        "parent": None,
+        "history": {
+            "nodes": [
+                {**entry, "relationChanges": None} for entry in ISSUE_NODE["history"]["nodes"]
+            ]
+        },
+    }
+
+    item = map_issue(node)
+
+    assert (item.labels, item.parent_external_id) == ((), None)
+    assert [e.type for e in item.events] == [EventType.CREATED, EventType.STARTED]
