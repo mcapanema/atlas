@@ -176,4 +176,32 @@ describe("WorkItemPage", () => {
     expect(await screen.findByText(/Blocked by DEP-1309/)).toBeInTheDocument();
     expect(screen.getByText(/Label added: Blocked/)).toBeInTheDocument();
   });
+
+  it("labels label-removed and blocker-cleared events with their detail", async () => {
+    const detailEvents = [
+      {
+        ...events[0],
+        id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        type: "label_removed",
+        detail: "Bug",
+      },
+      {
+        ...events[0],
+        id: "99999999-9999-9999-9999-999999999999",
+        type: "blocker_cleared",
+        detail: "DEP-7",
+      },
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
+      if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(detailEvents));
+      return Promise.resolve(jsonResponse(workItem));
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/Label removed: Bug/)).toBeInTheDocument();
+    expect(screen.getByText(/Blocker cleared: DEP-7/)).toBeInTheDocument();
+  });
 });
