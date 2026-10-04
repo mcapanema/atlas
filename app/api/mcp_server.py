@@ -196,11 +196,12 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
         project_id: str | None = None,
         remaining: int | None = None,
         target_date: str | None = None,
-        window_days: int = 90,
+        window_days: int | None = None,
     ) -> str:
         """Monte Carlo completion forecast for a scope. Optional what-ifs:
         `remaining` overrides the open-item count (e.g. a planned sprint
         scope), `target_date` (YYYY-MM-DD) adds a hit-the-date confidence.
+        `window_days` defaults to the team's forecast history rule.
         Provide exactly one of team_id/project_id.
         """
         data = await _api(

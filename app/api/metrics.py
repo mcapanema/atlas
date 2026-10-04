@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -23,14 +23,25 @@ router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
 @dataclass(frozen=True)
 class Period:
-    """An explicit start/end analysis window, mapped onto now+window_days.
+    """An explicit start/end analysis window (both dates inclusive), or none.
 
-    Both dates inclusive: `now` is the midnight after `end`, so the domain's
-    (window_start, now] window covers start 00:00 through end 23:59:59.
+    Resolved against the scope's timezone: `now` is the local midnight after
+    `end`, so the domain's (window_start, now] window covers start 00:00
+    through end 23:59:59 on the team's calendar.
+
+    ponytail: the window is window_days x 24h back from that midnight, so a
+    range spanning a DST change is off by that hour at its start. Build the
+    start from the local start date too if a DST zone ever needs it.
     """
 
-    now: datetime | None
-    window_days: int | None
+    start: date | None = None
+    end: date | None = None
+
+    def resolve(self, tz: tzinfo) -> tuple[datetime | None, int | None]:
+        if self.start is None or self.end is None:
+            return None, None
+        window_end = datetime.combine(self.end + timedelta(days=1), time.min, tzinfo=tz)
+        return window_end, (self.end - self.start).days + 1
 
 
 async def get_period(start: date | None = None, end: date | None = None) -> Period:
@@ -40,7 +51,7 @@ async def get_period(start: date | None = None, end: date | None = None) -> Peri
             detail="Provide both start and end, or neither",
         )
     if start is None or end is None:
-        return Period(now=None, window_days=None)
+        return Period()
     if end < start:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -52,8 +63,7 @@ async def get_period(start: date | None = None, end: date | None = None) -> Peri
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Range must not exceed 365 days",
         )
-    window_end = datetime.combine(end + timedelta(days=1), time.min, tzinfo=UTC)
-    return Period(now=window_end, window_days=window_days)
+    return Period(start=start, end=end)
 
 
 PeriodDep = Annotated[Period, Depends(get_period)]
@@ -85,10 +95,11 @@ async def get_flow_metrics(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
+    now, period_days = period.resolve(samples.rules.tz)
     metrics = await service.get_flow_metrics(
         scope=samples,
-        window_days=period.window_days or window_days,
-        now=period.now,
+        window_days=period_days or window_days,
+        now=now,
     )
     return FlowMetricsRead(
         window_start=metrics.window_start,
@@ -118,10 +129,11 @@ async def get_flow_history(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
+    now, period_days = period.resolve(samples.rules.tz)
     history = await service.get_flow_history(
         scope=samples,
-        window_days=period.window_days or window_days,
-        now=period.now,
+        window_days=period_days or window_days,
+        now=now,
     )
     return FlowHistoryRead.model_validate(history)
 
@@ -140,10 +152,11 @@ async def get_lead_time_distribution(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
+    now, period_days = period.resolve(samples.rules.tz)
     distribution = await service.get_lead_time_distribution(
         scope=samples,
-        window_days=period.window_days or window_days,
-        now=period.now,
+        window_days=period_days or window_days,
+        now=now,
     )
     return LeadTimeDistributionRead.model_validate(distribution)
 
@@ -172,6 +185,7 @@ async def get_aging_wip(
         cycle_time_p85_seconds=(
             aging.cycle_time_p85.total_seconds() if aging.cycle_time_p85 is not None else None
         ),
+        percentile=aging.percentile,
         items=[
             AgingItemRead(
                 work_item_id=item.work_item_id,
@@ -199,9 +213,10 @@ async def get_delivery_health(
         types=filters.types,
         exclude_states=filters.exclude_states,
     )
+    now, period_days = period.resolve(samples.rules.tz)
     health = await service.get_delivery_health(
         scope=samples,
-        window_days=period.window_days or window_days,
-        now=period.now,
+        window_days=period_days or window_days,
+        now=now,
     )
     return DeliveryHealthRead.model_validate(health)

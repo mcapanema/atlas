@@ -35,6 +35,7 @@ class TeamRead(BaseModel):
     name: str
     external_id: str | None
     created_at: datetime
+    has_custom_rules: bool = False
 
 
 class ProjectCreate(BaseModel):
@@ -315,6 +316,7 @@ class AgingWipRead(BaseModel):
     now: datetime
     cycle_time_p85_seconds: float | None
     items: list[AgingItemRead]
+    percentile: int
 
 
 class HealthComponentRead(BaseModel):
