@@ -92,10 +92,11 @@ The one write-side projection: `app/domain/snapshots/` holds
 rewritten in place when the scope's metric rules change — ADR-0010) with
 repository ports, `SnapshotService` (`app/application/snapshots/service.py`)
 captures them for every team and project inside the sync request, and
-`evaluate_forecast_accuracy` (`app/domain/forecasting/accuracy.py`) scores past forecast snapshots
-against actual completions. Served from `GET /api/metrics/snapshots`
-(lead-time trend on the dashboards) and `GET /api/forecasts/accuracy`
-(forecast calibration on the forecast card and Executive Dashboard).
+`evaluate_forecast_accuracy` (`app/domain/forecasting/accuracy.py`) scores
+past forecast snapshots against actual completions. Served from
+`GET /api/metrics/snapshots` (lead-time trend on the dashboards) and
+`GET /api/forecasts/accuracy` (forecast calibration on the forecast card
+and Executive Dashboard).
 
 ### Metric rules (ADR-0010)
 

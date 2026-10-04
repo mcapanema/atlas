@@ -1,5 +1,5 @@
 import { Alert, Button, Empty, Modal, Select, Space, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useMetricRules, useRecomputeHistory, type RecomputeStatus } from "../api/metricRules";
@@ -84,6 +84,10 @@ function RulesWorkspace({
   const view = useMetricRules(scope);
   const organizationId = recomputeOrganization(scope, teams.data);
   const recompute = useRecomputeHistory(organizationId);
+  const { reset: resetRecompute } = recompute;
+  const scopeKey = scopeValue(scope);
+  // A failed recompute belongs to the scope it ran for.
+  useEffect(() => resetRecompute(), [scopeKey, resetRecompute]);
 
   return (
     <Space direction="vertical" size="large" style={{ width: "100%" }}>

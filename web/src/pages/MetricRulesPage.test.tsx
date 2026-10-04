@@ -228,6 +228,18 @@ describe("MetricRulesPage", () => {
     expect(await screen.findByText("recompute is unavailable")).toBeInTheDocument();
   });
 
+  it("drops a recompute error when the scope switches", async () => {
+    mockApi(view(), 200, { recomputeStatus: 500 });
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+    fireEvent.click(await screen.findByRole("button", { name: "Recompute history" }));
+    expect(await screen.findByText("recompute is unavailable")).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Rules for" }));
+    fireEvent.click(await screen.findByTitle(teamFixture.name));
+
+    await waitFor(() => expect(screen.queryByText("recompute is unavailable")).toBeNull());
+  });
+
   it("treats toggling a rule back to its inherited value as no change", async () => {
     const calls = mockApi(view());
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);

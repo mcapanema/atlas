@@ -90,11 +90,15 @@ export function useSaveMetricRules(scope: RulesScope) {
 export function useRecomputeHistory(organizationId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      apiFetch<MetricRulesView>(
-        `/api/organizations/${organizationId ?? ""}/metric-rules/recompute`,
-        { method: "POST" },
-      ),
+    mutationFn: () => {
+      if (organizationId === undefined) throw new Error("No organization to recompute");
+      return apiFetch<MetricRulesView>(
+        `/api/organizations/${organizationId}/metric-rules/recompute`,
+        {
+          method: "POST",
+        },
+      );
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["metric-rules"] }),
   });
 }
