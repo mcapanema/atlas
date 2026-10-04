@@ -4,11 +4,11 @@ from uuid import uuid4
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
 from app.application.snapshots.service import (
-    FORECAST_WINDOW_DAYS,
     METRICS_WINDOW_DAYS,
     SnapshotService,
 )
 from app.domain.events.entities import Event, EventType
+from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot
 from app.domain.teams.entities import Team
@@ -87,7 +87,7 @@ async def test_capture_all_snapshots_every_team_and_project_scope() -> None:
     assert team_metrics[0].lead_time_p50_seconds == timedelta(days=8).total_seconds()
     team_forecasts = await forecast_snapshots.list(team_id=team.id)
     assert len(team_forecasts) == 1
-    assert team_forecasts[0].window_days == FORECAST_WINDOW_DAYS
+    assert team_forecasts[0].window_days == DEFAULT_RULES.forecast_history_days
     assert team_forecasts[0].remaining == 1
     assert team_forecasts[0].p50_days is not None
 
@@ -128,7 +128,7 @@ async def test_get_forecast_accuracy_evaluates_resolved_past_forecasts() -> None
     await forecast_snapshots.add(
         ForecastSnapshot(
             captured_on=(NOW - timedelta(days=7)).date(),
-            window_days=FORECAST_WINDOW_DAYS,
+            window_days=DEFAULT_RULES.forecast_history_days,
             remaining=1,
             p50_days=5,
             p85_days=10,

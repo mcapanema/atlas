@@ -139,6 +139,10 @@ class SqlAlchemyMetricSnapshotRepository:
         self._session.add(MetricSnapshotModel.from_domain(snapshot))
         await self._session.flush()
 
+    async def update(self, snapshot: MetricSnapshot) -> None:
+        await self._session.merge(MetricSnapshotModel.from_domain(snapshot))
+        await self._session.flush()
+
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[MetricSnapshot]:
@@ -174,6 +178,10 @@ class SqlAlchemyForecastSnapshotRepository:
 
     async def add(self, snapshot: ForecastSnapshot) -> None:
         self._session.add(ForecastSnapshotModel.from_domain(snapshot))
+        await self._session.flush()
+
+    async def update(self, snapshot: ForecastSnapshot) -> None:
+        await self._session.merge(ForecastSnapshotModel.from_domain(snapshot))
         await self._session.flush()
 
     async def list(

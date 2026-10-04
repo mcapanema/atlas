@@ -1,7 +1,8 @@
 """Persisted point-in-time aggregations of the computed analytics.
 
-The SPEC's Snapshot concept: an immutable historical aggregation of
-metrics. One row per scope (team XOR project) per UTC day, captured after
+The SPEC's Snapshot concept: a historical aggregation of metrics, rewritten
+in place (same id, day and instant) when its scope's metric rules change
+(ADR-0010). One row per scope (team XOR project) per UTC day, captured after
 sync — metric snapshots feed dashboard history, forecast snapshots feed
 forecast-accuracy calibration.
 """

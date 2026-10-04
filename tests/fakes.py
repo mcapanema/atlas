@@ -205,6 +205,9 @@ class InMemoryMetricSnapshotRepository:
     async def add(self, snapshot: MetricSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot
 
+    async def update(self, snapshot: MetricSnapshot) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[MetricSnapshot]:
@@ -272,6 +275,9 @@ class InMemoryForecastSnapshotRepository:
         self._snapshots: dict[UUID, ForecastSnapshot] = {s.id: s for s in snapshots or []}
 
     async def add(self, snapshot: ForecastSnapshot) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
+    async def update(self, snapshot: ForecastSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot
 
     async def list(

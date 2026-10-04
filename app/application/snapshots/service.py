@@ -7,11 +7,14 @@ forecast-accuracy calibration. The compute-on-read analytics stay the
 live source — snapshots are a write-side record of what they said.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
+from app.application.scope import ScopeSamples
 from app.domain.forecasting.accuracy import (
     ForecastAccuracy,
     evaluate_forecast_accuracy,
@@ -25,7 +28,6 @@ from app.domain.snapshots.repository import (
 from app.domain.teams.repository import TeamRepository
 
 METRICS_WINDOW_DAYS = 30
-FORECAST_WINDOW_DAYS = 90
 
 
 class SnapshotService:
@@ -83,6 +85,32 @@ class SnapshotService:
         completions = [s.completed_at for s in scope.samples if s.completed_at is not None]
         return evaluate_forecast_accuracy(snapshots, completions)
 
+    async def recompute_scope(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        """Rewrite the scope's snapshot history under its current metric rules.
+
+        Each snapshot is re-derived as of its original capture instant
+        (`created_at`): streams are truncated there, so later events (a
+        reopen, a backfill) don't leak into the past. Forecast snapshots
+        become a backtest of the current rules. Rows keep their id, day and
+        instant. Returns the number of snapshots rewritten.
+        """
+        data = await self._metrics.load_scope_data(team_id=team_id, project_id=project_id)
+        metric_snapshots = await self._metric_snapshots.list(team_id=team_id, project_id=project_id)
+        for metric in metric_snapshots:
+            scope = data.samples(as_of=metric.created_at)
+            values = await self._metric_values(scope, metric.created_at)
+            await self._metric_snapshots.update(replace(metric, **values))
+        forecast_snapshots = await self._forecast_snapshots.list(
+            team_id=team_id, project_id=project_id
+        )
+        for forecast in forecast_snapshots:
+            scope = data.samples(as_of=forecast.created_at)
+            values = await self._forecast_values(scope, forecast.created_at)
+            await self._forecast_snapshots.update(replace(forecast, **values))
+        return len(metric_snapshots) + len(forecast_snapshots)
+
     async def _capture(
         self,
         at: datetime,
@@ -93,40 +121,51 @@ class SnapshotService:
         today = at.date()
         if await self._metric_snapshots.exists_on(today, team_id=team_id, project_id=project_id):
             return 0
-        scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
-        metrics = await self._metrics.get_flow_metrics(
-            window_days=METRICS_WINDOW_DAYS, now=at, scope=scope
-        )
-        forecast = await self._forecasts.get_forecast(
-            window_days=FORECAST_WINDOW_DAYS, now=at, scope=scope
-        )
-        lead, cycle = metrics.lead_time, metrics.cycle_time
+        data = await self._metrics.load_scope_data(team_id=team_id, project_id=project_id)
+        scope = data.samples(as_of=at)
         await self._metric_snapshots.add(
             MetricSnapshot(
                 captured_on=today,
-                window_days=METRICS_WINDOW_DAYS,
-                completed=metrics.completed,
-                wip=metrics.wip,
-                lead_time_p50_seconds=lead.p50.total_seconds() if lead else None,
-                lead_time_p85_seconds=lead.p85.total_seconds() if lead else None,
-                cycle_time_p50_seconds=cycle.p50.total_seconds() if cycle else None,
-                cycle_time_p85_seconds=cycle.p85.total_seconds() if cycle else None,
-                blocked_seconds=metrics.blocked_time.total_seconds(),
-                flow_efficiency=metrics.flow_efficiency,
                 team_id=team_id,
                 project_id=project_id,
+                created_at=at,
+                **await self._metric_values(scope, at),
             )
         )
-        completion = forecast.completion
         await self._forecast_snapshots.add(
             ForecastSnapshot(
                 captured_on=today,
-                window_days=FORECAST_WINDOW_DAYS,
-                remaining=forecast.remaining,
-                p50_days=completion.p50_days if completion else None,
-                p85_days=completion.p85_days if completion else None,
                 team_id=team_id,
                 project_id=project_id,
+                created_at=at,
+                **await self._forecast_values(scope, at),
             )
         )
         return 1
+
+    async def _metric_values(self, scope: ScopeSamples, at: datetime) -> dict[str, Any]:
+        metrics = await self._metrics.get_flow_metrics(
+            window_days=METRICS_WINDOW_DAYS, now=at, scope=scope
+        )
+        lead, cycle = metrics.lead_time, metrics.cycle_time
+        return {
+            "window_days": METRICS_WINDOW_DAYS,
+            "completed": metrics.completed,
+            "wip": metrics.wip,
+            "lead_time_p50_seconds": lead.p50.total_seconds() if lead else None,
+            "lead_time_p85_seconds": lead.p85.total_seconds() if lead else None,
+            "cycle_time_p50_seconds": cycle.p50.total_seconds() if cycle else None,
+            "cycle_time_p85_seconds": cycle.p85.total_seconds() if cycle else None,
+            "blocked_seconds": metrics.blocked_time.total_seconds(),
+            "flow_efficiency": metrics.flow_efficiency,
+        }
+
+    async def _forecast_values(self, scope: ScopeSamples, at: datetime) -> dict[str, Any]:
+        forecast = await self._forecasts.get_forecast(now=at, scope=scope)
+        completion = forecast.completion
+        return {
+            "window_days": scope.rules.forecast_history_days,
+            "remaining": forecast.remaining,
+            "p50_days": completion.p50_days if completion else None,
+            "p85_days": completion.p85_days if completion else None,
+        }

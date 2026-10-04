@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
@@ -120,3 +121,32 @@ async def test_forecast_snapshot_roundtrip(session: AsyncSession) -> None:
     assert snapshots[0].p85_days == 19
     assert snapshots[0].team_id is None
     assert await repo.exists_on(date(2026, 7, 11), project_id=project)
+
+
+async def test_metric_snapshot_update_replaces_the_row(session: AsyncSession) -> None:
+    repo = SqlAlchemyMetricSnapshotRepository(session)
+    snapshot = _metric(date(2026, 7, 11))
+    await repo.add(snapshot)
+
+    await repo.update(replace(snapshot, completed=9))
+
+    (stored,) = await repo.list(team_id=TEAM)
+    assert (stored.id, stored.completed) == (snapshot.id, 9)
+
+
+async def test_forecast_snapshot_update_replaces_the_row(session: AsyncSession) -> None:
+    repo = SqlAlchemyForecastSnapshotRepository(session)
+    snapshot = ForecastSnapshot(
+        captured_on=date(2026, 7, 11),
+        window_days=90,
+        remaining=5,
+        p50_days=10,
+        p85_days=20,
+        team_id=TEAM,
+    )
+    await repo.add(snapshot)
+
+    await repo.update(replace(snapshot, remaining=3))
+
+    (stored,) = await repo.list(team_id=TEAM)
+    assert (stored.id, stored.remaining) == (snapshot.id, 3)
