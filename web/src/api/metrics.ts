@@ -123,6 +123,7 @@ export interface AgingWip {
   now: string;
   cycle_time_p85_seconds: number | null;
   items: AgingItem[];
+  percentile: number;
 }
 
 export function useAgingWip(scope: MetricsScope, filters: MetricsFilters = {}) {

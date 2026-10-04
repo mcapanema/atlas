@@ -11,11 +11,17 @@ import { EChart } from "./EChart";
 import { HelpLabel } from "./HelpLabel";
 import { StatCard } from "./StatCard";
 
-const METHOD_HELP =
-  "Runs 2,000 simulations of the remaining work. Each simulated day draws a " +
-  "completion count from this scope's actual daily throughput over the last 90 " +
-  "days (or since its first activity, if more recent), zero-throughput days included. Each bar is how many simulations " +
-  "finished on that date; the dashed lines mark P50 and P85.";
+const DAY_MS = 86_400_000;
+
+function methodHelp(historyDays: number): string {
+  return (
+    "Runs 2,000 simulations of the remaining work. Each simulated day draws a completion " +
+    `count from this scope's actual daily throughput over its last ${historyDays} days of ` +
+    "history (the team's forecast history, set in Metric rules; shorter for a young scope), " +
+    "zero-throughput days included. Each bar is how many simulations finished on that date; " +
+    "the dashed lines mark P50 and P85."
+  );
+}
 
 function percent(fraction: number | null | undefined): string {
   return fraction != null ? `${Math.round(fraction * 100)}%` : "—";
@@ -156,7 +162,10 @@ export function ForecastCard({
   }
   if (!data) return null;
 
-  const title = <HelpLabel label="Completion forecast" help={METHOD_HELP} />;
+  const historyDays = Math.round(
+    (Date.parse(data.window_end) - Date.parse(data.window_start)) / DAY_MS,
+  );
+  const title = <HelpLabel label="Completion forecast" help={methodHelp(historyDays)} />;
 
   if (!completion) {
     return (

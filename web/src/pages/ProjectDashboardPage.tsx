@@ -3,6 +3,8 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useProjects } from "../api/projects";
+import { useTeams } from "../api/teams";
+import { CustomRulesTag } from "../components/CustomRulesTag";
 import { FlowDashboard } from "../components/FlowDashboard";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { applyFiltersToSearchParams, filtersFromSearchParams } from "../lib/metricsFilters";
@@ -13,6 +15,8 @@ export function ProjectDashboardPage() {
   const projectId = searchParams.get("project") ?? undefined;
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
   const projects = useProjects();
+  const teams = useTeams();
+  const project = projects.data?.find((p) => p.id === projectId);
 
   const setFilters = (next: MetricsFilters) => {
     const params = new URLSearchParams(searchParams);
@@ -40,6 +44,7 @@ export function ProjectDashboardPage() {
             loading={projects.isLoading}
             options={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
           />
+          <CustomRulesTag team={teams.data?.find((team) => team.id === project?.team_id)} />
           {projectId && (
             <MetricsFilterBar filters={filters} scope={{ projectId }} onChange={setFilters} />
           )}

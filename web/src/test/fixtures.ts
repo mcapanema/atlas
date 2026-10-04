@@ -139,6 +139,7 @@ export const accuracyFixture = {
 export const agingWipFixture = {
   now: "2026-07-10T00:00:00Z",
   cycle_time_p85_seconds: 259200,
+  percentile: 85,
   items: [
     {
       work_item_id: "44444444-4444-4444-4444-444444444444",

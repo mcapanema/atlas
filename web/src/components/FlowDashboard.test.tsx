@@ -318,6 +318,14 @@ describe("FlowDashboard", () => {
     expect(await screen.findByText(/Touch time divided by lead time/)).toBeInTheDocument();
   });
 
+  it("labels aging flags with the team's aging percentile", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, percentile: 70 } });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "t1" }} />);
+
+    expect(await screen.findByText("over P70")).toBeInTheDocument();
+  });
+
   it("explains how the throughput chart is built", async () => {
     mockMetricsFetch();
 

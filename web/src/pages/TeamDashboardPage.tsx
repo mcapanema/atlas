@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useTeams } from "../api/teams";
+import { CustomRulesTag } from "../components/CustomRulesTag";
 import { FlowDashboard } from "../components/FlowDashboard";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { applyFiltersToSearchParams, filtersFromSearchParams } from "../lib/metricsFilters";
@@ -40,6 +41,7 @@ export function TeamDashboardPage() {
             loading={teams.isLoading}
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
+          <CustomRulesTag team={teams.data?.find((team) => team.id === teamId)} />
           {teamId && (
             <MetricsFilterBar filters={filters} scope={{ teamId }} onChange={setFilters} />
           )}
