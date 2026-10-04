@@ -244,3 +244,39 @@ async def test_resolve_reads_the_org_row_once_and_warns_once(
 
     assert overrides.org_reads == 1
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+
+
+class _FreshRows(InMemoryMetricRuleOverridesRepository):
+    """Hands out a new RuleOverrides (and overrides dict) on every read."""
+
+    async def get(
+        self, organization_id: UUID, *, team_id: UUID | None = None
+    ) -> RuleOverrides | None:
+        row = await super().get(organization_id, team_id=team_id)
+        if row is None:
+            return None
+        return RuleOverrides(
+            organization_id=row.organization_id,
+            team_id=row.team_id,
+            overrides=dict(row.overrides),
+        )
+
+
+async def test_each_teams_unknown_rule_warns_even_when_layers_are_freed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first = Team(organization_id=ORG, name="First")
+    second = Team(organization_id=ORG, name="Second")
+    rows = [
+        RuleOverrides(organization_id=ORG, team_id=team.id, overrides={"typo": 1})
+        for team in (first, second)
+    ]
+    resolver = MetricRulesResolver(
+        _FreshRows(rows), InMemoryTeamRepository([first, second]), InMemoryProjectRepository([])
+    )
+
+    with caplog.at_level(logging.WARNING):
+        await resolver.resolve(team_id=first.id, project_id=None, item_team_ids=[second.id])
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2

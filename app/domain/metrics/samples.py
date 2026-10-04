@@ -118,10 +118,9 @@ def derive_flow_sample(
     (the cancel un-delivered the item). With move_back_ends_wip off, a STOPPED
     never counts, so the clock restarts only after a CANCELED. born_done marks an
     item created already completed and never started (see _born_done).
-    Blocked time sums blocked periods clipped to the
-    cycle — from started_at (or the first event, if never started) to
-    completed_at; a still-open period on an uncompleted item is not counted
-    (unmeasurable).
+    Blocked time sums blocked periods clipped to the cycle — from started_at
+    (or the first event, if never started) to completed_at; a still-open
+    period on an uncompleted item is not counted (unmeasurable).
 
     ponytail: Done -> Todo isn't a reopen here (only a STARTED after
     COMPLETED is), so it stays completed. Telling it apart from Done ->
