@@ -1,12 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, String, delete, func, select
+from sqlalchemy import JSON, ForeignKey, String, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
-from app.domain.work_items.entities import WorkItem, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
 from app.infrastructure.repositories.batching import chunked
@@ -28,6 +28,13 @@ class WorkItemModel(Base):
     )
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    state_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    labels: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    parent_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("work_items.id", name="fk_work_items_parent_id"), nullable=True, index=True
+    )
 
     def to_domain(self) -> WorkItem:
         return WorkItem(
@@ -40,6 +47,9 @@ class WorkItemModel(Base):
             external_id=self.external_id,
             url=self.url,
             created_at=self.created_at,
+            state_type=StateType(self.state_type) if self.state_type else None,
+            labels=tuple(self.labels),
+            parent_id=self.parent_id,
         )
 
     @classmethod
@@ -54,6 +64,9 @@ class WorkItemModel(Base):
             external_id=work_item.external_id,
             url=work_item.url,
             created_at=work_item.created_at,
+            state_type=work_item.state_type.value if work_item.state_type else None,
+            labels=list(work_item.labels),
+            parent_id=work_item.parent_id,
         )
 
 
@@ -73,6 +86,12 @@ class SqlAlchemyWorkItemRepository:
 
     async def delete(self, work_item_ids: list[UUID]) -> None:
         for chunk in chunked(work_item_ids):
+            # Children outlive a deleted parent: drop the link first (FKs are enforced).
+            await self._session.execute(
+                update(WorkItemModel)
+                .where(WorkItemModel.parent_id.in_(chunk))
+                .values(parent_id=None)
+            )
             await self._session.execute(delete(WorkItemModel).where(WorkItemModel.id.in_(chunk)))
 
     # Must stay above `list` — that method shadows the `list` builtin for every
@@ -87,6 +106,25 @@ class SqlAlchemyWorkItemRepository:
             query = query.where(WorkItemModel.project_id == project_id)
         result = await self._session.execute(query)
         return list(result.scalars())
+
+    async def list_labels(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[str]:
+        query = select(WorkItemModel.labels)
+        if team_id is not None:
+            query = query.where(WorkItemModel.team_id == team_id)
+        if project_id is not None:
+            query = query.where(WorkItemModel.project_id == project_id)
+        result = await self._session.execute(query)
+        # ponytail: flattened in Python — JSON array functions differ between
+        # SQLite and PostgreSQL. Push down if a scope outgrows one column scan.
+        return sorted({label for labels in result.scalars() for label in labels})
+
+    async def parent_ids(self) -> set[UUID]:
+        result = await self._session.execute(
+            select(WorkItemModel.parent_id).where(WorkItemModel.parent_id.is_not(None)).distinct()
+        )
+        return {parent_id for parent_id in result.scalars() if parent_id is not None}
 
     async def list(
         self,

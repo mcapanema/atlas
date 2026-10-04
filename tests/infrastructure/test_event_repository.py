@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.events.entities import Event, EventType
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import StateType, WorkItem
 from app.infrastructure.repositories import batching
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
@@ -213,3 +213,61 @@ async def test_delete_for_work_items_removes_their_events_in_batches(
 
     remaining = await repo.list_for_work_items([first, second, kept])
     assert [event.work_item_id for event in remaining] == [kept]
+
+
+async def test_missing_state_types_then_fill_never_overwrites(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    item_id = await _work_item_id(session)
+    at = datetime(2026, 9, 1, tzinfo=UTC)
+    untyped = Event(work_item_id=item_id, type=EventType.STARTED, occurred_at=at, external_id="h1")
+    typed = Event(
+        work_item_id=item_id,
+        type=EventType.STARTED,
+        occurred_at=at,
+        external_id="h2",
+        from_state_type=StateType.BACKLOG,
+        to_state_type=StateType.STARTED,
+    )
+    await repo.add(untyped)
+    await repo.add(typed)
+
+    missing = await repo.external_ids_missing_state_types(["h1", "h2", "nope"])
+    filled = await repo.fill_state_types(
+        {
+            "h1": (StateType.UNSTARTED, StateType.STARTED),
+            "h2": (StateType.TRIAGE, StateType.COMPLETED),  # already typed: untouched
+        }
+    )
+    stored = {e.external_id: e for e in await repo.list_for_work_item(item_id)}
+
+    assert missing == {"h1"}
+    assert filled == 1
+    assert (stored["h1"].from_state_type, stored["h1"].to_state_type) == (
+        StateType.UNSTARTED,
+        StateType.STARTED,
+    )
+    assert (stored["h2"].from_state_type, stored["h2"].to_state_type) == (
+        StateType.BACKLOG,
+        StateType.STARTED,
+    )
+    assert await repo.external_ids_missing_state_types(["h1", "h2"]) == set()
+
+
+async def test_event_detail_and_types_round_trip(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    item_id = await _work_item_id(session)
+    event = Event(
+        work_item_id=item_id,
+        type=EventType.BLOCKER_ADDED,
+        occurred_at=datetime(2026, 9, 1, tzinfo=UTC),
+        detail="DEP-1309",
+    )
+    await repo.add(event)
+
+    [stored] = await repo.list_for_work_item(item_id)
+
+    assert (stored.type, stored.detail, stored.to_state_type) == (
+        EventType.BLOCKER_ADDED,
+        "DEP-1309",
+        None,
+    )
