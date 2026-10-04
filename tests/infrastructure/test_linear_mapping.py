@@ -428,7 +428,12 @@ def test_blocked_label_ids_matches_whole_words_only() -> None:
             {"id": "l4", "name": "regras-blockly"},
             {"id": "l5", "name": "unblock-me-later"},
             {"id": "l6", "name": "block"},
+            {"id": "l7", "name": "blocked_by"},
+            {"id": "l8", "name": "Blockers"},
+            {"id": "l9", "name": "blocker_external"},
+            {"id": "l10", "name": "blocks"},
+            {"id": "l11", "name": "unblocked"},
         ]
     )
 
-    assert ids == {"l1", "l2", "l3", "l6"}
+    assert ids == {"l1", "l2", "l3", "l6", "l7", "l8", "l9"}

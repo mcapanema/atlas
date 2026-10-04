@@ -8,6 +8,7 @@ from uuid import UUID
 from app.domain.metric_rules.entities import (
     DEFAULT_RULES,
     MetricRules,
+    RuleOverrides,
     resolve_rules,
     unknown_rule_names,
 )
@@ -18,11 +19,22 @@ from app.domain.teams.repository import TeamRepository
 logger = logging.getLogger(__name__)
 
 
-def resolve_layers(*layers: Mapping[str, object], subject: str) -> MetricRules:
-    """Resolve override layers over the built-ins; unknown keys warn, invalid ones fall back."""
+def resolve_layers(
+    *layers: Mapping[str, object],
+    subject: str,
+    warned: set[tuple[int, str]] | None = None,
+) -> MetricRules:
+    """Resolve override layers over the built-ins; unknown keys warn, invalid ones fall back.
+
+    `warned` lets one load share the keys it already warned about, so a layer
+    several resolutions fold in (the workspace's) is reported once.
+    """
+    seen = warned if warned is not None else set()
     for layer in layers:
-        if unknown := unknown_rule_names(layer):
-            logger.warning("Ignoring unknown metric rule(s) %s for %s", ", ".join(unknown), subject)
+        fresh = [name for name in unknown_rule_names(layer) if (id(layer), name) not in seen]
+        if fresh:
+            seen.update((id(layer), name) for name in fresh)
+            logger.warning("Ignoring unknown metric rule(s) %s for %s", ", ".join(fresh), subject)
     try:
         return resolve_rules(*layers)
     except ValueError:
@@ -60,21 +72,33 @@ class MetricRulesResolver:
         """Rules for a team or project scope whose items belong to `item_team_ids`."""
         scope_team = team_id if team_id is not None else await self._project_team(project_id)
         wanted = set(item_team_ids) | ({scope_team} if scope_team is not None else set())
-        by_team = {tid: await self.team_rules(tid) for tid in wanted}
+        org_rows: dict[UUID, RuleOverrides | None] = {}
+        warned: set[tuple[int, str]] = set()
+        by_team = {tid: await self._team_rules(tid, org_rows, warned) for tid in wanted}
         scope = by_team[scope_team] if scope_team is not None else DEFAULT_RULES
         return ResolvedRules(scope=scope, by_team=by_team)
 
     async def team_rules(self, team_id: UUID) -> MetricRules:
         """The team's effective rules; built-in defaults if stored rules are invalid."""
+        return await self._team_rules(team_id, {}, set())
+
+    async def _team_rules(
+        self,
+        team_id: UUID,
+        org_rows: dict[UUID, RuleOverrides | None],
+        warned: set[tuple[int, str]],
+    ) -> MetricRules:
         team = await self._teams.get(team_id)
         if team is None:
             return DEFAULT_RULES
+        if team.organization_id not in org_rows:
+            org_rows[team.organization_id] = await self._overrides.get(team.organization_id)
         rows = (
-            await self._overrides.get(team.organization_id),
+            org_rows[team.organization_id],
             await self._overrides.get(team.organization_id, team_id=team_id),
         )
         layers = [row.overrides for row in rows if row is not None]
-        return resolve_layers(*layers, subject=f"team {team_id}")
+        return resolve_layers(*layers, subject=f"team {team_id}", warned=warned)
 
     async def _project_team(self, project_id: UUID | None) -> UUID | None:
         if project_id is None:

@@ -81,6 +81,12 @@ def test_unknown_keys_are_ignored_and_reported() -> None:
             "at least one health weight",
         ),
         ({"timezone": "Mars/Olympus_Mons"}, "timezone"),
+        ({"timezone": 3}, "timezone"),
+        ({"stability_best_weeks": -1}, "stability_best_weeks"),
+        ({"stability_best_weeks": 53}, "stability_best_weeks"),
+        ({"stability_worst_weeks": 53}, "stability_worst_weeks"),
+        ({"weight_flow": -1}, "weight_flow"),
+        ({"weight_risk": 11}, "weight_risk"),
         ({"reopen_completion": "middle"}, "reopen_completion"),
         ({"exclude_born_done": "yes"}, "exclude_born_done"),
         ({"healthy_min": 80.5}, "healthy_min"),
@@ -91,6 +97,15 @@ def test_invalid_rules_are_rejected_naming_the_rule(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         resolve_rules(overrides)
+
+
+def test_a_non_string_timezone_is_rejected_even_if_it_prints_as_a_zone() -> None:
+    class PrintsAsUtc:
+        def __str__(self) -> str:
+            return "UTC"
+
+    with pytest.raises(ValueError, match="timezone"):
+        MetricRules(timezone=PrintsAsUtc())  # type: ignore[arg-type]  # the point: bad type
 
 
 def test_tz_is_the_named_zone() -> None:

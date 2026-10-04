@@ -195,3 +195,39 @@ def test_cfd_day_ends_after_the_repeated_hour_when_dst_ends_at_midnight() -> Non
     days = daily_flow_counts([events], start=start, end=end, tz=santiago)
 
     assert (days[0].day, days[0].done) == (date(2026, 4, 4), 1)
+
+
+def test_restart_after_done_then_canceled_opens_a_new_stint() -> None:
+    events = [
+        _on(EventType.CREATED, 1),
+        _on(EventType.STARTED, 2),
+        _on(EventType.COMPLETED, 5),
+        _on(EventType.CANCELED, 6),
+        _on(EventType.STARTED, 8),
+    ]
+    rules = MetricRules(done_then_canceled="canceled", restart_clock_after_move_back=True)
+
+    sample = derive_flow_sample(events, rules)
+
+    assert sample is not None
+    assert (sample.started_at, sample.completed_at, sample.canceled) == (_june(8), None, False)
+
+
+def test_restart_clock_without_move_back_ending_wip_restarts_only_after_a_cancel() -> None:
+    events = [
+        _on(EventType.CREATED, 1),
+        _on(EventType.STARTED, 2),
+        _on(EventType.STOPPED, 4),
+        _on(EventType.STARTED, 6),
+        _on(EventType.CANCELED, 7),
+        _on(EventType.STARTED, 9),
+    ]
+    rules = MetricRules(move_back_ends_wip=False, restart_clock_after_move_back=True)
+
+    after_stop = derive_flow_sample(events[:4], rules)
+    after_cancel = derive_flow_sample(events, rules)
+
+    assert after_stop is not None
+    assert after_cancel is not None
+    assert after_stop.started_at == _june(2)  # the STOPPED was ignored: no restart
+    assert after_cancel.started_at == _june(9)  # only a CANCELED restarts

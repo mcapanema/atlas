@@ -35,11 +35,18 @@ class Period:
     start: date | None = None
     end: date | None = None
 
+    @property
+    def days(self) -> int:
+        """Inclusive day count; 0 when the window is open."""
+        if self.start is None or self.end is None:
+            return 0
+        return (self.end - self.start).days + 1
+
     def resolve(self, tz: tzinfo) -> tuple[datetime | None, int | None]:
         if self.start is None or self.end is None:
             return None, None
         window_end = datetime.combine(self.end + timedelta(days=1), time.min, tzinfo=tz)
-        return window_end, (self.end - self.start).days + 1
+        return window_end, self.days
 
 
 async def get_period(start: date | None = None, end: date | None = None) -> Period:
@@ -55,13 +62,13 @@ async def get_period(start: date | None = None, end: date | None = None) -> Peri
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="end must not be before start",
         )
-    window_days = (end - start).days + 1
-    if window_days > 365:
+    period = Period(start=start, end=end)
+    if period.days > 365:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Range must not exceed 365 days",
         )
-    return Period(start=start, end=end)
+    return period
 
 
 PeriodDep = Annotated[Period, Depends(get_period)]

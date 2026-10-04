@@ -1,9 +1,10 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
 
+from app.api.metrics import Period
 from tests.api.helpers import create_team, days_ago
 
 
@@ -408,3 +409,8 @@ async def test_flow_history_buckets_a_short_window_daily(client: AsyncClient) ->
     body = response.json()
     assert body["bucket_days"] == 1
     assert len(body["buckets"]) == 7
+
+
+def test_period_days_is_inclusive_and_zero_when_open() -> None:
+    assert Period(start=date(2026, 6, 1), end=date(2026, 6, 30)).days == 30
+    assert Period().days == 0

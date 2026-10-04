@@ -32,8 +32,8 @@ class AdvisorService:
 
         `window_days` scopes the flow summary; the lead-time distribution and
         forecast keep their dashboard defaults (the forecast window comes from
-        the team's rules). The scope's items and events are loaded once and shared by all three
-        computations.
+        the team's rules). The scope's items and events are loaded once and
+        shared by all three computations.
         """
         window_end = now if now is not None else datetime.now(UTC)
         scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)

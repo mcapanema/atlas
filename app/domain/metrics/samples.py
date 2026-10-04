@@ -109,13 +109,17 @@ def derive_flow_sample(
     restart_clock_after_move_back, the restart after the latest move-back);
     completed_at the last COMPLETED (or the first since the clock started,
     with reopen_completion="first"), voided if a later STARTED reopened the
-    item. stopped_at is when an uncompleted item first left progress (the
-    first STOPPED, unless move_back_ends_wip is off, or CANCELED since its
-    latest STARTED or COMPLETED); canceled marks an item closed without
-    delivery, which with done_then_canceled="canceled" includes Done ->
-    Canceled. born_done marks an item created already completed and never
-    started (see _born_done). Blocked time sums blocked periods clipped to
-    the cycle — from started_at (or the first event, if never started) to
+    item. stopped_at is when an uncompleted item first left progress: its
+    first STOPPED since the latest STARTED or COMPLETED (STOPPED is ignored
+    when move_back_ends_wip is off), or its CANCELED. canceled marks an item
+    closed without delivery, which with done_then_canceled="canceled"
+    includes Done -> Canceled; a STARTED after that cancel voids the
+    cancellation, and with restart_clock_after_move_back it opens a new stint
+    (the cancel un-delivered the item). With move_back_ends_wip off, a STOPPED
+    never counts, so the clock restarts only after a CANCELED. born_done marks an
+    item created already completed and never started (see _born_done).
+    Blocked time sums blocked periods clipped to the
+    cycle — from started_at (or the first event, if never started) to
     completed_at; a still-open period on an uncompleted item is not counted
     (unmeasurable).
 

@@ -1,6 +1,9 @@
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+import pytest
 
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
@@ -209,3 +212,35 @@ async def test_as_of_replay_ignores_a_reopen_after_the_instant() -> None:
     assert sample.completed_at == NOW - timedelta(days=8)
     (now_sample,) = data.samples().samples
     assert now_sample.completed_at is None
+
+
+class _CountingOverrides(InMemoryMetricRuleOverridesRepository):
+    def __init__(self, rows: list[RuleOverrides]) -> None:
+        super().__init__(rows)
+        self.org_reads = 0
+
+    async def get(
+        self, organization_id: UUID, *, team_id: UUID | None = None
+    ) -> RuleOverrides | None:
+        if team_id is None:
+            self.org_reads += 1
+        return await super().get(organization_id, team_id=team_id)
+
+
+async def test_resolve_reads_the_org_row_once_and_warns_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    first = Team(organization_id=ORG, name="First")
+    second = Team(organization_id=ORG, name="Second")
+    overrides = _CountingOverrides(
+        [RuleOverrides(organization_id=ORG, overrides={"renamed_rule": 1})]
+    )
+    resolver = MetricRulesResolver(
+        overrides, InMemoryTeamRepository([first, second]), InMemoryProjectRepository([])
+    )
+
+    with caplog.at_level(logging.WARNING):
+        await resolver.resolve(team_id=first.id, project_id=None, item_team_ids=[second.id])
+
+    assert overrides.org_reads == 1
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1

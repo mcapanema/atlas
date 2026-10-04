@@ -125,7 +125,9 @@ def _check_order(rules: MetricRules) -> None:
 
 def _check_timezone(name: object) -> None:
     try:
-        ZoneInfo(str(name))
+        if not isinstance(name, str):
+            raise ValueError(name)
+        ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise ValueError("timezone must be an IANA time zone name, e.g. America/Sao_Paulo") from exc
 
