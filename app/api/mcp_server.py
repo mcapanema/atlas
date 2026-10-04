@@ -47,14 +47,15 @@ def _render_aging(aging: dict[str, Any], limit: int = 10) -> str:
     items = aging["items"]
     if not items:
         return "Aging WIP: nothing in progress."
-    p85 = aging["cycle_time_p85_seconds"]
+    threshold = aging["cycle_time_percentile_seconds"]
+    pct = aging["percentile"]
     header = "Aging WIP"
-    if p85 is not None:
-        header += f" (cycle-time p85 = {p85 / _DAY_SECONDS:.1f}d)"
+    if threshold is not None:
+        header += f" (cycle-time p{pct} = {threshold / _DAY_SECONDS:.1f}d)"
     lines = [header + ":"]
     for item in items[:limit]:
         age = item["age_seconds"] / _DAY_SECONDS
-        flag = " [over p85]" if item["over_p85"] else ""
+        flag = f" [over p{pct}]" if item["over_percentile"] else ""
         lines.append(f"- {item['title']} — {item['state']}, {age:.1f}d{flag}")
     if len(items) > limit:
         lines.append(f"... and {len(items) - limit} more (use aging_wip for the full list)")
@@ -157,7 +158,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
     @mcp.tool()
     async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
         """Every in-progress item with its age, flagged when older than the
-        scope's cycle-time p85 — the 'what is stuck' view for a daily
+        scope's configured aging percentile of cycle time — the 'what is stuck' view for a daily
         standup. Provide exactly one of team_id/project_id.
         """
         aging = await _api(
@@ -196,11 +197,12 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
         project_id: str | None = None,
         remaining: int | None = None,
         target_date: str | None = None,
-        window_days: int = 90,
+        window_days: int | None = None,
     ) -> str:
         """Monte Carlo completion forecast for a scope. Optional what-ifs:
         `remaining` overrides the open-item count (e.g. a planned sprint
         scope), `target_date` (YYYY-MM-DD) adds a hit-the-date confidence.
+        `window_days` defaults to the team's forecast history rule.
         Provide exactly one of team_id/project_id.
         """
         data = await _api(
@@ -259,7 +261,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
 
 1. Call list_scopes and resolve the team (ask me if the name is ambiguous).
 2. Call meeting_brief for that team, then aging_wip if the brief flags stuck items.
-3. Report, in order: items over the p85 age line (by name), anything blocked,
+3. Report, in order: items over the aging percentile line (by name), anything blocked,
    and how WIP compares to recent completion rate.
 4. Keep it under 10 bullets, ordered by what needs a decision in the meeting.
    Flag anything the data can't answer instead of guessing."""

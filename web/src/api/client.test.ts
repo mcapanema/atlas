@@ -51,9 +51,28 @@ describe("apiFetch", () => {
     await expect(apiFetch("/api/things")).rejects.toThrow("Request failed: 502");
   });
 
-  it("falls back to the status code when detail is not a string", async () => {
+  it("joins an array detail as '<field>: <msg>' items", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ detail: [{ loc: ["body"], msg: "invalid" }] }), {
+      new Response(
+        JSON.stringify({
+          detail: [
+            { loc: ["body", "healthy_min"], msg: "must be at most 100" },
+            { loc: ["body", "weight_flow"], msg: "must be at least 0" },
+            { msg: "no location" },
+          ],
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(apiFetch("/api/things")).rejects.toThrow(
+      "healthy_min: must be at most 100; weight_flow: must be at least 0; no location",
+    );
+  });
+
+  it("falls back to the status code when detail is neither a string nor a list", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: { nested: true } }), {
         status: 422,
         headers: { "Content-Type": "application/json" },
       }),

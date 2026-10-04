@@ -7,6 +7,7 @@ import { AdvisorPage } from "./pages/AdvisorPage";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
 import { ExecutiveDashboardPage } from "./pages/ExecutiveDashboardPage";
 import { MeetingsPage } from "./pages/MeetingsPage";
+import { MetricRulesPage } from "./pages/MetricRulesPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { WorkItemPage } from "./pages/WorkItemPage";
 import { WorkItemsPage } from "./pages/WorkItemsPage";
@@ -36,6 +37,7 @@ export function App() {
           <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/metrics" element={<Navigate to="/teams" replace />} />
           <Route path="/connectors" element={<ConnectorsPage />} />
+          <Route path="/metric-rules" element={<MetricRulesPage />} />
         </Routes>
       </Suspense>
     </AppLayout>

@@ -3,6 +3,7 @@
 # visible to Alembic autogenerate and to test table creation.
 from app.infrastructure.repositories import (
     events,
+    metric_rules,
     organizations,
     personas,
     projects,
@@ -13,6 +14,7 @@ from app.infrastructure.repositories import (
 
 __all__ = [
     "events",
+    "metric_rules",
     "organizations",
     "personas",
     "projects",

@@ -88,14 +88,33 @@ Metrics (`/metrics`) and Advisor (`/advisor`) pages.
 ### Persisted analytics snapshots (ADR-0008)
 
 The one write-side projection: `app/domain/snapshots/` holds
-`MetricSnapshot` and `ForecastSnapshot` (one immutable row per scope per
-UTC day) with repository ports, `SnapshotService`
-(`app/application/snapshots/service.py`) captures them for every team and
-project inside the sync request, and `evaluate_forecast_accuracy`
-(`app/domain/forecasting/accuracy.py`) scores past forecast snapshots
-against actual completions. Served from `GET /api/metrics/snapshots`
-(lead-time trend on the dashboards) and `GET /api/forecasts/accuracy`
-(forecast calibration on the forecast card and Executive Dashboard).
+`MetricSnapshot` and `ForecastSnapshot` (one row per scope per UTC day,
+rewritten in place when the scope's metric rules change — ADR-0010) with
+repository ports, `SnapshotService` (`app/application/snapshots/service.py`)
+captures them for every team and project inside the sync request, and
+`evaluate_forecast_accuracy` (`app/domain/forecasting/accuracy.py`) scores
+past forecast snapshots against actual completions. Served from
+`GET /api/metrics/snapshots` (lead-time trend on the dashboards) and
+`GET /api/forecasts/accuracy` (forecast calibration on the forecast card
+and Executive Dashboard).
+
+### Metric rules (ADR-0010)
+
+Every rule that changes how a metric is computed — lifecycle
+interpretation, health scales and weights, timezone, chart bucketing,
+forecast history — is a field of `MetricRules`
+(`app/domain/metric_rules/entities.py`, defaults = the previous built-in behavior).
+`metric_rule_overrides` stores sparse override layers per organization
+(the workspace default) and per team; `MetricRulesResolver`
+(`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace
+⊕ team, and `ScopeSampleLoader` (`app/application/scope.py`) folds each item
+with its team's rules while the scope's own rules drive health, calendar and
+windows. `MetricRulesService` serves `GET/PATCH /api/organizations/{id}/metric-rules`
+and `/api/teams/{id}/metric-rules`; a change rewrites the affected scopes'
+snapshot history through the background `RecomputeRunner` in
+`app/api/recompute.py` (it cancels the running task before a save writes,
+then restarts with the pending scopes; status on the organization row,
+resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
 
 ### Ports to external systems
 

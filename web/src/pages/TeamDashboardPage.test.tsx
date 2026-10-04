@@ -47,6 +47,15 @@ describe("TeamDashboardPage", () => {
     expect(urls).toContain(`/api/metrics?team_id=${teamFixture.id}`);
   });
 
+  it("links a team with its own rules to them", async () => {
+    mockMetricsFetch({ "/api/teams": [{ ...teamFixture, has_custom_rules: true }] });
+
+    renderPage(`/teams?team=${teamFixture.id}`);
+
+    const link = await screen.findByRole("link", { name: "Custom rules" });
+    expect(link).toHaveAttribute("href", `/metric-rules?team=${teamFixture.id}`);
+  });
+
   it("shows an error when teams fail to load", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
 

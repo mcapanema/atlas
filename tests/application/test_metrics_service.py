@@ -208,9 +208,9 @@ async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
 
     assert [a.work_item_id for a in aging.items] == [old.id, young.id]
     assert aging.items[0].age == timedelta(days=10)
-    assert aging.cycle_time_p85 == timedelta(days=7)
-    assert aging.items[0].over_p85 is True
-    assert aging.items[1].over_p85 is False
+    assert aging.cycle_time_percentile == timedelta(days=7)
+    assert aging.items[0].over_percentile is True
+    assert aging.items[1].over_percentile is False
 
 
 async def test_delivery_health_for_team() -> None:

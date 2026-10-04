@@ -417,3 +417,23 @@ def test_map_issue_created_in_todo_and_completed_later_gets_no_created_done() ->
     completed = [e for e in map_issue(node).events if e.type is EventType.COMPLETED]
 
     assert [e.external_id for e in completed] == ["h6"]
+
+
+def test_blocked_label_ids_matches_whole_words_only() -> None:
+    ids = blocked_label_ids(
+        [
+            {"id": "l1", "name": "Blocked"},
+            {"id": "l2", "name": "blocker: external"},
+            {"id": "l3", "name": "Blocking"},
+            {"id": "l4", "name": "regras-blockly"},
+            {"id": "l5", "name": "unblock-me-later"},
+            {"id": "l6", "name": "block"},
+            {"id": "l7", "name": "blocked_by"},
+            {"id": "l8", "name": "Blockers"},
+            {"id": "l9", "name": "blocker_external"},
+            {"id": "l10", "name": "blocks"},
+            {"id": "l11", "name": "unblocked"},
+        ]
+    )
+
+    assert ids == {"l1", "l2", "l3", "l6", "l7", "l8", "l9"}

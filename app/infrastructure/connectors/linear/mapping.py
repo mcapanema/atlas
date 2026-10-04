@@ -5,6 +5,7 @@ nothing outside this package sees a Linear payload.
 """
 
 import logging
+import re
 from collections.abc import Set as AbstractSet
 from datetime import datetime
 from typing import Any
@@ -21,14 +22,22 @@ logger = logging.getLogger(__name__)
 HISTORY_PAGE_SIZE = 250
 
 
+_BLOCKED_LABEL = re.compile(r"(?<![a-z0-9])block(?:ed|ers?|ing)?(?![a-z0-9])", re.IGNORECASE)
+
+
 def blocked_label_ids(label_nodes: list[dict[str, Any]]) -> set[str]:
     """Ids of labels whose name marks blocked work.
 
-    ponytail: case-insensitive 'block' substring, zero config — covers
-    "Blocked", "blocked", "blocker: external". Promote to a Settings list
-    if a workspace ever needs exact names.
+    Whole words only, where "_" separates words too: "Blocked", "Blockers",
+    "blocker: external", "Blocking" and "blocked_by" match; "regras-blockly"
+    (a Blockly label), "blocks" and "unblocked" don't — the 2026-10-03 audit
+    found the old "block" substring match flagging "regras-blockly" as
+    blocked forever.
+
+    ponytail: zero-config name match. Per-team label lists and Linear
+    "blocks" relations are sub-project B of the per-team metric rules.
     """
-    return {node["id"] for node in label_nodes if "block" in str(node.get("name", "")).lower()}
+    return {node["id"] for node in label_nodes if _BLOCKED_LABEL.search(str(node.get("name", "")))}
 
 
 def map_team(node: dict[str, Any]) -> SourceTeam:

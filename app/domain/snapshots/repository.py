@@ -10,6 +10,10 @@ class MetricSnapshotRepository(Protocol):
 
     async def add(self, snapshot: MetricSnapshot) -> None: ...
 
+    async def update(self, snapshot: MetricSnapshot) -> None:
+        """Replace the stored snapshot with the same id."""
+        ...
+
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[MetricSnapshot]:
@@ -29,6 +33,10 @@ class ForecastSnapshotRepository(Protocol):
     """Persistence port for ForecastSnapshot."""
 
     async def add(self, snapshot: ForecastSnapshot) -> None: ...
+
+    async def update(self, snapshot: ForecastSnapshot) -> None:
+        """Replace the stored snapshot with the same id."""
+        ...
 
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None

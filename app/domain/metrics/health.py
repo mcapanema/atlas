@@ -1,17 +1,20 @@
 """Delivery Health: one explainable 0-100 composite per scope.
 
 Five components — predictability, efficiency, flow, stability, risk — each
-scored 0-100 with a human-readable reason, averaged into an overall score
+scored 0-100 with a human-readable reason, weighted into an overall score
 and band. Pure arithmetic over already-derived samples and timelines: the
 AI layer explains these numbers, it never produces them (VISION:
-"AI Explains, Statistics Predict").
+"AI Explains, Statistics Predict"). Scales, the aging percentile, component
+weights and band cutoffs come from the scope's MetricRules.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event, event_order
 from app.domain.events.timeline import derive_timeline
+from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.lead_time import lead_times
@@ -19,9 +22,6 @@ from app.domain.metrics.samples import FlowSample, derive_flow_sample, in_progre
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.throughput import throughput
 from app.domain.metrics.wip import wip
-
-_HEALTHY = 70
-_WARNING = 40
 
 
 @dataclass(frozen=True)
@@ -48,8 +48,8 @@ def _clamp(value: float) -> int:
     return max(0, min(100, round(value)))
 
 
-def _predictability(lead: list[timedelta]) -> HealthComponent | None:
-    """Lead-time spread: p95 at p50 scores 100, p95 at 4x p50 scores 0."""
+def _predictability(lead: list[timedelta], *, worst_ratio: float) -> HealthComponent | None:
+    """Lead-time spread: p95 at p50 scores 100, p95 at `worst_ratio` x p50 scores 0."""
     if not lead:
         return None
     seconds = [d.total_seconds() for d in lead]
@@ -59,7 +59,7 @@ def _predictability(lead: list[timedelta]) -> HealthComponent | None:
     ratio = percentile(seconds, 95) / p50
     return HealthComponent(
         name="predictability",
-        score=_clamp(100 * (4 - ratio) / 3),
+        score=_clamp(100 * (worst_ratio - ratio) / (worst_ratio - 1)),
         reason=f"lead time p95 is {ratio:.1f}x p50",
     )
 
@@ -94,15 +94,17 @@ def _flow(
     )
 
 
-def _stability(*, wip_now: int, completed: int, window_days: int) -> HealthComponent | None:
-    """WIP inventory in weeks of throughput (Little's law): <=1 week 100, >=5 weeks 0."""
+def _stability(
+    *, wip_now: int, completed: int, window_days: int, best_weeks: float, worst_weeks: float
+) -> HealthComponent | None:
+    """WIP inventory in weeks of throughput (Little's law): <= best 100, >= worst 0."""
     if completed == 0:
         return None
     weekly = completed / (window_days / 7)
     weeks_of_wip = wip_now / weekly
     return HealthComponent(
         name="stability",
-        score=_clamp(100 * (5 - weeks_of_wip) / 4),
+        score=_clamp(100 * (worst_weeks - weeks_of_wip) / (worst_weeks - best_weeks)),
         reason=f"WIP equals {weeks_of_wip:.1f} weeks of throughput",
     )
 
@@ -111,9 +113,10 @@ def _risk(
     item_states: list[tuple[FlowSample, bool]],
     *,
     now: datetime,
-    cycle_p85: timedelta | None,
+    cycle_limit: timedelta | None,
+    aging_percentile: int,
 ) -> HealthComponent | None:
-    """Share of in-progress items currently blocked or aging past cycle P85."""
+    """Share of in-progress items currently blocked or aging past the cycle percentile."""
     open_items = [(sample, blocked) for sample, blocked in item_states if in_progress(sample, now)]
     if not open_items:
         return None
@@ -122,63 +125,103 @@ def _risk(
         for sample, blocked in open_items
         if blocked
         or (
-            cycle_p85 is not None
+            cycle_limit is not None
             and sample.started_at is not None
-            and now - sample.started_at > cycle_p85
+            and now - sample.started_at > cycle_limit
         )
     )
     return HealthComponent(
         name="risk",
         score=_clamp(100 * (1 - at_risk / len(open_items))),
         reason=(
-            f"{at_risk} of {len(open_items)} in-progress items blocked or aging past cycle p85"
+            f"{at_risk} of {len(open_items)} in-progress items blocked or aging past"
+            f" cycle p{aging_percentile}"
         ),
     )
 
 
-def compute_delivery_health(
-    streams: list[list[Event]], *, now: datetime, window_days: int = 30
-) -> DeliveryHealth:
-    """Score the scope's delivery health over the trailing window ending at `now`."""
-    window_start = now - timedelta(days=window_days)
-    mid = now - timedelta(days=window_days) / 2
-    item_states: list[tuple[FlowSample, bool]] = []
-    for stream in streams:
-        sample = derive_flow_sample(stream)
+def _item_states(
+    streams: list[list[Event]], samples: Sequence[FlowSample | None] | None
+) -> list[tuple[FlowSample, bool]]:
+    """(sample, blocked right now) per item; samples derived with built-in rules if absent."""
+    derived = samples if samples is not None else [derive_flow_sample(s) for s in streams]
+    states: list[tuple[FlowSample, bool]] = []
+    for stream, sample in zip(streams, derived, strict=True):
         if sample is None:
             continue
         ordered = sorted(stream, key=event_order)
         blocked_open = any(p.ended_at is None for p in derive_timeline(ordered).blocked_periods)
-        item_states.append((sample, blocked_open))
-    samples = [sample for sample, _ in item_states]
+        states.append((sample, blocked_open))
+    return states
+
+
+def _cycle_percentile(samples: list[FlowSample], pct: int) -> timedelta | None:
+    completed = cycle_times(samples)
+    if not completed:
+        return None
+    return timedelta(seconds=percentile([c.total_seconds() for c in completed], pct))
+
+
+def _score(
+    components: tuple[HealthComponent, ...], rules: MetricRules
+) -> tuple[tuple[HealthComponent, ...], int | None, str | None]:
+    """Weighted overall score and band; zero-weight components drop out."""
+    weighted = tuple(c for c in components if rules.weight(c.name) > 0)
+    if not weighted:
+        return (), None, None
+    total = sum(rules.weight(c.name) for c in weighted)
+    score = round(sum(c.score * rules.weight(c.name) for c in weighted) / total)
+    if score >= rules.healthy_min:
+        band = "healthy"
+    elif score >= rules.warning_min:
+        band = "warning"
+    else:
+        band = "critical"
+    return weighted, score, band
+
+
+def compute_delivery_health(
+    streams: list[list[Event]],
+    *,
+    now: datetime,
+    window_days: int = 30,
+    samples: Sequence[FlowSample | None] | None = None,
+    rules: MetricRules = DEFAULT_RULES,
+) -> DeliveryHealth:
+    """Score the scope's delivery health over the trailing window ending at `now`.
+
+    `samples` are the streams' samples (aligned by index) when the caller
+    folded them with per-item rules; omitted, they're derived with the
+    built-in rules. `rules` are the scope's.
+    """
+    window_start = now - timedelta(days=window_days)
+    mid = now - timedelta(days=window_days) / 2
+    item_states = _item_states(streams, samples)
+    all_samples = [sample for sample, _ in item_states]
     in_window = [
-        s for s in samples if s.completed_at is not None and window_start < s.completed_at <= now
+        s
+        for s in all_samples
+        if s.completed_at is not None and window_start < s.completed_at <= now
     ]
-    completed_cycles = cycle_times(samples)
-    cycle_p85 = (
-        timedelta(seconds=percentile([c.total_seconds() for c in completed_cycles], 85))
-        if completed_cycles
-        else None
+    candidates = (
+        _predictability(lead_times(in_window), worst_ratio=rules.predictability_worst_ratio),
+        _efficiency(in_window),
+        _flow(all_samples, window_start=window_start, mid=mid, now=now),
+        _stability(
+            wip_now=wip(all_samples, at=now),
+            completed=len(in_window),
+            window_days=window_days,
+            best_weeks=rules.stability_best_weeks,
+            worst_weeks=rules.stability_worst_weeks,
+        ),
+        _risk(
+            item_states,
+            now=now,
+            cycle_limit=_cycle_percentile(all_samples, rules.aging_percentile),
+            aging_percentile=rules.aging_percentile,
+        ),
     )
-    components = tuple(
-        c
-        for c in (
-            _predictability(lead_times(in_window)),
-            _efficiency(in_window),
-            _flow(samples, window_start=window_start, mid=mid, now=now),
-            _stability(
-                wip_now=wip(samples, at=now), completed=len(in_window), window_days=window_days
-            ),
-            _risk(item_states, now=now, cycle_p85=cycle_p85),
-        )
-        if c is not None
-    )
-    if not components:
-        return DeliveryHealth(
-            window_start=window_start, window_end=now, score=None, band=None, components=()
-        )
-    score = round(sum(c.score for c in components) / len(components))
-    band = "healthy" if score >= _HEALTHY else "warning" if score >= _WARNING else "critical"
+    components, score, band = _score(tuple(c for c in candidates if c is not None), rules)
     return DeliveryHealth(
         window_start=window_start, window_end=now, score=score, band=band, components=components
     )

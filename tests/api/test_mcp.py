@@ -8,6 +8,7 @@ app in-process via an httpx ASGITransport factory.
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 import httpx
 import httpx2
@@ -18,6 +19,7 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.mcp_server import _render_aging
 from app.main import create_app
 from tests.api.helpers import create_team
 
@@ -209,3 +211,49 @@ async def test_meeting_prompts(
         assert isinstance(content, TextContent)
         assert "Platform" in content.text
         assert "meeting_brief" in content.text
+
+
+def test_aging_copy_names_the_configured_percentile() -> None:
+    item = {"title": "Fix login", "state": "In Progress", "age_seconds": 6 * 86400}
+    aging = {
+        "cycle_time_percentile_seconds": 4 * 86400,
+        "percentile": 70,
+        "items": [{**item, "over_percentile": True}],
+    }
+
+    text = _render_aging(aging)
+
+    assert "(cycle-time p70 = 4.0d)" in text
+    assert "6.0d [over p70]" in text
+
+
+def _many_aging(threshold_seconds: float | None) -> dict[str, Any]:
+    return {
+        "cycle_time_percentile_seconds": threshold_seconds,
+        "percentile": 85,
+        "items": [
+            {
+                "title": f"Item {n}",
+                "state": "In Progress",
+                "age_seconds": 86400.0,
+                "over_percentile": False,
+            }
+            for n in range(12)
+        ],
+    }
+
+
+def test_aging_rows_are_capped_with_a_numeric_percentile() -> None:
+    lines = _render_aging(_many_aging(4 * 86400)).splitlines()
+
+    assert len([line for line in lines if line.startswith("- ")]) == 10
+    assert lines[-1].startswith("... and 2 more")
+
+
+def test_aging_rows_are_capped_without_a_percentile() -> None:
+    text = _render_aging(_many_aging(None))
+    lines = text.splitlines()
+
+    assert lines[0] == "Aging WIP:"
+    assert len([line for line in lines if line.startswith("- ")]) == 10
+    assert lines[-1].startswith("... and 2 more")

@@ -38,19 +38,22 @@ import { HealthBadge } from "./HealthBadge";
 import { HelpLabel } from "./HelpLabel";
 import { StatCard } from "./StatCard";
 
-const agingColumns: ColumnsType<AgingItem> = [
-  {
-    title: "Title",
-    dataIndex: "title",
-    render: (title, item) => <Link to={`/work-items/${item.work_item_id}`}>{title}</Link>,
-  },
-  { title: "State", dataIndex: "state" },
-  { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
-  {
-    title: "",
-    render: (_, item) => (item.over_p85 ? <Tag color="red">over P85</Tag> : null),
-  },
-];
+function agingColumns(percentile: number): ColumnsType<AgingItem> {
+  return [
+    {
+      title: "Title",
+      dataIndex: "title",
+      render: (title, item) => <Link to={`/work-items/${item.work_item_id}`}>{title}</Link>,
+    },
+    { title: "State", dataIndex: "state" },
+    { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
+    {
+      title: "",
+      render: (_, item) =>
+        item.over_percentile ? <Tag color="red">over P{percentile}</Tag> : null,
+    },
+  ];
+}
 
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
@@ -116,7 +119,7 @@ function FlowStats({ data, statLabel }: { data: FlowMetrics; statLabel: string }
       <StatCard
         title={`Throughput (${statLabel})`}
         value={data.completed}
-        help={`Work items completed in the last ${statLabel}. Counted at the moment an item reached a done state. Items created already done (logged after the fact) are left out of every metric.`}
+        help={`Work items completed in the last ${statLabel}. Counted at the moment an item reached a done state. Items created already done (logged after the fact) are left out of every metric, unless the team's metric rules include them.`}
       />
       <StatCard
         title="WIP (now)"
@@ -268,17 +271,17 @@ function FlowCharts({
   );
 }
 
-function AgingWipCard({ items }: { items: AgingItem[] }) {
+function AgingWipCard({ items, percentile }: { items: AgingItem[]; percentile: number }) {
   return (
     <ChartCard
       label="Aging WIP"
-      help="Items currently in progress, oldest first. Flagged when they have already been open longer than 85% of completed items took."
+      help={`Items currently in progress, oldest first. Flagged when they have already been open longer than ${percentile}% of completed items took (the team's aging percentile, set in Metric rules).`}
     >
       <Table
         size="small"
         rowKey="work_item_id"
         pagination={false}
-        columns={agingColumns}
+        columns={agingColumns(percentile)}
         dataSource={items}
       />
     </ChartCard>
@@ -319,7 +322,9 @@ export function FlowDashboard({
         snapshots={snapshots.data}
         chartLabel={windowLabel(filters, 90)}
       />
-      {aging.data && aging.data.items.length > 0 && <AgingWipCard items={aging.data.items} />}
+      {aging.data && aging.data.items.length > 0 && (
+        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
+      )}
       <ForecastCard scope={scope} filters={filters} />
     </Space>
   );

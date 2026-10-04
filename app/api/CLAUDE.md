@@ -37,7 +37,16 @@ Presentation is allowed to know a concrete adapter exists).
   `app/main.py`'s `create_app()`. Deliberate exceptions: `health.py`
   serves bare `/health`; `advisor.py` mounts at `/api/recommendations`
   (named for what it returns); `connectors.py` nests actions per vendor
-  (`POST /api/connectors/linear/sync`).
+  (`POST /api/connectors/linear/sync`); `metric_rules.py` is prefix-less
+  because it serves both `/api/organizations/{id}/metric-rules` and
+  `/api/teams/{id}/metric-rules`.
+- **Background recompute** (`recompute.py`): the in-process
+  `RecomputeRunner` (one asyncio task, no queue) rewrites snapshot history
+  after a rule change. A new schedule cancels and restarts it with every
+  pending scope; each scope is one session and one commit; the lifespan
+  resumes organizations left "running". A route that changes rules does
+  its write inside `async with runner.paused()` (cancel first, write and
+  commit, then `queue`): a running scope holds SQLite's write lock.
 - `mount_spa()` must be registered last in `create_app()` — the rule and
   its reason are owned by `app/infrastructure/CLAUDE.md`.
 - **MCP facade** (`mcp_server.py`): the MCP server's tools call Atlas's own

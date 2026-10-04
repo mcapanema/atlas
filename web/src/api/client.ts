@@ -9,20 +9,21 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 // FastAPI puts human-readable errors in a string `detail` field; 422
-// validation errors carry an array there instead — fall through to the
-// generic message for those.
+// validation errors carry an array of {loc, msg} there, joined as
+// "<field>: <msg>".
 async function errorDetail(response: Response): Promise<string> {
   try {
-    const body: unknown = await response.json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      typeof (body as { detail?: unknown }).detail === "string"
-    ) {
-      return (body as { detail: string }).detail;
-    }
+    const body = (await response.json()) as { detail?: unknown } | null;
+    const detail = body?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length > 0) return detail.map(validationMessage).join("; ");
   } catch {
     // non-JSON error body
   }
   return `Request failed: ${response.status}`;
+}
+
+function validationMessage(item: { loc?: (string | number)[]; msg?: string }): string {
+  const field = item.loc?.at(-1);
+  return field === undefined ? String(item.msg) : `${field}: ${String(item.msg)}`;
 }

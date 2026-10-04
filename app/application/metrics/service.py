@@ -2,7 +2,8 @@ from collections.abc import Set as AbstractSet
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.application.scope import ScopeSampleLoader, ScopeSamples
+from app.application.metric_rules.resolver import MetricRulesResolver
+from app.application.scope import ScopeData, ScopeSampleLoader, ScopeSamples
 from app.domain.events.repository import EventRepository
 from app.domain.metrics.aging import AgingWip, compute_aging_wip
 from app.domain.metrics.distribution import (
@@ -19,8 +20,19 @@ from app.domain.work_items.repository import WorkItemRepository
 class MetricsService:
     """Application use cases for flow metrics."""
 
-    def __init__(self, work_items: WorkItemRepository, events: EventRepository) -> None:
-        self._scope = ScopeSampleLoader(work_items, events)
+    def __init__(
+        self,
+        work_items: WorkItemRepository,
+        events: EventRepository,
+        rules: MetricRulesResolver | None = None,
+    ) -> None:
+        self._scope = ScopeSampleLoader(work_items, events, rules)
+
+    async def load_scope_data(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> ScopeData:
+        """The scope's raw picture, for as-of replays (snapshot capture and recompute)."""
+        return await self._scope.load_data(team_id=team_id, project_id=project_id)
 
     async def load_scope(
         self,
@@ -66,7 +78,14 @@ class MetricsService:
         window_end = now if now is not None else datetime.now(UTC)
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
-        return compute_flow_history(scope.streams, now=window_end, window_days=window_days)
+        return compute_flow_history(
+            scope.streams,
+            samples=scope.samples,
+            stream_rules=scope.stream_rules,
+            rules=scope.rules,
+            now=window_end,
+            window_days=window_days,
+        )
 
     async def get_lead_time_distribution(
         self,
@@ -97,7 +116,9 @@ class MetricsService:
         at = now if now is not None else datetime.now(UTC)
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
-        return compute_aging_wip(scope.items_with_samples, now=at)
+        return compute_aging_wip(
+            scope.items_with_samples, now=at, aging_percentile=scope.rules.aging_percentile
+        )
 
     async def get_delivery_health(
         self,
@@ -112,4 +133,10 @@ class MetricsService:
         window_end = now if now is not None else datetime.now(UTC)
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
-        return compute_delivery_health(scope.streams, now=window_end, window_days=window_days)
+        return compute_delivery_health(
+            scope.streams,
+            samples=scope.samples,
+            rules=scope.rules,
+            now=window_end,
+            window_days=window_days,
+        )

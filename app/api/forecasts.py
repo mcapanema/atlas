@@ -35,7 +35,7 @@ async def get_forecast(
     service: ForecastServiceDep,
     scope: ScopeDep,
     filters: ItemFiltersDep,
-    window_days: int = Query(default=90, ge=7, le=365),
+    window_days: int | None = Query(default=None, ge=7, le=365),
     remaining: int | None = Query(default=None, ge=0, le=100_000),
     target_date: date | None = None,
 ) -> ForecastRead:

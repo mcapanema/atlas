@@ -6,11 +6,13 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
+from dataclasses import replace
 from datetime import date, datetime
 from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.events.entities import Event
+from app.domain.metric_rules.entities import RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
@@ -203,6 +205,9 @@ class InMemoryMetricSnapshotRepository:
     async def add(self, snapshot: MetricSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot
 
+    async def update(self, snapshot: MetricSnapshot) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[MetricSnapshot]:
@@ -272,6 +277,9 @@ class InMemoryForecastSnapshotRepository:
     async def add(self, snapshot: ForecastSnapshot) -> None:
         self._snapshots[snapshot.id] = snapshot
 
+    async def update(self, snapshot: ForecastSnapshot) -> None:
+        self._snapshots[snapshot.id] = snapshot
+
     async def list(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[ForecastSnapshot]:
@@ -292,3 +300,40 @@ class InMemoryForecastSnapshotRepository:
     ) -> bool:
         scoped = await self.list(team_id=team_id, project_id=project_id)
         return any(s.captured_on == captured_on for s in scoped)
+
+
+class InMemoryMetricRuleOverridesRepository:
+    def __init__(self, rows: list[RuleOverrides] | None = None) -> None:
+        self._rows: dict[UUID, RuleOverrides] = {r.id: r for r in rows or []}
+
+    async def get(
+        self, organization_id: UUID, *, team_id: UUID | None = None
+    ) -> RuleOverrides | None:
+        return next(
+            (
+                r
+                for r in self._rows.values()
+                if r.organization_id == organization_id and r.team_id == team_id
+            ),
+            None,
+        )
+
+    async def list_for_organization(self, organization_id: UUID) -> list[RuleOverrides]:
+        return [r for r in self._rows.values() if r.organization_id == organization_id]
+
+    async def list_recomputing(self) -> list[RuleOverrides]:
+        return [
+            r for r in self._rows.values() if r.team_id is None and r.recompute.state == "running"
+        ]
+
+    async def save(self, overrides: RuleOverrides) -> None:
+        existing = self._rows.get(overrides.id)
+        # Mirrors the adapter: an existing row keeps its recompute status.
+        self._rows[overrides.id] = (
+            overrides if existing is None else replace(overrides, recompute=existing.recompute)
+        )
+
+    async def save_recompute(self, organization_id: UUID, status: RecomputeStatus) -> None:
+        existing = await self.get(organization_id)
+        row = existing or RuleOverrides(organization_id=organization_id)
+        self._rows[row.id] = replace(row, recompute=status)

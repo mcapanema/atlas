@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator, Callable, Iterator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -51,6 +52,42 @@ async def test_app(sessionmaker: async_sessionmaker[AsyncSession]) -> FastAPI:
 @pytest_asyncio.fixture
 async def client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+        yield http_client
+
+
+@pytest_asyncio.fixture
+async def file_sessionmaker(tmp_path: Path) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """A file-backed DB with a real connection pool.
+
+    For code that opens concurrent sessions (the metric-rules recompute
+    runner): the single shared in-memory connection above can't isolate
+    their transactions.
+    """
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'atlas.db'}")
+    enable_sqlite_pragmas(engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def rules_app(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[FastAPI]:
+    """The app on the file-backed DB; stops the recompute runner on teardown."""
+    application = create_app()
+    application.state.sessionmaker = file_sessionmaker
+    yield application
+    runner = getattr(application.state, "recompute_runner", None)
+    if runner is not None:
+        await runner.close()
+
+
+@pytest_asyncio.fixture
+async def rules_client(rules_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=rules_app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client
 

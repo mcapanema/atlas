@@ -3,6 +3,7 @@ from collections.abc import Set as AbstractSet
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
+from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.scope import ScopeSampleLoader, ScopeSamples
 from app.domain.events.repository import EventRepository
 from app.domain.forecasting.monte_carlo import (
@@ -21,8 +22,13 @@ from app.domain.work_items.repository import WorkItemRepository
 class ForecastService:
     """Application use cases for Monte Carlo delivery forecasting."""
 
-    def __init__(self, work_items: WorkItemRepository, events: EventRepository) -> None:
-        self._scope = ScopeSampleLoader(work_items, events)
+    def __init__(
+        self,
+        work_items: WorkItemRepository,
+        events: EventRepository,
+        rules: MetricRulesResolver | None = None,
+    ) -> None:
+        self._scope = ScopeSampleLoader(work_items, events, rules)
 
     async def load_scope(
         self,
@@ -45,7 +51,7 @@ class ForecastService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 90,
+        window_days: int | None = None,
         remaining: int | None = None,
         target_date: date | None = None,
         now: datetime | None = None,
@@ -55,16 +61,21 @@ class ForecastService:
 
         `remaining` defaults to the scope's open item count — neither completed
         nor canceled (items with no events count as open backlog). Deterministic:
-        the simulation runs with a fixed seed.
+        the simulation runs with a fixed seed. `window_days` defaults to the scope
+        team's forecast_history_days rule.
         """
         window_end = now if now is not None else datetime.now(UTC)
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
 
+        history_window = (
+            window_days if window_days is not None else scope.rules.forecast_history_days
+        )
+
         closed = sum(1 for s in scope.samples if s.completed_at is not None or s.canceled)
         scope_remaining = remaining if remaining is not None else scope.item_count - closed
 
-        history_days = observed_history_days(scope.samples, end=window_end, days=window_days)
+        history_days = observed_history_days(scope.samples, end=window_end, days=history_window)
         daily = daily_throughput_samples(scope.samples, end=window_end, days=history_days)
         # ponytail: the 2k-trial simulation is pure CPU (~0.9s worst case) —
         # run it in a worker thread so the event loop (incl. /health) stays

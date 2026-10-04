@@ -371,3 +371,26 @@ h5 {
     transition-duration: 0.01ms !important;
   }
 }
+
+.rule-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ant-color-split);
+}
+.rule-row:last-child {
+  border-bottom: 0;
+}
+.rule-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 640px;
+}
+@media (max-width: 720px) {
+  .rule-row {
+    flex-direction: column;
+  }
+}
