@@ -5,6 +5,7 @@ history in the background (app/api/recompute.py); the response carries the
 recompute status to poll.
 """
 
+from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -24,16 +25,25 @@ def _read(view: RulesView | None, missing: str) -> MetricRulesViewRead:
     return MetricRulesViewRead.model_validate(view)
 
 
-async def _saved(
-    change: RulesChange | None, missing: str, session: AsyncSession, runner: RecomputeRunner
+async def _save(
+    save: Callable[[], Awaitable[RulesChange | None]],
+    missing: str,
+    session: AsyncSession,
+    runner: RecomputeRunner,
 ) -> MetricRulesViewRead:
-    if change is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{missing} not found")
-    if change.scopes:
-        # The runner writes in its own sessions and SQLite allows one writer:
-        # commit the new rules (and the "running" status) before it starts.
-        await session.commit()
-        await runner.schedule(change.organization_id, change.scopes)
+    # The runner is paused BEFORE the write: a scope rewrite holds SQLite's
+    # single write lock until it commits, so writing first would block (and
+    # 500) behind it. It restarts on exit, even on a 404/422, so pending
+    # work isn't stranded.
+    async with runner.paused() as queue:
+        change = await save()
+        if change is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"{missing} not found"
+            )
+        if change.scopes:
+            await session.commit()  # the new rules and "running", before the run restarts
+            queue(change.organization_id, change.scopes)
     return MetricRulesViewRead.model_validate(change.view)
 
 
@@ -56,8 +66,12 @@ async def update_workspace_rules(
     session: SessionDep,
     runner: RecomputeRunnerDep,
 ) -> MetricRulesViewRead:
-    change = await service.update_organization(organization_id, payload.changes())
-    return await _saved(change, f"Organization {organization_id}", session, runner)
+    return await _save(
+        lambda: service.update_organization(organization_id, payload.changes()),
+        f"Organization {organization_id}",
+        session,
+        runner,
+    )
 
 
 @router.post(
@@ -73,9 +87,10 @@ async def recompute_history(
 ) -> MetricRulesViewRead:
     _read(await service.organization_view(organization_id), f"Organization {organization_id}")
     scopes = await service.organization_scopes(organization_id)
-    await service.start_recompute(organization_id)
-    await session.commit()
-    await runner.schedule(organization_id, scopes)
+    async with runner.paused() as queue:  # before writing; see _save
+        await service.start_recompute(organization_id)
+        await session.commit()
+        queue(organization_id, scopes)
     return _read(
         await service.organization_view(organization_id), f"Organization {organization_id}"
     )
@@ -94,5 +109,9 @@ async def update_team_rules(
     session: SessionDep,
     runner: RecomputeRunnerDep,
 ) -> MetricRulesViewRead:
-    change = await service.update_team(team_id, payload.changes())
-    return await _saved(change, f"Team {team_id}", session, runner)
+    return await _save(
+        lambda: service.update_team(team_id, payload.changes()),
+        f"Team {team_id}",
+        session,
+        runner,
+    )
