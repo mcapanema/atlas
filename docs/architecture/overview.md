@@ -34,11 +34,11 @@ The slices come in four kinds.
 `entities.py` + `repository.py` (a `Protocol` port), a SQLAlchemy adapter
 in `app/infrastructure/repositories/`, and a CRUD router. A Team owns
 Projects and Work Items; a Project groups Work Items; each Work Item
-accumulates immutable Events (state changes, assignments, blocks). Events
+accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). Events
 are the source of truth everything analytical derives from. One pure
 derivation lives beside its aggregate: `derive_timeline`
-(`app/domain/events/timeline.py`) turns an item's events into
-state/blocked periods for `GET /api/work-items/{id}/timeline` and the Work
+(`app/domain/events/timeline.py`) turns an item's events into state periods
+and — under its team's rules (`blocked_periods`) — blocked periods for `GET /api/work-items/{id}/timeline` and the Work
 Item Explorer (`/work-items`).
 
 ### Computed-on-read analytics (ADR-0003, amended by ADR-0008)
@@ -101,8 +101,9 @@ and Executive Dashboard).
 ### Metric rules (ADR-0010)
 
 Every rule that changes how a metric is computed — lifecycle
-interpretation, health scales and weights, timezone, chart bucketing,
-forecast history — is a field of `MetricRules`
+interpretation (incl. reopens, parent issues, lead-time start), the blocked
+signal, health scales and weights, timezone, chart bucketing, forecast
+history and remaining, label → type mapping — is a field of `MetricRules`
 (`app/domain/metric_rules/entities.py`, defaults = the previous built-in behavior).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`
@@ -140,10 +141,11 @@ that package. The first connector is Linear
 personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
 mapping functions, and a paginating `LinearDataSource`. Exposed as
 `POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
-and the Connectors page in the frontend. Blocked work is inferred from the
-workspace's blocked label: the datasource resolves label ids whose name
-contains "block" and the mapper turns label add/remove history into
-BLOCKED/UNBLOCKED events, which feed blocked time and flow efficiency.
+and the Connectors page in the frontend. The mapper stores raw
+facts — label add/remove events (named), blocked-side relation-history
+events, state types on transitions, and each issue's labels and parent
+(ADR-0011); the team's metric rules decide at read time what counts as
+blocked, which items are parents, and which types and states count.
 Issues created directly in a started-type state start at creation, and
 issues created directly in a completed-type state (logged after the fact)
 complete at creation (`:created-done`), which analytics treat as records, not
