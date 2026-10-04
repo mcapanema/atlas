@@ -125,6 +125,7 @@ class SyncSummaryRead(BaseModel):
     events: int
     divergences: int
     deleted: int
+    state_types_filled: int
 
 
 class StatePeriodRead(BaseModel):
