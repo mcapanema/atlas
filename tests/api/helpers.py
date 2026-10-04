@@ -2,18 +2,29 @@
 
 from datetime import UTC, datetime, timedelta
 
+from fastapi import FastAPI
 from httpx import AsyncClient
 
 
-async def create_team(client: AsyncClient) -> str:
+async def create_org_and_team(client: AsyncClient) -> tuple[str, str]:
     org = await client.post("/api/organizations", json={"name": "Acme"})
     assert org.status_code in (200, 201)
-    team = await client.post(
-        "/api/teams", json={"organization_id": org.json()["id"], "name": "Platform"}
-    )
+    org_id: str = org.json()["id"]
+    team = await client.post("/api/teams", json={"organization_id": org_id, "name": "Platform"})
     assert team.status_code in (200, 201)
     team_id: str = team.json()["id"]
-    return team_id
+    return org_id, team_id
+
+
+async def create_team(client: AsyncClient) -> str:
+    return (await create_org_and_team(client))[1]
+
+
+async def settle(app: FastAPI) -> None:
+    """Wait for the metric-rules recompute runner to go idle."""
+    runner = getattr(app.state, "recompute_runner", None)
+    if runner is not None:
+        await runner.wait_idle()
 
 
 async def create_work_item(

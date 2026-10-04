@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -16,6 +17,7 @@ from app.api import (
     health,
     mcp_server,
     meetings,
+    metric_rules,
     metrics,
     organizations,
     personas,
@@ -23,6 +25,7 @@ from app.api import (
     teams,
     work_items,
 )
+from app.api.recompute import RecomputeRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
 from app.domain.sync.port import DataSourceError
@@ -37,6 +40,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     sessionmaker = build_sessionmaker(settings.database_url, echo=settings.db_echo)
     app.state.sessionmaker = sessionmaker
+    runner = RecomputeRunner(sessionmaker)
+    app.state.recompute_runner = runner
+    # Finish any history recompute a restart interrupted, without delaying
+    # startup; resume() logs and gives up if the DB isn't migrated yet.
+    resume = asyncio.create_task(runner.resume())
     try:
         async with AsyncExitStack() as stack:
             # The MCP session manager only exists when ATLAS_MCP_TOKEN is set
@@ -47,6 +55,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await stack.enter_async_context(mcp.session_manager.run())
             yield
     finally:
+        resume.cancel()
+        await asyncio.gather(resume, return_exceptions=True)
+        await runner.close()
         engine = sessionmaker.kw["bind"]
         assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
         await engine.dispose()
@@ -71,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(advisor.router)
     app.include_router(personas.router)
     app.include_router(meetings.router)
+    app.include_router(metric_rules.router)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

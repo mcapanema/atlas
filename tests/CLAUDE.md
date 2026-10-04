@@ -19,6 +19,11 @@ the codebase or its tooling rather than one layer. Exemplar:
   instance with `app.state.sessionmaker` overridden to the in-memory
   factory. Use this for `tests/api/` tests; don't stand up a separate app
   instance per test file.
+- `file_sessionmaker` / `rules_app` / `rules_client` — the same app on a
+  file-backed SQLite DB with a real connection pool, for code that opens
+  concurrent sessions (the metric-rules recompute runner): the shared
+  in-memory connection can't isolate their transactions. `rules_app`
+  closes the runner on teardown; `helpers.settle(app)` waits for it.
 - `settings_env` — the one way to override settings in a test:
   `settings_env(linear_api_key="x")` sets `ATLAS_LINEAR_API_KEY` and clears
   the `get_settings` cache (cleared again on teardown). Pass `""` to
@@ -45,7 +50,7 @@ test_...` functions need no `@pytest.mark.asyncio` decorator.
 ## API-test conventions
 
 - Parent chains (`org → team → work item`) come from
-  `tests/api/helpers.py` (`create_team`, `create_work_item`) — don't
+  `tests/api/helpers.py` (`create_team`, `create_org_and_team`, `create_work_item`) — don't
   re-declare a private `_create_team`.
 - Seeding events relative to the wall clock uses `helpers.days_ago(n)`
   (pinned to 12:00 UTC). Never `datetime.now(UTC) - timedelta(...)`

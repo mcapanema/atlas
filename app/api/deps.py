@@ -8,6 +8,7 @@ from app.application.advisor.service import AdvisorService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
+from app.application.metric_rules.service import MetricRulesService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
 from app.application.personas.service import PersonaService
@@ -180,12 +181,14 @@ def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> Sync
 SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
 
 
-def get_snapshot_service(session: SessionDep) -> SnapshotService:
+def snapshot_service_for(session: AsyncSession) -> SnapshotService:
+    """Built outside a request too: the recompute runner opens its own sessions."""
     work_items = SqlAlchemyWorkItemRepository(session)
     events = SqlAlchemyEventRepository(session)
+    rules = rules_resolver_for(session)
     return SnapshotService(
-        MetricsService(work_items, events, rules_resolver_for(session)),
-        ForecastService(work_items, events, rules_resolver_for(session)),
+        MetricsService(work_items, events, rules),
+        ForecastService(work_items, events, rules),
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
         SqlAlchemyMetricSnapshotRepository(session),
@@ -193,4 +196,24 @@ def get_snapshot_service(session: SessionDep) -> SnapshotService:
     )
 
 
+def get_snapshot_service(session: SessionDep) -> SnapshotService:
+    return snapshot_service_for(session)
+
+
 SnapshotServiceDep = Annotated[SnapshotService, Depends(get_snapshot_service)]
+
+
+def metric_rules_service_for(session: AsyncSession) -> MetricRulesService:
+    return MetricRulesService(
+        SqlAlchemyMetricRuleOverridesRepository(session),
+        SqlAlchemyOrganizationRepository(session),
+        SqlAlchemyTeamRepository(session),
+        SqlAlchemyProjectRepository(session),
+    )
+
+
+def get_metric_rules_service(session: SessionDep) -> MetricRulesService:
+    return metric_rules_service_for(session)
+
+
+MetricRulesServiceDep = Annotated[MetricRulesService, Depends(get_metric_rules_service)]

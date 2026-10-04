@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -359,3 +359,79 @@ class PersonaGuidanceRead(BaseModel):
     version: int
     guidance: str
     created_at: datetime
+
+
+class MetricRulesRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    exclude_born_done: bool
+    move_back_ends_wip: bool
+    restart_clock_after_move_back: bool
+    reopen_completion: Literal["last", "first"]
+    done_then_canceled: Literal["delivered", "canceled"]
+    healthy_min: int
+    warning_min: int
+    predictability_worst_ratio: float
+    stability_best_weeks: float
+    stability_worst_weeks: float
+    aging_percentile: int
+    weight_predictability: float
+    weight_efficiency: float
+    weight_flow: float
+    weight_stability: float
+    weight_risk: float
+    timezone: str
+    daily_bucket_max_days: int
+    forecast_history_days: int
+
+
+class MetricRulesOverridesWrite(BaseModel):
+    """PATCH body: a value overrides the rule, null makes it inherit again, absent = unchanged.
+
+    Ranges and cross-field rules are validated in the domain (MetricRules), so
+    a violation comes back as a 422 naming the rule.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    exclude_born_done: bool | None = None
+    move_back_ends_wip: bool | None = None
+    restart_clock_after_move_back: bool | None = None
+    reopen_completion: Literal["last", "first"] | None = None
+    done_then_canceled: Literal["delivered", "canceled"] | None = None
+    healthy_min: int | None = None
+    warning_min: int | None = None
+    predictability_worst_ratio: float | None = None
+    stability_best_weeks: float | None = None
+    stability_worst_weeks: float | None = None
+    aging_percentile: int | None = None
+    weight_predictability: float | None = None
+    weight_efficiency: float | None = None
+    weight_flow: float | None = None
+    weight_stability: float | None = None
+    weight_risk: float | None = None
+    timezone: str | None = None
+    daily_bucket_max_days: int | None = None
+    forecast_history_days: int | None = None
+
+    def changes(self) -> dict[str, Any]:
+        return self.model_dump(exclude_unset=True)
+
+
+class RecomputeStatusRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    state: Literal["idle", "running", "failed"]
+    started_at: datetime | None
+    finished_at: datetime | None
+    error: str | None
+
+
+class MetricRulesViewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    built_in: MetricRulesRead
+    inherited: MetricRulesRead
+    overrides: dict[str, Any]
+    effective: MetricRulesRead
+    recompute: RecomputeStatusRead
