@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
 from app.domain.events.timeline import derive_timeline
+from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 
 
 @dataclass(frozen=True)
@@ -45,41 +46,88 @@ def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
     )
 
 
-def derive_flow_sample(events: list[Event]) -> FlowSample | None:
+@dataclass
+class _Lifecycle:
+    """Fold state while replaying one item's events in order."""
+
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    stopped_at: datetime | None = None
+    canceled: bool = False
+
+    def start(self, at: datetime, *, restart_clock: bool) -> None:
+        # A start after a move-back (stopped, not completed) opens a fresh
+        # stint when the team's rules say so; a reopen after Done never does.
+        if self.started_at is None or (restart_clock and self.stopped_at is not None):
+            self.started_at = at
+        self.completed_at, self.stopped_at, self.canceled = None, None, False
+
+    def complete(self, at: datetime) -> None:
+        self.completed_at, self.stopped_at, self.canceled = at, None, False
+
+    def close(self, event: Event, rules: MetricRules) -> None:
+        """A STOPPED or CANCELED: leaves progress, or (by rule) un-delivers Done."""
+        if self.completed_at is not None:
+            if event.type is EventType.CANCELED and rules.done_then_canceled == "canceled":
+                self.completed_at, self.stopped_at, self.canceled = None, event.occurred_at, True
+            return
+        if self.stopped_at is None:
+            self.stopped_at = event.occurred_at
+        self.canceled = self.canceled or event.type is EventType.CANCELED
+
+
+def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
+    state = _Lifecycle()
+    for event in ordered:
+        if event.type is EventType.STARTED:
+            state.start(event.occurred_at, restart_clock=rules.restart_clock_after_move_back)
+        elif event.type is EventType.COMPLETED:
+            state.complete(event.occurred_at)
+        elif event.type is EventType.CANCELED or (
+            event.type is EventType.STOPPED and rules.move_back_ends_wip
+        ):
+            state.close(event, rules)
+    if state.completed_at is not None and rules.reopen_completion == "first":
+        # The first completion of the current clock: never before its start,
+        # so a restarted clock can't produce a negative cycle time.
+        state.completed_at = min(
+            e.occurred_at
+            for e in ordered
+            if e.type is EventType.COMPLETED
+            and (state.started_at is None or e.occurred_at >= state.started_at)
+        )
+    return state
+
+
+def derive_flow_sample(
+    events: list[Event], rules: MetricRules = DEFAULT_RULES
+) -> FlowSample | None:
     """Fold one work item's events into a FlowSample; None if it has no events.
 
-    created_at is the first event; started_at the first STARTED; completed_at
-    the last COMPLETED, voided if a later STARTED reopened the item.
-    stopped_at is when an uncompleted item first left progress (the first STOPPED
-    or CANCELED since its latest STARTED or COMPLETED); canceled marks an item
-    closed without delivery. born_done marks an item created already completed and
-    never started (see _born_done). Blocked time sums blocked periods clipped to the
-    cycle — from started_at (or the first event, if never started) to
+    `rules` are the item's team's lifecycle rules (built-in by default):
+    created_at is the first event; started_at the first STARTED (or, with
+    restart_clock_after_move_back, the restart after the latest move-back);
+    completed_at the last COMPLETED (or the first since the clock started,
+    with reopen_completion="first"), voided if a later STARTED reopened the
+    item. stopped_at is when an uncompleted item first left progress (the
+    first STOPPED, unless move_back_ends_wip is off, or CANCELED since its
+    latest STARTED or COMPLETED); canceled marks an item closed without
+    delivery, which with done_then_canceled="canceled" includes Done ->
+    Canceled. born_done marks an item created already completed and never
+    started (see _born_done). Blocked time sums blocked periods clipped to
+    the cycle — from started_at (or the first event, if never started) to
     completed_at; a still-open period on an uncompleted item is not counted
     (unmeasurable).
+
+    ponytail: Done -> Todo isn't a reopen here (only a STARTED after
+    COMPLETED is), so it stays completed. Telling it apart from Done ->
+    Deployed needs state types: sub-project B of the per-team metric rules.
     """
     if not events:
         return None
     ordered = sorted(events, key=event_order)
-
-    started_at = next((e.occurred_at for e in ordered if e.type is EventType.STARTED), None)
-
-    # ponytail: Done -> Todo isn't a reopen here (only a STARTED after
-    # COMPLETED is), so it stays completed; Done -> Canceled stays delivered
-    # by decision. Categorize state *types* in the domain if either skews
-    # the numbers.
-    completed_at: datetime | None = None
-    stopped_at: datetime | None = None
-    canceled = False
-    for event in ordered:
-        if event.type is EventType.COMPLETED:
-            completed_at, stopped_at, canceled = event.occurred_at, None, False
-        elif event.type is EventType.STARTED:
-            completed_at, stopped_at, canceled = None, None, False
-        elif event.type in (EventType.STOPPED, EventType.CANCELED) and completed_at is None:
-            if stopped_at is None:
-                stopped_at = event.occurred_at
-            canceled = canceled or event.type is EventType.CANCELED
+    state = _replay(ordered, rules)
+    started_at, completed_at = state.started_at, state.completed_at
 
     # Blocked time is measured inside the item's cycle: a label left on after
     # Done isn't blocked work, and pre-start blocking is already queue time.
@@ -98,8 +146,8 @@ def derive_flow_sample(events: list[Event]) -> FlowSample | None:
         started_at=started_at,
         completed_at=completed_at,
         blocked_time=blocked_time,
-        stopped_at=stopped_at,
-        canceled=canceled,
+        stopped_at=state.stopped_at,
+        canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
     )
 
