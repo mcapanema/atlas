@@ -256,3 +256,64 @@ async def test_a_failing_finish_does_not_kill_the_run_for_later_organizations(
     await runner.wait_idle()
 
     assert await _recompute_state(file_sessionmaker, healthy) == "idle"
+
+
+async def test_a_caller_cancelled_while_the_run_is_stopping_still_restarts_the_pending_work(
+    file_sessionmaker: Sessions, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team = await _seed(file_sessionmaker)
+    async with file_sessionmaker() as session:
+        await metric_rules_service_for(session).start_recompute(team.organization_id)
+        await session.commit()
+    parked = asyncio.Event()
+    stopping = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def slow_to_stop(self: SnapshotService, **_: object) -> int:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            return 0
+        parked.set()
+        try:
+            await asyncio.Event().wait()
+        finally:  # the cancel is slow to land: _cancel() stays awaiting
+            stopping.set()
+            await release.wait()
+        return 0
+
+    monkeypatch.setattr(SnapshotService, "recompute_scope", slow_to_stop)
+    runner = RecomputeRunner(file_sessionmaker)
+    await runner.schedule(team.organization_id, [ScopeRef(team_id=team.id)])
+    await parked.wait()
+
+    async def save() -> None:
+        async with runner.paused():
+            pass
+
+    caller = asyncio.create_task(save())
+    await stopping.wait()
+    caller.cancel()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    await runner.wait_idle()
+
+    assert await _recompute_state(file_sessionmaker, team.organization_id) == "idle"
+
+
+async def test_wait_idle_waits_for_a_paused_body_and_the_run_it_restarts(
+    file_sessionmaker: Sessions,
+) -> None:
+    org = await _running_org(file_sessionmaker, "A")
+    runner = RecomputeRunner(file_sessionmaker)
+
+    async with runner.paused() as queue:
+        queue(org, [])
+        waiter = asyncio.create_task(runner.wait_idle())
+        await asyncio.sleep(0.05)
+        assert not waiter.done()  # no run has started yet, but one is about to
+    await asyncio.wait_for(waiter, timeout=3)
+
+    assert await _recompute_state(file_sessionmaker, org) == "idle"

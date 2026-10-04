@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import Coroutine
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -7,8 +9,9 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.recompute import RecomputeRunner
 from app.api.schemas import MetricRulesOverridesWrite, MetricRulesRead
-from app.application.metric_rules.service import MetricRulesService
+from app.application.metric_rules.service import MetricRulesService, ScopeRef
 from app.application.snapshots.service import SnapshotService
 from app.domain.metric_rules.entities import RULE_NAMES
 from tests.api.helpers import create_org_and_team, settle
@@ -114,13 +117,17 @@ async def test_a_save_during_a_long_scope_rewrite_is_not_blocked_by_its_write_lo
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     org, team = await create_org_and_team(rules_client)
+    project = (
+        await rules_client.post("/api/projects", json={"team_id": team, "name": "Launch"})
+    ).json()["id"]
     in_scope = asyncio.Event()
     release = asyncio.Event()
-    calls = 0
+    scopes: list[ScopeRef] = []
 
-    async def holding_the_write_lock(self: SnapshotService, **_: object) -> int:
-        nonlocal calls
-        calls += 1
+    async def holding_the_write_lock(
+        self: SnapshotService, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> int:
+        scopes.append(ScopeRef(team_id=team_id, project_id=project_id))
         async with file_sessionmaker() as session:  # a real, uncommitted write
             await session.execute(text("UPDATE teams SET name = name"))
             in_scope.set()
@@ -142,7 +149,11 @@ async def test_a_save_during_a_long_scope_rewrite_is_not_blocked_by_its_write_lo
     final = (await rules_client.get(f"/api/teams/{team}/metric-rules")).json()
 
     assert response.status_code == 200
-    assert calls == 2  # the held run was cancelled, then restarted
+    assert len(scopes) == 3  # the held run was cancelled mid-scope...
+    assert set(scopes[1:]) == {  # ...then restarted with both of the organization's scopes
+        ScopeRef(team_id=UUID(team)),
+        ScopeRef(project_id=UUID(project)),
+    }
     assert final["recompute"]["state"] == "idle"
 
 
@@ -187,3 +198,33 @@ async def test_a_save_while_the_old_run_is_finishing_keeps_the_status_running(
     assert response.status_code == 200
     assert state == "running"
     assert final["recompute"]["state"] == "idle"
+
+
+async def test_a_save_that_changes_no_rule_commits_before_the_run_restarts(
+    rules_app: FastAPI, rules_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    org, team = await create_org_and_team(rules_client)
+    log: list[str] = []
+    original_commit = AsyncSession.commit
+
+    async def commit(self: AsyncSession) -> None:
+        log.append("commit")
+        await original_commit(self)
+
+    def run(self: RecomputeRunner) -> Coroutine[Any, Any, None]:
+        log.append("run")  # called at restart; leaves its scopes pending for the next one
+        return asyncio.sleep(0)
+
+    monkeypatch.setattr(RecomputeRunner, "_run", run)
+    monkeypatch.setattr(AsyncSession, "commit", commit)
+    await rules_client.post(f"/api/organizations/{org}/metric-rules/recompute")
+    log.clear()
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules",
+        json={"aging_percentile": 85},  # = inherited
+    )
+    await settle(rules_app)
+
+    assert response.status_code == 200
+    assert log[:2] == ["commit", "run"]

@@ -122,3 +122,17 @@ async def test_save_recompute_inserts_the_organization_row_when_missing(
     assert loaded is not None
     assert loaded.overrides == {}
     assert loaded.recompute.state == "running"
+
+
+async def test_save_recompute_leaves_updated_at_alone_on_an_existing_row(
+    session: AsyncSession,
+) -> None:
+    repo = SqlAlchemyMetricRuleOverridesRepository(session)
+    edited = datetime(2026, 10, 1, 9, tzinfo=UTC)
+    await repo.save(RuleOverrides(organization_id=ORG, updated_at=edited))
+
+    await repo.save_recompute(ORG, RecomputeStatus(state="running"))
+
+    loaded = await repo.get(ORG)
+    assert loaded is not None
+    assert loaded.updated_at == edited

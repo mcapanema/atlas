@@ -58,10 +58,10 @@ class RecomputeRunner:
         pending scope.
         """
         async with self._lock:
-            await self._cancel()
             try:
+                await self._cancel()
                 yield self._queue
-            finally:
+            finally:  # also when the caller is cancelled while _cancel() still waits
                 if self._pending:
                     self._task = asyncio.create_task(self._run())
 
@@ -84,7 +84,9 @@ class RecomputeRunner:
             await self.schedule(organization_id, scopes)
 
     async def wait_idle(self) -> None:
-        """Until no run is in flight (tests, shutdown)."""
+        """Until no run is in flight (tests, shutdown), a `paused()` body included."""
+        async with self._lock:  # a paused() body restarts the run before it releases this
+            pass
         while (task := self._task) is not None and not task.done():
             await asyncio.gather(task, return_exceptions=True)
 

@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
-from app.domain._time import utcnow
 from app.domain.metric_rules.entities import RecomputeState, RecomputeStatus, RuleOverrides
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
@@ -130,6 +129,5 @@ class SqlAlchemyMetricRuleOverridesRepository:
         if existing is None:
             await self.save(RuleOverrides(organization_id=organization_id, recompute=status))
             return
-        existing.set_recompute(status)
-        existing.updated_at = utcnow()
+        existing.set_recompute(status)  # updated_at stays "overrides last edited"
         await self._session.flush()

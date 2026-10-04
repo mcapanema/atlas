@@ -6,6 +6,7 @@ runs in Presentation's background runner; this service only records its
 status on the organization's row.
 """
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from uuid import UUID
@@ -26,6 +27,8 @@ from app.domain.organizations.repository import OrganizationRepository
 from app.domain.projects.repository import ProjectRepository
 from app.domain.teams.entities import Team
 from app.domain.teams.repository import TeamRepository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -85,10 +88,26 @@ def _reject_unknown(changes: Mapping[str, object | None]) -> None:
         raise ValueError(f"Unknown metric rule(s): {', '.join(unknown)}")
 
 
-def _check_team(team: Team, workspace: Mapping[str, object], own: Mapping[str, object]) -> None:
+def _check_team(
+    team: Team,
+    before: Mapping[str, object],
+    workspace: Mapping[str, object],
+    own: Mapping[str, object],
+) -> None:
+    """Reject a workspace change that newly invalidates the team's rules.
+
+    A team already invalid under the `before` workspace (corrupt or legacy
+    JSON) isn't the change's doing: it is skipped with a warning, so it can't
+    block every workspace update.
+    """
     try:
         resolve_rules(workspace, own)
     except ValueError as exc:
+        try:
+            resolve_rules(before, own)
+        except ValueError:
+            logger.warning("Team %s's stored metric rules were already invalid: %s", team.name, exc)
+            return
         raise ValueError(f"Conflicts with team {team.name}'s own rules: {exc}") from exc
 
 
@@ -149,7 +168,7 @@ class MetricRulesService:
         layer = _apply(row.overrides, changes)
         after = resolve_rules(layer)
         teams = await self._organization_teams(organization_id)
-        team_layers = await self._checked_team_layers(organization_id, teams, layer)
+        team_layers = await self._checked_team_layers(organization_id, teams, row.overrides, layer)
         before = resolve_layers(row.overrides, subject=f"organization {organization_id}")
         changed = _changed(before, after)
         affected = [t.id for t in teams if changed - set(team_layers.get(t.id, {}))]
@@ -238,16 +257,20 @@ class MetricRulesService:
         return status
 
     async def _checked_team_layers(
-        self, organization_id: UUID, teams: list[Team], workspace: Mapping[str, object]
+        self,
+        organization_id: UUID,
+        teams: list[Team],
+        before: Mapping[str, object],
+        workspace: Mapping[str, object],
     ) -> dict[UUID, dict[str, object]]:
-        """Each team's own layer; raises ValueError if `workspace` conflicts with one."""
+        """Each team's own layer; raises ValueError if `workspace` newly conflicts with one."""
         team_layers = {
             r.team_id: dict(r.overrides)
             for r in await self._overrides.list_for_organization(organization_id)
             if r.team_id is not None
         }
         for team in teams:
-            _check_team(team, workspace, team_layers.get(team.id, {}))
+            _check_team(team, before, workspace, team_layers.get(team.id, {}))
         return team_layers
 
     async def _organization_teams(self, organization_id: UUID) -> list[Team]:

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from app.application.forecasting.service import ForecastService
@@ -7,7 +8,10 @@ from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metrics.service import MetricsService
 from app.application.snapshots.service import SnapshotService
 from app.domain.events.entities import Event, EventType
-from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.forecasting.monte_carlo import DeliveryForecast
+from app.domain.metric_rules.entities import DEFAULT_RULES, RuleOverrides
+from app.domain.metrics.summary import FlowMetrics
+from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem
 from tests.fakes import (
@@ -108,3 +112,83 @@ async def test_capture_and_recompute_see_each_snapshot_as_of_its_instant() -> No
     old_metrics, new_metrics = await metric_snapshots.list(team_id=team.id)
     assert (old_metrics.wip, old_metrics.completed) == (1, 0)
     assert (new_metrics.wip, new_metrics.completed) == (0, 1)
+
+
+async def test_recompute_rewrites_a_forecast_with_the_teams_history_window() -> None:
+    team = Team(organization_id=ORG, name="Platform")
+    item = WorkItem(team_id=team.id, title="Finished")
+    events = [_at(item, EventType.CREATED, 20), _at(item, EventType.COMPLETED, 2)]
+    overrides = InMemoryMetricRuleOverridesRepository()
+    service, _, forecast_snapshots = _service(team, [item], events, overrides)
+    await service.capture_all(now=NOW)
+    (before,) = await forecast_snapshots.list(team_id=team.id)
+    assert before.window_days == DEFAULT_RULES.forecast_history_days
+
+    await overrides.save(
+        RuleOverrides(organization_id=ORG, team_id=team.id, overrides={"forecast_history_days": 30})
+    )
+    await service.recompute_scope(team_id=team.id)
+
+    (after,) = await forecast_snapshots.list(team_id=team.id)
+    assert after.window_days == 30
+    assert after.id == before.id
+
+
+class _RecordingMetricSnapshots(InMemoryMetricSnapshotRepository):
+    log: list[str]
+
+    async def update(self, snapshot: MetricSnapshot) -> None:
+        self.log.append("update")
+        await super().update(snapshot)
+
+
+class _RecordingForecastSnapshots(InMemoryForecastSnapshotRepository):
+    log: list[str]
+
+    async def update(self, snapshot: ForecastSnapshot) -> None:
+        self.log.append("update")
+        await super().update(snapshot)
+
+
+class _RecordingMetrics(MetricsService):
+    log: list[str]
+
+    async def get_flow_metrics(self, **kwargs: Any) -> FlowMetrics:
+        self.log.append("compute")
+        return await super().get_flow_metrics(**kwargs)
+
+
+class _RecordingForecasts(ForecastService):
+    log: list[str]
+
+    async def get_forecast(self, **kwargs: Any) -> DeliveryForecast:
+        self.log.append("compute")
+        return await super().get_forecast(**kwargs)
+
+
+async def test_recompute_computes_every_value_before_the_first_write() -> None:
+    team = Team(organization_id=ORG, name="Platform")
+    item = WorkItem(team_id=team.id, title="Finished")
+    events = [_at(item, EventType.CREATED, 20), _at(item, EventType.COMPLETED, 2)]
+    log: list[str] = []
+    work_items = InMemoryWorkItemRepository([item])
+    event_repo = InMemoryEventRepository(events)
+    teams = InMemoryTeamRepository([team])
+    projects = InMemoryProjectRepository()
+    resolver = MetricRulesResolver(InMemoryMetricRuleOverridesRepository(), teams, projects)
+    metrics = _RecordingMetrics(work_items, event_repo, resolver)
+    forecasts = _RecordingForecasts(work_items, event_repo, resolver)
+    metric_snapshots = _RecordingMetricSnapshots()
+    forecast_snapshots = _RecordingForecastSnapshots()
+    for recorder in (metrics, forecasts, metric_snapshots, forecast_snapshots):
+        recorder.log = log
+    service = SnapshotService(
+        metrics, forecasts, teams, projects, metric_snapshots, forecast_snapshots
+    )
+    await service.capture_all(now=NOW - timedelta(days=1))
+    await service.capture_all(now=NOW)
+    log.clear()
+
+    await service.recompute_scope(team_id=team.id)
+
+    assert log == ["compute"] * 4 + ["update"] * 4

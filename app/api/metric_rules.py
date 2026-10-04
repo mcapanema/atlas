@@ -41,8 +41,8 @@ async def _save(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"{missing} not found"
             )
+        await session.commit()  # the new rules (and "running"), before the run restarts
         if change.scopes:
-            await session.commit()  # the new rules and "running", before the run restarts
             queue(change.organization_id, change.scopes)
     return MetricRulesViewRead.model_validate(change.view)
 
