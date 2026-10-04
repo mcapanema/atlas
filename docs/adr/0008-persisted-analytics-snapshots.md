@@ -21,8 +21,9 @@ use today's history and silently rewrite the prediction.
 ## Decision
 
 Keep compute-on-read as the live source of truth, and additionally
-persist one immutable snapshot pair (flow metrics + Monte Carlo forecast;
-immutability amended by ADR-0010) per scope (each team, each project) per UTC day. Capture happens inside
+persist one immutable snapshot pair (flow metrics + Monte Carlo forecast)
+per scope (each team, each project) per UTC day (amended by ADR-0010).
+Capture happens inside
 the sync request transaction — sync is the only point delivery data
 changes — and is idempotent per day. Forecast accuracy is a pure domain
 function over past forecast snapshots and actual completion timestamps:

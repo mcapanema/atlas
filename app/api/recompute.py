@@ -62,6 +62,9 @@ class RecomputeRunner:
                 await self._cancel()
                 yield self._queue
             finally:  # also when the caller is cancelled while _cancel() still waits
+                # The restart may briefly overlap the old task while it unwinds;
+                # that is safe: a cancelled task only rolls back (CancelledError
+                # skips commit and finish) and touches _pending on normal returns only.
                 if self._pending:
                     self._task = asyncio.create_task(self._run())
 

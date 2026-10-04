@@ -98,15 +98,20 @@ def _check_team(
 
     A team already invalid under the `before` workspace (corrupt or legacy
     JSON) isn't the change's doing: it is skipped with a warning, so it can't
-    block every workspace update.
+    block every workspace update. If the stored workspace layer is itself
+    corrupt, every team counts as already invalid, so a fixing change is
+    accepted with only a warning — consistent with the resolver's built-in
+    fallback for those teams.
     """
     try:
         resolve_rules(workspace, own)
     except ValueError as exc:
         try:
             resolve_rules(before, own)
-        except ValueError:
-            logger.warning("Team %s's stored metric rules were already invalid: %s", team.name, exc)
+        except ValueError as earlier:
+            logger.warning(
+                "Team %s's stored metric rules were already invalid: %s", team.name, earlier
+            )
             return
         raise ValueError(f"Conflicts with team {team.name}'s own rules: {exc}") from exc
 
@@ -173,7 +178,8 @@ class MetricRulesService:
         changed = _changed(before, after)
         affected = [t.id for t in teams if changed - set(team_layers.get(t.id, {}))]
         scopes = await self._scopes_for(affected)
-        await self._overrides.save(replace(row, overrides=layer, updated_at=utcnow()))
+        if layer != row.overrides:  # a same-value change must not bump "last edited"
+            await self._overrides.save(replace(row, overrides=layer, updated_at=utcnow()))
         status = await self._mark_running(organization_id) if scopes else row.recompute
         view = RulesView(
             built_in=DEFAULT_RULES,
@@ -199,7 +205,8 @@ class MetricRulesService:
         )
         layer = _apply(row.overrides, changes)
         after = resolve_rules(workspace, layer)
-        await self._overrides.save(replace(row, overrides=layer, updated_at=utcnow()))
+        if layer != row.overrides:  # a same-value change must not bump "last edited"
+            await self._overrides.save(replace(row, overrides=layer, updated_at=utcnow()))
         before = resolve_layers(workspace, row.overrides, subject=f"team {team_id}")
         scopes = await self._scopes_for([team_id]) if _changed(before, after) else ()
         status = (

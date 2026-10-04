@@ -209,6 +209,21 @@ async def test_workspace_change_to_the_same_value_changes_nothing() -> None:
     assert after is not None
     assert after.overrides == stored.overrides
     assert after.recompute == stored.recompute
+    assert after.updated_at == stored.updated_at
+
+
+async def test_a_team_change_to_the_same_value_keeps_updated_at() -> None:
+    service, _, alpha, *_, repo = _world()
+    org_id = alpha.organization_id
+    await service.update_team(alpha.id, {"aging_percentile": 70})
+    stored = await repo.get(org_id, team_id=alpha.id)
+
+    await service.update_team(alpha.id, {"aging_percentile": 70})
+
+    after = await repo.get(org_id, team_id=alpha.id)
+    assert stored is not None
+    assert after is not None
+    assert after.updated_at == stored.updated_at
 
 
 async def test_workspace_change_skips_a_team_whose_stored_rules_were_already_invalid(

@@ -100,7 +100,9 @@ class SnapshotService:
         ponytail: the write lock is held for that burst plus the commit, once
         per scope; a concurrent sync can still push past the SQLite busy
         timeout, so the org goes to "failed" and Retry recovers. Upgrade
-        path: one short transaction per snapshot, or PostgreSQL.
+        path: PostgreSQL. Shorter per-snapshot transactions would trade the
+        recompute runner's invariant (a cancel or failure never leaves a
+        scope half old, half new) for lock time, so they are not the path.
         """
         data = await self._metrics.load_scope_data(team_id=team_id, project_id=project_id)
         old_metrics = await self._metric_snapshots.list(team_id=team_id, project_id=project_id)

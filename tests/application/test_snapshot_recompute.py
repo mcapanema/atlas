@@ -116,13 +116,19 @@ async def test_capture_and_recompute_see_each_snapshot_as_of_its_instant() -> No
 
 async def test_recompute_rewrites_a_forecast_with_the_teams_history_window() -> None:
     team = Team(organization_id=ORG, name="Platform")
-    item = WorkItem(team_id=team.id, title="Finished")
-    events = [_at(item, EventType.CREATED, 20), _at(item, EventType.COMPLETED, 2)]
+    done = WorkItem(team_id=team.id, title="Finished long ago")
+    open_item = WorkItem(team_id=team.id, title="Still open")
+    events = [
+        _at(done, EventType.CREATED, 80),
+        _at(done, EventType.COMPLETED, 60),
+        _at(open_item, EventType.CREATED, 70),
+    ]
     overrides = InMemoryMetricRuleOverridesRepository()
-    service, _, forecast_snapshots = _service(team, [item], events, overrides)
+    service, _, forecast_snapshots = _service(team, [done, open_item], events, overrides)
     await service.capture_all(now=NOW)
     (before,) = await forecast_snapshots.list(team_id=team.id)
     assert before.window_days == DEFAULT_RULES.forecast_history_days
+    assert before.p50_days is not None  # the 60-day-old completion is inside 90 days
 
     await overrides.save(
         RuleOverrides(organization_id=ORG, team_id=team.id, overrides={"forecast_history_days": 30})
@@ -131,6 +137,7 @@ async def test_recompute_rewrites_a_forecast_with_the_teams_history_window() -> 
 
     (after,) = await forecast_snapshots.list(team_id=team.id)
     assert after.window_days == 30
+    assert after.p50_days is None  # ...and outside 30: nothing left to simulate from
     assert after.id == before.id
 
 
