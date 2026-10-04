@@ -4,7 +4,7 @@ Date: 2026-07-11
 
 ## Status
 
-Accepted. Amends ADR-0003 (analytics computed on read).
+Accepted. Amends ADR-0003 (analytics computed on read). Amended by ADR-0010 (snapshots are rewritten when a scope's metric rules change).
 
 ## Context
 
