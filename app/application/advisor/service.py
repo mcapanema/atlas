@@ -31,8 +31,8 @@ class AdvisorService:
         """Assemble the scope's current delivery picture for the advisor.
 
         `window_days` scopes the flow summary; the lead-time distribution and
-        forecast keep their 90-day defaults, matching the dashboards. The
-        scope's items and events are loaded once and shared by all three
+        forecast keep their dashboard defaults (the forecast window comes from
+        the team's rules). The scope's items and events are loaded once and shared by all three
         computations.
         """
         window_end = now if now is not None else datetime.now(UTC)

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.advisor.service import AdvisorService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
+from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
 from app.application.personas.service import PersonaService
@@ -22,6 +23,7 @@ from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
+from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.personas import (
     SqlAlchemyAdviceFeedbackRepository,
@@ -50,6 +52,14 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+def rules_resolver_for(session: AsyncSession) -> MetricRulesResolver:
+    return MetricRulesResolver(
+        SqlAlchemyMetricRuleOverridesRepository(session),
+        SqlAlchemyTeamRepository(session),
+        SqlAlchemyProjectRepository(session),
+    )
 
 
 def get_organization_service(session: SessionDep) -> OrganizationService:
@@ -91,6 +101,7 @@ def get_metrics_service(session: SessionDep) -> MetricsService:
     return MetricsService(
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
+        rules_resolver_for(session),
     )
 
 
@@ -101,6 +112,7 @@ def get_forecast_service(session: SessionDep) -> ForecastService:
     return ForecastService(
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
+        rules_resolver_for(session),
     )
 
 
@@ -172,8 +184,8 @@ def get_snapshot_service(session: SessionDep) -> SnapshotService:
     work_items = SqlAlchemyWorkItemRepository(session)
     events = SqlAlchemyEventRepository(session)
     return SnapshotService(
-        MetricsService(work_items, events),
-        ForecastService(work_items, events),
+        MetricsService(work_items, events, rules_resolver_for(session)),
+        ForecastService(work_items, events, rules_resolver_for(session)),
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
         SqlAlchemyMetricSnapshotRepository(session),
