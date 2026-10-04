@@ -6,12 +6,13 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
+from dataclasses import replace
 from datetime import date, datetime
 from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.events.entities import Event
-from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.metric_rules.entities import RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
@@ -320,4 +321,13 @@ class InMemoryMetricRuleOverridesRepository:
         ]
 
     async def save(self, overrides: RuleOverrides) -> None:
-        self._rows[overrides.id] = overrides
+        existing = self._rows.get(overrides.id)
+        # Mirrors the adapter: an existing row keeps its recompute status.
+        self._rows[overrides.id] = (
+            overrides if existing is None else replace(overrides, recompute=existing.recompute)
+        )
+
+    async def save_recompute(self, organization_id: UUID, status: RecomputeStatus) -> None:
+        existing = await self.get(organization_id)
+        row = existing or RuleOverrides(organization_id=organization_id)
+        self._rows[row.id] = replace(row, recompute=status)

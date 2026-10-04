@@ -1,7 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.metric_rules.entities import RecomputeStatus, RuleOverrides
 
 
 class MetricRuleOverridesRepository(Protocol):
@@ -22,5 +22,9 @@ class MetricRuleOverridesRepository(Protocol):
         ...
 
     async def save(self, overrides: RuleOverrides) -> None:
-        """Insert, or replace the row with the same id."""
+        """Insert (with its recompute status), or update an existing row's overrides only."""
+        ...
+
+    async def save_recompute(self, organization_id: UUID, status: RecomputeStatus) -> None:
+        """Write only the organization row's recompute status; insert it empty if missing."""
         ...
