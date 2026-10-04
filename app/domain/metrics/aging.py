@@ -1,7 +1,8 @@
 """Aging WIP: how long current in-progress items have been in flight.
 
 Flags items whose in-progress age exceeds the scope's completed cycle-time
-P85 — the "this one is quietly getting stuck" signal from Kanban practice.
+percentile (the team's aging_percentile, P85 by default) — the "this one is
+quietly getting stuck" signal from Kanban practice.
 """
 
 from dataclasses import dataclass
@@ -27,24 +28,33 @@ class AgingItem:
 
 @dataclass(frozen=True)
 class AgingWip:
-    """In-progress items at `now`, oldest first, with the P85 reference line."""
+    """In-progress items at `now`, oldest first, with the cycle-time reference line.
+
+    `cycle_time_p85` (and AgingItem.over_p85) keep their names for API
+    stability; the percentile is `percentile`, the team's aging_percentile.
+    """
 
     now: datetime
     cycle_time_p85: timedelta | None
     items: tuple[AgingItem, ...]
+    percentile: int = 85
 
 
 def compute_aging_wip(
-    items_with_samples: list[tuple[WorkItem, FlowSample]], *, now: datetime
+    items_with_samples: list[tuple[WorkItem, FlowSample]],
+    *,
+    now: datetime,
+    aging_percentile: int = 85,
 ) -> AgingWip:
     """Age of every item in progress at `now` (started, not completed).
 
-    cycle_time_p85 comes from the scope's completed samples; over_p85 is
-    False everywhere when there is no completed history to compare against.
+    The reference line is the scope's completed cycle-time percentile at
+    `aging_percentile`; over_p85 is False everywhere when there is no
+    completed history to compare against.
     """
     completed = cycle_times([sample for _, sample in items_with_samples])
-    p85 = (
-        timedelta(seconds=percentile([c.total_seconds() for c in completed], 85))
+    limit = (
+        timedelta(seconds=percentile([c.total_seconds() for c in completed], aging_percentile))
         if completed
         else None
     )
@@ -59,8 +69,8 @@ def compute_aging_wip(
                 title=item.title,
                 state=item.state,
                 age=age,
-                over_p85=p85 is not None and age > p85,
+                over_p85=limit is not None and age > limit,
             )
         )
     aging.sort(key=lambda a: a.age, reverse=True)
-    return AgingWip(now=now, cycle_time_p85=p85, items=tuple(aging))
+    return AgingWip(now=now, cycle_time_p85=limit, items=tuple(aging), percentile=aging_percentile)
