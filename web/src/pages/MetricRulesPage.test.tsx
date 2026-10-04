@@ -279,6 +279,28 @@ describe("MetricRulesPage", () => {
     expect(screen.queryByText("Discard unsaved changes?")).toBeNull();
   });
 
+  it("forgets unsaved edits once the form is gone, even before the next scope loads", async () => {
+    mockApi(view());
+    const respond = vi.mocked(globalThis.fetch).getMockImplementation();
+    vi.mocked(globalThis.fetch).mockImplementation((input, init) =>
+      requestUrl(input).startsWith("/api/teams/")
+        ? new Promise<Response>(() => undefined) // the team's rules never load
+        : respond!(input, init),
+    );
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+    fireEvent.click(await screen.findByRole("switch", { name: RESTART }));
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Rules for" }));
+    fireEvent.click(await screen.findByTitle(teamFixture.name));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard and switch" }));
+    await waitFor(() => expect(screen.queryByRole("switch", { name: RESTART })).toBeNull());
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Rules for" }));
+    fireEvent.click(await screen.findByTitle(`Workspace default — ${ORG.name}`));
+
+    await waitFor(() => expect(screen.getByRole("switch", { name: RESTART })).toBeInTheDocument());
+  });
+
   it("shows an empty state when there are no organizations", async () => {
     mockApi(view(), 200, { organizations: [] });
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);

@@ -74,6 +74,8 @@ export function MetricRulesForm({
   const changes = pendingChanges(view.overrides, draft);
   const dirty = Object.keys(changes).length > 0;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  // An unmounted form has nothing unsaved, even if no new form replaces it yet.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const inheritedFrom = scope.kind === "team" ? "Workspace default" : "Built-in";
   return (
     <Space direction="vertical" size="large" style={{ width: "100%" }}>

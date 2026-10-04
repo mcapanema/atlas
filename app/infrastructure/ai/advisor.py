@@ -126,7 +126,7 @@ Knowledge base:
 _MEETING_INSTRUCTIONS: dict[MeetingType, str] = {
     MeetingType.DAILY_STANDUP: (
         "Prepare talking points for today's daily standup. Report, in order: "
-        "items over the cycle-time p85 age line (by name), anything blocked, and "
+        "items over the aging percentile line (by name), anything blocked, and "
         "how WIP compares to the recent completion rate. At most 10 points, "
         "ordered by what needs a decision in the meeting; mark those with "
         "needs_decision. Flag anything the data cannot answer instead of guessing."

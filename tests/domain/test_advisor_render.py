@@ -182,3 +182,23 @@ def test_render_meeting_context_caps_aging_at_ten_items() -> None:
     assert "- Item 9 —" in text
     assert "- Item 10 —" not in text
     assert "... and 2 more" in text
+
+
+def test_render_meeting_context_names_the_configured_aging_percentile() -> None:
+    context = MeetingContext(
+        delivery=_delivery(),
+        health=DeliveryHealth(
+            window_start=_START, window_end=_NOW, score=None, band=None, components=()
+        ),
+        aging=AgingWip(
+            now=_NOW,
+            cycle_time_percentile=timedelta(days=4),
+            items=(_aging_item("Fix login", 6, True),),
+            percentile=70,
+        ),
+    )
+
+    text = render_meeting_context(context)
+
+    assert "Aging WIP (cycle-time p70 = 4.0d):" in text
+    assert "- Fix login — In Progress, 6.0d [over p70]" in text
