@@ -82,7 +82,8 @@ def daily_flow_counts(
     day = start.astimezone(tz).date()
     last = end.astimezone(tz).date()
     while day <= last:
-        instant = min(end, datetime.combine(day, time.max, tzinfo=tz))
+        # fold=1: the later of a repeated hour, so a midnight DST end keeps the full day.
+        instant = min(end, datetime.combine(day, time.max.replace(fold=1), tzinfo=tz))
         while pointer < len(ordered) and ordered[pointer][0] <= instant:
             _, item_index, event = ordered[pointer]
             # Empty or omitted (a hand-built ScopeSamples): built-in rules.

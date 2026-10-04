@@ -1,10 +1,10 @@
 """Capture and serve persisted analytics snapshots.
 
-Snapshots are the SPEC's historical-aggregation concept: one immutable row
-per scope (each team, each project) per UTC day, captured after sync.
-Metric snapshots feed dashboard history; forecast snapshots feed
-forecast-accuracy calibration. The compute-on-read analytics stay the
-live source — snapshots are a write-side record of what they said.
+Snapshots are one row per scope (each team, each project) per UTC day,
+captured after sync. Metric snapshots feed dashboard history; forecast
+snapshots feed forecast-accuracy calibration. They are re-derived as of
+their instant and rewritten in place when a scope's metric rules change
+(docs/adr/0010-per-team-metric-rules.md).
 """
 
 from dataclasses import replace
@@ -95,6 +95,12 @@ class SnapshotService:
         reopen, a backfill) don't leak into the past. Forecast snapshots
         become a backtest of the current rules. Rows keep their id, day and
         instant. Returns the number of snapshots rewritten.
+
+        ponytail: the rewrite holds SQLite's write lock from the first
+        update() flush through every forecast Monte Carlo until commit; a
+        concurrent sync can push it past the busy timeout, so the org goes to
+        "failed" and Retry recovers. Upgrade path: compute all values first,
+        then write them in one burst.
         """
         data = await self._metrics.load_scope_data(team_id=team_id, project_id=project_id)
         metric_snapshots = await self._metric_snapshots.list(team_id=team_id, project_id=project_id)

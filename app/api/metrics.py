@@ -27,11 +27,9 @@ class Period:
 
     Resolved against the scope's timezone: `now` is the local midnight after
     `end`, so the domain's (window_start, now] window covers start 00:00
-    through end 23:59:59 on the team's calendar.
-
-    ponytail: the window is window_days x 24h back from that midnight, so a
-    range spanning a DST change is off by that hour at its start. Build the
-    start from the local start date too if a DST zone ever needs it.
+    through end 23:59:59 on the team's calendar. The start stays at local
+    midnight across DST: subtracting days from a zone-aware datetime is
+    wall-clock arithmetic.
     """
 
     start: date | None = None

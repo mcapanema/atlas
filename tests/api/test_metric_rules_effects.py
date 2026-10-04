@@ -59,3 +59,20 @@ async def test_aging_wip_reports_its_percentile(
     body = (await rules_client.get("/api/metrics/aging-wip", params={"team_id": team})).json()
 
     assert body["percentile"] == 60
+
+
+async def test_period_follows_dst_in_the_teams_timezone(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    team = await create_team(rules_client)
+    await _set(rules_app, rules_client, team, timezone="America/New_York")
+
+    body = (
+        await rules_client.get(
+            "/api/metrics", params={"team_id": team, "start": "2026-03-01", "end": "2026-03-31"}
+        )
+    ).json()
+
+    # EST local midnight at the start, EDT local midnight after the end date.
+    assert datetime.fromisoformat(body["window_start"]) == datetime(2026, 3, 1, 5, tzinfo=UTC)
+    assert datetime.fromisoformat(body["window_end"]) == datetime(2026, 4, 1, 4, tzinfo=UTC)

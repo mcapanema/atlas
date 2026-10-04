@@ -172,3 +172,26 @@ def test_cfd_days_follow_the_scope_timezone() -> None:
 
     assert (local[0].day, local[0].done) == (date(2026, 7, 4), 1)
     assert (utc[0].day, utc[0].done) == (date(2026, 7, 4), 0)
+
+
+def test_cfd_day_ends_after_the_repeated_hour_when_dst_ends_at_midnight() -> None:
+    santiago = ZoneInfo("America/Santiago")  # 4 Apr 2026: 24:00 -> 23:00, 23:xx repeats
+    events = [
+        Event(
+            work_item_id=ITEM,
+            type=EventType.CREATED,
+            occurred_at=datetime(2026, 4, 1, 12, tzinfo=UTC),
+        ),
+        # 23:30 on 4 April, second occurrence (UTC-4).
+        Event(
+            work_item_id=ITEM,
+            type=EventType.COMPLETED,
+            occurred_at=datetime(2026, 4, 5, 3, 30, tzinfo=UTC),
+        ),
+    ]
+    start = datetime(2026, 4, 4, 3, tzinfo=UTC)  # local midnight, 4 April (UTC-3)
+    end = datetime(2026, 4, 7, 4, tzinfo=UTC)
+
+    days = daily_flow_counts([events], start=start, end=end, tz=santiago)
+
+    assert (days[0].day, days[0].done) == (date(2026, 4, 4), 1)
