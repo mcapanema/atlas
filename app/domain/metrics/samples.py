@@ -4,12 +4,14 @@ The bridge between raw events and the flow metrics: every metric consumes
 FlowSamples instead of re-reading event streams.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
 from app.domain.events.timeline import blocked_periods
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
+from app.domain.work_items.entities import NOT_STARTED_STATE_TYPES, StateType
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,14 @@ class FlowSample:
     born_done: bool = False
     # A blocked period is still open at the end of the stream.
     blocked_now: bool = False
+    # When lead time starts if not at creation: the Triage exit, set only
+    # under lead_time_start="triage_exit" (see arrived_at).
+    triage_exit_at: datetime | None = None
+
+    @property
+    def arrived_at(self) -> datetime:
+        """Where lead time and pre-start queue time begin (creation, or Triage exit by rule)."""
+        return self.triage_exit_at or self.created_at
 
 
 def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
@@ -56,16 +66,32 @@ class _Lifecycle:
     completed_at: datetime | None = None
     stopped_at: datetime | None = None
     canceled: bool = False
+    reopened_after_done: bool = False
 
     def start(self, at: datetime, *, restart_clock: bool) -> None:
         # A start after a move-back (stopped, not completed) opens a fresh
         # stint when the team's rules say so; a reopen after Done never does.
-        if self.started_at is None or (restart_clock and self.stopped_at is not None):
+        moved_back = self.stopped_at is not None and not self.reopened_after_done
+        if self.started_at is None or (restart_clock and moved_back):
             self.started_at = at
         self.completed_at, self.stopped_at, self.canceled = None, None, False
+        self.reopened_after_done = False
 
     def complete(self, at: datetime) -> None:
         self.completed_at, self.stopped_at, self.canceled = at, None, False
+
+    def reopen(self, event: Event, rules: MetricRules) -> None:
+        """A Done or Canceled item moved back to a not-started state, by the reopen rules.
+
+        Reopened, it is open again (remaining) but not in progress. A Done
+        reopen keeps the clock: a later start resumes the same stint.
+        """
+        if event.from_state_type is StateType.COMPLETED:
+            if self.completed_at is not None and rules.done_then_reopened == "reopened":
+                self.completed_at, self.stopped_at = None, event.occurred_at
+                self.reopened_after_done = True
+        elif self.canceled and rules.canceled_then_reopened == "reopened":
+            self.canceled = False
 
     def close(self, event: Event, rules: MetricRules) -> None:
         """A STOPPED or CANCELED: leaves progress, or (by rule) un-delivers Done."""
@@ -78,17 +104,62 @@ class _Lifecycle:
         self.canceled = self.canceled or event.type is EventType.CANCELED
 
 
+def _reopens(event: Event) -> bool:
+    """A move from a Done or Canceled state back to a not-started one (typed transitions only)."""
+    return (
+        event.from_state_type in (StateType.COMPLETED, StateType.CANCELED)
+        and event.to_state_type in NOT_STARTED_STATE_TYPES
+    )
+
+
+def _triage_exit(ordered: list[Event]) -> datetime | None:
+    """When the item first left a Triage-type state; None if it never sat in Triage."""
+    return next(
+        (
+            event.occurred_at
+            for event in ordered
+            if event.from_state_type is StateType.TRIAGE
+            and event.to_state_type not in (None, StateType.TRIAGE)
+        ),
+        None,
+    )
+
+
+def state_type_at(
+    events: Sequence[Event], at: datetime | None, current: StateType | None
+) -> StateType | None:
+    """The item's state type at `at`; `current` (the stored one) for now (`at` None).
+
+    From typed transitions: the last one at or before `at` gives its
+    to-type; before the first one, its from-type. With no typed transitions
+    (REST-created events) the stored type is the only fact.
+    """
+    if at is None:
+        return current
+    typed = [e for e in sorted(events, key=event_order) if e.to_state_type is not None]
+    if not typed:
+        return current
+    before = [e for e in typed if e.occurred_at <= at]
+    return before[-1].to_state_type if before else typed[0].from_state_type
+
+
+def _apply(state: _Lifecycle, event: Event, rules: MetricRules) -> None:
+    if event.type is EventType.STARTED:
+        state.start(event.occurred_at, restart_clock=rules.restart_clock_after_move_back)
+    elif event.type is EventType.COMPLETED:
+        state.complete(event.occurred_at)
+    elif _reopens(event):
+        state.reopen(event, rules)
+    elif event.type is EventType.CANCELED or (
+        event.type is EventType.STOPPED and rules.move_back_ends_wip
+    ):
+        state.close(event, rules)
+
+
 def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
     state = _Lifecycle()
     for event in ordered:
-        if event.type is EventType.STARTED:
-            state.start(event.occurred_at, restart_clock=rules.restart_clock_after_move_back)
-        elif event.type is EventType.COMPLETED:
-            state.complete(event.occurred_at)
-        elif event.type is EventType.CANCELED or (
-            event.type is EventType.STOPPED and rules.move_back_ends_wip
-        ):
-            state.close(event, rules)
+        _apply(state, event, rules)
     if state.completed_at is not None and rules.reopen_completion == "first":
         # The first completion of the current clock: never before its start,
         # so a restarted clock can't produce a negative cycle time.
@@ -125,9 +196,10 @@ def derive_flow_sample(
     (or the first event, if never started) to completed_at; a still-open
     period on an uncompleted item is not counted (unmeasurable).
 
-    ponytail: Done -> Todo isn't a reopen here (only a STARTED after
-    COMPLETED is), so it stays completed. Telling it apart from Done ->
-    Deployed needs state types: sub-project B of the per-team metric rules.
+    With done_then_reopened / canceled_then_reopened = "reopened", a typed
+    move from Done / Canceled to a not-started state reopens the item (open,
+    not in progress); a later start after a Done reopen keeps the clock.
+    arrived_at is the Triage exit under lead_time_start="triage_exit".
     """
     if not events:
         return None
@@ -157,6 +229,7 @@ def derive_flow_sample(
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
         blocked_now=any(p.ended_at is None for p in periods),
+        triage_exit_at=_triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None,
     )
 
 

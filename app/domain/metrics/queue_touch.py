@@ -1,6 +1,6 @@
 """Queue Time and Touch Time: waiting vs actively-worked share of delivery.
 
-Queue time = pre-start wait (created -> started) plus blocked time.
+Queue time = pre-start wait (arrival -> started) plus blocked time.
 Touch time = cycle time minus blocked time, floored at zero.
 Completed-and-started samples only.
 
@@ -18,7 +18,7 @@ from app.domain.metrics.samples import FlowSample
 def queue_times(samples: list[FlowSample]) -> list[timedelta]:
     """Queue time per sample that was both started and completed."""
     return [
-        (s.started_at - s.created_at) + s.blocked_time
+        (s.started_at - s.arrived_at) + s.blocked_time
         for s in samples
         if s.completed_at is not None and s.started_at is not None
     ]
