@@ -26,6 +26,7 @@ class WorkItemModel(Base):
     external_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
+    url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     def to_domain(self) -> WorkItem:
@@ -37,6 +38,7 @@ class WorkItemModel(Base):
             type=WorkItemType(self.type),
             state=self.state,
             external_id=self.external_id,
+            url=self.url,
             created_at=self.created_at,
         )
 
@@ -50,6 +52,7 @@ class WorkItemModel(Base):
             type=work_item.type.value,
             state=work_item.state,
             external_id=work_item.external_id,
+            url=work_item.url,
             created_at=work_item.created_at,
         )
 

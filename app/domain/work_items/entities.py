@@ -28,6 +28,8 @@ class WorkItem:
     state: str = DEFAULT_STATE
     project_id: UUID | None = None
     external_id: str | None = None
+    # Deep link to the item in the origin system; None for manually created items.
+    url: str | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)
 
