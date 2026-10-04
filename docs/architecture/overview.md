@@ -89,9 +89,9 @@ Metrics (`/metrics`) and Advisor (`/advisor`) pages.
 
 The one write-side projection: `app/domain/snapshots/` holds
 `MetricSnapshot` and `ForecastSnapshot` (one row per scope per UTC day,
-rewritten in place when the scope's metric rules change — ADR-0010) with repository ports, `SnapshotService`
-(`app/application/snapshots/service.py`) captures them for every team and
-project inside the sync request, and `evaluate_forecast_accuracy`
+rewritten in place when the scope's metric rules change — ADR-0010) with
+repository ports, `SnapshotService` (`app/application/snapshots/service.py`)
+captures them for every team and project inside the sync request, and `evaluate_forecast_accuracy`
 (`app/domain/forecasting/accuracy.py`) scores past forecast snapshots
 against actual completions. Served from `GET /api/metrics/snapshots`
 (lead-time trend on the dashboards) and `GET /api/forecasts/accuracy`
@@ -102,7 +102,7 @@ against actual completions. Served from `GET /api/metrics/snapshots`
 Every rule that changes how a metric is computed — lifecycle
 interpretation, health scales and weights, timezone, chart bucketing,
 forecast history — is a field of `MetricRules`
-(`app/domain/metric_rules/entities.py`, defaults = the original behavior).
+(`app/domain/metric_rules/entities.py`, defaults = the previous built-in behavior).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace

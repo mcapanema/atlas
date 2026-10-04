@@ -4,7 +4,8 @@ Date: 2026-07-11
 
 ## Status
 
-Accepted. Amends ADR-0003 (analytics computed on read). Amended by ADR-0010 (snapshots are rewritten when a scope's metric rules change).
+Accepted. Amends ADR-0003 (analytics computed on read). Amended by
+ADR-0010 (snapshots are rewritten when a scope's metric rules change).
 
 ## Context
 
@@ -20,8 +21,8 @@ use today's history and silently rewrite the prediction.
 ## Decision
 
 Keep compute-on-read as the live source of truth, and additionally
-persist one immutable snapshot pair (flow metrics + Monte Carlo forecast)
-per scope (each team, each project) per UTC day. Capture happens inside
+persist one immutable snapshot pair (flow metrics + Monte Carlo forecast;
+immutability amended by ADR-0010) per scope (each team, each project) per UTC day. Capture happens inside
 the sync request transaction — sync is the only point delivery data
 changes — and is idempotent per day. Forecast accuracy is a pure domain
 function over past forecast snapshots and actual completion timestamps:
@@ -38,5 +39,5 @@ actual duration fell within P50/P85.
 - A day with no sync captures no snapshot — history has gaps if sync
   isn't run daily. Acceptable: snapshots describe observed syncs, and a
   scheduler can be added later without schema changes.
-- Snapshot rows are immutable; metric-definition changes only affect rows
-  written after the change.
+- Snapshot rows are immutable (amended by ADR-0010); metric-definition
+  changes only affect rows written after the change.
