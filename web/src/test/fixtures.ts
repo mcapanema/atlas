@@ -96,6 +96,7 @@ export const teamFixture = {
   name: "Platform",
   external_id: null,
   created_at: "2026-07-01T00:00:00Z",
+  has_custom_rules: false,
 };
 
 export const snapshotsFixture = [

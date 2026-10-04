@@ -2,6 +2,7 @@ import {
   ApartmentOutlined,
   ApiOutlined,
   BulbOutlined,
+  ControlOutlined,
   FundOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -66,6 +67,11 @@ const NAV: MenuProps["items"] = [
         icon: <ApiOutlined />,
         label: <Link to="/connectors">Connectors</Link>,
       },
+      {
+        key: "/metric-rules",
+        icon: <ControlOutlined />,
+        label: <Link to="/metric-rules">Metric rules</Link>,
+      },
     ],
   },
 ];
@@ -80,6 +86,7 @@ const TITLES: Record<string, string> = {
   meetings: "Meetings",
   organizations: "Organizations",
   connectors: "Connectors",
+  "metric-rules": "Metric rules",
 };
 
 // Collapsed to the 64px rail there is no room for group titles (AntD

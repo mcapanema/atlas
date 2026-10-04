@@ -8,6 +8,7 @@ export interface Team {
   name: string;
   external_id: string | null;
   created_at: string;
+  has_custom_rules: boolean;
 }
 
 export function useTeams() {
