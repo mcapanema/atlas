@@ -2,6 +2,8 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 
+from app.api.schemas import WorkItemRead
+from app.domain.work_items.entities import WorkItem
 from tests.api.helpers import create_team, create_work_item
 
 
@@ -174,3 +176,17 @@ async def test_list_states_unscoped_returns_every_state(client: AsyncClient) -> 
 
     assert response.status_code == 200
     assert "shipped" in response.json()
+
+
+def test_read_dto_exposes_url() -> None:
+    item = WorkItem(team_id=uuid4(), title="T", url="https://linear.app/acme/issue/ENG-1")
+
+    assert WorkItemRead.model_validate(item).url == "https://linear.app/acme/issue/ENG-1"
+
+
+async def test_created_item_has_null_url(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+
+    response = await client.post("/api/work-items", json={"team_id": team_id, "title": "Manual"})
+
+    assert response.json()["url"] is None

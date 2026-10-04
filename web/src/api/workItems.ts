@@ -11,6 +11,7 @@ export interface WorkItem {
   type: string;
   state: string;
   external_id: string | null;
+  url: string | null;
   created_at: string;
 }
 

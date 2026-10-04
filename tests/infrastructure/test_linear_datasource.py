@@ -69,6 +69,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
     issue_node: dict[str, Any] = {
         "id": "i1",
         "title": "Fix login",
+        "url": "https://linear.app/acme/issue/ENG-1/fix-login",
         "createdAt": "2026-07-01T10:00:00.000Z",
         "state": {"name": "In Progress", "type": "started"},
         "team": {"id": "t1"},
@@ -91,6 +92,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
         body = json.loads(request.content)
         if "issueLabels(" in body["query"]:
             return _page("issueLabels", [])
+        assert "\n      url\n" in body["query"]
         assert "completedAt" in body["query"]
         assert "canceledAt" in body["query"]
         assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
@@ -101,6 +103,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
     assert items[0].external_id == "i1"
     assert [e.type for e in items[0].events] == [EventType.CREATED, EventType.STARTED]
     assert items[0].completed_at is None  # node carries no completedAt
+    assert items[0].url == "https://linear.app/acme/issue/ENG-1/fix-login"
 
 
 async def test_fetch_work_items_skips_malformed_nodes(

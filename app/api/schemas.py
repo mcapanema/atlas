@@ -72,6 +72,7 @@ class WorkItemRead(BaseModel):
     type: WorkItemType
     state: str
     external_id: str | None
+    url: str | None
     created_at: datetime
 
 

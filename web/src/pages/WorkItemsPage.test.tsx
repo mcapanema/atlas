@@ -24,6 +24,7 @@ function mockApi() {
             type: "bug",
             state: "In Progress",
             external_id: null,
+            url: "https://linear.app/acme/issue/ENG-1/fix-login-flow",
             created_at: "2026-06-10T14:32:07Z",
           },
         ],
@@ -49,6 +50,12 @@ describe("WorkItemsPage", () => {
       "href",
       "/work-items/11111111-1111-1111-1111-111111111111",
     );
+
+    // The origin link sits in its own column and opens outside the app.
+    const source = screen.getByRole("link", { name: /linear\.app/ });
+    expect(source).toHaveAttribute("href", "https://linear.app/acme/issue/ENG-1/fix-login-flow");
+    expect(source).toHaveAttribute("target", "_blank");
+    expect(source).toHaveAttribute("rel", "noopener noreferrer");
 
     const calls = vi.mocked(globalThis.fetch).mock.calls.map((call) => requestUrl(call[0]));
     expect(calls.some((url) => url.includes("limit=50") && url.includes("offset=0"))).toBe(true);
@@ -132,6 +139,7 @@ describe("WorkItemsPage", () => {
               type: "bug",
               state: "In Progress",
               external_id: null,
+              url: null,
               created_at: "2026-07-01T00:00:00Z",
             },
           ],

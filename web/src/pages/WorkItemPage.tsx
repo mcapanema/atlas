@@ -3,6 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useParams } from "react-router-dom";
 
 import { useWorkItemEvents, type WorkItemEvent } from "../api/events";
+import { SourceLink } from "../components/SourceLink";
 import {
   type BlockedPeriod,
   type StatePeriod,
@@ -78,6 +79,9 @@ function WorkItemHeader({ workItem }: { workItem: WorkItem | undefined }) {
             {formatDateTime(workItem.created_at)}
           </Descriptions.Item>
           <Descriptions.Item label="External id">{workItem.external_id ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="Source">
+            <SourceLink url={workItem.url} />
+          </Descriptions.Item>
         </Descriptions>
       )}
     </div>

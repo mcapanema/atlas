@@ -139,6 +139,8 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
         created_at=created_at,
         completed_at=datetime.fromisoformat(completed_at) if completed_at else None,
         events=tuple(events),
+        # .get: the field is optional — a node without it must not be dropped as malformed.
+        url=node.get("url"),
     )
 
 

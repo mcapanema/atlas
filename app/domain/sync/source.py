@@ -52,3 +52,5 @@ class SourceWorkItem:
     # completion. Sync uses the mismatch to synthesize the terminal event.
     completed_at: datetime | None = None
     events: tuple[SourceEvent, ...] = ()
+    # Deep link to the issue in the source system.
+    url: str | None = None

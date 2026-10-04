@@ -16,6 +16,7 @@ const workItem = {
   type: "bug",
   state: "In Progress",
   external_id: null,
+  url: "https://linear.app/acme/issue/ENG-1/fix-login-flow",
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -92,6 +93,10 @@ describe("WorkItemPage", () => {
     expect(screen.getByText(/synced → In Progress/)).toBeInTheDocument();
     expect(screen.getAllByText("Backlog").length).toBeGreaterThan(0);
     expect(screen.getByText("still blocked")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /linear\.app/ })).toHaveAttribute(
+      "href",
+      "https://linear.app/acme/issue/ENG-1/fix-login-flow",
+    );
   });
 
   it("shows an error when the work item does not exist", async () => {

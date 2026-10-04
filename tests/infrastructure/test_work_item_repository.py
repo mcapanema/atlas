@@ -137,3 +137,29 @@ async def test_delete_removes_only_the_given_items(session: AsyncSession) -> Non
     await repo.delete([drop.id, uuid4()])  # an unknown id is ignored
 
     assert [item.title for item in await repo.list(team_id=team_id)] == ["Keep"]
+
+
+async def test_url_roundtrips(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(
+        team_id=await _team_id(session),
+        title="Add login",
+        url="https://linear.app/acme/issue/ENG-1/add-login",
+    )
+
+    await repo.add(item)
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.url == "https://linear.app/acme/issue/ENG-1/add-login"
+
+
+async def test_url_defaults_to_none(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=await _team_id(session), title="Add login")
+
+    await repo.add(item)
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.url is None
