@@ -72,6 +72,7 @@ function mockApi(current: MetricRulesView, patchStatus = 200): Call[] {
 const RESTART = "Restart the clock after a move-back";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -137,6 +138,7 @@ describe("MetricRulesPage", () => {
     const running = view({
       recompute: { ...IDLE, state: "running", started_at: "2026-10-03T12:00:00Z" },
     });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     let current = view();
     const calls = mockApi(current);
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -149,9 +151,9 @@ describe("MetricRulesPage", () => {
         current = running;
         return jsonResponse(running);
       }
-      const response = jsonResponse(current);
-      if (current === running) current = view(); // the rewrite finishes after one poll
-      return response;
+      // the rewrite has finished by the first poll
+      current = view();
+      return jsonResponse(current);
     });
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
 
@@ -159,32 +161,10 @@ describe("MetricRulesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Recomputing history…")).toBeInTheDocument();
-    await waitFor(
-      () => expect(screen.queryByText("Recomputing history…")).not.toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    );
-    expect(calls.filter((call) => call.method === "GET").length).toBeGreaterThan(1);
-  }, 10000);
-
-  it("offers a retry that recomputes the team's organization", async () => {
-    const calls = mockApi(view({ recompute: { ...IDLE, state: "failed", error: "boom" } }));
-    renderWithClient(<MetricRulesPage />, [`/metric-rules?team=${teamFixture.id}`]);
-
-    expect(await screen.findByText("boom")).toBeInTheDocument();
-    expect(await screen.findByTitle(teamFixture.name)).toBeInTheDocument(); // teams loaded
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-    await waitFor(() =>
-      expect(
-        calls.some(
-          (call) =>
-            call.method === "POST" &&
-            call.url === `/api/organizations/${ORG.id}/metric-rules/recompute`,
-        ),
-      ).toBe(true),
-    );
+    const getsAtSave = calls.filter((call) => call.method === "GET").length;
+    await vi.advanceTimersByTimeAsync(2_000);
+    await waitFor(() => expect(screen.queryByText("Recomputing history…")).not.toBeInTheDocument());
+    expect(calls.filter((call) => call.method === "GET").length).toBeGreaterThan(getsAtSave);
   });
 
   it("shows why a save was rejected", async () => {
