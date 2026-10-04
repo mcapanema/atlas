@@ -133,7 +133,11 @@ class MetricRules:
         return any(folded == listed.strip().casefold() for listed in self.blocked_label_names)
 
     def type_of(self, item: WorkItem) -> WorkItemType:
-        """The item's type: its first type_labels hit among its labels, else its stored type."""
+        """The item's type: its first type_labels hit among its labels, else its stored type.
+
+        ponytail: labels are the item's current labels, applied to as-of
+        replays too. Upgrade path: label history (LABEL_ADDED/REMOVED events).
+        """
         carried = {label.strip().casefold() for label in item.labels}
         return next(
             (

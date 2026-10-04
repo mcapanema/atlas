@@ -177,6 +177,7 @@ async def test_fetch_work_items_maps_label_history_with_names() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if "issueLabels(" in body["query"]:
+            assert "includeArchived: true" in body["query"]
             return _page("issueLabels", [{"id": "lbl-1", "name": "Blocked"}])
         assert "addedLabelIds" in body["query"]
         assert "labelIds" in body["query"]

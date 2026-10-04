@@ -126,7 +126,7 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
         type=WorkItemType.TASK,
         state=node["state"]["name"],
         state_type=_state_type(node["state"]),
-        labels=tuple(names[i] for i in node.get("labelIds") or () if i in names),
+        labels=tuple(_detail(names[i]) for i in node.get("labelIds") or () if i in names),
         parent_external_id=(node.get("parent") or {}).get("id"),
         team_external_id=node["team"]["id"],
         project_external_id=project["id"] if project else None,
@@ -168,6 +168,15 @@ _NON_BLOCKING_CODES = frozenset({"ax", "rx", "xr", "xo", "ar", "rr", "ad", "am",
 _warned_codes: set[str] = set()
 
 
+# events.detail is String(255): a longer label name or identifier would fail
+# the insert on PostgreSQL.
+_DETAIL_MAX = 255
+
+
+def _detail(text: str) -> str:
+    return text[:_DETAIL_MAX]
+
+
 def _warn_unknown_code(code: str) -> None:
     if "b" in code and code not in _NON_BLOCKING_CODES and code not in _warned_codes:
         _warned_codes.add(code)
@@ -178,6 +187,8 @@ def _relation_events(entry: dict[str, Any], occurred_at: datetime) -> list[Sourc
     """Blocked-side "blocked by" relation changes → BLOCKER_ADDED/CLEARED (history only)."""
     events: list[SourceEvent] = []
     for change in entry.get("relationChanges") or ():
+        if not isinstance(change, dict):
+            continue
         code, identifier = change.get("type"), change.get("identifier")
         if not isinstance(code, str) or not isinstance(identifier, str):
             continue
@@ -190,7 +201,7 @@ def _relation_events(entry: dict[str, Any], occurred_at: datetime) -> list[Sourc
                 external_id=f"{entry['id']}:blocker:{code}:{identifier}",
                 type=event_type,
                 occurred_at=occurred_at,
-                detail=identifier,
+                detail=_detail(identifier),
             )
         )
     return events
@@ -202,6 +213,9 @@ _LABEL_CHANGES = (
 )
 
 
+# ponytail: a label event stores the label's name at sync time, so a label
+# renamed later keeps its old name on past events. Upgrade path: key events
+# by label id and resolve the name at read time.
 def _label_events(
     entry: dict[str, Any], occurred_at: datetime, label_names: Mapping[str, str]
 ) -> list[SourceEvent]:
@@ -217,7 +231,7 @@ def _label_events(
                     external_id=f"{entry['id']}:{suffix}:{label_id}",
                     type=event_type,
                     occurred_at=occurred_at,
-                    detail=name,
+                    detail=_detail(name),
                 )
             )
     return events
@@ -247,7 +261,7 @@ def _born_label_events(
             external_id=f"{node['id']}:label-born:{label_id}",
             type=EventType.LABEL_ADDED,
             occurred_at=created_at,
-            detail=label_names[label_id],
+            detail=_detail(label_names[label_id]),
         )
         for label_id in sorted(born)
         if label_id in label_names

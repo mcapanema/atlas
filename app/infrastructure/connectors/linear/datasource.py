@@ -72,7 +72,7 @@ query Projects($after: String) {
 
 _LABELS_QUERY = """
 query Labels($after: String) {
-  issueLabels(first: 100, after: $after) {
+  issueLabels(first: 100, after: $after, includeArchived: true) {
     nodes { id name }
     pageInfo { hasNextPage endCursor }
   }

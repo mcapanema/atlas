@@ -28,10 +28,9 @@ class ScopeSamples:
     """One scope load: per-item event streams, derived samples, item count.
 
     `streams` holds one occurred_at-ordered event list per work item that
-    has events, born-done items excluded (per their team's rule). `item_count`
-    counts every item in the scope, including eventless backlog but not
-    excluded born-done records — it is the forecast's remaining-work
-    denominator. `items_with_samples` pairs each evented item with its
+    has events, born-done items and parents excluded (per their team's rules).
+    `item_count` counts every item in the scope, including eventless backlog
+    but not those excluded records. `items_with_samples` pairs each evented item with its
     derived sample (aging WIP needs item identity). `stream_rules[i]` are the
     rules stream i was folded with (its item's team's); `rules` are the
     scope's own (its team's, or its project's team's). `remaining_count` is
@@ -102,6 +101,8 @@ class ScopeData:
         if stream is None:
             return None
         rules = self.rules.for_team(item.team_id)
+        # ponytail: parent links are a current fact applied to as-of replays.
+        # Upgrade path: IssueHistory fromParent/toParent for historical parents.
         if item.id in self.parent_ids and not rules.count_parent_issues:
             return None
         sample = derive_flow_sample(stream, rules)

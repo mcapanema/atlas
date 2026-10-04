@@ -79,6 +79,7 @@ class _Lifecycle:
 
     def complete(self, at: datetime) -> None:
         self.completed_at, self.stopped_at, self.canceled = at, None, False
+        self.reopened_after_done = False
 
     def reopen(self, event: Event, rules: MetricRules) -> None:
         """A Done or Canceled item moved back to a not-started state, by the reopen rules.
@@ -98,9 +99,13 @@ class _Lifecycle:
         if self.completed_at is not None:
             if event.type is EventType.CANCELED and rules.done_then_canceled == "canceled":
                 self.completed_at, self.stopped_at, self.canceled = None, event.occurred_at, True
+                self.reopened_after_done = False
             return
         if self.stopped_at is None:
             self.stopped_at = event.occurred_at
+        # A stop or cancel after a Done reopen is a plain move-back: a later
+        # start restarts the clock as after any cancel.
+        self.reopened_after_done = False
         self.canceled = self.canceled or event.type is EventType.CANCELED
 
 
@@ -113,12 +118,21 @@ def _reopens(event: Event) -> bool:
 
 
 def _triage_exit(ordered: list[Event]) -> datetime | None:
-    """When the item first left a Triage-type state; None if it never sat in Triage."""
+    """When the item first left Triage, at or before its first start/completion.
+
+    None if it never sat in Triage, or only left after work began (a later
+    Triage visit would make lead and queue time negative).
+    """
+    began = next(
+        (e.occurred_at for e in ordered if e.type in (EventType.STARTED, EventType.COMPLETED)),
+        None,
+    )
     return next(
         (
             event.occurred_at
             for event in ordered
-            if event.from_state_type is StateType.TRIAGE
+            if (began is None or event.occurred_at <= began)
+            and event.from_state_type is StateType.TRIAGE
             and event.to_state_type not in (None, StateType.TRIAGE)
         ),
         None,

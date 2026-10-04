@@ -156,6 +156,74 @@ def test_triage_straight_to_started_arrives_at_the_start() -> None:
     assert sample.arrived_at == sample.started_at == _day(4)
 
 
+def _assert_arrives_at_creation(events: list[Event]) -> None:
+    sample = derive_flow_sample(events, TRIAGE_EXIT)
+
+    assert sample is not None
+    assert sample.arrived_at == _day(1)
+    assert all(t >= timedelta(0) for t in [*lead_times([sample]), *queue_times([sample])])
+
+
+def test_a_triage_exit_after_done_is_ignored() -> None:
+    _assert_arrives_at_creation(
+        [
+            _on(EventType.CREATED, 1),
+            _moved(T.UNSTARTED, T.STARTED, 2, EventType.STARTED),
+            _moved(T.STARTED, T.COMPLETED, 3, EventType.COMPLETED),
+            _moved(T.COMPLETED, T.TRIAGE, 4),
+            _moved(T.TRIAGE, T.UNSTARTED, 5),
+        ]
+    )
+
+
+def test_a_triage_exit_after_the_first_start_is_ignored() -> None:
+    _assert_arrives_at_creation(
+        [
+            _on(EventType.CREATED, 1),
+            _moved(T.UNSTARTED, T.STARTED, 3, EventType.STARTED),
+            _moved(T.STARTED, T.TRIAGE, 4),
+            _moved(T.TRIAGE, T.STARTED, 5, EventType.STARTED),
+            _moved(T.STARTED, T.COMPLETED, 6, EventType.COMPLETED),
+        ]
+    )
+
+
+REOPEN_RESTART = MetricRules(done_then_reopened="reopened", restart_clock_after_move_back=True)
+
+
+def test_a_start_after_reopen_then_cancel_restarts_the_clock() -> None:
+    events = [
+        _on(EventType.CREATED, 1),
+        _moved(T.UNSTARTED, T.STARTED, 2, EventType.STARTED),
+        _moved(T.STARTED, T.COMPLETED, 3, EventType.COMPLETED),
+        _moved(T.COMPLETED, T.UNSTARTED, 4),
+        _on(EventType.CANCELED, 5),
+        _moved(T.UNSTARTED, T.STARTED, 6, EventType.STARTED),
+    ]
+
+    sample = derive_flow_sample(events, REOPEN_RESTART)
+
+    assert sample is not None
+    assert sample.started_at == _day(6)
+
+
+def test_a_start_after_repeated_done_reopens_keeps_the_clock() -> None:
+    events = [
+        _on(EventType.CREATED, 1),
+        _moved(T.UNSTARTED, T.STARTED, 2, EventType.STARTED),
+        _moved(T.STARTED, T.COMPLETED, 3, EventType.COMPLETED),
+        _moved(T.COMPLETED, T.UNSTARTED, 4),
+        _moved(T.UNSTARTED, T.COMPLETED, 5, EventType.COMPLETED),
+        _moved(T.COMPLETED, T.UNSTARTED, 6),
+        _moved(T.UNSTARTED, T.STARTED, 7, EventType.STARTED),
+    ]
+
+    sample = derive_flow_sample(events, REOPEN_RESTART)
+
+    assert sample is not None
+    assert sample.started_at == _day(2)
+
+
 def test_state_type_at_reads_typed_transitions() -> None:
     assert state_type_at(BORN_IN_TRIAGE, _day(2), T.COMPLETED) is T.TRIAGE  # before the first
     assert state_type_at(BORN_IN_TRIAGE, _day(4), T.COMPLETED) is T.BACKLOG

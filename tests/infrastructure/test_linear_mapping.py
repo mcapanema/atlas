@@ -465,3 +465,29 @@ def test_node_without_new_optional_keys_maps_normally() -> None:
 
     assert (item.labels, item.parent_external_id) == ((), None)
     assert [e.type for e in item.events] == [EventType.CREATED, EventType.STARTED]
+
+
+def test_a_null_relation_change_is_skipped_not_fatal() -> None:
+    entry = _relation_entry(("ab", "DEP-1"))
+    entry["relationChanges"] = [None, {"type": "ab", "identifier": "DEP-1"}]
+
+    events = map_history_entry(entry)
+
+    assert [(e.type, e.detail) for e in events] == [(EventType.BLOCKER_ADDED, "DEP-1")]
+
+
+def test_long_label_names_and_blockers_are_truncated_to_the_detail_column() -> None:
+    long_name = "x" * 300
+    entry = {
+        **_relation_entry(("ab", long_name)),
+        "addedLabelIds": ["l1"],
+        "removedLabelIds": [],
+    }
+    node = {**ISSUE_NODE, "labelIds": ["l1"], "history": {"nodes": [entry]}}
+
+    item = map_issue(node, {"l1": long_name})
+
+    details = [e.detail for e in item.events if e.detail is not None]
+    assert details
+    assert all(len(d) == 255 for d in details)
+    assert item.labels == ("x" * 255,)
