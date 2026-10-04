@@ -47,11 +47,11 @@ def _render_aging(aging: dict[str, Any], limit: int = 10) -> str:
     items = aging["items"]
     if not items:
         return "Aging WIP: nothing in progress."
-    limit = aging["cycle_time_percentile_seconds"]
+    threshold = aging["cycle_time_percentile_seconds"]
     pct = aging["percentile"]
     header = "Aging WIP"
-    if limit is not None:
-        header += f" (cycle-time p{pct} = {limit / _DAY_SECONDS:.1f}d)"
+    if threshold is not None:
+        header += f" (cycle-time p{pct} = {threshold / _DAY_SECONDS:.1f}d)"
     lines = [header + ":"]
     for item in items[:limit]:
         age = item["age_seconds"] / _DAY_SECONDS
