@@ -167,6 +167,25 @@ describe("MetricRulesPage", () => {
     expect(calls.filter((call) => call.method === "GET").length).toBeGreaterThan(getsAtSave);
   });
 
+  it("offers a retry that recomputes the team's organization", async () => {
+    const calls = mockApi(view({ recompute: { ...IDLE, state: "failed", error: "boom" } }));
+    renderWithClient(<MetricRulesPage />, [`/metric-rules?team=${teamFixture.id}`]);
+
+    expect(await screen.findByText("boom")).toBeInTheDocument();
+    expect(await screen.findByTitle(teamFixture.name)).toBeInTheDocument(); // teams loaded
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (call) =>
+            call.method === "POST" &&
+            call.url === `/api/organizations/${ORG.id}/metric-rules/recompute`,
+        ),
+      ).toBe(true),
+    );
+  });
+
   it("shows why a save was rejected", async () => {
     mockApi(view(), 422);
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
