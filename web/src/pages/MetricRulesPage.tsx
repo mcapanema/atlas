@@ -1,8 +1,9 @@
-import { Alert, Button, Select, Space, Typography } from "antd";
+import { Alert, Button, Empty, Modal, Select, Space, Typography } from "antd";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useMetricRules, useRecomputeHistory, type RecomputeStatus } from "../api/metricRules";
-import { useOrganizations } from "../api/organizations";
+import { useOrganizations, type Organization } from "../api/organizations";
 import { useTeams } from "../api/teams";
 import { MetricRulesForm } from "../components/MetricRulesForm";
 import {
@@ -17,10 +18,12 @@ function RecomputeBanner({
   status,
   onRetry,
   retrying,
+  canRetry,
 }: {
   status: RecomputeStatus;
   onRetry: () => void;
   retrying: boolean;
+  canRetry: boolean;
 }) {
   if (status.state === "running") {
     return (
@@ -40,7 +43,7 @@ function RecomputeBanner({
         message="History recompute failed"
         description={status.error ?? undefined}
         action={
-          <Button size="small" onClick={onRetry} loading={retrying}>
+          <Button size="small" onClick={onRetry} loading={retrying} disabled={!canRetry}>
             Retry
           </Button>
         }
@@ -50,15 +53,88 @@ function RecomputeBanner({
   return null;
 }
 
-export function MetricRulesPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const organizations = useOrganizations();
-  const teams = useTeams();
-  const scope = scopeFromParams(searchParams, organizations.data?.[0]?.id);
-  const view = useMetricRules(scope);
-  const recompute = useRecomputeHistory(recomputeOrganization(scope, teams.data));
-  const running = view.data?.recompute.state === "running";
+/** Switches scope via the URL, asking first when the form holds unsaved edits. */
+function useScopeSwitch(dirty: boolean) {
+  const [, setSearchParams] = useSearchParams();
+  const [modal, modalContext] = Modal.useModal();
+  const switchScope = (value: string) => {
+    if (!dirty) return setSearchParams(scopeParams(value));
+    modal.confirm({
+      title: "Discard unsaved changes?",
+      content: "Switching scope drops the edits you haven't saved.",
+      okText: "Discard and switch",
+      onOk: () => setSearchParams(scopeParams(value)),
+    });
+  };
+  return [switchScope, modalContext] as const;
+}
 
+function RulesWorkspace({
+  organizations,
+  loading,
+}: {
+  organizations: Organization[];
+  loading: boolean;
+}) {
+  const [searchParams] = useSearchParams();
+  const [dirty, setDirty] = useState(false);
+  const [switchScope, modalContext] = useScopeSwitch(dirty);
+  const teams = useTeams();
+  const scope = scopeFromParams(searchParams, organizations[0]?.id);
+  const view = useMetricRules(scope);
+  const organizationId = recomputeOrganization(scope, teams.data);
+  const recompute = useRecomputeHistory(organizationId);
+
+  return (
+    <Space direction="vertical" size="large" style={{ width: "100%" }}>
+      {modalContext}
+      <Space wrap>
+        <Select
+          aria-label="Rules for"
+          style={{ width: 320 }}
+          placeholder="Select a team or the workspace default"
+          value={scopeValue(scope)}
+          options={scopeOptions(organizations, teams.data ?? [])}
+          loading={loading || teams.isLoading}
+          onChange={switchScope}
+        />
+        {scope?.kind === "organization" && (
+          <Button onClick={() => recompute.mutate()} loading={recompute.isPending}>
+            Recompute history
+          </Button>
+        )}
+      </Space>
+      {recompute.isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Couldn't start the recompute"
+          description={recompute.error.message}
+        />
+      )}
+      {view.isError && <Alert type="error" showIcon message="Couldn't load the rules" />}
+      {view.data && scope && (
+        <>
+          <RecomputeBanner
+            status={view.data.recompute}
+            onRetry={() => recompute.mutate()}
+            retrying={recompute.isPending}
+            canRetry={organizationId !== undefined}
+          />
+          <MetricRulesForm
+            key={scopeValue(scope)}
+            scope={scope}
+            view={view.data}
+            onDirtyChange={setDirty}
+          />
+        </>
+      )}
+    </Space>
+  );
+}
+
+export function MetricRulesPage() {
+  const organizations = useOrganizations();
   return (
     <>
       <Typography.Title level={3}>Metric rules</Typography.Title>
@@ -66,39 +142,14 @@ export function MetricRulesPage() {
         How Atlas reads your delivery data. Teams inherit the workspace default and can override any
         rule; every dashboard, forecast and the snapshot history follow the team&apos;s rules.
       </Typography.Paragraph>
-      <Space direction="vertical" size="large" style={{ width: "100%" }}>
-        <Space wrap>
-          <Select
-            aria-label="Rules for"
-            style={{ width: 320 }}
-            placeholder="Select a team or the workspace default"
-            value={scopeValue(scope)}
-            options={scopeOptions(organizations.data ?? [], teams.data ?? [])}
-            loading={organizations.isLoading || teams.isLoading}
-            onChange={(value: string) => setSearchParams(scopeParams(value))}
-          />
-          {scope?.kind === "organization" && (
-            <Button
-              onClick={() => recompute.mutate()}
-              loading={recompute.isPending}
-              disabled={running}
-            >
-              Recompute history
-            </Button>
-          )}
-        </Space>
-        {view.isError && <Alert type="error" showIcon message="Couldn't load the rules" />}
-        {view.data && scope && (
-          <>
-            <RecomputeBanner
-              status={view.data.recompute}
-              onRetry={() => recompute.mutate()}
-              retrying={recompute.isPending}
-            />
-            <MetricRulesForm key={scopeValue(scope)} scope={scope} view={view.data} />
-          </>
-        )}
-      </Space>
+      {organizations.isSuccess && organizations.data.length === 0 ? (
+        <Empty description="No organizations yet. Create one to set its metric rules." />
+      ) : (
+        <RulesWorkspace
+          organizations={organizations.data ?? []}
+          loading={organizations.isLoading}
+        />
+      )}
     </>
   );
 }

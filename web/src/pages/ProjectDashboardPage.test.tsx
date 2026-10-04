@@ -5,7 +5,7 @@ vi.mock("../components/EChart", () => ({
   EChart: () => <div data-testid="echart" />,
 }));
 
-import { jsonResponse, mockMetricsFetch, requestUrl } from "../test/fixtures";
+import { jsonResponse, mockMetricsFetch, requestUrl, teamFixture } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ProjectDashboardPage } from "./ProjectDashboardPage";
 
@@ -33,6 +33,36 @@ describe("ProjectDashboardPage", () => {
     await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain(`/api/metrics?project_id=${project.id}`);
+  });
+
+  it("tags the project's own team when it has custom rules", async () => {
+    const otherTeam = { ...teamFixture, id: "99999999-9999-9999-9999-999999999999" };
+    mockMetricsFetch({
+      "/api/projects": [{ ...project, team_id: teamFixture.id }],
+      "/api/teams": [otherTeam, { ...teamFixture, has_custom_rules: true }],
+    });
+
+    renderWithClient(<ProjectDashboardPage />, [`/projects?project=${project.id}`]);
+
+    const link = await screen.findByRole("link", { name: "Custom rules" });
+    expect(link).toHaveAttribute("href", `/metric-rules?team=${teamFixture.id}`);
+  });
+
+  it("does not borrow another team's custom rules", async () => {
+    const otherTeam = {
+      ...teamFixture,
+      id: "99999999-9999-9999-9999-999999999999",
+      has_custom_rules: true,
+    };
+    mockMetricsFetch({
+      "/api/projects": [{ ...project, team_id: teamFixture.id }],
+      "/api/teams": [otherTeam, teamFixture],
+    });
+
+    renderWithClient(<ProjectDashboardPage />, [`/projects?project=${project.id}`]);
+
+    await screen.findByText("Throughput (30d)");
+    expect(screen.queryByRole("link", { name: "Custom rules" })).not.toBeInTheDocument();
   });
 
   it("shows an error when projects fail to load", async () => {

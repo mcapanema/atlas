@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Space, Tag, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   useSaveMetricRules,
@@ -8,7 +8,13 @@ import {
   type RulesScope,
   type RuleValue,
 } from "../api/metricRules";
-import { RULE_GROUPS, formatRuleValue, pendingChanges, type RuleSpec } from "../lib/metricRules";
+import {
+  RULE_GROUPS,
+  draftValue,
+  formatRuleValue,
+  pendingChanges,
+  type RuleSpec,
+} from "../lib/metricRules";
 import { RuleControl } from "./RuleControl";
 
 function RuleRow({
@@ -54,10 +60,20 @@ function RuleRow({
 }
 
 /** Edits one scope's overrides; keyed by scope, so switching scopes starts a fresh draft. */
-export function MetricRulesForm({ scope, view }: { scope: RulesScope; view: MetricRulesView }) {
+export function MetricRulesForm({
+  scope,
+  view,
+  onDirtyChange,
+}: {
+  scope: RulesScope;
+  view: MetricRulesView;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const [draft, setDraft] = useState<RuleChanges>(view.overrides);
   const save = useSaveMetricRules(scope);
   const changes = pendingChanges(view.overrides, draft);
+  const dirty = Object.keys(changes).length > 0;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const inheritedFrom = scope.kind === "team" ? "Workspace default" : "Built-in";
   return (
     <Space direction="vertical" size="large" style={{ width: "100%" }}>
@@ -78,14 +94,19 @@ export function MetricRulesForm({ scope, view }: { scope: RulesScope; view: Metr
               view={view}
               draft={draft}
               inheritedFrom={inheritedFrom}
-              onChange={(value) => setDraft((current) => ({ ...current, [spec.name]: value }))}
+              onChange={(value) =>
+                setDraft((current) => ({
+                  ...current,
+                  [spec.name]: draftValue(view, spec.name, value),
+                }))
+              }
             />
           ))}
         </Card>
       ))}
       <Button
         type="primary"
-        disabled={Object.keys(changes).length === 0}
+        disabled={!dirty}
         loading={save.isPending}
         onClick={() => save.mutate(changes, { onSuccess: (saved) => setDraft(saved.overrides) })}
       >

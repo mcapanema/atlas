@@ -49,16 +49,23 @@ interface Call {
   body: unknown;
 }
 
-function mockApi(current: MetricRulesView, patchStatus = 200): Call[] {
+function mockApi(
+  current: MetricRulesView,
+  patchStatus = 200,
+  extra: { recomputeStatus?: number; organizations?: (typeof ORG)[] } = {},
+): Call[] {
   const calls: Call[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     const method = init?.method ?? "GET";
     const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-    if (url === "/api/organizations") return jsonResponse([ORG]);
+    if (url === "/api/organizations") return jsonResponse(extra.organizations ?? [ORG]);
     if (url === "/api/teams") return jsonResponse([teamFixture]);
     if (url.includes("/metric-rules")) {
       calls.push({ url, method, body });
+      if (method === "POST" && extra.recomputeStatus) {
+        return jsonResponse({ detail: "recompute is unavailable" }, extra.recomputeStatus);
+      }
       if (method === "PATCH" && patchStatus !== 200) {
         return jsonResponse({ detail: "healthy_min must be between 1 and 100" }, patchStatus);
       }
@@ -125,13 +132,13 @@ describe("MetricRulesPage", () => {
     );
   });
 
-  it("shows the recompute banner while history is rewritten", async () => {
+  it("shows the recompute banner while history is rewritten, and lets you restart it", async () => {
     mockApi(view({ recompute: { ...IDLE, state: "running", started_at: "2026-10-03T12:00:00Z" } }));
 
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
 
     expect(await screen.findByText("Recomputing history…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Recompute history" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Recompute history" })).toBeEnabled();
   });
 
   it("shows the banner after a save, polls while running, and clears once idle", async () => {
@@ -194,5 +201,100 @@ describe("MetricRulesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("healthy_min must be between 1 and 100")).toBeInTheDocument();
+  });
+
+  it("keeps Retry disabled until the team's organization is known", async () => {
+    const calls = mockApi(view({ recompute: { ...IDLE, state: "failed", error: "boom" } }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = requestUrl(input);
+      if (url === "/api/organizations") return jsonResponse([ORG]);
+      if (url === "/api/teams") return new Promise<Response>(() => undefined); // never loads
+      return jsonResponse(view({ recompute: { ...IDLE, state: "failed", error: "boom" } }));
+    });
+    renderWithClient(<MetricRulesPage />, [`/metric-rules?team=${teamFixture.id}`]);
+
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    expect(retry).toBeDisabled();
+    fireEvent.click(retry);
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(0);
+  });
+
+  it("shows why a recompute could not start", async () => {
+    mockApi(view(), 200, { recomputeStatus: 500 });
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Recompute history" }));
+
+    expect(await screen.findByText("recompute is unavailable")).toBeInTheDocument();
+  });
+
+  it("treats toggling a rule back to its inherited value as no change", async () => {
+    const calls = mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    const toggle = await screen.findByRole("switch", { name: RESTART });
+    fireEvent.click(toggle);
+    expect(await screen.findByText("Customized")).toBeInTheDocument();
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(screen.queryByText("Customized")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(calls.some((call) => call.method === "PATCH")).toBe(false);
+  });
+
+  it("confirms before a scope switch drops unsaved edits", async () => {
+    mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+    fireEvent.click(await screen.findByRole("switch", { name: RESTART }));
+
+    const pickTeam = async () => {
+      fireEvent.mouseDown(screen.getByRole("combobox", { name: "Rules for" }));
+      fireEvent.click(await screen.findByTitle(teamFixture.name));
+    };
+    await pickTeam();
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    expect(screen.getAllByText(/^Built-in:/).length).toBeGreaterThan(0); // scope kept
+    expect(screen.getByRole("switch", { name: RESTART })).toBeChecked(); // draft kept
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    await pickTeam();
+    // the cancelled dialog may still be animating out, so take the newest one
+    const confirms = await screen.findAllByRole("button", { name: "Discard and switch" });
+    fireEvent.click(confirms[confirms.length - 1]);
+
+    expect(await screen.findAllByText(/^Workspace default:/)).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("switches scope straight away when nothing is unsaved", async () => {
+    mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+    await screen.findByText("Lifecycle");
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Rules for" }));
+    fireEvent.click(await screen.findByTitle(teamFixture.name));
+
+    expect(await screen.findAllByText(/^Workspace default:/)).not.toHaveLength(0);
+    expect(screen.queryByText("Discard unsaved changes?")).toBeNull();
+  });
+
+  it("shows an empty state when there are no organizations", async () => {
+    mockApi(view(), 200, { organizations: [] });
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    expect(await screen.findByText(/No organizations yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Rules for" })).not.toBeInTheDocument();
+  });
+
+  it("explains when the restart clock applies", async () => {
+    mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    expect(
+      await screen.findByText(
+        /only while "Moving back to backlog ends WIP" is on, and always after a cancel/,
+      ),
+    ).toBeInTheDocument();
   });
 });

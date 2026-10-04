@@ -1,5 +1,12 @@
 import type { Organization } from "../api/organizations";
-import type { MetricRules, RuleChanges, RuleName, RuleValue, RulesScope } from "../api/metricRules";
+import type {
+  MetricRules,
+  MetricRulesView,
+  RuleChanges,
+  RuleName,
+  RuleValue,
+  RulesScope,
+} from "../api/metricRules";
 import type { Team } from "../api/teams";
 
 type Control =
@@ -50,7 +57,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "restart_clock_after_move_back",
         label: "Restart the clock after a move-back",
-        help: "When an item moved back to backlog is started again, cycle time and aging count from the restart; the parked time becomes queue time. A reopen after done never restarts the clock.",
+        help: 'When an item moved back to backlog is started again, cycle time and aging count from the restart; the parked time becomes queue time. Applies after a move-back only while "Moving back to backlog ends WIP" is on, and always after a cancel. A reopen after done never restarts the clock.',
         control: { kind: "switch" },
       },
       {
@@ -168,6 +175,15 @@ export function formatRuleValue(spec: RuleSpec, value: RuleValue): string {
   }
   if (control.kind === "number" && control.suffix) return `${String(value)} ${control.suffix}`;
   return String(value);
+}
+
+/** A draft entry equal to the inherited value, with no saved override, is no override at all. */
+export function draftValue(
+  view: Pick<MetricRulesView, "inherited" | "overrides">,
+  name: RuleName,
+  value: RuleValue | null,
+): RuleValue | null {
+  return value === view.inherited[name] && view.overrides[name] == null ? null : value;
 }
 
 /** What to PATCH: draft values that differ from the saved overrides (null = inherit). */
