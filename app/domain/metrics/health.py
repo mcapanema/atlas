@@ -12,8 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.domain.events.entities import Event, event_order
-from app.domain.events.timeline import derive_timeline
+from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency
@@ -145,14 +144,7 @@ def _item_states(
 ) -> list[tuple[FlowSample, bool]]:
     """(sample, blocked right now) per item; samples derived with built-in rules if absent."""
     derived = samples if samples is not None else [derive_flow_sample(s) for s in streams]
-    states: list[tuple[FlowSample, bool]] = []
-    for stream, sample in zip(streams, derived, strict=True):
-        if sample is None:
-            continue
-        ordered = sorted(stream, key=event_order)
-        blocked_open = any(p.ended_at is None for p in derive_timeline(ordered).blocked_periods)
-        states.append((sample, blocked_open))
-    return states
+    return [(sample, sample.blocked_now) for sample in derived if sample is not None]
 
 
 def _cycle_percentile(samples: list[FlowSample], pct: int) -> timedelta | None:

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
-from app.domain.events.timeline import derive_timeline
+from app.domain.events.timeline import blocked_periods
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 
 
@@ -23,6 +23,8 @@ class FlowSample:
     stopped_at: datetime | None = None
     canceled: bool = False
     born_done: bool = False
+    # A blocked period is still open at the end of the stream.
+    blocked_now: bool = False
 
 
 def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
@@ -118,7 +120,8 @@ def derive_flow_sample(
     (the cancel un-delivered the item). With move_back_ends_wip off, a STOPPED
     never counts, so the clock restarts only after a CANCELED. born_done marks an
     item created already completed and never started (see _born_done).
-    Blocked time sums blocked periods clipped to the cycle — from started_at
+    Blocked time sums the rules' blocked periods (labels, relations,
+    explicit events) clipped to the cycle — from started_at
     (or the first event, if never started) to completed_at; a still-open
     period on an uncompleted item is not counted (unmeasurable).
 
@@ -136,7 +139,8 @@ def derive_flow_sample(
     # Done isn't blocked work, and pre-start blocking is already queue time.
     cycle_start = started_at if started_at is not None else ordered[0].occurred_at
     blocked_time = timedelta(0)
-    for period in derive_timeline(ordered).blocked_periods:
+    periods = blocked_periods(ordered, rules)
+    for period in periods:
         ended_at = period.ended_at
         if completed_at is not None:
             ended_at = completed_at if ended_at is None else min(ended_at, completed_at)
@@ -152,6 +156,7 @@ def derive_flow_sample(
         stopped_at=state.stopped_at,
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
+        blocked_now=any(p.ended_at is None for p in periods),
     )
 
 

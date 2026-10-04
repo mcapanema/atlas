@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.domain.events.entities import Event, EventType, event_order
+from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 
 
 @dataclass(frozen=True)
@@ -35,14 +36,63 @@ class WorkItemTimeline:
     blocked_periods: tuple[BlockedPeriod, ...]
 
 
-def derive_timeline(events: list[Event]) -> WorkItemTimeline:
+def _blocked_source(event: Event, rules: MetricRules) -> tuple[str, bool] | None:
+    """(source key, opens?) for an event that opens or closes a blocked source, else None."""
+    if event.type in (EventType.BLOCKED, EventType.UNBLOCKED):
+        return "explicit", event.type is EventType.BLOCKED
+    if event.detail is None:
+        return None
+    if event.type in (EventType.LABEL_ADDED, EventType.LABEL_REMOVED):
+        blocked = rules.is_blocked_label(event.detail)
+        key = f"label:{event.detail.strip().casefold()}"
+        return (key, event.type is EventType.LABEL_ADDED) if blocked else None
+    if event.type in (EventType.BLOCKER_ADDED, EventType.BLOCKER_CLEARED):
+        key = f"blocker:{event.detail}"
+        counted = rules.blocked_by_relations
+        return (key, event.type is EventType.BLOCKER_ADDED) if counted else None
+    return None
+
+
+def blocked_periods(
+    events: list[Event], rules: MetricRules = DEFAULT_RULES
+) -> tuple[BlockedPeriod, ...]:
+    """Blocked intervals under `rules`: blocked while any source is open.
+
+    Sources: explicit BLOCKED/UNBLOCKED events (always), label events whose
+    label the rules call blocked (each label its own source), and — with
+    blocked_by_relations — "blocked by" relations (each blocker its own
+    source). Overlapping sources form one period, never a double count; a
+    close for a source that isn't open is ignored (truncated history).
+    """
+    periods: list[BlockedPeriod] = []
+    open_sources: set[str] = set()
+    for event in sorted(events, key=event_order):
+        source = _blocked_source(event, rules)
+        if source is None:
+            continue
+        key, opens = source
+        was_blocked = bool(open_sources)
+        if opens:
+            open_sources.add(key)
+        else:
+            open_sources.discard(key)
+        if open_sources and not was_blocked:
+            periods.append(BlockedPeriod(started_at=event.occurred_at))
+        elif was_blocked and not open_sources:
+            periods[-1] = BlockedPeriod(
+                started_at=periods[-1].started_at, ended_at=event.occurred_at
+            )
+    return tuple(periods)
+
+
+def derive_timeline(events: list[Event], rules: MetricRules = DEFAULT_RULES) -> WorkItemTimeline:
     """Fold a Work Item's events into state periods and blocked periods.
 
     Events are sorted by `event_order` defensively. State periods come from
     events carrying to_state; if the first such event also names a from_state
     and an earlier event exists (usually CREATED), the gap becomes the initial
     period — the time the item waited in its starting state. Blocked periods
-    pair BLOCKED with the next UNBLOCKED; an unmatched BLOCKED stays open.
+    come from `blocked_periods` under the rules.
     """
     ordered = sorted(events, key=event_order)
 
@@ -67,18 +117,7 @@ def derive_timeline(events: list[Event]) -> WorkItemTimeline:
             )
         state_periods.append(StatePeriod(state=event.to_state, entered_at=event.occurred_at))
 
-    blocked_periods: list[BlockedPeriod] = []
-    for event in ordered:
-        has_open_block = bool(blocked_periods) and blocked_periods[-1].ended_at is None
-        if event.type is EventType.BLOCKED and not has_open_block:
-            blocked_periods.append(BlockedPeriod(started_at=event.occurred_at))
-        elif event.type is EventType.UNBLOCKED and has_open_block:
-            blocked_periods[-1] = BlockedPeriod(
-                started_at=blocked_periods[-1].started_at,
-                ended_at=event.occurred_at,
-            )
-
     return WorkItemTimeline(
         state_periods=tuple(state_periods),
-        blocked_periods=tuple(blocked_periods),
+        blocked_periods=blocked_periods(ordered, rules),
     )

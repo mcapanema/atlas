@@ -2,8 +2,9 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.application.events.service import EventService
-from app.domain.events.entities import EventType
+from app.domain.events.entities import Event, EventType
 from app.domain.events.timeline import StatePeriod
+from app.domain.metric_rules.entities import MetricRules
 from tests.fakes import InMemoryEventRepository
 
 
@@ -80,3 +81,22 @@ async def test_get_timeline_is_empty_for_unknown_work_item() -> None:
 
     assert timeline.state_periods == ()
     assert timeline.blocked_periods == ()
+
+
+async def test_timeline_blocked_periods_follow_the_rules() -> None:
+    item_id = uuid4()
+    at = datetime(2026, 9, 1, tzinfo=UTC)
+    repo = InMemoryEventRepository(
+        [
+            Event(
+                work_item_id=item_id, type=EventType.BLOCKER_ADDED, occurred_at=at, detail="DEP-1"
+            ),
+        ]
+    )
+    service = EventService(repo)
+
+    default = await service.get_timeline(item_id)
+    relations = await service.get_timeline(item_id, MetricRules(blocked_by_relations=True))
+
+    assert default.blocked_periods == ()
+    assert [p.started_at for p in relations.blocked_periods] == [at]
