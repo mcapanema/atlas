@@ -18,6 +18,8 @@ const workItem = {
   external_id: null,
   url: "https://linear.app/acme/issue/ENG-1/fix-login-flow",
   created_at: "2026-01-01T00:00:00Z",
+  state_type: null,
+  labels: [],
 };
 
 const events = [
@@ -28,6 +30,9 @@ const events = [
     occurred_at: "2026-06-10T09:05:00Z",
     from_state: null,
     to_state: null,
+    from_state_type: null,
+    to_state_type: null,
+    detail: null,
     external_id: null,
     recorded_at: "2026-01-01T00:00:00Z",
   },
@@ -38,6 +43,9 @@ const events = [
     occurred_at: "2026-01-03T00:00:00Z",
     from_state: "Backlog",
     to_state: "In Progress",
+    from_state_type: null,
+    to_state_type: null,
+    detail: null,
     external_id: null,
     recorded_at: "2026-01-03T00:00:00Z",
   },
@@ -48,6 +56,9 @@ const events = [
     occurred_at: "2026-01-04T00:00:00Z",
     from_state: null,
     to_state: "In Progress",
+    from_state_type: null,
+    to_state_type: null,
+    detail: null,
     external_id: null,
     recorded_at: "2026-01-04T00:00:00Z",
   },
@@ -136,5 +147,33 @@ describe("WorkItemPage", () => {
     renderPage();
 
     expect(await screen.findByText(/10-06-2026 09:05/)).toBeInTheDocument();
+  });
+
+  it("labels blocker and label events with their detail", async () => {
+    const detailEvents = [
+      {
+        ...events[0],
+        id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        type: "blocker_added",
+        detail: "DEP-1309",
+      },
+      {
+        ...events[0],
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+        type: "label_added",
+        detail: "Blocked",
+      },
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
+      if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(detailEvents));
+      return Promise.resolve(jsonResponse(workItem));
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/Blocked by DEP-1309/)).toBeInTheDocument();
+    expect(screen.getByText(/Label added: Blocked/)).toBeInTheDocument();
   });
 });

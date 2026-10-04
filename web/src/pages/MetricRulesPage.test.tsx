@@ -28,6 +28,15 @@ const BUILT_IN: MetricRules = {
   timezone: "UTC",
   daily_bucket_max_days: 21,
   forecast_history_days: 90,
+  count_parent_issues: true,
+  lead_time_start: "created",
+  done_then_reopened: "delivered",
+  canceled_then_reopened: "canceled",
+  blocked_label_pattern: true,
+  blocked_label_names: [],
+  blocked_by_relations: false,
+  remaining_state_types: ["triage", "backlog", "unstarted", "started"],
+  type_labels: [],
 };
 
 const IDLE = { state: "idle", started_at: null, finished_at: null, error: null } as const;
@@ -61,6 +70,7 @@ function mockApi(
     const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     if (url === "/api/organizations") return jsonResponse(extra.organizations ?? [ORG]);
     if (url === "/api/teams") return jsonResponse([teamFixture]);
+    if (url.startsWith("/api/work-items/labels")) return jsonResponse(["Blocked", "Bug"]);
     if (url.includes("/metric-rules")) {
       calls.push({ url, method, body });
       if (method === "POST" && extra.recomputeStatus) {
@@ -132,6 +142,16 @@ describe("MetricRulesPage", () => {
     );
   });
 
+  it("shows the Blocked and Work item types groups", async () => {
+    mockApi(view());
+
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    expect(await screen.findByText("Blocked")).toBeInTheDocument();
+    expect(screen.getByText("Count Linear 'blocked by' relations")).toBeInTheDocument();
+    expect(screen.getByText("Work item types")).toBeInTheDocument();
+  });
+
   it("shows the recompute banner while history is rewritten, and lets you restart it", async () => {
     mockApi(view({ recompute: { ...IDLE, state: "running", started_at: "2026-10-03T12:00:00Z" } }));
 
@@ -152,6 +172,7 @@ describe("MetricRulesPage", () => {
       const url = requestUrl(input);
       if (url === "/api/organizations") return jsonResponse([ORG]);
       if (url === "/api/teams") return jsonResponse([teamFixture]);
+      if (url.startsWith("/api/work-items/labels")) return jsonResponse(["Blocked", "Bug"]);
       const method = init?.method ?? "GET";
       calls.push({ url, method, body: undefined });
       if (method === "PATCH") {
@@ -209,6 +230,7 @@ describe("MetricRulesPage", () => {
       const url = requestUrl(input);
       if (url === "/api/organizations") return jsonResponse([ORG]);
       if (url === "/api/teams") return new Promise<Response>(() => undefined); // never loads
+      if (url.startsWith("/api/work-items/labels")) return jsonResponse([]);
       return jsonResponse(view({ recompute: { ...IDLE, state: "failed", error: "boom" } }));
     });
     renderWithClient(<MetricRulesPage />, [`/metric-rules?team=${teamFixture.id}`]);

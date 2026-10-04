@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { teamFixture } from "../test/fixtures";
+import type { MetricRules } from "../api/metricRules";
 import {
   RULE_GROUPS,
+  canonicalStates,
+  draftValue,
   formatRuleValue,
   pendingChanges,
   recomputeOrganization,
   scopeFromParams,
+  sameRuleValue,
   scopeParams,
   type RuleSpec,
 } from "./metricRules";
@@ -69,5 +73,36 @@ describe("scope helpers", () => {
     const team = { ...teamFixture, has_custom_rules: false };
     expect(recomputeOrganization({ kind: "team", id: team.id }, [team])).toBe(team.organization_id);
     expect(recomputeOrganization({ kind: "organization", id: "o1" }, undefined)).toBe("o1");
+  });
+});
+
+describe("list-valued rules", () => {
+  it("treats an equal list as no override", () => {
+    const inherited = { blocked_label_names: ["Blocked"] } as unknown as MetricRules;
+    const view = { inherited, overrides: {} };
+    expect(draftValue(view, "blocked_label_names", ["Blocked"])).toBeNull();
+    expect(
+      pendingChanges({ blocked_label_names: ["Blocked"] }, { blocked_label_names: ["Blocked"] }),
+    ).toEqual({});
+  });
+
+  it("orders state types canonically so a reorder isn't a change", () => {
+    expect(canonicalStates(["started", "unstarted"])).toEqual(["unstarted", "started"]);
+    expect(sameRuleValue(["unstarted", "started"], canonicalStates(["started", "unstarted"]))).toBe(
+      true,
+    );
+  });
+
+  it("formats list values for the inherited hint", () => {
+    expect(formatRuleValue(ruleSpec("blocked_label_names"), [])).toBe("None");
+    expect(formatRuleValue(ruleSpec("blocked_label_names"), ["Blocked", "On hold"])).toBe(
+      "Blocked, On hold",
+    );
+    expect(formatRuleValue(ruleSpec("remaining_state_types"), ["unstarted", "started"])).toBe(
+      "Todo, In progress",
+    );
+    expect(formatRuleValue(ruleSpec("type_labels"), [{ label: "Bug", type: "bug" }])).toBe(
+      "Bug → bug",
+    );
   });
 });

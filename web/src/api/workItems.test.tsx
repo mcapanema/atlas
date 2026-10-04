@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { jsonResponse, requestUrl } from "../test/fixtures";
-import { useWorkItemStates } from "./workItems";
+import { useWorkItemLabels, useWorkItemStates } from "./workItems";
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,5 +32,18 @@ describe("useWorkItemStates", () => {
 
     await waitFor(() => expect(result.current.data).toEqual(["backlog"]));
     expect(requestUrl(fetchSpy.mock.calls[0][0])).toBe("/api/work-items/states");
+  });
+});
+
+describe("useWorkItemLabels", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("requests the team-scoped labels", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(["Bug"]));
+
+    const { result } = renderHook(() => useWorkItemLabels({ teamId: "t1" }), { wrapper });
+
+    await waitFor(() => expect(result.current.data).toEqual(["Bug"]));
+    expect(requestUrl(fetchSpy.mock.calls[0][0])).toBe("/api/work-items/labels?team_id=t1");
   });
 });

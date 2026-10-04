@@ -13,6 +13,8 @@ export interface WorkItem {
   external_id: string | null;
   url: string | null;
   created_at: string;
+  state_type: string | null;
+  labels: string[];
 }
 
 export interface StatePeriod {
@@ -73,5 +75,17 @@ export function useWorkItemStates(scope: MetricsScope = {}) {
   return useQuery({
     queryKey: ["work-items", "states", scope],
     queryFn: () => apiFetch<string[]>(`/api/work-items/states${query ? `?${query}` : ""}`),
+  });
+}
+
+/** Distinct labels in a scope — options for the label-based metric rules. */
+export function useWorkItemLabels(scope: MetricsScope = {}) {
+  const params = new URLSearchParams();
+  if (scope.teamId) params.set("team_id", scope.teamId);
+  else if (scope.projectId) params.set("project_id", scope.projectId);
+  const query = params.toString();
+  return useQuery({
+    queryKey: ["work-items", "labels", scope],
+    queryFn: () => apiFetch<string[]>(`/api/work-items/labels${query ? `?${query}` : ""}`),
   });
 }

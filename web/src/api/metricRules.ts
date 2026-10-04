@@ -2,6 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "./client";
 
+export type OpenStateType = "triage" | "backlog" | "unstarted" | "started";
+export type WorkItemTypeName = "story" | "task" | "bug" | "spike" | "other";
+export interface TypeLabel {
+  label: string;
+  type: WorkItemTypeName;
+}
+
 /** Every rule that changes how a metric is computed (app/domain/metric_rules). */
 export interface MetricRules {
   exclude_born_done: boolean;
@@ -23,6 +30,15 @@ export interface MetricRules {
   timezone: string;
   daily_bucket_max_days: number;
   forecast_history_days: number;
+  count_parent_issues: boolean;
+  lead_time_start: "created" | "triage_exit";
+  done_then_reopened: "delivered" | "reopened";
+  canceled_then_reopened: "canceled" | "reopened";
+  blocked_label_pattern: boolean;
+  blocked_label_names: string[];
+  blocked_by_relations: boolean;
+  remaining_state_types: OpenStateType[];
+  type_labels: TypeLabel[];
 }
 
 export type RuleName = keyof MetricRules;
