@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -97,6 +98,53 @@ async def test_first_sync_creates_everything() -> None:
     assert item.created_at == CREATED_AT
     events = await harness.events.list_for_work_item(item.id)
     assert [e.type for e in events] == [EventType.CREATED, EventType.STARTED]
+
+
+async def test_first_sync_stores_url() -> None:
+    source = full_source()
+    source.work_items = [
+        dataclasses.replace(source.work_items[0], url="https://linear.app/acme/issue/ENG-1")
+    ]
+    harness = Harness(source)
+
+    await harness.service.sync(await seed_org(harness))
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.url == "https://linear.app/acme/issue/ENG-1"
+
+
+async def test_resync_backfills_url_on_item_synced_without_one() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # stored with url=None, as before this feature
+    source.work_items = [
+        dataclasses.replace(source.work_items[0], url="https://linear.app/acme/issue/ENG-1")
+    ]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.url == "https://linear.app/acme/issue/ENG-1"
+
+
+async def test_changed_url_is_updated() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], url="https://linear.app/a/E-1")]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = [dataclasses.replace(source.work_items[0], url="https://linear.app/b/E-1")]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.url == "https://linear.app/b/E-1"
 
 
 async def test_second_sync_is_a_no_op() -> None:

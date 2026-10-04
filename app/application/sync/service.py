@@ -227,6 +227,7 @@ class SyncService:
                     state=source.state,
                     project_id=project_id,
                     external_id=source.external_id,
+                    url=source.url,
                     created_at=source.created_at,
                 )
                 await self._work_items.add(work_item)
@@ -239,7 +240,8 @@ class SyncService:
                     existing.project_id,
                     existing.team_id,
                     existing.type,
-                ) != (source.title, source.state, project_id, team.id, source.type)
+                    existing.url,
+                ) != (source.title, source.state, project_id, team.id, source.type, source.url)
                 if changed:
                     work_item = WorkItem(
                         team_id=team.id,
@@ -248,6 +250,7 @@ class SyncService:
                         state=source.state,
                         project_id=project_id,
                         external_id=existing.external_id,
+                        url=source.url,
                         id=existing.id,
                         created_at=existing.created_at,
                     )

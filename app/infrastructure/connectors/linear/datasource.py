@@ -92,6 +92,7 @@ query Issues($after: String) {{
     nodes {{
       id
       title
+      url
       createdAt
       completedAt
       canceledAt

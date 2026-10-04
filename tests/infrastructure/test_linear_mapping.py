@@ -191,6 +191,16 @@ ISSUE_NODE: dict[str, Any] = {
 }
 
 
+def test_map_issue_carries_url() -> None:
+    node = {**ISSUE_NODE, "url": "https://linear.app/acme/issue/ENG-1/fix-login"}
+
+    assert map_issue(node).url == "https://linear.app/acme/issue/ENG-1/fix-login"
+
+
+def test_map_issue_without_url_key_has_none() -> None:
+    assert map_issue(ISSUE_NODE).url is None
+
+
 def test_map_issue_synthesizes_created_event_and_maps_history() -> None:
     item = map_issue(ISSUE_NODE)
 
