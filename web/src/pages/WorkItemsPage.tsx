@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { useTeams } from "../api/teams";
 import { useWorkItems, WORK_ITEMS_PAGE_SIZE, type WorkItem } from "../api/workItems";
+import { SourceLink } from "../components/SourceLink";
 import { formatDateTime } from "../lib/dates";
 
 export function WorkItemsPage() {
@@ -69,6 +70,11 @@ export function WorkItemsPage() {
               title: "Created",
               dataIndex: "created_at",
               render: (createdAt: string) => formatDateTime(createdAt),
+            },
+            {
+              title: "Source",
+              dataIndex: "url",
+              render: (url: string | null) => <SourceLink url={url} />,
             },
           ]}
         />
