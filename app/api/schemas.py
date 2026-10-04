@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import DEFAULT_STATE, WorkItemType
+from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
 
 
 class OrganizationCreate(BaseModel):
@@ -72,6 +72,8 @@ class WorkItemRead(BaseModel):
     title: str
     type: WorkItemType
     state: str
+    state_type: StateType | None
+    labels: list[str]
     external_id: str | None
     url: str | None
     created_at: datetime
@@ -102,6 +104,9 @@ class EventRead(BaseModel):
     occurred_at: datetime
     from_state: str | None
     to_state: str | None
+    from_state_type: StateType | None
+    to_state_type: StateType | None
+    detail: str | None
     external_id: str | None
     recorded_at: datetime
 

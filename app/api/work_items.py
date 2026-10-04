@@ -67,6 +67,16 @@ async def list_work_item_states(
     return await service.list_states(team_id=team_id, project_id=project_id)
 
 
+@router.get("/labels", response_model=list[str])
+async def list_work_item_labels(
+    service: WorkItemServiceDep,
+    team_id: UUID | None = None,
+    project_id: UUID | None = None,
+) -> list[str]:
+    """Distinct labels in scope — the options for the label-based metric rules."""
+    return await service.list_labels(team_id=team_id, project_id=project_id)
+
+
 @router.get("/{work_item_id}", response_model=WorkItemRead)
 async def get_work_item(work_item_id: UUID, service: WorkItemServiceDep) -> WorkItemRead:
     item = await service.get_work_item(work_item_id)
@@ -81,6 +91,8 @@ async def get_work_item_timeline(
     work_items: WorkItemServiceDep,
     events: EventServiceDep,
 ) -> WorkItemTimelineRead:
-    if await work_items.get_work_item(work_item_id) is None:
+    item = await work_items.get_work_item(work_item_id)
+    if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work item not found")
-    return WorkItemTimelineRead.model_validate(await events.get_timeline(work_item_id))
+    rules = await work_items.team_rules(item.team_id)
+    return WorkItemTimelineRead.model_validate(await events.get_timeline(work_item_id, rules))
