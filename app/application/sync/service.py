@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 from app.domain.events.entities import Event, EventType
@@ -40,6 +40,15 @@ class SyncSummary:
     # Atlas work items (with their events) whose source item is gone —
     # deleted or trashed upstream (ADR-0009).
     deleted: int
+    # Stored transition events given their state types (ADR-0011).
+    state_types_filled: int
+
+
+def _candidate_event_eids(sources: list[SourceWorkItem]) -> list[str]:
+    """Every event external id a run may insert, incl. synthesized completions."""
+    return [event.external_id for source in sources for event in source.events] + [
+        f"{source.external_id}:completed" for source in sources if source.completed_at is not None
+    ]
 
 
 class SyncService:
@@ -75,7 +84,9 @@ class SyncService:
         logger.info("Sync started for organization %s", resolved)
         teams = await self._sync_teams(resolved)
         projects = await self._sync_projects()
-        work_items, events, divergences, deleted = await self._sync_work_items()
+        sources = await self._source.fetch_work_items()
+        filled = await self._fill_state_types(sources)
+        work_items, events, divergences, deleted = await self._sync_work_items(sources)
         summary = SyncSummary(
             teams=teams,
             projects=projects,
@@ -83,10 +94,11 @@ class SyncService:
             events=events,
             divergences=divergences,
             deleted=deleted,
+            state_types_filled=filled,
         )
         logger.info(
             "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
-            "events=%d divergences=%d deleted=%d",
+            "events=%d divergences=%d deleted=%d state_types_filled=%d",
             resolved,
             summary.teams,
             summary.projects,
@@ -94,6 +106,7 @@ class SyncService:
             summary.events,
             summary.divergences,
             summary.deleted,
+            summary.state_types_filled,
         )
         return summary
 
@@ -182,11 +195,88 @@ class SyncService:
                 written += 1
         return written
 
-    async def _sync_work_items(self) -> tuple[int, int, int, int]:
-        items_written = 0
+    async def _fill_state_types(self, sources: list[SourceWorkItem]) -> int:
+        """Give already-stored transition events their state types, once (ADR-0011).
+
+        The one exception to insert-only events: a type that's still empty
+        is filled, never changed. After the first sync under this code
+        nothing is missing, and this is a single batched lookup.
+        """
+        typed = {
+            event.external_id: (event.from_state_type, event.to_state_type)
+            for source in sources
+            for event in source.events
+            if event.to_state_type is not None
+        }
+        missing = await self._events.external_ids_missing_state_types(list(typed))
+        if not missing:
+            return 0
+        filled = await self._events.fill_state_types({eid: typed[eid] for eid in missing})
+        logger.info("Filled state types on %d stored event(s)", filled)
+        return filled
+
+    async def _upsert_item(
+        self,
+        source: SourceWorkItem,
+        team_id: UUID,
+        project_id: UUID | None,
+        existing: WorkItem | None,
+    ) -> tuple[WorkItem, bool]:
+        """Create or update the item from its source; (item, written?). Parents link later."""
+        if existing is None:
+            item = WorkItem(
+                team_id=team_id,
+                title=source.title,
+                type=source.type,
+                state=source.state,
+                project_id=project_id,
+                external_id=source.external_id,
+                url=source.url,
+                state_type=source.state_type,
+                labels=source.labels,
+                created_at=source.created_at,
+            )
+            await self._work_items.add(item)
+            return item, True
+        item = replace(
+            existing,
+            team_id=team_id,
+            title=source.title,
+            type=source.type,
+            state=source.state,
+            project_id=project_id,
+            url=source.url,
+            state_type=source.state_type,
+            labels=source.labels,
+        )
+        if item == existing:
+            return existing, False
+        await self._work_items.update(item)
+        return item, True
+
+    async def _link_parents(
+        self, sources: list[SourceWorkItem], items_by_eid: dict[str, WorkItem]
+    ) -> set[UUID]:
+        """Point each synced item at its parent, once every item exists; ids written.
+
+        A parent may sync after its child, so links resolve in this second
+        pass. A parent outside Atlas leaves the link empty.
+        """
+        written: set[UUID] = set()
+        for source in sources:
+            item = items_by_eid.get(source.external_id)
+            if item is None:
+                continue
+            parent = items_by_eid.get(source.parent_external_id or "")
+            parent_id = parent.id if parent is not None else None
+            if item.parent_id != parent_id:
+                await self._work_items.update(replace(item, parent_id=parent_id))
+                written.add(item.id)
+        return written
+
+    async def _sync_work_items(self, sources: list[SourceWorkItem]) -> tuple[int, int, int, int]:
         events_written = 0
         divergences = 0
-        sources = await self._source.fetch_work_items()
         teams_by_eid = {
             team.external_id: team
             for team in await self._teams.list()
@@ -202,65 +292,31 @@ class SyncService:
             for item in await self._work_items.list()
             if item.external_id is not None
         }
-        candidate_event_eids = [
-            event.external_id for source in sources for event in source.events
-        ] + [
-            f"{source.external_id}:completed"
-            for source in sources
-            if source.completed_at is not None
-        ]
-        existing_event_eids = await self._events.existing_external_ids(candidate_event_eids)
+        existing_event_eids = await self._events.existing_external_ids(
+            _candidate_event_eids(sources)
+        )
+        synced: dict[str, WorkItem] = {}
+        written: set[UUID] = set()
         for source in sources:
             team = teams_by_eid.get(source.team_external_id)
             if team is None:
                 continue  # can't place a work item without its team
-            project_id: UUID | None = None
-            if source.project_external_id is not None:
-                project = projects_by_eid.get(source.project_external_id)
-                project_id = project.id if project is not None else None
-            existing = items_by_eid.get(source.external_id)
-            if existing is None:
-                work_item = WorkItem(
-                    team_id=team.id,
-                    title=source.title,
-                    type=source.type,
-                    state=source.state,
-                    project_id=project_id,
-                    external_id=source.external_id,
-                    url=source.url,
-                    created_at=source.created_at,
-                )
-                await self._work_items.add(work_item)
-                items_written += 1
-            else:
-                work_item = existing
-                changed = (
-                    existing.title,
-                    existing.state,
-                    existing.project_id,
-                    existing.team_id,
-                    existing.type,
-                    existing.url,
-                ) != (source.title, source.state, project_id, team.id, source.type, source.url)
-                if changed:
-                    work_item = WorkItem(
-                        team_id=team.id,
-                        title=source.title,
-                        type=source.type,
-                        state=source.state,
-                        project_id=project_id,
-                        external_id=existing.external_id,
-                        url=source.url,
-                        id=existing.id,
-                        created_at=existing.created_at,
-                    )
-                    await self._work_items.update(work_item)
-                    items_written += 1
-            written, diverged = await self._sync_events(work_item.id, source, existing_event_eids)
-            events_written += written
+            project = projects_by_eid.get(source.project_external_id or "")
+            item, changed = await self._upsert_item(
+                source,
+                team.id,
+                project.id if project is not None else None,
+                items_by_eid.get(source.external_id),
+            )
+            synced[source.external_id] = item
+            if changed:
+                written.add(item.id)
+            n, diverged = await self._sync_events(item.id, source, existing_event_eids)
+            events_written += n
             divergences += diverged
+        written |= await self._link_parents(sources, {**items_by_eid, **synced})
         deleted = await self._prune_vanished(sources, teams_by_eid, items_by_eid)
-        return items_written, events_written, divergences, deleted
+        return len(written), events_written, divergences, deleted
 
     async def _prune_vanished(
         self,
@@ -319,6 +375,9 @@ class SyncService:
                 occurred_at=source_event.occurred_at,
                 from_state=source_event.from_state,
                 to_state=source_event.to_state,
+                from_state_type=source_event.from_state_type,
+                to_state_type=source_event.to_state_type,
+                detail=source_event.detail,
                 external_id=source_event.external_id,
             )
             await self._events.add(event)

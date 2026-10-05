@@ -1,8 +1,16 @@
 from uuid import uuid4
 
+from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.work_items.service import WorkItemService
+from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem, WorkItemType
-from tests.fakes import InMemoryWorkItemRepository
+from tests.fakes import (
+    InMemoryMetricRuleOverridesRepository,
+    InMemoryProjectRepository,
+    InMemoryTeamRepository,
+    InMemoryWorkItemRepository,
+)
 
 
 async def test_create_work_item_defaults_to_task() -> None:
@@ -35,7 +43,7 @@ async def test_get_work_item_returns_created_item() -> None:
     service = WorkItemService(repo)
     item = await service.create_work_item(team_id=uuid4(), title="Add login")
 
-    assert await service.get_work_item(item.id) is item
+    assert await service.get_work_item(item.id) == item
 
 
 async def test_get_work_item_returns_none_for_unknown_id() -> None:
@@ -70,3 +78,31 @@ async def test_list_states_delegates_to_repository() -> None:
     )
 
     assert await service.list_states(team_id=team_id) == ["backlog", "done"]
+
+
+async def test_items_carry_their_teams_effective_type() -> None:
+    org = uuid4()
+    team = Team(organization_id=org, name="Platform")
+    item = WorkItem(team_id=team.id, title="Crash", labels=("Bug",))
+    resolver = MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository(
+            [
+                RuleOverrides(
+                    organization_id=org,
+                    team_id=team.id,
+                    overrides={"type_labels": [{"label": "Bug", "type": "bug"}]},
+                )
+            ]
+        ),
+        InMemoryTeamRepository([team]),
+        InMemoryProjectRepository(),
+    )
+    service = WorkItemService(InMemoryWorkItemRepository([item]), resolver)
+
+    [listed] = await service.list_work_items(team_id=team.id)
+    fetched = await service.get_work_item(item.id)
+
+    assert listed.type is WorkItemType.BUG
+    assert fetched is not None
+    assert fetched.type is WorkItemType.BUG
+    assert await service.list_labels(team_id=team.id) == ["Bug"]

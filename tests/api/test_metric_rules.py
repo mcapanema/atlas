@@ -228,3 +228,30 @@ async def test_a_save_that_changes_no_rule_commits_before_the_run_restarts(
 
     assert response.status_code == 200
     assert log[:2] == ["commit", "run"]
+
+
+async def test_collection_rules_round_trip_normalized(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules",
+        json={
+            "blocked_label_names": [" On hold "],
+            "remaining_state_types": ["started", "unstarted"],
+            "type_labels": [{"label": "Bug", "type": "bug"}],
+        },
+    )
+    await settle(rules_app)
+    rejected = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"remaining_state_types": []}
+    )
+
+    effective = response.json()["effective"]
+    assert response.status_code == 200
+    assert effective["blocked_label_names"] == ["On hold"]
+    assert effective["remaining_state_types"] == ["unstarted", "started"]
+    assert effective["type_labels"] == [{"label": "Bug", "type": "bug"}]
+    assert rejected.status_code == 422
+    assert "remaining_state_types" in rejected.text

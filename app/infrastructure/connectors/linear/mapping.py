@@ -5,14 +5,13 @@ nothing outside this package sees a Linear payload.
 """
 
 import logging
-import re
-from collections.abc import Set as AbstractSet
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
 from app.domain.events.entities import EventType
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
-from app.domain.work_items.entities import WorkItemType
+from app.domain.work_items.entities import StateType, WorkItemType
 
 logger = logging.getLogger(__name__)
 
@@ -20,24 +19,6 @@ logger = logging.getLogger(__name__)
 # interpolates it). A history of exactly this length has likely been
 # truncated by the cap — older events are silently missing.
 HISTORY_PAGE_SIZE = 250
-
-
-_BLOCKED_LABEL = re.compile(r"(?<![a-z0-9])block(?:ed|ers?|ing)?(?![a-z0-9])", re.IGNORECASE)
-
-
-def blocked_label_ids(label_nodes: list[dict[str, Any]]) -> set[str]:
-    """Ids of labels whose name marks blocked work.
-
-    Whole words only, where "_" separates words too: "Blocked", "Blockers",
-    "blocker: external", "Blocking" and "blocked_by" match; "regras-blockly"
-    (a Blockly label), "blocks" and "unblocked" don't — the 2026-10-03 audit
-    found the old "block" substring match flagging "regras-blockly" as
-    blocked forever.
-
-    ponytail: zero-config name match. Per-team label lists and Linear
-    "blocks" relations are sub-project B of the per-team metric rules.
-    """
-    return {node["id"] for node in label_nodes if _BLOCKED_LABEL.search(str(node.get("name", "")))}
 
 
 def map_team(node: dict[str, Any]) -> SourceTeam:
@@ -106,7 +87,8 @@ def _initial_events(node: dict[str, Any], created_at: datetime) -> list[SourceEv
     return events
 
 
-def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset()) -> SourceWorkItem:
+def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None) -> SourceWorkItem:
+    names = label_names or {}
     created_at = datetime.fromisoformat(node["createdAt"])
     history_nodes = node["history"]["nodes"]
     if len(history_nodes) >= HISTORY_PAGE_SIZE:
@@ -115,9 +97,9 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
             node["id"],
             HISTORY_PAGE_SIZE,
         )
-    events = _initial_events(node, created_at)
+    events = [*_initial_events(node, created_at), *_born_label_events(node, created_at, names)]
     for entry in history_nodes:
-        events.extend(map_history_entry(entry, blocked_ids))
+        events.extend(map_history_entry(entry, names))
     canceled_at = node.get("canceledAt")
     if canceled_at:
         # Keyed by time: a reopen-then-recancel carries a new canceledAt and
@@ -139,10 +121,13 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
     return SourceWorkItem(
         external_id=node["id"],
         title=node["title"],
-        # ponytail: Linear has no built-in story/task/bug field — everything
-        # maps to TASK. Classify from labels if type metrics are ever needed.
+        # Linear has no story/task/bug field: every item is TASK, and the team's
+        # type_labels rule classifies at read time (MetricRules.type_of).
         type=WorkItemType.TASK,
         state=node["state"]["name"],
+        state_type=_state_type(node["state"]),
+        labels=tuple(_detail(names[i]) for i in node.get("labelIds") or () if i in names),
+        parent_external_id=(node.get("parent") or {}).get("id"),
         team_external_id=node["team"]["id"],
         project_external_id=project["id"] if project else None,
         created_at=created_at,
@@ -153,65 +138,184 @@ def map_issue(node: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset())
     )
 
 
-def map_history_entry(
-    entry: dict[str, Any], blocked_ids: AbstractSet[str] = frozenset()
-) -> list[SourceEvent]:
-    """One issue-history entry → 0..n SourceEvents.
+def _state_type(state: dict[str, Any] | None) -> StateType | None:
+    """The domain category of a Linear workflow state; None for an unknown type."""
+    if state is None:
+        return None
+    try:
+        return StateType(state["type"])
+    except ValueError:
+        return None
 
-    State transitions map as before; leaving a started state for a
-    non-started, non-completed one also emits a derived STOPPED.
-    Blocked-label additions/removals map to BLOCKED/UNBLOCKED with derived
-    external_ids — Linear has no native blocked event; the workspace's
-    blocked label is the signal.
 
-    ponytail: labels present at issue creation produce no history entry,
-    so an item born blocked reads as never blocked. Diff current labels
-    against label history if that ever skews blocked time.
-    """
+# Linear's IssueHistory.relationChanges codes are undocumented; decoded
+# against a live workspace on 2026-10-04 (spec: sync-captured metric rules).
+# On the issue whose history holds the entry: "ab"/"rb" = a "blocked by
+# <identifier>" relation added/removed; "br"/"bo" = that blocker resolved/
+# reopened (Linear writes them ~0.2 s after the blocker completes or
+# reopens). "ax", "rx", "xr", "xo" are the same four seen from the blocker's
+# side; "ar"/"rr" (related) and "ad"/"am"/"rd"/"rm" (duplicate) don't block.
+# Only the blocked side becomes events, so a blocker never blocks itself.
+_BLOCKER_CODES = {
+    "ab": EventType.BLOCKER_ADDED,
+    "bo": EventType.BLOCKER_ADDED,
+    "rb": EventType.BLOCKER_CLEARED,
+    "br": EventType.BLOCKER_CLEARED,
+}
+_NON_BLOCKING_CODES = frozenset({"ax", "rx", "xr", "xo", "ar", "rr", "ad", "am", "rd", "rm"})
+# ponytail: warned once per code per process — enough to notice Linear
+# adding a code; reset per sync if anyone needs the repeat.
+_warned_codes: set[str] = set()
+
+
+# events.detail is String(255): a longer label name or identifier would fail
+# the insert on PostgreSQL.
+_DETAIL_MAX = 255
+
+
+def _detail(text: str) -> str:
+    return text[:_DETAIL_MAX]
+
+
+def _warn_unknown_code(code: str) -> None:
+    if "b" in code and code not in _NON_BLOCKING_CODES and code not in _warned_codes:
+        _warned_codes.add(code)
+        logger.warning("Ignoring unknown Linear relation-change code %r", code)
+
+
+def _relation_events(entry: dict[str, Any], occurred_at: datetime) -> list[SourceEvent]:
+    """Blocked-side "blocked by" relation changes → BLOCKER_ADDED/CLEARED (history only)."""
     events: list[SourceEvent] = []
-    occurred_at = datetime.fromisoformat(entry["createdAt"])
-    to_state = entry.get("toState")
-    if to_state is not None:
-        from_state = entry.get("fromState")
+    for change in entry.get("relationChanges") or ():
+        if not isinstance(change, dict):
+            continue
+        code, identifier = change.get("type"), change.get("identifier")
+        if not isinstance(code, str) or not isinstance(identifier, str):
+            continue
+        event_type = _BLOCKER_CODES.get(code)
+        if event_type is None:
+            _warn_unknown_code(code)
+            continue
         events.append(
             SourceEvent(
-                external_id=entry["id"],
-                type=_event_type(from_state, to_state),
+                external_id=f"{entry['id']}:blocker:{code}:{identifier}",
+                type=event_type,
                 occurred_at=occurred_at,
-                from_state=from_state["name"] if from_state else None,
-                to_state=to_state["name"],
+                detail=_detail(identifier),
             )
         )
-        if (
-            from_state is not None
-            and from_state["type"] == "started"
-            and to_state["type"] not in ("started", "completed")
-        ):
-            # Left progress without completing (moved back or canceled).
+    return events
+
+
+_LABEL_CHANGES = (
+    ("addedLabelIds", EventType.LABEL_ADDED, "label-added"),
+    ("removedLabelIds", EventType.LABEL_REMOVED, "label-removed"),
+)
+
+
+# ponytail: a label event stores the label's name at sync time, so a label
+# renamed later keeps its old name on past events. Upgrade path: key events
+# by label id and resolve the name at read time.
+def _label_events(
+    entry: dict[str, Any], occurred_at: datetime, label_names: Mapping[str, str]
+) -> list[SourceEvent]:
+    """Raw label changes, named; whether a label means blocked is a read-time rule."""
+    events: list[SourceEvent] = []
+    for key, event_type, suffix in _LABEL_CHANGES:
+        for label_id in entry.get(key) or ():
+            name = label_names.get(label_id)
+            if name is None:
+                continue  # a deleted label: no name to match rules against
             events.append(
                 SourceEvent(
-                    external_id=f"{entry['id']}:stopped",
-                    type=EventType.STOPPED,
+                    external_id=f"{entry['id']}:{suffix}:{label_id}",
+                    type=event_type,
                     occurred_at=occurred_at,
+                    detail=_detail(name),
                 )
             )
-    if blocked_ids & set(entry.get("addedLabelIds") or ()):
-        events.append(
-            SourceEvent(
-                external_id=f"{entry['id']}:blocked",
-                type=EventType.BLOCKED,
-                occurred_at=occurred_at,
-            )
+    return events
+
+
+def _born_label_events(
+    node: dict[str, Any], created_at: datetime, label_names: Mapping[str, str]
+) -> list[SourceEvent]:
+    """LABEL_ADDED at creation for the labels the issue was created with.
+
+    History has no creation entry: a label the issue carries with no add in
+    history, or whose first history mention is a removal, was there from
+    the start.
+    """
+    first_was_add: dict[str, bool] = {}
+    for entry in sorted(
+        node["history"]["nodes"], key=lambda e: datetime.fromisoformat(e["createdAt"])
+    ):
+        for label_id in entry.get("addedLabelIds") or ():
+            first_was_add.setdefault(label_id, True)
+        for label_id in entry.get("removedLabelIds") or ():
+            first_was_add.setdefault(label_id, False)
+    born = {label_id for label_id in node.get("labelIds") or () if label_id not in first_was_add}
+    born |= {label_id for label_id, was_add in first_was_add.items() if not was_add}
+    return [
+        SourceEvent(
+            external_id=f"{node['id']}:label-born:{label_id}",
+            type=EventType.LABEL_ADDED,
+            occurred_at=created_at,
+            detail=_detail(label_names[label_id]),
         )
-    if blocked_ids & set(entry.get("removedLabelIds") or ()):
+        for label_id in sorted(born)
+        if label_id in label_names
+    ]
+
+
+def _transition_events(entry: dict[str, Any], occurred_at: datetime) -> list[SourceEvent]:
+    to_state = entry.get("toState")
+    if to_state is None:
+        return []
+    from_state = entry.get("fromState")
+    events = [
+        SourceEvent(
+            external_id=entry["id"],
+            type=_event_type(from_state, to_state),
+            occurred_at=occurred_at,
+            from_state=from_state["name"] if from_state else None,
+            to_state=to_state["name"],
+            from_state_type=_state_type(from_state),
+            to_state_type=_state_type(to_state),
+        )
+    ]
+    if (
+        from_state is not None
+        and from_state["type"] == "started"
+        and to_state["type"] not in ("started", "completed")
+    ):
+        # Left progress without completing (moved back or canceled).
         events.append(
             SourceEvent(
-                external_id=f"{entry['id']}:unblocked",
-                type=EventType.UNBLOCKED,
+                external_id=f"{entry['id']}:stopped",
+                type=EventType.STOPPED,
                 occurred_at=occurred_at,
             )
         )
     return events
+
+
+def map_history_entry(
+    entry: dict[str, Any], label_names: Mapping[str, str] | None = None
+) -> list[SourceEvent]:
+    """One issue-history entry → 0..n SourceEvents.
+
+    State transitions (with their state types; leaving a started state for a
+    non-started, non-completed one also emits a derived STOPPED), raw label
+    changes, and blocked-side relation changes. Blocked is decided at read
+    time from these (ADR-0011).
+    """
+    occurred_at = datetime.fromisoformat(entry["createdAt"])
+    return [
+        *_transition_events(entry, occurred_at),
+        *_label_events(entry, occurred_at, label_names or {}),
+        *_relation_events(entry, occurred_at),
+    ]
 
 
 def _event_type(from_state: dict[str, Any] | None, to_state: dict[str, Any]) -> EventType:

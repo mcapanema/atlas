@@ -4,8 +4,11 @@ import type {
   MetricRulesView,
   RuleChanges,
   RuleName,
+  OpenStateType,
   RuleValue,
   RulesScope,
+  TypeLabel,
+  WorkItemTypeName,
 } from "../api/metricRules";
 import type { Team } from "../api/teams";
 
@@ -13,7 +16,35 @@ type Control =
   | { kind: "switch" }
   | { kind: "select"; options: { value: string; label: string }[] }
   | { kind: "number"; min: number; max: number; step: number; suffix?: string }
-  | { kind: "timezone" };
+  | { kind: "timezone" }
+  | { kind: "labels" }
+  | { kind: "states" }
+  | { kind: "typeLabels" };
+
+export const STATE_TYPE_OPTIONS: { value: OpenStateType; label: string }[] = [
+  { value: "triage", label: "Triage" },
+  { value: "backlog", label: "Backlog" },
+  { value: "unstarted", label: "Todo" },
+  { value: "started", label: "In progress" },
+];
+
+export const WORK_ITEM_TYPE_OPTIONS: { value: WorkItemTypeName; label: string }[] = [
+  { value: "story", label: "story" },
+  { value: "task", label: "task" },
+  { value: "bug", label: "bug" },
+  { value: "spike", label: "spike" },
+  { value: "other", label: "other" },
+];
+
+/** State types in workflow order — the server's canonical order, so a reorder isn't a change. */
+export function canonicalStates(states: OpenStateType[]): OpenStateType[] {
+  return STATE_TYPE_OPTIONS.map((option) => option.value).filter((value) => states.includes(value));
+}
+
+/** Rule values compare by content: lists and mappings are fresh arrays on every edit. */
+export function sameRuleValue(a: RuleValue | null, b: RuleValue | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 export interface RuleSpec {
   name: RuleName;
@@ -84,6 +115,71 @@ export const RULE_GROUPS: RuleGroup[] = [
           ],
         },
       },
+      {
+        name: "count_parent_issues",
+        label: "Count parent issues",
+        help: "Off: an issue with sub-issues leaves every metric, remaining included; only its sub-issues count. Avoids counting the same work twice.",
+        control: { kind: "switch" },
+      },
+      {
+        name: "lead_time_start",
+        label: "Lead time starts",
+        help: "At creation, or when the item first leaves Triage. Also where pre-start queue time begins. Items never in Triage start at creation.",
+        control: {
+          kind: "select",
+          options: [
+            { value: "created", label: "At creation" },
+            { value: "triage_exit", label: "When it leaves Triage" },
+          ],
+        },
+      },
+      {
+        name: "done_then_reopened",
+        label: "Done, then moved back to Todo",
+        help: "Moved from done back to a not-started state (Todo, Backlog, Triage) without restarting: stays delivered, or counts as open again (remaining, not WIP). A later start keeps the original clock.",
+        control: {
+          kind: "select",
+          options: [
+            { value: "delivered", label: "Stays delivered" },
+            { value: "reopened", label: "Counts as reopened" },
+          ],
+        },
+      },
+      {
+        name: "canceled_then_reopened",
+        label: "Canceled, then moved back to Todo",
+        help: "Moved from canceled back to a not-started state: stays canceled, or counts as open again (remaining, not WIP).",
+        control: {
+          kind: "select",
+          options: [
+            { value: "canceled", label: "Stays canceled" },
+            { value: "reopened", label: "Counts as reopened" },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    title: "Blocked",
+    rules: [
+      {
+        name: "blocked_label_pattern",
+        label: "Labels named like 'Blocked'",
+        help: "Labels such as Blocked, Blocker: external or Blocking mark an item blocked while applied. Whole words only: 'regras-blockly' doesn't count.",
+        control: { kind: "switch" },
+      },
+      {
+        name: "blocked_label_names",
+        label: "More blocked labels",
+        help: "Further label names that mark an item blocked while applied (any case).",
+        control: { kind: "labels" },
+      },
+      {
+        name: "blocked_by_relations",
+        label: "Count Linear 'blocked by' relations",
+        help: "An item is blocked from when a 'blocked by' relation is added until it is removed or the blocker is done or canceled, and again if the blocker reopens. Linear records relation history from about mid-2026; older relations don't count.",
+        control: { kind: "switch" },
+      },
     ],
   },
   {
@@ -133,7 +229,7 @@ export const RULE_GROUPS: RuleGroup[] = [
     ],
   },
   {
-    title: "Calendar & windows",
+    title: "Forecast & windows",
     rules: [
       {
         name: "timezone",
@@ -153,6 +249,23 @@ export const RULE_GROUPS: RuleGroup[] = [
         help: "How many recent days of throughput the completion forecast samples from.",
         control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
       },
+      {
+        name: "remaining_state_types",
+        label: "Forecast counts as remaining",
+        help: "Open items count toward the completion forecast only in these states. Items created outside Linear always count.",
+        control: { kind: "states" },
+      },
+    ],
+  },
+  {
+    title: "Work item types",
+    rules: [
+      {
+        name: "type_labels",
+        label: "Type from labels",
+        help: "An item takes the type of the first mapped label it carries; otherwise it stays a task. Drives the type filter on every dashboard.",
+        control: { kind: "typeLabels" },
+      },
     ],
   },
 ];
@@ -167,14 +280,34 @@ export function timeZoneOptions() {
   return zones;
 }
 
+function formatListValue(kind: Control["kind"], value: RuleValue): string | undefined {
+  if (kind === "labels") {
+    const names = value as string[];
+    return names.length ? names.join(", ") : "None";
+  }
+  if (kind === "states") {
+    return STATE_TYPE_OPTIONS.filter((o) => (value as string[]).includes(o.value))
+      .map((o) => o.label)
+      .join(", ");
+  }
+  if (kind === "typeLabels") {
+    const rows = value as TypeLabel[];
+    return rows.length ? rows.map((row) => `${row.label} → ${row.type}`).join(", ") : "None";
+  }
+  return undefined;
+}
+
 export function formatRuleValue(spec: RuleSpec, value: RuleValue): string {
   const { control } = spec;
-  if (control.kind === "switch") return value ? "On" : "Off";
+  const list = formatListValue(control.kind, value);
+  if (list !== undefined) return list;
+  const scalar = value as string | number | boolean;
+  if (control.kind === "switch") return scalar ? "On" : "Off";
   if (control.kind === "select") {
-    return control.options.find((option) => option.value === value)?.label ?? String(value);
+    return control.options.find((option) => option.value === scalar)?.label ?? String(scalar);
   }
-  if (control.kind === "number" && control.suffix) return `${String(value)} ${control.suffix}`;
-  return String(value);
+  if (control.kind === "number" && control.suffix) return `${String(scalar)} ${control.suffix}`;
+  return String(scalar);
 }
 
 /** A draft entry equal to the inherited value, with no saved override, is no override at all. */
@@ -183,7 +316,7 @@ export function draftValue(
   name: RuleName,
   value: RuleValue | null,
 ): RuleValue | null {
-  return value === view.inherited[name] && view.overrides[name] == null ? null : value;
+  return sameRuleValue(value, view.inherited[name]) && view.overrides[name] == null ? null : value;
 }
 
 /** What to PATCH: draft values that differ from the saved overrides (null = inherit). */
@@ -191,7 +324,7 @@ export function pendingChanges(saved: Partial<MetricRules>, draft: RuleChanges):
   const changes: RuleChanges = {};
   for (const name of Object.keys(draft) as RuleName[]) {
     const next = draft[name] ?? null;
-    if (next !== (saved[name] ?? null)) changes[name] = next;
+    if (!sameRuleValue(next, saved[name] ?? null)) changes[name] = next;
   }
   return changes;
 }

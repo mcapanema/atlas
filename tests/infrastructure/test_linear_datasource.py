@@ -141,7 +141,7 @@ async def test_fetch_work_items_skips_malformed_nodes(
     assert any("i-bad" in record.getMessage() for record in caplog.records)
 
 
-async def test_fetch_work_items_resolves_blocked_labels() -> None:
+async def test_fetch_work_items_maps_label_history_with_names() -> None:
     issue_node: dict[str, Any] = {
         "id": "i1",
         "title": "Fix login",
@@ -151,6 +151,7 @@ async def test_fetch_work_items_resolves_blocked_labels() -> None:
         "state": {"name": "Backlog", "type": "backlog"},
         "team": {"id": "t1"},
         "project": None,
+        "labelIds": ["lbl-1"],
         "history": {
             "nodes": [
                 {
@@ -176,17 +177,22 @@ async def test_fetch_work_items_resolves_blocked_labels() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if "issueLabels(" in body["query"]:
+            assert "includeArchived: true" in body["query"]
             return _page("issueLabels", [{"id": "lbl-1", "name": "Blocked"}])
         assert "addedLabelIds" in body["query"]
+        assert "labelIds" in body["query"]
+        assert "parent { id }" in body["query"]
+        assert "relationChanges { identifier type }" in body["query"]
         return _page("issues", [issue_node])
 
     items = await _datasource(handler).fetch_work_items()
 
-    assert [e.type for e in items[0].events] == [
-        EventType.CREATED,
-        EventType.BLOCKED,
-        EventType.UNBLOCKED,
+    assert [(e.type, e.detail) for e in items[0].events] == [
+        (EventType.CREATED, None),
+        (EventType.LABEL_ADDED, "Blocked"),
+        (EventType.LABEL_REMOVED, "Blocked"),
     ]
+    assert items[0].labels == ("Blocked",)
 
 
 async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -59,8 +59,8 @@ class ForecastService:
     ) -> DeliveryForecast:
         """Forecast completion of the scope's open work from its trailing throughput.
 
-        `remaining` defaults to the scope's open item count — neither completed
-        nor canceled (items with no events count as open backlog). Deterministic:
+        `remaining` defaults to the scope's open items in a state type its
+        remaining_state_types rule counts (eventless backlog included). Deterministic:
         the simulation runs with a fixed seed. `window_days` defaults to the scope
         team's forecast_history_days rule.
         """
@@ -72,8 +72,7 @@ class ForecastService:
             window_days if window_days is not None else scope.rules.forecast_history_days
         )
 
-        closed = sum(1 for s in scope.samples if s.completed_at is not None or s.canceled)
-        scope_remaining = remaining if remaining is not None else scope.item_count - closed
+        scope_remaining = remaining if remaining is not None else _open_count(scope)
 
         history_days = observed_history_days(scope.samples, end=window_end, days=history_window)
         daily = daily_throughput_samples(scope.samples, end=window_end, days=history_days)
@@ -97,3 +96,11 @@ class ForecastService:
             completion=completion,
             confidence=confidence,
         )
+
+
+def _open_count(scope: ScopeSamples) -> int:
+    """Remaining work: the loader's state-type-aware count; all open items if hand-built."""
+    if scope.remaining_count is not None:
+        return scope.remaining_count
+    closed = sum(1 for s in scope.samples if s.completed_at is not None or s.canceled)
+    return scope.item_count - closed

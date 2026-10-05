@@ -2,11 +2,11 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import DEFAULT_STATE, WorkItemType
+from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
 
 
 class OrganizationCreate(BaseModel):
@@ -72,6 +72,8 @@ class WorkItemRead(BaseModel):
     title: str
     type: WorkItemType
     state: str
+    state_type: StateType | None
+    labels: list[str]
     external_id: str | None
     url: str | None
     created_at: datetime
@@ -102,6 +104,9 @@ class EventRead(BaseModel):
     occurred_at: datetime
     from_state: str | None
     to_state: str | None
+    from_state_type: StateType | None
+    to_state_type: StateType | None
+    detail: str | None
     external_id: str | None
     recorded_at: datetime
 
@@ -125,6 +130,7 @@ class SyncSummaryRead(BaseModel):
     events: int
     divergences: int
     deleted: int
+    state_types_filled: int
 
 
 class StatePeriodRead(BaseModel):
@@ -363,6 +369,16 @@ class PersonaGuidanceRead(BaseModel):
     created_at: datetime
 
 
+OpenStateType = Literal["triage", "backlog", "unstarted", "started"]
+
+
+class TypeLabelRead(BaseModel):
+    """One label -> work-item type mapping row."""
+
+    label: str
+    type: WorkItemType
+
+
 class MetricRulesRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -385,6 +401,23 @@ class MetricRulesRead(BaseModel):
     timezone: str
     daily_bucket_max_days: int
     forecast_history_days: int
+    count_parent_issues: bool
+    lead_time_start: Literal["created", "triage_exit"]
+    done_then_reopened: Literal["delivered", "reopened"]
+    canceled_then_reopened: Literal["canceled", "reopened"]
+    blocked_label_pattern: bool
+    blocked_label_names: list[str]
+    blocked_by_relations: bool
+    remaining_state_types: list[OpenStateType]
+    type_labels: list[TypeLabelRead]
+
+    @field_validator("type_labels", mode="before")
+    @classmethod
+    def _type_label_rows(cls, value: object) -> object:
+        # The domain holds (label, type) pairs; the API speaks objects.
+        if isinstance(value, tuple):
+            return [{"label": label, "type": work_type} for label, work_type in value]
+        return value
 
 
 class MetricRulesOverridesWrite(BaseModel):
@@ -415,9 +448,18 @@ class MetricRulesOverridesWrite(BaseModel):
     timezone: str | None = None
     daily_bucket_max_days: int | None = None
     forecast_history_days: int | None = None
+    count_parent_issues: bool | None = None
+    lead_time_start: Literal["created", "triage_exit"] | None = None
+    done_then_reopened: Literal["delivered", "reopened"] | None = None
+    canceled_then_reopened: Literal["canceled", "reopened"] | None = None
+    blocked_label_pattern: bool | None = None
+    blocked_label_names: list[str] | None = None
+    blocked_by_relations: bool | None = None
+    remaining_state_types: list[OpenStateType] | None = None
+    type_labels: list[TypeLabelRead] | None = None
 
     def changes(self) -> dict[str, Any]:
-        return self.model_dump(exclude_unset=True)
+        return self.model_dump(exclude_unset=True, mode="json")
 
 
 class RecomputeStatusRead(BaseModel):

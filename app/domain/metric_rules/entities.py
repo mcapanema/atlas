@@ -7,7 +7,8 @@ overrides (the workspace default) layer on top, then a team's. Analytics
 only ever see one resolved MetricRules.
 """
 
-from collections.abc import Mapping
+import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, tzinfo
 from typing import Any, Literal
@@ -15,18 +16,39 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.domain._time import utcnow
+from app.domain.work_items.entities import OPEN_STATE_TYPES, StateType, WorkItem, WorkItemType
 
 ReopenCompletion = Literal["last", "first"]
 DoneThenCanceled = Literal["delivered", "canceled"]
+LeadTimeStart = Literal["created", "triage_exit"]
+DoneThenReopened = Literal["delivered", "reopened"]
+CanceledThenReopened = Literal["canceled", "reopened"]
 RecomputeState = Literal["idle", "running", "failed"]
 
 HEALTH_COMPONENTS = ("predictability", "efficiency", "flow", "stability", "risk")
 
-_FLAGS = ("exclude_born_done", "move_back_ends_wip", "restart_clock_after_move_back")
+_FLAGS = (
+    "exclude_born_done",
+    "move_back_ends_wip",
+    "restart_clock_after_move_back",
+    "count_parent_issues",
+    "blocked_label_pattern",
+    "blocked_by_relations",
+)
 _CHOICES: dict[str, tuple[str, ...]] = {
     "reopen_completion": ("last", "first"),
     "done_then_canceled": ("delivered", "canceled"),
+    "lead_time_start": ("created", "triage_exit"),
+    "done_then_reopened": ("delivered", "reopened"),
+    "canceled_then_reopened": ("canceled", "reopened"),
 }
+MAX_LIST_RULE_ENTRIES = 50
+
+# Built-in blocked-label match: whole words, where "_" separates words too.
+# "Blocked", "Blockers", "blocker: external", "Blocking", "blocked_by" match;
+# "regras-blockly" (a Blockly label), "blocks" and "unblocked" don't — the
+# 2026-10-03 audit found a "block" substring match flagging "regras-blockly".
+_BLOCKED_LABEL = re.compile(r"(?<![a-z0-9])block(?:ed|ers?|ing)?(?![a-z0-9])", re.IGNORECASE)
 _INTEGERS = (
     "healthy_min",
     "warning_min",
@@ -57,6 +79,15 @@ class MetricRules:
     restart_clock_after_move_back: bool = False
     reopen_completion: ReopenCompletion = "last"
     done_then_canceled: DoneThenCanceled = "delivered"
+    count_parent_issues: bool = True
+    lead_time_start: LeadTimeStart = "created"
+    done_then_reopened: DoneThenReopened = "delivered"
+    canceled_then_reopened: CanceledThenReopened = "canceled"
+    # Blocked signal: label names (the built-in pattern and/or a list) and
+    # Linear "blocked by" relations (history only — ADR-0011).
+    blocked_label_pattern: bool = True
+    blocked_label_names: tuple[str, ...] = ()
+    blocked_by_relations: bool = False
     # Delivery-health scoring.
     healthy_min: int = 70
     warning_min: int = 40
@@ -74,8 +105,13 @@ class MetricRules:
     timezone: str = "UTC"
     daily_bucket_max_days: int = 21
     forecast_history_days: int = 90
+    # Open state types whose items count as forecast remaining.
+    remaining_state_types: tuple[StateType, ...] = OPEN_STATE_TYPES
+    # Label -> work-item type, first match wins (Linear has no type field).
+    type_labels: tuple[tuple[str, WorkItemType], ...] = ()
 
     def __post_init__(self) -> None:
+        _normalize_collections(self)
         _check_types(self)
         _check_ranges(self)
         _check_order(self)
@@ -88,6 +124,95 @@ class MetricRules:
     def weight(self, component: str) -> float:
         """The health weight of `component` (one of HEALTH_COMPONENTS)."""
         return float(getattr(self, f"weight_{component}"))
+
+    def is_blocked_label(self, name: str) -> bool:
+        """Whether a label named `name` marks blocked work under these rules."""
+        if self.blocked_label_pattern and _BLOCKED_LABEL.search(name):
+            return True
+        folded = name.strip().casefold()
+        return any(folded == listed.strip().casefold() for listed in self.blocked_label_names)
+
+    def type_of(self, item: WorkItem) -> WorkItemType:
+        """The item's type: its first type_labels hit among its labels, else its stored type.
+
+        ponytail: labels are the item's current labels, applied to as-of
+        replays too. Upgrade path: label history (LABEL_ADDED/REMOVED events).
+        """
+        carried = {label.strip().casefold() for label in item.labels}
+        return next(
+            (
+                work_type
+                for label, work_type in self.type_labels
+                if label.strip().casefold() in carried
+            ),
+            item.type,
+        )
+
+
+def _normalize_collections(rules: MetricRules) -> None:
+    """Coerce JSON-shaped collection rules (lists, {"label","type"} objects) into tuples.
+
+    Frozen dataclass, so the canonical values are written with
+    object.__setattr__. Every malformed shape raises ValueError naming the
+    rule: the resolver falls back to built-ins on ValueError only.
+    """
+    object.__setattr__(rules, "blocked_label_names", _label_names(rules.blocked_label_names))
+    object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
+    object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))
+
+
+def _entries(name: str, value: object) -> list[object]:
+    if isinstance(value, str | bytes) or not isinstance(value, Iterable):
+        raise ValueError(f"{name} must be a list")
+    entries = list(value)
+    if len(entries) > MAX_LIST_RULE_ENTRIES:
+        raise ValueError(f"{name} must have at most {MAX_LIST_RULE_ENTRIES} entries")
+    return entries
+
+
+def _label(name: str, value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} entries must be non-empty label names")
+    return value.strip()
+
+
+def _label_names(value: object) -> tuple[str, ...]:
+    return tuple(
+        _label("blocked_label_names", entry) for entry in _entries("blocked_label_names", value)
+    )
+
+
+def _state_types(value: object) -> tuple[StateType, ...]:
+    message = "remaining_state_types must be a non-empty subset of: " + ", ".join(OPEN_STATE_TYPES)
+    try:
+        chosen = {StateType(str(entry)) for entry in _entries("remaining_state_types", value)}
+    except (TypeError, ValueError) as exc:  # TypeError: an unhashable entry
+        if "remaining_state_types" in str(exc):
+            raise
+        raise ValueError(message) from exc
+    if not chosen or not chosen <= set(OPEN_STATE_TYPES):
+        raise ValueError(message)
+    return tuple(state for state in OPEN_STATE_TYPES if state in chosen)
+
+
+def _type_label(entry: object) -> tuple[str, WorkItemType]:
+    """One mapping row: a {"label", "type"} object (stored JSON, API) or a pair."""
+    pair = (entry.get("label"), entry.get("type")) if isinstance(entry, Mapping) else entry
+    if not isinstance(pair, tuple | list) or len(pair) != 2:
+        raise ValueError("type_labels entries must each be a label and a work-item type")
+    label = _label("type_labels", pair[0])
+    try:
+        return label, WorkItemType(pair[1])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"type_labels types must be one of: {', '.join(WorkItemType)}") from exc
+
+
+def _type_labels(value: object) -> tuple[tuple[str, WorkItemType], ...]:
+    pairs = tuple(_type_label(entry) for entry in _entries("type_labels", value))
+    folded = [label.casefold() for label, _ in pairs]
+    if len(set(folded)) != len(folded):
+        raise ValueError("type_labels must not map the same label twice")
+    return pairs
 
 
 def _check_types(rules: MetricRules) -> None:

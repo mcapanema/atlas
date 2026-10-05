@@ -12,7 +12,10 @@ class WorkItemRepository(Protocol):
     async def update(self, work_item: WorkItem) -> None: ...
 
     async def delete(self, work_item_ids: list[UUID]) -> None:
-        """Delete these work items; unknown ids are ignored. Delete their events first."""
+        """Delete these work items; unknown ids are ignored, their children lose the parent link.
+
+        Delete their events first.
+        """
         ...
 
     # Must stay above `list` — that method shadows the `list` builtin for every
@@ -20,6 +23,16 @@ class WorkItemRepository(Protocol):
     async def list_states(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[str]: ...
+
+    async def list_labels(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[str]:
+        """Distinct label names in scope, sorted."""
+        ...
+
+    async def parent_ids(self) -> set[UUID]:
+        """Every work item that is some item's parent."""
+        ...
 
     async def list(
         self,

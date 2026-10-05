@@ -9,6 +9,9 @@ export interface WorkItemEvent {
   occurred_at: string;
   from_state: string | null;
   to_state: string | null;
+  from_state_type: string | null;
+  to_state_type: string | null;
+  detail: string | null;
   external_id: string | null;
   recorded_at: string;
 }

@@ -85,7 +85,7 @@ ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 
 
 def get_work_item_service(session: SessionDep) -> WorkItemService:
-    return WorkItemService(SqlAlchemyWorkItemRepository(session))
+    return WorkItemService(SqlAlchemyWorkItemRepository(session), rules_resolver_for(session))
 
 
 WorkItemServiceDep = Annotated[WorkItemService, Depends(get_work_item_service)]

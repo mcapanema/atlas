@@ -4,6 +4,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from app.domain._time import utcnow
+from app.domain.work_items.entities import StateType
 
 
 class EventType(StrEnum):
@@ -23,6 +24,15 @@ class EventType(StrEnum):
     # Closed without delivery. After a COMPLETED it changes nothing.
     CANCELED = "canceled"
     STATE_CHANGED = "state_changed"
+    # A raw label change; detail = the label's name. Whether it means
+    # blocked is a read-time rule (MetricRules.is_blocked_label).
+    LABEL_ADDED = "label_added"
+    LABEL_REMOVED = "label_removed"
+    # A "blocked by" relation opened (added, or its blocker reopened) or
+    # cleared (removed, or its blocker resolved); detail = the blocker's
+    # identifier, e.g. "DEP-1309".
+    BLOCKER_ADDED = "blocker_added"
+    BLOCKER_CLEARED = "blocker_cleared"
 
 
 @dataclass(frozen=True)
@@ -35,6 +45,12 @@ class Event:
     from_state: str | None = None
     to_state: str | None = None
     external_id: str | None = None
+    # Categories of from_state/to_state on a state transition; None when
+    # unknown (REST-created events, or not filled yet — ADR-0011).
+    from_state_type: StateType | None = None
+    to_state_type: StateType | None = None
+    # Label name (label events) or blocker identifier (blocker events).
+    detail: str | None = None
     id: UUID = field(default_factory=uuid4)
     recorded_at: datetime = field(default_factory=utcnow)
 

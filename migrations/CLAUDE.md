@@ -3,7 +3,9 @@
 Alembic, async template. `env.py` reads
 `app.config.get_settings().database_url` and imports
 `app.infrastructure.repositories` so `Base.metadata` sees every registered
-model — don't hand-edit the DB URL here.
+model — don't hand-edit the DB URL here. Its `fileConfig(...)` passes
+`disable_existing_loggers=False` so in-process alembic runs in tests don't
+disable the app's loggers.
 
 ## Workflow
 

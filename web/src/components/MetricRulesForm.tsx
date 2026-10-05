@@ -8,6 +8,7 @@ import {
   type RulesScope,
   type RuleValue,
 } from "../api/metricRules";
+import { useWorkItemLabels } from "../api/workItems";
 import {
   RULE_GROUPS,
   draftValue,
@@ -22,12 +23,14 @@ function RuleRow({
   view,
   draft,
   inheritedFrom,
+  labelOptions,
   onChange,
 }: {
   spec: RuleSpec;
   view: MetricRulesView;
   draft: RuleChanges;
   inheritedFrom: string;
+  labelOptions: string[];
   onChange: (value: RuleValue | null) => void;
 }) {
   const own = draft[spec.name];
@@ -48,7 +51,12 @@ function RuleRow({
         </Typography.Text>
       </div>
       <Space>
-        <RuleControl spec={spec} value={own ?? inherited} onChange={onChange} />
+        <RuleControl
+          spec={spec}
+          value={own ?? inherited}
+          labelOptions={labelOptions}
+          onChange={onChange}
+        />
         {customized && (
           <Button type="link" size="small" onClick={() => onChange(null)}>
             Reset to default
@@ -71,6 +79,7 @@ export function MetricRulesForm({
 }) {
   const [draft, setDraft] = useState<RuleChanges>(view.overrides);
   const save = useSaveMetricRules(scope);
+  const labels = useWorkItemLabels(scope.kind === "team" ? { teamId: scope.id } : {});
   const changes = pendingChanges(view.overrides, draft);
   const dirty = Object.keys(changes).length > 0;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
@@ -96,6 +105,7 @@ export function MetricRulesForm({
               view={view}
               draft={draft}
               inheritedFrom={inheritedFrom}
+              labelOptions={labels.data ?? []}
               onChange={(value) =>
                 setDraft((current) => ({
                   ...current,

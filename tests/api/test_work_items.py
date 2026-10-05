@@ -1,9 +1,11 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.schemas import WorkItemRead
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import StateType, WorkItem
+from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
 from tests.api.helpers import create_team, create_work_item
 
 
@@ -190,3 +192,30 @@ async def test_created_item_has_null_url(client: AsyncClient) -> None:
     response = await client.post("/api/work-items", json={"team_id": team_id, "title": "Manual"})
 
     assert response.json()["url"] is None
+
+
+async def test_labels_endpoint_and_new_read_fields(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    team_id = await create_team(client)
+    async with sessionmaker() as session:
+        await SqlAlchemyWorkItemRepository(session).add(
+            WorkItem(
+                team_id=UUID(team_id),
+                title="Synced",
+                state_type=StateType.UNSTARTED,
+                labels=("Bug", "Urgent"),
+            )
+        )
+        await session.commit()
+
+    labels = await client.get("/api/work-items/labels", params={"team_id": team_id})
+    page = await client.get("/api/work-items", params={"team_id": team_id})
+
+    assert labels.json() == ["Bug", "Urgent"]
+    [item] = page.json()["items"]
+    assert (item["state_type"], item["labels"], item["type"]) == (
+        "unstarted",
+        ["Bug", "Urgent"],
+        "task",
+    )

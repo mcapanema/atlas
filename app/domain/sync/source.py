@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import WorkItemType
+from app.domain.work_items.entities import StateType, WorkItemType
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,12 @@ class SourceEvent:
     occurred_at: datetime
     from_state: str | None = None
     to_state: str | None = None
+    # Categories of from_state/to_state on a state transition; None when
+    # unknown (REST-created events, or not filled yet — ADR-0011).
+    from_state_type: StateType | None = None
+    to_state_type: StateType | None = None
+    # Label name (label events) or blocker identifier (blocker events).
+    detail: str | None = None
 
     def __post_init__(self) -> None:
         if self.occurred_at.tzinfo is None:
@@ -54,3 +60,7 @@ class SourceWorkItem:
     events: tuple[SourceEvent, ...] = ()
     # Deep link to the issue in the source system.
     url: str | None = None
+    # Current state category, label names, and parent issue (source identity).
+    state_type: StateType | None = None
+    labels: tuple[str, ...] = ()
+    parent_external_id: str | None = None

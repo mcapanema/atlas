@@ -8,7 +8,6 @@ from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
-    blocked_label_ids,
     map_issue,
     map_project,
     map_team,
@@ -73,7 +72,7 @@ query Projects($after: String) {
 
 _LABELS_QUERY = """
 query Labels($after: String) {
-  issueLabels(first: 100, after: $after) {
+  issueLabels(first: 100, after: $after, includeArchived: true) {
     nodes { id name }
     pageInfo { hasNextPage endCursor }
   }
@@ -100,6 +99,8 @@ query Issues($after: String) {{
       state {{ name type }}
       team {{ id }}
       project {{ id }}
+      labelIds
+      parent {{ id }}
       history(first: {HISTORY_PAGE_SIZE}) {{
         nodes {{
           id
@@ -108,6 +109,7 @@ query Issues($after: String) {{
           toState {{ name type }}
           addedLabelIds
           removedLabelIds
+          relationChanges {{ identifier type }}
         }}
       }}
     }}
@@ -141,15 +143,11 @@ class LinearDataSource:
 
     async def fetch_work_items(self) -> list[SourceWorkItem]:
         labels = await self._nodes(_LABELS_QUERY, "issueLabels")
-        blocked_ids = blocked_label_ids(labels)
+        label_names = {node["id"]: str(node["name"]) for node in labels}
         issues = [
             node for node in await self._nodes(_ISSUES_QUERY, "issues") if not node.get("trashed")
         ]
-        return _map_tolerantly(
-            issues,
-            lambda node: map_issue(node, blocked_ids),
-            "issue",
-        )
+        return _map_tolerantly(issues, lambda node: map_issue(node, label_names), "issue")
 
     async def _nodes(self, query: str, root: str) -> list[dict[str, Any]]:
         nodes: list[dict[str, Any]] = []

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import WorkItem, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
@@ -163,3 +163,47 @@ async def test_url_defaults_to_none(session: AsyncSession) -> None:
 
     assert fetched is not None
     assert fetched.url is None
+
+
+async def test_new_facts_round_trip_and_labels_parents_are_listed(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    parent = WorkItem(team_id=team_id, title="Epic", labels=("Feature",))
+    child = WorkItem(
+        team_id=team_id,
+        title="Task",
+        state_type=StateType.UNSTARTED,
+        labels=("Bug", "Feature"),
+        parent_id=parent.id,
+    )
+    await repo.add(parent)
+    await repo.add(child)
+
+    stored = await repo.get(child.id)
+
+    assert stored is not None
+    assert (stored.state_type, stored.labels, stored.parent_id) == (
+        StateType.UNSTARTED,
+        ("Bug", "Feature"),
+        parent.id,
+    )
+    assert await repo.list_labels(team_id=team_id) == ["Bug", "Feature"]
+    assert await repo.parent_ids() == {parent.id}
+
+
+async def test_delete_detaches_children_instead_of_failing(session: AsyncSession) -> None:
+    # Review focus 5: FKs are enforced (conftest); the child outlives its parent.
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    parent = WorkItem(team_id=team_id, title="Epic")
+    child = WorkItem(team_id=team_id, title="Task", parent_id=parent.id)
+    await repo.add(parent)
+    await repo.add(child)
+
+    await repo.delete([parent.id])
+    session.expire_all()
+    stored = await repo.get(child.id)
+
+    assert await repo.get(parent.id) is None
+    assert stored is not None
+    assert stored.parent_id is None

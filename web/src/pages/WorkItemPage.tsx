@@ -53,7 +53,16 @@ const blockedColumns: ColumnsType<BlockedPeriod> = [
   },
 ];
 
+const DETAIL_LABELS: Record<string, (detail: string) => string> = {
+  label_added: (detail) => `Label added: ${detail}`,
+  label_removed: (detail) => `Label removed: ${detail}`,
+  blocker_added: (detail) => `Blocked by ${detail}`,
+  blocker_cleared: (detail) => `Blocker cleared: ${detail}`,
+};
+
 function eventLabel(event: WorkItemEvent): string {
+  const withDetail = DETAIL_LABELS[event.type];
+  if (withDetail && event.detail) return withDetail(event.detail);
   if (event.from_state && event.to_state) {
     return `${event.type}: ${event.from_state} → ${event.to_state}`;
   }

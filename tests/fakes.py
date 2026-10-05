@@ -6,6 +6,7 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date, datetime
 from uuid import UUID
@@ -18,7 +19,7 @@ from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import StateType, WorkItem
 
 
 class InMemoryOrganizationRepository:
@@ -86,8 +87,13 @@ class InMemoryWorkItemRepository:
         self._items[work_item.id] = work_item
 
     async def delete(self, work_item_ids: list[UUID]) -> None:
+        doomed = set(work_item_ids)
         for work_item_id in work_item_ids:
             self._items.pop(work_item_id, None)
+        # Mirrors the adapter: children outlive a deleted parent.
+        for item_id, item in list(self._items.items()):
+            if item.parent_id in doomed:
+                self._items[item_id] = replace(item, parent_id=None)
 
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
@@ -96,6 +102,15 @@ class InMemoryWorkItemRepository:
     ) -> list[str]:
         items = await self.list(team_id=team_id, project_id=project_id)
         return sorted({item.state for item in items})
+
+    async def list_labels(
+        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+    ) -> list[str]:
+        items = await self.list(team_id=team_id, project_id=project_id)
+        return sorted({label for item in items for label in item.labels})
+
+    async def parent_ids(self) -> set[UUID]:
+        return {item.parent_id for item in self._items.values() if item.parent_id is not None}
 
     async def list(
         self,
@@ -168,6 +183,28 @@ class InMemoryEventRepository:
             for e in self._events.values()
             if e.external_id is not None and e.external_id in wanted
         }
+
+    async def external_ids_missing_state_types(self, external_ids: list[str]) -> set[str]:
+        wanted = set(external_ids)
+        return {
+            e.external_id
+            for e in self._events.values()
+            if e.external_id in wanted and e.to_state_type is None
+        }
+
+    async def fill_state_types(
+        self, types_by_external_id: Mapping[str, tuple[StateType | None, StateType | None]]
+    ) -> int:
+        filled = 0
+        for event_id, event in list(self._events.items()):
+            types = types_by_external_id.get(event.external_id or "")
+            if types is None or types[1] is None or event.to_state_type is not None:
+                continue
+            self._events[event_id] = replace(
+                event, from_state_type=types[0], to_state_type=types[1]
+            )
+            filled += 1
+        return filled
 
 
 class FakeDataSource:

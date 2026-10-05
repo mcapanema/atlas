@@ -9,7 +9,7 @@ from app.application.sync.service import SyncService, UnknownOrganizationError
 from app.domain.events.entities import EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
-from app.domain.work_items.entities import WorkItem, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
 from tests.fakes import (
     FakeDataSource,
     InMemoryEventRepository,
@@ -681,3 +681,139 @@ async def test_item_moved_to_another_team_upstream_is_not_pruned() -> None:
     assert moved is not None
     assert lt2 is not None
     assert moved.team_id == lt2.id
+
+
+def _facts_source(*items: SourceWorkItem) -> FakeDataSource:
+    return FakeDataSource(
+        teams=[SourceTeam(external_id="lt1", name="Platform")], work_items=list(items)
+    )
+
+
+def _source_item(external_id: str, **fields: object) -> SourceWorkItem:
+    return dataclasses.replace(
+        SourceWorkItem(
+            external_id=external_id,
+            title=f"Item {external_id}",
+            type=WorkItemType.TASK,
+            state="Todo",
+            team_external_id="lt1",
+            project_external_id=None,
+            created_at=CREATED_AT,
+        ),
+        **fields,  # type: ignore[arg-type]
+    )
+
+
+async def test_sync_stores_state_type_labels_and_event_facts() -> None:
+    event = SourceEvent(
+        external_id="h1:blocker:ab:DEP-1",
+        type=EventType.BLOCKER_ADDED,
+        occurred_at=CREATED_AT,
+        detail="DEP-1",
+    )
+    harness = Harness(
+        _facts_source(
+            _source_item("li1", state_type=StateType.UNSTARTED, labels=("Bug",), events=(event,))
+        )
+    )
+
+    await harness.service.sync()
+    [item] = await harness.work_items.list()
+    [stored] = await harness.events.list_for_work_item(item.id)
+
+    assert (item.state_type, item.labels) == (StateType.UNSTARTED, ("Bug",))
+    assert (stored.type, stored.detail) == (EventType.BLOCKER_ADDED, "DEP-1")
+
+
+async def test_label_change_updates_the_item() -> None:
+    source = _facts_source(_source_item("li1", labels=("Bug",)))
+    harness = Harness(source)
+    await harness.service.sync()
+    source.work_items = [_source_item("li1", labels=("Bug", "Urgent"))]
+
+    summary = await harness.service.sync()
+    [item] = await harness.work_items.list()
+
+    assert item.labels == ("Bug", "Urgent")
+    assert summary.work_items == 1
+
+
+async def test_parent_synced_after_its_child_is_linked() -> None:
+    harness = Harness(
+        _facts_source(_source_item("child", parent_external_id="parent"), _source_item("parent"))
+    )
+
+    await harness.service.sync()
+    by_eid = {item.external_id: item for item in await harness.work_items.list()}
+
+    assert by_eid["child"].parent_id == by_eid["parent"].id
+    assert by_eid["parent"].parent_id is None
+
+
+async def test_parent_outside_atlas_leaves_no_link() -> None:
+    harness = Harness(_facts_source(_source_item("child", parent_external_id="elsewhere")))
+
+    await harness.service.sync()
+    [item] = await harness.work_items.list()
+
+    assert item.parent_id is None
+
+
+async def test_sync_fills_missing_state_types_once_and_never_overwrites() -> None:
+    harness = Harness(
+        _facts_source(
+            _source_item(
+                "li1",
+                events=(
+                    SourceEvent(
+                        external_id="h1",
+                        type=EventType.STARTED,
+                        occurred_at=CREATED_AT,
+                        from_state_type=StateType.BACKLOG,
+                        to_state_type=StateType.STARTED,
+                    ),
+                    SourceEvent(
+                        external_id="h2",
+                        type=EventType.STATE_CHANGED,
+                        occurred_at=CREATED_AT,
+                        from_state_type=StateType.STARTED,
+                        to_state_type=StateType.STARTED,
+                    ),
+                ),
+            )
+        )
+    )
+    await harness.service.sync()
+    [item] = await harness.work_items.list()
+    # Simulate rows stored before ADR-0011: h1 untyped, h2 typed differently.
+    stored_before = await harness.events.list_for_work_item(item.id)
+    await harness.events.delete_for_work_items([item.id])
+    for event in stored_before:
+        stale = None if event.external_id == "h1" else StateType.UNSTARTED
+        await harness.events.add(
+            dataclasses.replace(event, from_state_type=stale, to_state_type=stale)
+        )
+
+    first = await harness.service.sync()
+    second = await harness.service.sync()
+    stored = {e.external_id: e for e in await harness.events.list_for_work_item(item.id)}
+
+    assert (first.state_types_filled, second.state_types_filled) == (1, 0)
+    assert stored["h1"].to_state_type is StateType.STARTED
+    assert stored["h2"].to_state_type is StateType.UNSTARTED  # never overwritten
+    assert second.events == 0
+
+
+async def test_pruning_a_parent_keeps_its_children_unlinked() -> None:
+    source = _facts_source(
+        _source_item("child", parent_external_id="parent"), _source_item("parent")
+    )
+    harness = Harness(source)
+    await harness.service.sync()
+    source.work_items = [_source_item("child")]
+
+    summary = await harness.service.sync()
+    [item] = await harness.work_items.list()
+
+    assert summary.deleted == 1
+    assert (item.external_id, item.parent_id) == ("child", None)

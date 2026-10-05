@@ -41,8 +41,8 @@ default) and one per team. Effective rules = built-in ⊕ workspace ⊕ team.
   only through `save_recompute`, separately from the override columns, so a
   PATCH and the runner's finish cannot overwrite each other. The lifespan
   resumes an interrupted rewrite.
-- Rules that need facts Atlas doesn't store yet (blocked relations, parent
-  issues, state types) are out of scope here (sub-project B).
+- Rules that need facts sync didn't store (blocked relations, parent issues,
+  state types, labels) were added by ADR-0011.
 
 ## Consequences
 
