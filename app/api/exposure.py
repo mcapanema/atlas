@@ -13,7 +13,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 # ponytail: a fixed loopback allowlist. Add ATLAS_ALLOWED_HOSTS — together
 # with the ADR-0005 user-auth decision — if Atlas is ever served to other
 # machines.
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})  # noqa: S104 — a Host name to accept, not a bind address
 _FORWARDING_HEADERS = frozenset(
     {b"forwarded", b"x-forwarded-for", b"x-forwarded-host", b"x-real-ip", b"cf-connecting-ip"}
 )

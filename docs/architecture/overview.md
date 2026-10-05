@@ -194,7 +194,9 @@ layer facade: every tool calls the REST API in-process and reformats the DTO
 as compact text, so analytics logic and error semantics live in exactly one
 place. `GET /api/recommendations/context` returns the advisor's digest as
 text for the same reason — a chat client brings its own LLM, so advice works
-without an OpenRouter key.
+without an OpenRouter key. The MCP mount is the only path served to
+non-local requests — `LocalOnlyMiddleware` (`app/api/exposure.py`, ADR-0012)
+answers 403 to everything else.
 
 Meeting preparation has two deliberate paths: **external** — the MCP prompts
 (`daily_standup`, `retrospective`, `planning`) instruct a connected chat AI

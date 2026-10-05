@@ -18,7 +18,12 @@ class Settings(BaseSettings):
     entry there in the same commit.
     """
 
-    model_config = SettingsConfigDict(env_prefix="ATLAS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="ATLAS_",
+        env_file=".env",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
 
     database_url: str = "sqlite+aiosqlite:///./atlas.db"
     db_echo: bool = False

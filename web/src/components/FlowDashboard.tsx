@@ -30,7 +30,7 @@ import {
 import { formatDateTime } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
 import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
-import { periodText, windowLabel } from "../lib/metricsFilters";
+import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
@@ -111,10 +111,6 @@ function StaleDataAlert({ history }: { history: FlowHistory }) {
       description={`The last ${staleDays} day${staleDays === 1 ? "" : "s"} of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
     />
   );
-}
-
-function isRanged(filters: MetricsFilters): boolean {
-  return Boolean(filters.start && filters.end);
 }
 
 function FlowStats({

@@ -65,3 +65,8 @@ export function periodText(
   if (!window) return null;
   return `Last ${filters.windowDays ?? 30} days · ${formatDay(window.window_start)} – ${formatDay(window.window_end)}`;
 }
+
+/** True when an explicit start/end range (not a rolling window) is set. */
+export function isRanged(filters: MetricsFilters): boolean {
+  return Boolean(filters.start && filters.end);
+}

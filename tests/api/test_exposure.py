@@ -23,7 +23,14 @@ def _client(public_prefix: str | None = "/mcp/secret-token") -> AsyncClient:
 @pytest.mark.parametrize(
     # Docker's port map, Vite's dev proxy, plain loopback, IPv6 loopback.
     "host",
-    ["localhost", "localhost:8000", "localhost:5173", "127.0.0.1:8000", "[::1]:8000"],
+    [
+        "localhost",
+        "localhost:8000",
+        "localhost:5173",
+        "127.0.0.1:8000",
+        "[::1]:8000",
+        "0.0.0.0:8000",
+    ],
 )
 async def test_loopback_requests_reach_the_app(host: str) -> None:
     async with _client() as client:

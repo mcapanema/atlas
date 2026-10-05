@@ -62,7 +62,7 @@ function columnHelp(label: string, help: string) {
   return <HelpLabel label={label} help={help} />;
 }
 
-function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
+function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow> {
   return [
     {
       title: "Team",
@@ -98,7 +98,12 @@ function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
         ),
     },
     {
-      title: columnHelp("WIP", "Work items in progress right now."),
+      title: columnHelp(
+        "WIP",
+        ranged
+          ? "Work items in progress at the end of the selected range: started, and not yet completed, moved back, or canceled by then."
+          : "Work items in progress right now.",
+      ),
       sorter: (a, b) => (a.metrics?.wip ?? -1) - (b.metrics?.wip ?? -1),
       render: (_, row) =>
         cell(row.metricsState, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
@@ -174,17 +179,19 @@ function buildColumns(periodLabel: string): ColumnsType<TeamRow> {
 export function TeamMetricsTable({
   rows,
   periodLabel,
+  ranged,
   loading,
 }: {
   rows: TeamRow[];
   periodLabel: string;
+  ranged: boolean;
   loading: boolean;
 }) {
   const navigate = useNavigate();
   return (
     <section aria-label="Delivery metrics by team">
       <Table
-        columns={buildColumns(periodLabel)}
+        columns={buildColumns(periodLabel, ranged)}
         components={TABLE_COMPONENTS}
         dataSource={rows}
         loading={loading}

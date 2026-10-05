@@ -20,7 +20,7 @@ left a local install open to DNS-rebinding pages.
 
 `LocalOnlyMiddleware` (`app/api/exposure.py`) answers `403` to every HTTP
 request that is not local — Host a loopback name (`localhost`,
-`127.0.0.1`, `::1`, any port) and no forwarding header (`Forwarded`,
+`127.0.0.1`, `::1`, `0.0.0.0`, any port) and no forwarding header (`Forwarded`,
 `X-Forwarded-For`, `X-Forwarded-Host`, `X-Real-IP`, `CF-Connecting-IP`) —
 except under the MCP mount `/mcp/<ATLAS_MCP_TOKEN>`. Two independent
 signals catch tunnels: cloudflared keeps the public Host by default, and
@@ -34,4 +34,8 @@ at least 24 URL-safe characters and is masked in the access log.
 - Opening Atlas from another machine (LAN IP, a reverse proxy) is refused
   by design. Serving it to others needs ADR-0005's auth decision first,
   plus an allowed-hosts setting.
+- The Host check guards browsers (DNS rebinding) and tunnels. What keeps
+  other machines out is the loopback bind (compose `127.0.0.1:8000:8000`,
+  `make run --host 127.0.0.1`): a LAN client that forges `Host: localhost`
+  would otherwise pass.
 - The MCP tools' in-process REST calls use a loopback Host.

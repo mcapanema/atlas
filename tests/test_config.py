@@ -88,3 +88,13 @@ def test_mcp_token_must_be_a_long_url_safe_segment(
 
     with pytest.raises(ValidationError, match="ATLAS_MCP_TOKEN"):
         Settings(_env_file=None)
+
+
+def test_a_rejected_mcp_token_is_not_echoed_in_the_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "my-secret-token-1"
+    monkeypatch.setenv("ATLAS_MCP_TOKEN", secret)
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)
+
+    assert secret not in str(excinfo.value)
