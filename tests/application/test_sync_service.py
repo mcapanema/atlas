@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.application.sync.service import SyncService, UnknownOrganizationError
-from app.domain.events.entities import EventType
+from app.domain.events.entities import Event, EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
@@ -817,3 +817,54 @@ async def test_pruning_a_parent_keeps_its_children_unlinked() -> None:
 
     assert summary.deleted == 1
     assert (item.external_id, item.parent_id) == ("child", None)
+
+
+def _start_typed_as(source: FakeDataSource, event_type: EventType) -> None:
+    """Re-type li1's start event, as an older (or newer) connector mapping would."""
+    item = source.work_items[0]
+    created, started = item.events
+    source.work_items = [
+        dataclasses.replace(item, events=(created, dataclasses.replace(started, type=event_type)))
+    ]
+
+
+async def test_rebuild_replaces_events_stored_by_an_older_mapping() -> None:
+    source = full_source()
+    _start_typed_as(source, EventType.STATE_CHANGED)  # the old mapping's reading
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    recorded = Event(work_item_id=item.id, type=EventType.BLOCKED, occurred_at=CREATED_AT)
+    await harness.events.add(recorded)  # recorded through the events API: no external_id
+    _start_typed_as(source, EventType.STARTED)  # the fixed mapping
+
+    plain = await harness.service.sync(org_id)
+    stale = {e.external_id: e.type for e in await harness.events.list_for_work_item(item.id)}
+    rebuilt = await harness.service.sync(org_id, rebuild=True)
+
+    events = await harness.events.list_for_work_item(item.id)
+    assert stale["lh1"] is EventType.STATE_CHANGED  # insert-only: a plain sync never heals it
+    assert {e.external_id: e.type for e in events if e.external_id is not None} == {
+        "li1:created": EventType.CREATED,
+        "lh1": EventType.STARTED,
+    }
+    assert recorded.id in {e.id for e in events}
+    assert (plain.rebuilt, rebuilt.rebuilt, rebuilt.events) == (0, 1, 2)
+    assert rebuilt.organization_id == org_id
+
+
+async def test_rebuild_leaves_items_the_run_did_not_return_alone() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    source.work_items = []  # the team returned nothing: lost access, not deletion
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    assert (summary.rebuilt, summary.deleted) == (0, 0)
+    assert len(await harness.events.list_for_work_item(item.id)) == 2
