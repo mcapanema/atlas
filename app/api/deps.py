@@ -52,7 +52,13 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
             raise
 
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
+# scope="function": the teardown above (the commit) runs when the route
+# returns, BEFORE the response is sent — so a 2xx means the write is
+# durable and a failed commit is a 5xx (or 409 via the IntegrityError
+# handler). FastAPI's default "request" scope commits after the response
+# went out: a failed commit was a silent rollback behind a success
+# (review 2026-10-04, F1).
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 
 
 def rules_resolver_for(session: AsyncSession) -> MetricRulesResolver:

@@ -102,9 +102,9 @@ def create_app() -> FastAPI:
     async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
         # Unique-index / FK violations (duplicate external_id, two concurrent
         # syncs inserting the same entity). The DB is the last line of defense
-        # here — report a conflict, not a server bug. Note: a violation that
-        # only surfaces at the commit in get_session's teardown may still 500;
-        # the constraint itself is what protects the data.
+        # here — report a conflict, not a server bug. Violations that surface
+        # at get_session's commit land here too: that teardown runs before
+        # the response is sent (SessionDep's scope="function").
         return JSONResponse(
             status_code=409,
             content={"detail": "Conflicting write: resource already exists"},

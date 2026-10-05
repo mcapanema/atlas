@@ -12,7 +12,8 @@ Presentation is allowed to know a concrete adapter exists).
   `schemas.py`, one `<Concept>Create` (input, validated) /
   `<Concept>Read` (output, `from_attributes=True`) pair per concept.
 - `deps.py` holds the FastAPI `Depends` chain: `get_session`
-  (commit-on-success / rollback-on-error, request-scoped) →
+  (commit-on-success / rollback-on-error; `scope="function"`, so the
+  commit lands before the response is sent — a 2xx means durable) →
   `get_<concept>_service` (constructs the service with its concrete
   adapters). See the `ponytail:` comment on `get_session` for the
   deliberate transaction-scope boundary — read it before "fixing" it.
