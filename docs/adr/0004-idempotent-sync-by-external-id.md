@@ -34,3 +34,5 @@ unique index first.
 - A second connector has a known, small migration cost (vendor namespacing)
   before it can ship.
 - Items that disappear upstream are pruned on the next sync (ADR-0009).
+- A rebuild sync replaces stored source events from the current mapping
+  (ADR-0013): insert-only holds between rebuilds.

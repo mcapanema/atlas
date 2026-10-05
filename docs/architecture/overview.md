@@ -125,6 +125,9 @@ resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
   (`app/application/sync/service.py`) upserts snapshots into the domain
   model idempotently, matching on `external_id` — running sync twice is a
   no-op (ADR-0004) — and deletes items the source no longer returns (ADR-0009).
+  A rebuild sync (`"rebuild": true`) replaces the returned items'
+  source-derived events from the current mapping and rewrites snapshot
+  history (ADR-0013) — the upgrade path after a mapping fix.
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
 

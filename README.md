@@ -192,6 +192,19 @@ weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,
 and Docker base-image dependencies — minor/patch bumps grouped per
 ecosystem — see `.github/dependabot.yml`.
 
+## After upgrading Atlas: rebuild synced events
+
+Synced events are never rewritten by a normal sync, so a release that fixes
+how Linear history is mapped only reaches existing data through a rebuild:
+
+```bash
+curl -X POST http://localhost:8000/api/connectors/linear/sync \
+  -H 'content-type: application/json' -d '{"rebuild": true}'
+```
+
+It re-derives every synced issue's events and rewrites snapshot history;
+feedback, learned guidance, and metric rules are kept (ADR-0013).
+
 ## Chat access from Claude & ChatGPT (MCP)
 
 Atlas exposes an MCP server so you can ask about your teams' delivery from a

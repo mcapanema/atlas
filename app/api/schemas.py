@@ -119,6 +119,9 @@ class IntegrationStatusRead(BaseModel):
 
 class SyncRequest(BaseModel):
     organization_id: UUID | None = None
+    # Re-derive every returned item's source events from the current mapping,
+    # then rewrite snapshot history (ADR-0013). Use after a connector upgrade.
+    rebuild: bool = False
 
 
 class SyncSummaryRead(BaseModel):
@@ -131,6 +134,7 @@ class SyncSummaryRead(BaseModel):
     divergences: int
     deleted: int
     state_types_filled: int
+    rebuilt: int
 
 
 class StatePeriodRead(BaseModel):
