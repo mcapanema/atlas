@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import MetricRules
+from app.domain.metrics.cfd import daily_flow_counts
 from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.queue_touch import queue_times
 from app.domain.metrics.samples import derive_flow_sample, in_progress, state_type_at
@@ -80,6 +81,20 @@ def test_a_restart_after_a_done_reopen_keeps_the_clock() -> None:
     assert (sample.started_at, sample.completed_at) == (_day(2), _day(9))
 
 
+def test_cfd_keeps_a_done_reopen_done_by_default() -> None:
+    days = daily_flow_counts([DONE_THEN_TODO], start=_day(4), end=_day(7))
+
+    assert [d.done for d in days] == [1, 1, 1, 1]
+
+
+def test_cfd_follows_the_done_then_reopened_rule() -> None:
+    days = daily_flow_counts([DONE_THEN_TODO], start=_day(4), end=_day(7), stream_rules=[REOPENED])
+
+    # Done on 4 and 5 September; moved back to Todo on the 6th.
+    assert [d.done for d in days] == [1, 1, 0, 0]
+    assert [d.todo for d in days] == [0, 0, 1, 1]
+
+
 CANCELED_THEN_TODO = [
     _on(EventType.CREATED, 1),
     _moved(T.UNSTARTED, T.STARTED, 2, EventType.STARTED),
@@ -109,6 +124,20 @@ def test_canceled_to_todo_reopens_under_the_rule_and_a_restart_restarts_the_cloc
     assert (reopened.canceled, reopened.stopped_at) == (False, _day(3))
     assert not in_progress(reopened, _day(6))
     assert restarted.started_at == _day(8)
+
+
+def test_cfd_follows_the_canceled_then_reopened_rule() -> None:
+    hidden = daily_flow_counts([CANCELED_THEN_TODO], start=_day(4), end=_day(6))
+    reopened = daily_flow_counts(
+        [CANCELED_THEN_TODO],
+        start=_day(4),
+        end=_day(6),
+        stream_rules=[MetricRules(canceled_then_reopened="reopened")],
+    )
+
+    # Canceled on the 3rd (hidden phase); back in Todo on the 5th under the rule.
+    assert [d.todo for d in hidden] == [0, 0, 0]
+    assert [d.todo for d in reopened] == [0, 1, 1]
 
 
 BORN_IN_TRIAGE = [

@@ -12,6 +12,8 @@ from datetime import UTC, date, datetime, time, timedelta, tzinfo
 
 from app.domain.events.entities import Event, EventType, event_order
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
+from app.domain.metrics.samples import reopens
+from app.domain.work_items.entities import StateType
 
 
 @dataclass(frozen=True)
@@ -24,7 +26,20 @@ class DailyFlowCount:
     done: int
 
 
-def _advance(phase: str | None, event: Event, rules: MetricRules = DEFAULT_RULES) -> str:
+def _reopened(phase: str | None, event: Event, rules: MetricRules) -> bool:
+    """A typed Done/Canceled -> not-started move the team's rules count as a reopen.
+
+    Mirrors FlowSample's _Lifecycle.reopen, so the chart and the throughput /
+    remaining figures agree on the same item.
+    """
+    if not reopens(event):
+        return False
+    if event.from_state_type is StateType.COMPLETED:
+        return phase == "done" and rules.done_then_reopened == "reopened"
+    return phase == "canceled" and rules.canceled_then_reopened == "reopened"
+
+
+def _advance(phase: str | None, event: Event, rules: MetricRules = DEFAULT_RULES) -> str:  # noqa: PLR0911 — phase state transitions require multiple decision points
     """The item's phase after `event`, given its phase before it.
 
     "canceled" is a hidden phase: closed undelivered items drop out of the
@@ -32,12 +47,16 @@ def _advance(phase: str | None, event: Event, rules: MetricRules = DEFAULT_RULES
     delivered) unless the team's done_then_canceled rule un-delivers it. A
     STOPPED never lifts an item out of "canceled" (the derived stop can sort
     after the cancel when their timestamps skew or tie), and it's ignored
-    when the team's move_back_ends_wip rule is off.
+    when the team's move_back_ends_wip rule is off. A typed move from Done or
+    Canceled back to a not-started state returns the item to "todo" when the
+    team's done_then_reopened / canceled_then_reopened rule says so.
     """
     if event.type is EventType.STARTED:
         return "in_progress"
     if event.type is EventType.COMPLETED:
         return "done"
+    if _reopened(phase, event, rules):
+        return "todo"
     if phase == "done":
         undelivered = event.type is EventType.CANCELED and rules.done_then_canceled == "canceled"
         return "canceled" if undelivered else phase
