@@ -6,12 +6,14 @@ enter `session_manager.run()` explicitly. The MCP client is wired to the
 app in-process via an httpx ASGITransport factory.
 """
 
+import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 import httpx2
+import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
@@ -23,7 +25,7 @@ from app.api.mcp_server import _render_aging
 from app.main import create_app
 from tests.api.helpers import create_team
 
-TOKEN = "test-token-123"
+TOKEN = "test-token-0123456789abcdefghij"
 
 
 @asynccontextmanager
@@ -73,6 +75,22 @@ def test_no_mcp_route_without_token(settings_env: Callable[..., None]) -> None:
     # Route check, not a request: the SPA catch-all (if web/dist exists
     # locally) would otherwise answer and muddy a status-code assertion.
     assert not [r for r in app.routes if getattr(r, "path", "").startswith("/mcp")]
+
+
+def test_the_token_is_masked_in_the_access_log(
+    settings_env: Callable[..., None], caplog: pytest.LogCaptureFixture
+) -> None:
+    settings_env(mcp_token=TOKEN)
+    create_app()
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        # The exact call shape of uvicorn's h11/httptools access log line.
+        logging.getLogger("uvicorn.access").info(
+            '%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", "POST", f"/mcp/{TOKEN}/", "1.1", 200
+        )
+
+    assert TOKEN not in caplog.text
+    assert "/mcp/***/" in caplog.text
 
 
 async def test_wrong_token_is_not_served(

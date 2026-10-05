@@ -36,6 +36,29 @@ from app.infrastructure.static import mount_spa
 logger = logging.getLogger(__name__)
 
 
+class _RedactSecret(logging.Filter):
+    """Masks a secret in log-record arguments — the MCP token in uvicorn's access log."""
+
+    def __init__(self, secret: str) -> None:
+        super().__init__()
+        self._secret = secret
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                arg.replace(self._secret, "***") if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
+
+
+def _mask_in_access_log(secret: str) -> None:
+    access = logging.getLogger("uvicorn.access")
+    for stale in [f for f in access.filters if isinstance(f, _RedactSecret)]:
+        access.removeFilter(stale)  # create_app() runs once per test app
+    access.addFilter(_RedactSecret(secret))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
@@ -134,6 +157,8 @@ def create_app() -> FastAPI:
         public_prefix=f"/mcp/{settings.mcp_token}" if settings.mcp_token else None,
     )
     if settings.mcp_token:
+        # The token rides in the request path, which uvicorn logs per request.
+        _mask_in_access_log(settings.mcp_token)
         # Secret-URL auth: connector UIs (claude.ai, ChatGPT) can't send
         # custom headers, so the token rides in the path. No token, no route.
         mcp = mcp_server.build_mcp_server(app)
