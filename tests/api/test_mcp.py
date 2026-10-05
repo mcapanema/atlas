@@ -81,7 +81,7 @@ async def test_wrong_token_is_not_served(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             response = await client.post("/mcp/wrong-token/", json={})
     # 404 normally; 405 if a local web/dist build made the SPA catch-all
     # answer the path (StaticFiles rejects POST). Never 200.
@@ -94,7 +94,7 @@ async def test_list_scopes_tool(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             await create_team(client)
 
         async with mcp_session(app) as session:
@@ -114,7 +114,7 @@ async def test_meeting_brief_composes_digest(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             team_id = await create_team(client)
 
         async with mcp_session(app) as session:
@@ -153,7 +153,7 @@ async def test_drilldown_tools(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             team_id = await create_team(client)
             item = await client.post(
                 "/api/work-items", json={"team_id": team_id, "title": "Fix login flake"}
@@ -183,7 +183,7 @@ async def test_run_sync_surfaces_unconfigured_connector(
     async with running_app(sessionmaker, settings_env) as app:
         settings_env(mcp_token=TOKEN, linear_api_key="")
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             org = await client.post("/api/organizations", json={"name": "Acme"})
             org_id = org.json()["id"]
 

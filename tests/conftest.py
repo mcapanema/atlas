@@ -52,7 +52,7 @@ async def test_app(sessionmaker: async_sessionmaker[AsyncSession]) -> FastAPI:
 @pytest_asyncio.fixture
 async def client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=test_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(transport=transport, base_url="http://localhost") as http_client:
         yield http_client
 
 
@@ -88,7 +88,7 @@ async def rules_app(
 @pytest_asyncio.fixture
 async def rules_client(rules_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=rules_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+    async with AsyncClient(transport=transport, base_url="http://localhost") as http_client:
         yield http_client
 
 

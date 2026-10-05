@@ -162,7 +162,7 @@ cd web && npm run dev
 
 # Production mode (single service)
 cd web && npm run build && cd ..
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 </details>
@@ -222,6 +222,13 @@ cloudflared tunnel --url http://localhost:8000   # or: ngrok http 8000
 
 Copy the printed HTTPS origin; your connector URL is
 `https://<origin>/mcp/<token>/`.
+
+Only the MCP endpoint answers through the tunnel. Atlas serves its UI and
+REST API to this machine only: a request that arrives through a proxy (it
+carries `X-Forwarded-For` or a similar header) or under any hostname other
+than `localhost`/`127.0.0.1` gets `403` everywhere except
+`/mcp/<token>/` (ADR-0012). The token is still that endpoint's only
+credential — treat the full URL like a password.
 
 ### 3. Connect a client
 

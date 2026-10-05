@@ -25,6 +25,7 @@ from app.api import (
     teams,
     work_items,
 )
+from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
@@ -126,6 +127,12 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=502, content={"detail": f"Advisor error: {exc}"})
 
     settings = get_settings()
+    # UI and API to this machine only; the MCP mount (if any) to anyone
+    # holding its secret URL — the documented tunnel exposes nothing else.
+    app.add_middleware(
+        LocalOnlyMiddleware,
+        public_prefix=f"/mcp/{settings.mcp_token}" if settings.mcp_token else None,
+    )
     if settings.mcp_token:
         # Secret-URL auth: connector UIs (claude.ai, ChatGPT) can't send
         # custom headers, so the token rides in the path. No token, no route.

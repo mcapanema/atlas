@@ -74,7 +74,8 @@ async def _api(
     # ponytail: a fresh in-process client per tool call — pool one on
     # app.state if tool latency ever matters.
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://atlas") as client:
+    # A loopback Host: LocalOnlyMiddleware serves in-process tool calls as local.
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
         response = await client.request(method, path, params=params, json=json)
     if response.status_code >= 400:
         try:

@@ -16,7 +16,7 @@ async def test_spa_root_served_when_dist_exists(
     monkeypatch.setattr(static, "WEB_DIST", dist)
 
     transport = ASGITransport(app=create_app())
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://localhost") as client:
         root = await client.get("/")
         unknown = await client.get("/organizations")  # client-side route → SPA fallback
         missing_api = await client.get("/api/does-not-exist")
