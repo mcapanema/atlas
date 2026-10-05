@@ -113,7 +113,19 @@ function StaleDataAlert({ history }: { history: FlowHistory }) {
   );
 }
 
-function FlowStats({ data, statLabel }: { data: FlowMetrics; statLabel: string }) {
+function isRanged(filters: MetricsFilters): boolean {
+  return Boolean(filters.start && filters.end);
+}
+
+function FlowStats({
+  data,
+  statLabel,
+  ranged,
+}: {
+  data: FlowMetrics;
+  statLabel: string;
+  ranged: boolean;
+}) {
   return (
     <Row gutter={[16, 16]}>
       <StatCard
@@ -122,9 +134,13 @@ function FlowStats({ data, statLabel }: { data: FlowMetrics; statLabel: string }
         help={`Work items completed in the last ${statLabel}. Counted at the moment an item reached a done state. Items created already done (logged after the fact) are left out of every metric, unless the team's metric rules include them.`}
       />
       <StatCard
-        title="WIP (now)"
+        title={ranged ? "WIP (at range end)" : "WIP (now)"}
         value={data.wip}
-        help="Work items in progress right now: started, and not yet completed, moved back, or canceled. Not an average over the window."
+        help={
+          ranged
+            ? "Work items in progress at the end of the selected range: started, and not yet completed, moved back, or canceled by then. Not an average over the range."
+            : "Work items in progress right now: started, and not yet completed, moved back, or canceled. Not an average over the window."
+        }
       />
       <StatCard
         title="Lead time P50"
@@ -315,7 +331,11 @@ export function FlowDashboard({
       {health.data?.score != null && health.data.band != null && (
         <HealthStrip health={health.data} periodText={periodText(filters, metrics.data)} />
       )}
-      <FlowStats data={metrics.data} statLabel={windowLabel(filters, 30)} />
+      <FlowStats
+        data={metrics.data}
+        statLabel={windowLabel(filters, 30)}
+        ranged={isRanged(filters)}
+      />
       <FlowCharts
         history={history.data}
         distribution={distribution.data}

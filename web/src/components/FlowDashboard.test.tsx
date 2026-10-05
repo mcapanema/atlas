@@ -30,6 +30,20 @@ afterEach(() => {
 });
 
 describe("FlowDashboard", () => {
+  it("labels WIP as of the range end when a custom range is set", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(
+      <FlowDashboard
+        scope={{ teamId: "team-1" }}
+        filters={{ start: "2026-09-01", end: "2026-09-14" }}
+      />,
+    );
+
+    expect(await screen.findByText("WIP (at range end)")).toBeInTheDocument();
+    expect(screen.queryByText("WIP (now)")).not.toBeInTheDocument();
+  });
+
   it("renders stat tiles and the three charts for a team scope", async () => {
     mockMetricsFetch();
 
