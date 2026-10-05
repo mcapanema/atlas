@@ -19,6 +19,8 @@ from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from app.domain.advisor.render import quote_title
+
 _INSTRUCTIONS = (
     "Atlas is a delivery-intelligence platform for Engineering Managers: "
     "flow metrics, delivery health, aging WIP, and Monte Carlo forecasts "
@@ -56,7 +58,7 @@ def _render_aging(aging: dict[str, Any], limit: int = 10) -> str:
     for item in items[:limit]:
         age = item["age_seconds"] / _DAY_SECONDS
         flag = f" [over p{pct}]" if item["over_percentile"] else ""
-        lines.append(f"- {item['title']} — {item['state']}, {age:.1f}d{flag}")
+        lines.append(f"- {quote_title(item['title'])} — {item['state']}, {age:.1f}d{flag}")
     if len(items) > limit:
         lines.append(f"... and {len(items) - limit} more (use aging_wip for the full list)")
     return "\n".join(lines)
@@ -188,7 +190,10 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
         )
         if not page["items"]:
             return "No work items in scope."
-        lines = [f"- {i['id']}  [{i['state']}] ({i['type']}) {i['title']}" for i in page["items"]]
+        lines = [
+            f"- {i['id']}  [{i['state']}] ({i['type']}) {quote_title(i['title'])}"
+            for i in page["items"]
+        ]
         lines.append(f"Showing {len(page['items'])} of {page['total']} (offset {offset}).")
         return "\n".join(lines)
 

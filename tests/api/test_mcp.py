@@ -275,3 +275,14 @@ def test_aging_rows_are_capped_without_a_percentile() -> None:
     assert lines[0] == "Aging WIP:"
     assert len([line for line in lines if line.startswith("- ")]) == 10
     assert lines[-1].startswith("... and 2 more")
+
+
+def test_aging_titles_are_quoted() -> None:
+    item = {"title": "Fix login", "state": "In Progress", "age_seconds": 6 * 86400}
+    aging = {
+        "cycle_time_percentile_seconds": None,
+        "percentile": 85,
+        "items": [{**item, "over_percentile": False}],
+    }
+
+    assert '- "Fix login" — In Progress, 6.0d' in _render_aging(aging)
