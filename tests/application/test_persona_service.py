@@ -107,3 +107,26 @@ async def test_restore_copies_old_text_as_a_new_version() -> None:
 async def test_restore_unknown_version_returns_none() -> None:
     service, _, _ = _service()
     assert await service.restore_guidance(Persona.AGILE_COACH, 9) is None
+
+
+async def test_restore_keeps_unreflected_feedback_pending() -> None:
+    service, feedback_repo, guidance_repo = _service()
+    await guidance_repo.add(
+        PersonaGuidance(
+            persona=Persona.AGILE_COACH,
+            version=1,
+            guidance="Be concise.",
+            created_at=_T0,
+        )
+    )
+    pending = AdviceFeedback(
+        persona=Persona.AGILE_COACH,
+        rating="down",
+        advice_summary="too long",
+        created_at=_T0 + timedelta(hours=1),
+    )
+    await feedback_repo.add(pending)
+
+    await service.restore_guidance(Persona.AGILE_COACH, 1)
+
+    assert await service.pending_feedback(Persona.AGILE_COACH) == [pending]
