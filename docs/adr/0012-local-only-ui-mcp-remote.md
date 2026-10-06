@@ -18,17 +18,18 @@ left a local install open to DNS-rebinding pages.
 
 ## Decision
 
-`LocalOnlyMiddleware` (`app/api/exposure.py`) answers `403` to every HTTP
-request that is not local — Host a loopback name (`localhost`,
+`LocalOnlyMiddleware` (`app/api/exposure.py`) answers `403` to every
+HTTP request that is not local — Host a loopback name (`localhost`,
 `127.0.0.1`, `::1`, `0.0.0.0`, any port) and no forwarding header
 (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Real-IP`,
-`CF-Connecting-IP`) — except under the MCP mount `/mcp/<ATLAS_MCP_TOKEN>`.
-Two independent signals catch tunnels: cloudflared keeps the public Host
-by default, and both cloudflared and ngrok add `X-Forwarded-For`.
-`ATLAS_MCP_TOKEN` must be at least 24 URL-safe characters and is masked
-in the access log. `docker-compose.yml` and `make run` bind to loopback.
-The check covers HTTP and websocket requests, and fails closed: a
-missing, malformed, or repeated Host is not local.
+`CF-Connecting-IP`) — except under the MCP mount
+`/mcp/<ATLAS_MCP_TOKEN>`. Two independent signals catch tunnels:
+cloudflared keeps the public Host by default, and both cloudflared and
+ngrok add `X-Forwarded-For`. `ATLAS_MCP_TOKEN` must be at least 24
+URL-safe characters and is masked in the access log.
+`docker-compose.yml` and `make run` bind to loopback. The check covers
+HTTP and websocket requests, and fails closed: a missing, malformed, or
+repeated Host is not local.
 
 ## Consequences
 

@@ -4,9 +4,8 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from starlette.responses import PlainTextResponse
-from starlette.testclient import TestClient
-from starlette.types import Receive, Scope, Send
-from starlette.websockets import WebSocket, WebSocketDisconnect
+from starlette.types import Message, Receive, Scope, Send
+from starlette.websockets import WebSocket
 
 from app.api.exposure import LocalOnlyMiddleware, is_local
 
@@ -120,15 +119,27 @@ async def _echo_websocket(scope: Scope, receive: Receive, send: Send) -> None:
     await websocket.close()
 
 
-def test_websockets_are_local_only_too() -> None:
-    client = TestClient(LocalOnlyMiddleware(_echo_websocket), base_url="http://localhost")
+async def _drive_websocket(headers: list[tuple[bytes, bytes]]) -> list[Message]:
+    sent: list[Message] = []
 
-    with client.websocket_connect("/ws", headers={"host": "localhost"}) as websocket:
-        assert websocket.receive_text() == "ok"
-    with (
-        pytest.raises(WebSocketDisconnect),
-        client.websocket_connect(
-            "/ws", headers={"host": "localhost", "x-forwarded-for": "203.0.113.1"}
-        ) as websocket,
-    ):
-        websocket.receive_text()
+    async def receive() -> Message:
+        return {"type": "websocket.connect"}
+
+    async def send(message: Message) -> None:
+        sent.append(message)
+
+    scope = {"type": "websocket", "path": "/ws", "headers": headers}
+    await LocalOnlyMiddleware(_echo_websocket)(scope, receive, send)
+    return sent
+
+
+async def test_websockets_are_local_only_too() -> None:
+    local = await _drive_websocket([(b"host", b"localhost")])
+    assert {"type": "websocket.accept", "subprotocol": None, "headers": []} in local
+    assert {"type": "websocket.send", "text": "ok"} in local
+
+    tunnelled = await _drive_websocket(
+        [(b"host", b"localhost"), (b"x-forwarded-for", b"203.0.113.1")]
+    )
+    assert [m["type"] for m in tunnelled] == ["websocket.close"]
+    assert tunnelled[0]["code"] == 1008

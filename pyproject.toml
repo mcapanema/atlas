@@ -42,13 +42,7 @@ testpaths = ["tests"]
 # coverage.xml for diff-cover.
 addopts = ["--strict-markers", "--strict-config", "--cov-report=term", "--cov-report=xml"]
 xfail_strict = true
-filterwarnings = [
-    "error",
-    # starlette.testclient (imported by the websocket test) still reads the
-    # deprecated anyio.abc.BlockingPortal alias; drop on a starlette bump that
-    # uses anyio.from_thread.BlockingPortal.
-    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
-]
+filterwarnings = ["error"]
 
 # Coverage only engages when pytest is passed --cov (make test / CI);
 # bare `uv run pytest <path>` TDD runs skip it and the fail_under gate.
