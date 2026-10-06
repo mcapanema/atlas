@@ -202,3 +202,19 @@ async def test_a_plain_sync_does_not_recompute_history(
     rules = (await rules_client.get(f"/api/organizations/{org['id']}/metric-rules")).json()
 
     assert rules["recompute"]["finished_at"] is None
+
+
+async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_usable(
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+) -> None:
+    rules_app.dependency_overrides[get_delivery_data_source] = _fake_source
+
+    response = await rules_client.post(
+        "/api/connectors/linear/sync", json={"organization_id": str(uuid4()), "rebuild": True}
+    )
+    await settle(rules_app)  # must not hang: paused() restarted cleanly
+    org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
+    recompute = await rules_client.post(f"/api/organizations/{org['id']}/metric-rules/recompute")
+
+    assert response.status_code == 404
+    assert recompute.status_code == 202

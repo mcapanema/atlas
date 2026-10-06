@@ -868,3 +868,78 @@ async def test_rebuild_leaves_items_the_run_did_not_return_alone() -> None:
 
     assert (summary.rebuilt, summary.deleted) == (0, 0)
     assert len(await harness.events.list_for_work_item(item.id)) == 2
+
+
+def _done_without_history(source: FakeDataSource, *, real_completion: bool) -> None:
+    """li1 is done upstream; its history has a COMPLETED event only when `real_completion`."""
+    item = source.work_items[0]
+    done_at = datetime(2026, 7, 5, 9, 0, tzinfo=UTC)
+    events = item.events
+    if real_completion:
+        events = (
+            *events,
+            SourceEvent(
+                external_id="lh2",
+                type=EventType.COMPLETED,
+                occurred_at=done_at,
+                from_state="In Progress",
+                to_state="Done",
+            ),
+        )
+    source.work_items = [
+        dataclasses.replace(item, completed_at=done_at, state="Done", events=events)
+    ]
+
+
+async def test_rebuild_drops_a_synthesized_completion_once_history_has_the_real_one() -> None:
+    source = full_source()
+    _done_without_history(source, real_completion=False)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # synthesizes li1:completed (a divergence)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    _done_without_history(source, real_completion=True)  # the fixed mapping emits the real one
+
+    await harness.service.sync(org_id, rebuild=True)
+
+    eids = {e.external_id for e in await harness.events.list_for_work_item(item.id)}
+    assert "lh2" in eids
+    assert "li1:completed" not in eids
+
+
+async def test_rebuild_re_synthesizes_a_completion_history_still_lacks() -> None:
+    source = full_source()
+    _done_without_history(source, real_completion=False)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    eids = {e.external_id for e in await harness.events.list_for_work_item(item.id)}
+    assert "li1:completed" in eids
+    assert summary.divergences == 1
+
+
+async def test_rebuild_still_fills_state_types_on_stored_events() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    # A stored event from before ADR-0011: no state types yet.
+    stored = await harness.events.get_by_external_id("lh1")
+    assert stored is not None
+    await harness.events.add(dataclasses.replace(stored, from_state_type=None, to_state_type=None))
+    item = source.work_items[0]
+    created, started = item.events
+    typed = dataclasses.replace(
+        started, from_state_type=StateType.UNSTARTED, to_state_type=StateType.STARTED
+    )
+    source.work_items = [dataclasses.replace(item, events=(created, typed))]
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    assert summary.state_types_filled == 1

@@ -94,8 +94,10 @@ class SyncService:
         teams = await self._sync_teams(resolved)
         projects = await self._sync_projects()
         sources = await self._source.fetch_work_items()
-        # A rebuild re-inserts every event with its state types: nothing to fill.
-        filled = 0 if rebuild else await self._fill_state_types(sources)
+        # Also on a rebuild: items it can't rebuild (team unresolved) still get
+        # their stored events typed. The count then includes events the rebuild
+        # replaces next — a harmless overcount on the first rebuild of an old DB.
+        filled = await self._fill_state_types(sources)
         work_items, events, divergences, deleted, rebuilt = await self._sync_work_items(
             sources, rebuild=rebuild
         )
