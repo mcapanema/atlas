@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -212,9 +213,12 @@ async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_
     response = await rules_client.post(
         "/api/connectors/linear/sync", json={"organization_id": str(uuid4()), "rebuild": True}
     )
-    await settle(rules_app)  # must not hang: paused() restarted cleanly
-    org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
-    recompute = await rules_client.post(f"/api/organizations/{org['id']}/metric-rules/recompute")
+    async with asyncio.timeout(10):  # a runner-lock regression fails fast, not hangs
+        await settle(rules_app)  # must not hang: paused() restarted cleanly
+        org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
+        recompute = await rules_client.post(
+            f"/api/organizations/{org['id']}/metric-rules/recompute"
+        )
 
     assert response.status_code == 404
     assert recompute.status_code == 202
