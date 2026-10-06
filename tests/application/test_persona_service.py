@@ -127,6 +127,8 @@ async def test_restore_keeps_unreflected_feedback_pending() -> None:
     )
     await feedback_repo.add(pending)
 
-    await service.restore_guidance(Persona.AGILE_COACH, 1)
+    restored = await service.restore_guidance(Persona.AGILE_COACH, 1)
 
+    assert restored is not None
+    assert restored.created_at == _T0  # the watermark is the prior latest's, not "now"
     assert await service.pending_feedback(Persona.AGILE_COACH) == [pending]
