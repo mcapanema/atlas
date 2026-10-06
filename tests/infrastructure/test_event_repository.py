@@ -253,6 +253,48 @@ async def test_missing_state_types_then_fill_never_overwrites(session: AsyncSess
     assert await repo.external_ids_missing_state_types(["h1", "h2"]) == set()
 
 
+async def test_a_typed_to_with_an_untyped_from_is_filled_from_only(session: AsyncSession) -> None:
+    # Duplicate -> Todo, stored while "duplicate" had no StateType: only the
+    # from side is empty. A transition with no from state has nothing to fill.
+    repo = SqlAlchemyEventRepository(session)
+    item_id = await _work_item_id(session)
+    at = datetime(2026, 9, 1, tzinfo=UTC)
+    await repo.add(
+        Event(
+            work_item_id=item_id,
+            type=EventType.STATE_CHANGED,
+            occurred_at=at,
+            external_id="h1",
+            from_state="Duplicate",
+            to_state="Todo",
+            to_state_type=StateType.UNSTARTED,
+        )
+    )
+    await repo.add(
+        Event(
+            work_item_id=item_id,
+            type=EventType.STATE_CHANGED,
+            occurred_at=at,
+            external_id="h2",
+            to_state="Todo",
+            to_state_type=StateType.UNSTARTED,
+        )
+    )
+
+    missing = await repo.external_ids_missing_state_types(["h1", "h2"])
+    filled = await repo.fill_state_types({"h1": (StateType.CANCELED, StateType.BACKLOG)})
+    [stored] = [e for e in await repo.list_for_work_item(item_id) if e.external_id == "h1"]
+
+    assert missing == {"h1"}
+    assert filled == 1
+    # The empty side is filled; the known to-type is never overwritten.
+    assert (stored.from_state_type, stored.to_state_type) == (
+        StateType.CANCELED,
+        StateType.UNSTARTED,
+    )
+    assert await repo.external_ids_missing_state_types(["h1", "h2"]) == set()
+
+
 async def test_event_detail_and_types_round_trip(session: AsyncSession) -> None:
     repo = SqlAlchemyEventRepository(session)
     item_id = await _work_item_id(session)
