@@ -4,9 +4,11 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from starlette.responses import PlainTextResponse
+from starlette.testclient import TestClient
 from starlette.types import Receive, Scope, Send
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from app.api.exposure import LocalOnlyMiddleware
+from app.api.exposure import LocalOnlyMiddleware, is_local
 
 _TUNNEL = {"host": "abc.trycloudflare.com", "x-forwarded-for": "203.0.113.1"}
 
@@ -92,3 +94,41 @@ async def test_the_app_refuses_tunneled_requests_to_its_api_docs(test_app: FastA
         local = await client.get("/docs")
 
     assert (tunneled.status_code, local.status_code) == (403, 200)
+
+
+@pytest.mark.parametrize(
+    ("headers", "local"),
+    [
+        ([(b"host", b"LOCALHOST:8000")], True),  # Host is case-insensitive
+        ([(b"host", b"[::1]:8000")], True),
+        ([], False),  # no Host at all
+        ([(b"host", b"")], False),
+        ([(b"host", b"[::1]evil")], False),  # junk after the IPv6 literal
+        ([(b"host", b"::1")], False),  # an IPv6 Host must be bracketed
+        ([(b"host", b"attacker.example"), (b"host", b"localhost")], False),
+        ([(b"host", b"localhost"), (b"host", b"localhost")], False),  # duplicates fail closed
+    ],
+)
+def test_is_local_parses_the_host_strictly(headers: list[tuple[bytes, bytes]], local: bool) -> None:
+    assert is_local({"type": "http", "headers": headers}) is local
+
+
+async def _echo_websocket(scope: Scope, receive: Receive, send: Send) -> None:
+    websocket = WebSocket(scope, receive, send)
+    await websocket.accept()
+    await websocket.send_text("ok")
+    await websocket.close()
+
+
+def test_websockets_are_local_only_too() -> None:
+    client = TestClient(LocalOnlyMiddleware(_echo_websocket), base_url="http://localhost")
+
+    with client.websocket_connect("/ws", headers={"host": "localhost"}) as websocket:
+        assert websocket.receive_text() == "ok"
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect(
+            "/ws", headers={"host": "localhost", "x-forwarded-for": "203.0.113.1"}
+        ) as websocket,
+    ):
+        websocket.receive_text()
