@@ -94,13 +94,13 @@ class SyncService:
         teams = await self._sync_teams(resolved)
         projects = await self._sync_projects()
         sources = await self._source.fetch_work_items()
-        # Also on a rebuild: items it can't rebuild (team unresolved) still get
-        # their stored events typed. The count then includes events the rebuild
-        # replaces next — a harmless overcount on the first rebuild of an old DB.
-        filled = await self._fill_state_types(sources)
         work_items, events, divergences, deleted, rebuilt = await self._sync_work_items(
             sources, rebuild=rebuild
         )
+        # After the work-item sync: rebuilt and newly inserted events already carry
+        # their types, so only stored events left untyped are filled — exact in both
+        # modes, including items a rebuild skips (team unresolved).
+        filled = await self._fill_state_types(sources)
         summary = SyncSummary(
             organization_id=resolved,
             teams=teams,

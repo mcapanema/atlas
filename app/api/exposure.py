@@ -23,7 +23,7 @@ _FORWARDING_HEADERS = frozenset(
 
 
 # name[:port] or [ipv6][:port] — nothing else is a Host Atlas recognises.
-_HOST = re.compile(r"(?:\[(?P<v6>[^\]]+)\]|(?P<name>[^:\[\]]+))(?::\d{1,5})?")
+_HOST = re.compile(r"(?:\[(?P<v6>[^\]]*:[^\]]*)\]|(?P<name>[^:\[\]]+))(?::\d{1,5})?")
 
 
 def _hostname(host: str) -> str | None:

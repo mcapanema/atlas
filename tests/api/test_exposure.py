@@ -103,6 +103,8 @@ async def test_the_app_refuses_tunneled_requests_to_its_api_docs(test_app: FastA
         ([], False),  # no Host at all
         ([(b"host", b"")], False),
         ([(b"host", b"[::1]evil")], False),  # junk after the IPv6 literal
+        ([(b"host", b"[localhost]")], False),  # brackets are for IPv6 only
+        ([(b"host", b"[127.0.0.1]:8000")], False),
         ([(b"host", b"::1")], False),  # an IPv6 Host must be bracketed
         ([(b"host", b"attacker.example"), (b"host", b"localhost")], False),
         ([(b"host", b"localhost"), (b"host", b"localhost")], False),  # duplicates fail closed

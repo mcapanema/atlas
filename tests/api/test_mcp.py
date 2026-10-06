@@ -106,7 +106,7 @@ async def test_uvicorn_access_log_masks_the_token(
         port = server.servers[0].sockets[0].getsockname()[1]
         try:
             with caplog.at_level(logging.INFO, logger="uvicorn.access"):
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(trust_env=False) as client:
                     await client.post(f"http://127.0.0.1:{port}/mcp/{TOKEN}/", json={})
         finally:
             server.should_exit = True

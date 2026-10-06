@@ -924,22 +924,41 @@ async def test_rebuild_re_synthesizes_a_completion_history_still_lacks() -> None
     assert summary.divergences == 1
 
 
-async def test_rebuild_still_fills_state_types_on_stored_events() -> None:
-    source = full_source()
-    harness = Harness(source)
-    org_id = await seed_org(harness)
-    await harness.service.sync(org_id)
-    # A stored event from before ADR-0011: no state types yet.
-    stored = await harness.events.get_by_external_id("lh1")
-    assert stored is not None
-    await harness.events.add(dataclasses.replace(stored, from_state_type=None, to_state_type=None))
-    item = source.work_items[0]
+def _typed_items(team_external_id: str = "lt1") -> list[SourceWorkItem]:
+    """full_source()'s item with a typed lh1 event, team replaceable."""
+    item = full_source().work_items[0]
     created, started = item.events
     typed = dataclasses.replace(
         started, from_state_type=StateType.UNSTARTED, to_state_type=StateType.STARTED
     )
-    source.work_items = [dataclasses.replace(item, events=(created, typed))]
+    return [dataclasses.replace(item, events=(created, typed), team_external_id=team_external_id)]
+
+
+async def test_rebuild_still_fills_state_types_on_stored_events() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # lh1 stored untyped
+    # The item's team is no longer resolvable, so the rebuild skips it.
+    source.work_items = _typed_items(team_external_id="lt-gone")
 
     summary = await harness.service.sync(org_id, rebuild=True)
 
+    assert summary.rebuilt == 0
     assert summary.state_types_filled == 1
+    stored = await harness.events.get_by_external_id("lh1")
+    assert stored is not None
+    assert stored.to_state_type is StateType.STARTED
+
+
+async def test_rebuild_of_a_resolvable_item_does_not_count_its_events_as_filled() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # lh1 stored untyped
+    source.work_items = _typed_items()
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    assert summary.rebuilt == 1
+    assert summary.state_types_filled == 0

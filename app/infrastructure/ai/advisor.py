@@ -49,7 +49,7 @@ def _fenced(tag: str, text: str) -> str:
     Guidance and feedback are untrusted text: a literal </tag> in them would
     otherwise end the fence early and let the rest pose as instructions.
     """
-    defused = re.sub(rf"</\s*{tag}\b[^>]*>", f"[/{tag}]", text, flags=re.IGNORECASE)
+    defused = re.sub(rf"</\s*{tag}\b[^>]*>?", f"[/{tag}]", text, flags=re.IGNORECASE)
     return f"<{tag}>\n{defused}\n</{tag}>"
 
 
