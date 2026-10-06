@@ -114,6 +114,7 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
                 occurred_at=datetime.fromisoformat(canceled_at),
             )
         )
+    events.extend(_archive_events(node))
     project = node.get("project")
     # completedAt feeds completed_at (the sync synthesizes a missing
     # COMPLETED from it); cancellation arrives as the CANCELED event above.
@@ -154,6 +155,29 @@ def _state_type(state: dict[str, Any] | None) -> StateType | None:
         return StateType(state["type"])
     except ValueError:
         return None
+
+
+def _archive_events(node: dict[str, Any]) -> list[SourceEvent]:
+    """CANCELED at archivedAt for an issue archived while still open.
+
+    Linear hides archived issues: one archived before it was done or
+    canceled was abandoned, so it closes undelivered (out of WIP and forecast
+    remaining). Closed issues — Linear auto-archives them — keep their
+    outcome. Keyed by time like canceledAt, so a re-archive is a new event.
+
+    ponytail: an unarchived issue keeps this event and reads canceled until
+    it starts again; emit a reopen from history if unarchiving ever matters.
+    """
+    archived_at = node.get("archivedAt")
+    if not archived_at or _state_type(node["state"]) in (StateType.COMPLETED, StateType.CANCELED):
+        return []
+    return [
+        SourceEvent(
+            external_id=f"{node['id']}:archived:{archived_at}",
+            type=EventType.CANCELED,
+            occurred_at=datetime.fromisoformat(archived_at),
+        )
+    ]
 
 
 # Linear's IssueHistory.relationChanges codes are undocumented; decoded

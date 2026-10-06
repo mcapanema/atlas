@@ -83,7 +83,8 @@ query Labels($after: String) {
 # enough for any sane issue; map_issue logs a warning when the cap is hit.
 # Paginate history per-issue if one ever exceeds it.
 # Archived issues are included: Linear auto-archives closed issues, and
-# they are still delivered (or canceled) history. Trashed ones were
+# they are still delivered (or canceled) history; one archived while still
+# open reads as canceled (mapping._archive_events). Trashed ones were
 # deleted and are skipped in fetch_work_items.
 _ISSUES_QUERY = f"""
 query Issues($after: String) {{
@@ -95,6 +96,7 @@ query Issues($after: String) {{
       createdAt
       completedAt
       canceledAt
+      archivedAt
       trashed
       state {{ name type }}
       team {{ id }}

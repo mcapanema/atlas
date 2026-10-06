@@ -249,6 +249,7 @@ async def test_fetch_work_items_includes_archived_and_skips_trashed() -> None:
         # Linear auto-archives closed issues; they are still delivered history.
         assert "includeArchived: true" in body["query"]
         assert "trashed" in body["query"]
+        assert "archivedAt" in body["query"]
         return _page(
             "issues",
             [
