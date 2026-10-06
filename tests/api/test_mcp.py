@@ -6,14 +6,16 @@ enter `session_manager.run()` explicitly. The MCP client is wired to the
 app in-process via an httpx ASGITransport factory.
 """
 
+import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 import httpx2
 import pytest
+import uvicorn
 from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
@@ -22,10 +24,19 @@ from mcp.types import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.mcp_server import _render_aging
-from app.main import create_app
+from app.main import _RedactSecret, create_app
 from tests.api.helpers import create_team
 
 TOKEN = "test-token-0123456789abcdefghij"
+
+
+@pytest.fixture(autouse=True)
+def _drop_token_masks() -> Iterator[None]:
+    """create_app() masks the token on the global uvicorn.access logger; undo it per test."""
+    yield
+    access = logging.getLogger("uvicorn.access")
+    for mask in [f for f in access.filters if isinstance(f, _RedactSecret)]:
+        access.removeFilter(mask)
 
 
 @asynccontextmanager
@@ -77,20 +88,32 @@ def test_no_mcp_route_without_token(settings_env: Callable[..., None]) -> None:
     assert not [r for r in app.routes if getattr(r, "path", "").startswith("/mcp")]
 
 
-def test_the_token_is_masked_in_the_access_log(
-    settings_env: Callable[..., None], caplog: pytest.LogCaptureFixture
+async def test_uvicorn_access_log_masks_the_token(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    settings_env(mcp_token=TOKEN)
-    create_app()
-
-    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
-        # The exact call shape of uvicorn's h11/httptools access log line.
-        logging.getLogger("uvicorn.access").info(
-            '%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", "POST", f"/mcp/{TOKEN}/", "1.1", 200
+    async with running_app(sessionmaker, settings_env) as app:
+        # log_config=None: keep pytest's logging (uvicorn would replace the
+        # handlers); the real access logger still formats the real request.
+        server = uvicorn.Server(
+            uvicorn.Config(app, host="127.0.0.1", port=0, log_config=None, lifespan="off")
         )
+        serving = asyncio.create_task(server.serve())
+        async with asyncio.timeout(10):
+            while not server.started:  # noqa: ASYNC110 — uvicorn exposes a flag, not an Event
+                await asyncio.sleep(0.01)
+        port = server.servers[0].sockets[0].getsockname()[1]
+        with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+            async with httpx.AsyncClient() as client:
+                await client.post(f"http://127.0.0.1:{port}/mcp/{TOKEN}/", json={})
+        server.should_exit = True
+        await serving
 
-    assert TOKEN not in caplog.text
-    assert "/mcp/***/" in caplog.text
+    # Only the server's access log: the client-side httpx logger echoes the URL.
+    access = "\n".join(r.getMessage() for r in caplog.records if r.name == "uvicorn.access")
+    assert TOKEN not in access
+    assert "/mcp/***/" in access
 
 
 async def test_wrong_token_is_not_served(
