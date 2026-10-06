@@ -261,3 +261,15 @@ def test_state_type_at_reads_typed_transitions() -> None:
     untyped = [_on(EventType.CREATED, 1)]
     assert state_type_at(untyped, _day(2), T.BACKLOG) is T.BACKLOG
     assert state_type_at(untyped, _day(2), None) is None
+
+
+def test_cfd_canceled_then_reopened_does_not_reopen_a_done_item() -> None:
+    days = daily_flow_counts(
+        [DONE_THEN_TODO],
+        start=_day(4),
+        end=_day(7),
+        stream_rules=[MetricRules(canceled_then_reopened="reopened")],
+    )
+
+    # The Done -> Todo move comes from a COMPLETED state: only done_then_reopened governs it.
+    assert [d.done for d in days] == [1, 1, 1, 1]

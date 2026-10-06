@@ -39,17 +39,13 @@ def _reopened(phase: str | None, event: Event, rules: MetricRules) -> bool:
     return phase == "canceled" and rules.canceled_then_reopened == "reopened"
 
 
-def _advance(phase: str | None, event: Event, rules: MetricRules = DEFAULT_RULES) -> str:  # noqa: PLR0911 — phase state transitions require multiple decision points
+def _advance(phase: str | None, event: Event, rules: MetricRules = DEFAULT_RULES) -> str:
     """The item's phase after `event`, given its phase before it.
 
-    "canceled" is a hidden phase: closed undelivered items drop out of the
-    chart. Done stays done through a cancel (delivered work stays
-    delivered) unless the team's done_then_canceled rule un-delivers it. A
-    STOPPED never lifts an item out of "canceled" (the derived stop can sort
-    after the cancel when their timestamps skew or tie), and it's ignored
-    when the team's move_back_ends_wip rule is off. A typed move from Done or
-    Canceled back to a not-started state returns the item to "todo" when the
-    team's done_then_reopened / canceled_then_reopened rule says so.
+    STARTED and COMPLETED always win; a typed move from Done or Canceled back
+    to a not-started state returns the item to "todo" when the team's
+    done_then_reopened / canceled_then_reopened rule says so; anything else
+    is settled by _after_other.
     """
     if event.type is EventType.STARTED:
         return "in_progress"
@@ -57,6 +53,19 @@ def _advance(phase: str | None, event: Event, rules: MetricRules = DEFAULT_RULES
         return "done"
     if _reopened(phase, event, rules):
         return "todo"
+    return _after_other(phase, event, rules)
+
+
+def _after_other(phase: str | None, event: Event, rules: MetricRules) -> str:
+    """Any other event: a cancel or stop closes, everything else keeps the phase.
+
+    "canceled" is a hidden phase: closed undelivered items drop out of the
+    chart. Done stays done through a cancel (delivered work stays delivered)
+    unless the team's done_then_canceled rule un-delivers it. A STOPPED never
+    lifts an item out of "canceled" (the derived stop can sort after the
+    cancel when their timestamps skew or tie), and it's ignored when the
+    team's move_back_ends_wip rule is off.
+    """
     if phase == "done":
         undelivered = event.type is EventType.CANCELED and rules.done_then_canceled == "canceled"
         return "canceled" if undelivered else phase

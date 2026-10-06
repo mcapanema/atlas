@@ -42,6 +42,10 @@ describe("FlowDashboard", () => {
 
     expect(await screen.findByText("WIP (at range end)")).toBeInTheDocument();
     expect(screen.queryByText("WIP (now)")).not.toBeInTheDocument();
+    fireEvent.focus(screen.getByText("WIP (at range end)"));
+    expect(
+      await screen.findByText(/in progress at the end of the selected range/),
+    ).toBeInTheDocument();
   });
 
   it("renders stat tiles and the three charts for a team scope", async () => {
