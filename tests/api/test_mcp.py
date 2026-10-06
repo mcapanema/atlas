@@ -104,12 +104,17 @@ async def test_uvicorn_access_log_masks_the_token(
             while not server.started:  # noqa: ASYNC110 — uvicorn exposes a flag, not an Event
                 await asyncio.sleep(0.01)
         port = server.servers[0].sockets[0].getsockname()[1]
-        with caplog.at_level(logging.INFO, logger="uvicorn.access"):
-            async with httpx.AsyncClient() as client:
-                await client.post(f"http://127.0.0.1:{port}/mcp/{TOKEN}/", json={})
-        server.should_exit = True
-        await serving
+        try:
+            with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+                async with httpx.AsyncClient() as client:
+                    await client.post(f"http://127.0.0.1:{port}/mcp/{TOKEN}/", json={})
+        finally:
+            server.should_exit = True
+            async with asyncio.timeout(10):
+                await serving
 
+    # The mask on the global uvicorn.access logger was installed by create_app() inside
+    # running_app (and is removed by the autouse _drop_token_masks fixture).
     # Only the server's access log: the client-side httpx logger echoes the URL.
     access = "\n".join(r.getMessage() for r in caplog.records if r.name == "uvicorn.access")
     assert TOKEN not in access
