@@ -491,3 +491,22 @@ def test_long_label_names_and_blockers_are_truncated_to_the_detail_column() -> N
     assert details
     assert all(len(d) == 255 for d in details)
     assert item.labels == ("x" * 255,)
+
+
+def test_a_duplicate_state_is_typed_canceled() -> None:
+    node = {**ISSUE_NODE, "state": {"name": "Duplicate", "type": "duplicate"}}
+
+    assert map_issue(node).state_type is StateType.CANCELED
+
+
+def test_transition_into_duplicate_is_typed_canceled_and_stops() -> None:
+    events = map_history_entry(_entry("started", "duplicate", "In Progress", "Duplicate"))
+
+    assert [e.type for e in events] == [EventType.STATE_CHANGED, EventType.STOPPED]
+    assert events[0].to_state_type is StateType.CANCELED
+
+
+def test_an_unknown_state_type_maps_to_none() -> None:
+    node = {**ISSUE_NODE, "state": {"name": "Parked", "type": "parked"}}
+
+    assert map_issue(node).state_type is None

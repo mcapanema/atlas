@@ -138,10 +138,18 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
     )
 
 
+# Linear state types outside the shared StateType vocabulary, by meaning: a
+# Duplicate closes the issue undelivered (Linear also stamps its canceledAt).
+_STATE_TYPE_ALIASES = {"duplicate": StateType.CANCELED}
+
+
 def _state_type(state: dict[str, Any] | None) -> StateType | None:
     """The domain category of a Linear workflow state; None for an unknown type."""
     if state is None:
         return None
+    alias = _STATE_TYPE_ALIASES.get(state["type"])
+    if alias is not None:
+        return alias
     try:
         return StateType(state["type"])
     except ValueError:
