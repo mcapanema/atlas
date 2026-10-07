@@ -26,6 +26,7 @@ function mockApi({ configured }: { configured: boolean }) {
         divergences: 7,
         deleted: 9,
       });
+    if (url.endsWith("/sync-schedule")) return jsonResponse(null);
     throw new Error(`Unexpected fetch: ${url}`);
   });
 }
@@ -53,6 +54,15 @@ describe("ConnectorsPage", () => {
     expect(screen.getByText("9")).toBeInTheDocument();
   });
 
+  it("shows the auto-sync card for the selected organization", async () => {
+    mockApi({ configured: true });
+
+    renderWithClient(<ConnectorsPage />);
+
+    expect(await screen.findByText("Auto sync")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
+  });
+
   it("shows setup instructions and disables sync when not configured", async () => {
     mockApi({ configured: false });
 
@@ -75,6 +85,7 @@ describe("ConnectorsPage", () => {
           },
         ]);
       if (url === "/api/connectors/linear/sync") return jsonResponse({ detail: "boom" }, 500);
+      if (url.endsWith("/sync-schedule")) return jsonResponse(null);
       throw new Error(`Unexpected fetch: ${url}`);
     });
 

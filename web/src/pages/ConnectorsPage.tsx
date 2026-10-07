@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { useLinearStatus, useLinearSync, type SyncSummary } from "../api/connectors";
 import { useOrganizations } from "../api/organizations";
+import { AutoSyncCard } from "../components/AutoSyncCard";
 
 function SyncSummaryTable({ summary }: { summary: SyncSummary }) {
   return (
@@ -49,6 +50,10 @@ function SyncOutcome({ sync }: { sync: ReturnType<typeof useLinearSync> }) {
   return sync.data ? <SyncSummaryTable summary={sync.data} /> : null;
 }
 
+function ConfiguredTag({ configured }: { configured: boolean }) {
+  return configured ? <Tag color="green">Configured</Tag> : <Tag>Not configured</Tag>;
+}
+
 export function ConnectorsPage() {
   const status = useLinearStatus();
   const organizations = useOrganizations();
@@ -76,36 +81,39 @@ export function ConnectorsPage() {
   return (
     <>
       <Typography.Title level={3}>Connectors</Typography.Title>
-      <Card
-        title="Linear"
-        loading={status.isLoading || organizations.isLoading}
-        extra={configured ? <Tag color="green">Configured</Tag> : <Tag>Not configured</Tag>}
-      >
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <SetupHints
-            configured={configured}
-            noOrganizations={configured && !organizations.isLoading && orgList.length === 0}
-          />
-          <Space>
-            <Select
-              style={{ width: 260 }}
-              placeholder="Organization"
-              value={selectedOrgId}
-              onChange={setOrganizationId}
-              options={orgList.map((org) => ({ value: org.id, label: org.name }))}
+      <Space direction="vertical" size="large" style={{ width: "100%" }}>
+        <Card
+          title="Linear"
+          loading={status.isLoading || organizations.isLoading}
+          extra={<ConfiguredTag configured={configured} />}
+        >
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <SetupHints
+              configured={configured}
+              noOrganizations={configured && !organizations.isLoading && orgList.length === 0}
             />
-            <Button
-              type="primary"
-              disabled={!configured}
-              loading={sync.isPending}
-              onClick={() => sync.mutate(selectedOrgId)}
-            >
-              Sync now
-            </Button>
+            <Space>
+              <Select
+                style={{ width: 260 }}
+                placeholder="Organization"
+                value={selectedOrgId}
+                onChange={setOrganizationId}
+                options={orgList.map((org) => ({ value: org.id, label: org.name }))}
+              />
+              <Button
+                type="primary"
+                disabled={!configured}
+                loading={sync.isPending}
+                onClick={() => sync.mutate(selectedOrgId)}
+              >
+                Sync now
+              </Button>
+            </Space>
+            <SyncOutcome sync={sync} />
           </Space>
-          <SyncOutcome sync={sync} />
-        </Space>
-      </Card>
+        </Card>
+        {selectedOrgId && <AutoSyncCard organizationId={selectedOrgId} configured={configured} />}
+      </Space>
     </>
   );
 }
