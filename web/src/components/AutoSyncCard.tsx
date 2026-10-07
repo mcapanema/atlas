@@ -153,7 +153,8 @@ export function AutoSyncCard({
   configured,
 }: {
   organizationId: string;
-  configured: boolean;
+  /** undefined while the connector status loads: no warning until it's known. */
+  configured: boolean | undefined;
 }) {
   const schedule = useSyncSchedule(organizationId);
   const save = useSaveSyncSchedule(organizationId);
@@ -162,7 +163,7 @@ export function AutoSyncCard({
   return (
     <Card title="Auto sync" loading={schedule.isLoading}>
       <Space direction="vertical" style={{ width: "100%" }}>
-        {!configured && (
+        {configured === false && (
           <Alert type="warning" message="Scheduled syncs fail until ATLAS_LINEAR_API_KEY is set." />
         )}
         {schedule.isError ? (

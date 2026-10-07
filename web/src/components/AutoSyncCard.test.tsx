@@ -156,4 +156,13 @@ describe("AutoSyncCard", () => {
     );
     expect(await screen.findByText(/overnight windows aren't supported/)).toBeInTheDocument();
   });
+
+  it("does not warn about Linear while its status is still unknown", async () => {
+    mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} configured={undefined} />);
+
+    expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
+    expect(screen.queryByText(/Scheduled syncs fail/)).not.toBeInTheDocument();
+  });
 });
