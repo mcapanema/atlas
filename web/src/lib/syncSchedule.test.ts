@@ -4,6 +4,7 @@ import {
   WEEKDAY_OPTIONS,
   clockParts,
   defaultSchedule,
+  formatInZone,
   intervalOptions,
   timeZoneOptions,
 } from "./syncSchedule";
@@ -56,5 +57,14 @@ describe("syncSchedule helpers", () => {
   it("reads hours and minutes from HH:MM and HH:MM:SS", () => {
     expect(clockParts("08:30:00")).toEqual({ hour: 8, minute: 30 });
     expect(clockParts("18:05")).toEqual({ hour: 18, minute: 5 });
+  });
+
+  it("formats an instant in the schedule's zone, labelled with it", () => {
+    expect(formatInZone("2026-10-08T11:00:00Z", "America/Sao_Paulo")).toBe(
+      "08-10-2026 08:00 (America/Sao_Paulo)",
+    );
+    expect(formatInZone("2026-10-08T23:30:00Z", "Asia/Tokyo")).toBe(
+      "09-10-2026 08:30 (Asia/Tokyo)",
+    );
   });
 });

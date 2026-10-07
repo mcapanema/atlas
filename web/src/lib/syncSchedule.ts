@@ -50,3 +50,22 @@ export function defaultSchedule(
 export function clockParts(clock: string): { hour: number; minute: number } {
   return { hour: Number(clock.slice(0, 2)), minute: Number(clock.slice(3, 5)) };
 }
+
+/**
+ * "08-10-2026 08:00 (America/Sao_Paulo)": an instant in the schedule's own
+ * zone, labelled, so it reads the same as the window it was set in.
+ */
+export function formatInZone(iso: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("day")}-${part("month")}-${part("year")} ${part("hour")}:${part("minute")} (${timeZone})`;
+}

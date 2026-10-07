@@ -35,6 +35,8 @@ export function useSyncSchedule(organizationId: string) {
   return useQuery({
     queryKey: scheduleKey(organizationId),
     queryFn: () => apiFetch<SyncSchedule | null>(schedulePath(organizationId)),
+    // Polled so Next run / Last run stay current on a page left open.
+    refetchInterval: 60_000,
   });
 }
 

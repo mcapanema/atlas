@@ -2,7 +2,6 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SyncSchedule } from "../api/syncSchedule";
-import { formatDateTime } from "../lib/dates";
 import { defaultSchedule } from "../lib/syncSchedule";
 import { jsonResponse, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
@@ -41,6 +40,8 @@ function putBody(fetchMock: ReturnType<typeof mockSchedule>): unknown {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -55,7 +56,7 @@ describe("AutoSyncCard", () => {
     expect(screen.getByRole("checkbox", { name: "Mon" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Tue" })).not.toBeChecked();
     expect(screen.getByRole("switch")).toBeChecked();
-    expect(screen.getByText(`Next run: ${formatDateTime(NEXT_RUN)}`)).toBeInTheDocument();
+    expect(screen.getByText("Next run: 08-10-2026 09:00 (UTC)")).toBeInTheDocument();
   });
 
   it("shows why the last auto sync failed", async () => {
@@ -164,5 +165,41 @@ describe("AutoSyncCard", () => {
 
     expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
     expect(screen.queryByText(/Scheduled syncs fail/)).not.toBeInTheDocument();
+  });
+
+  it("shows run times in the schedule's zone, not the browser's", async () => {
+    mockSchedule({ ...saved, timezone: "America/Sao_Paulo", next_run_at: "2026-10-08T11:00:00Z" });
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+
+    expect(
+      await screen.findByText("Next run: 08-10-2026 08:00 (America/Sao_Paulo)"),
+    ).toBeInTheDocument();
+  });
+
+  it("refreshes the next and last run while the page stays open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockSchedule(saved);
+    const reads = () => fetchMock.mock.calls.filter(([, init]) => init?.method !== "PUT").length;
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    await waitFor(() => expect(reads()).toBe(1));
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await waitFor(() => expect(reads()).toBe(2));
+  });
+
+  it("shows a saved time as is on the browser's own DST-change day", async () => {
+    // 02:30 doesn't exist in New York on 2026-03-08: a picker value anchored
+    // to "today" there became 03:30 and would be re-saved that way.
+    vi.stubEnv("TZ", "America/New_York");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-08T12:00:00Z"));
+    mockSchedule({ ...saved, window_start: "02:30:00" });
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+
+    expect(await screen.findByDisplayValue("02:30")).toBeInTheDocument();
   });
 });

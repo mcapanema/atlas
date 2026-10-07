@@ -18,11 +18,11 @@ import {
   type SyncSchedule,
   type SyncScheduleInput,
 } from "../api/syncSchedule";
-import { formatDateTime } from "../lib/dates";
 import {
   WEEKDAY_OPTIONS,
   clockParts,
   defaultSchedule,
+  formatInZone,
   intervalOptions,
   timeZoneOptions,
 } from "../lib/syncSchedule";
@@ -37,10 +37,15 @@ interface FormValues {
   timezone: string;
 }
 
-// Built from parts, not parsed: dayjs needs a plugin to parse "HH:mm".
+// Picker values are wall-clock times only, so anchor them to a fixed day no
+// zone changes its clocks on: anchored to "today", a 02:30 on the browser's
+// own spring-forward day became 03:30. Built from parts, not parsed: dayjs
+// needs a plugin to parse "HH:mm".
+const ANCHOR_DAY = "2000-01-03";
+
 function toDayjs(clock: string): Dayjs {
   const { hour, minute } = clockParts(clock);
-  return dayjs().hour(hour).minute(minute).second(0).millisecond(0);
+  return dayjs(ANCHOR_DAY).hour(hour).minute(minute).second(0).millisecond(0);
 }
 
 function toFormValues(schedule: SyncScheduleInput): FormValues {
@@ -78,20 +83,20 @@ function RunStatus({ schedule }: { schedule: SyncSchedule | null }) {
     <Space direction="vertical" size={4} style={{ width: "100%" }}>
       <Typography.Text>
         {schedule.next_run_at
-          ? `Next run: ${formatDateTime(schedule.next_run_at)}`
+          ? `Next run: ${formatInZone(schedule.next_run_at, schedule.timezone)}`
           : "Auto sync is off"}
       </Typography.Text>
       {run?.error && (
         <Alert
           type="error"
           showIcon
-          message={`Last auto sync failed (${formatDateTime(run.finished_at)})`}
+          message={`Last auto sync failed (${formatInZone(run.finished_at, schedule.timezone)})`}
           description={run.error}
         />
       )}
       {run && !run.error && (
         <Typography.Text type="secondary">
-          Last auto sync: {formatDateTime(run.finished_at)}, succeeded
+          Last auto sync: {formatInZone(run.finished_at, schedule.timezone)}, succeeded
         </Typography.Text>
       )}
     </Space>
