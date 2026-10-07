@@ -22,9 +22,12 @@ from app.api import (
     organizations,
     personas,
     projects,
+    sync_schedules,
     teams,
     work_items,
 )
+from app.api.auto_sync import AutoSyncRunner
+from app.api.deps import linear_data_source
 from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
 from app.config import get_settings
@@ -69,6 +72,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Finish any history recompute a restart interrupted, without delaying
     # startup; resume() logs and gives up if the DB isn't migrated yet.
     resume = asyncio.create_task(runner.resume())
+    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, recompute=runner)
+    app.state.auto_sync_runner = auto_sync
+    # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).
+    auto_sync.start()
     try:
         async with AsyncExitStack() as stack:
             # The MCP session manager only exists when ATLAS_MCP_TOKEN is set
@@ -79,7 +86,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await stack.enter_async_context(mcp.session_manager.run())
             yield
     finally:
+        # Cancel before the first await: a task cancelled while it checks out
+        # a pool connection orphans it, so never let one start just to stop it.
         resume.cancel()
+        await auto_sync.close()
         await asyncio.gather(resume, return_exceptions=True)
         await runner.close()
         engine = sessionmaker.kw["bind"]
@@ -107,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(personas.router)
     app.include_router(meetings.router)
     app.include_router(metric_rules.router)
+    app.include_router(sync_schedules.router)
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

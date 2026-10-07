@@ -128,6 +128,13 @@ resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
   A rebuild sync (`"rebuild": true`) replaces the returned items'
   source-derived events from the current mapping and rewrites snapshot
   history (ADR-0013) — the upgrade path after a mapping fix.
+  Auto sync (ADR-0014): an organization's `SyncSchedule`
+  (`app/domain/sync_schedules/`: weekdays, a local time window, an interval,
+  an IANA zone; slot math in `slots.py`) is served by
+  `GET/PUT /api/organizations/{id}/sync-schedule` and run by the in-process
+  `AutoSyncRunner` (`app/api/auto_sync.py`). It ticks every minute, syncs
+  each organization with a due slot exactly like the manual route, and
+  records the outcome on the schedule. Edited on the Connectors page.
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
 

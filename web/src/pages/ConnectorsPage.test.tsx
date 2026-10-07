@@ -5,18 +5,31 @@ import { jsonResponse, requestUrl } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { ConnectorsPage } from "./ConnectorsPage";
 
-function mockApi({ configured }: { configured: boolean }) {
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+const ACME = {
+  id: "11111111-1111-1111-1111-111111111111",
+  name: "Acme",
+  created_at: "2026-07-01T00:00:00Z",
+};
+const GLOBEX = {
+  id: "22222222-2222-2222-2222-222222222222",
+  name: "Globex",
+  created_at: "2026-07-02T00:00:00Z",
+};
+
+function mockApi({
+  configured,
+  autoSyncing = false,
+  organizations = [ACME],
+}: {
+  configured: boolean;
+  autoSyncing?: boolean;
+  organizations?: (typeof ACME)[];
+}) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
-    if (url === "/api/connectors/linear") return jsonResponse({ configured });
-    if (url === "/api/organizations")
-      return jsonResponse([
-        {
-          id: "11111111-1111-1111-1111-111111111111",
-          name: "Acme",
-          created_at: "2026-07-01T00:00:00Z",
-        },
-      ]);
+    if (url === "/api/connectors/linear")
+      return jsonResponse({ configured, auto_syncing: autoSyncing });
+    if (url === "/api/organizations") return jsonResponse(organizations);
     if (url === "/api/connectors/linear/sync")
       return jsonResponse({
         teams: 1,
@@ -26,11 +39,21 @@ function mockApi({ configured }: { configured: boolean }) {
         divergences: 7,
         deleted: 9,
       });
+    if (url.endsWith("/sync-schedule") && init?.method === "PUT")
+      return jsonResponse({
+        ...(JSON.parse(init.body as string) as object),
+        updated_at: "2026-10-07T13:00:00Z",
+        last_run: null,
+        last_manual_sync_at: null,
+        next_run_at: null,
+      });
+    if (url.endsWith("/sync-schedule")) return jsonResponse(null);
     throw new Error(`Unexpected fetch: ${url}`);
   });
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -51,6 +74,55 @@ describe("ConnectorsPage", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
     expect(screen.getByText("Deleted")).toBeInTheDocument();
     expect(screen.getByText("9")).toBeInTheDocument();
+  });
+
+  it("shows the auto-sync card for the selected organization", async () => {
+    mockApi({ configured: true });
+
+    renderWithClient(<ConnectorsPage />);
+
+    expect(await screen.findByText("Auto sync")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
+  });
+
+  it("says why Sync now waits while an automatic sync runs", async () => {
+    mockApi({ configured: true, autoSyncing: true });
+
+    renderWithClient(<ConnectorsPage />);
+
+    expect(
+      await screen.findByText(/An automatic sync is running; Sync now starts when it finishes/),
+    ).toBeInTheDocument();
+  });
+
+  it("polls the Linear status so a running auto sync shows up", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockApi({ configured: true });
+    const statusCalls = () =>
+      fetchMock.mock.calls.filter(([input]) => requestUrl(input) === "/api/connectors/linear")
+        .length;
+
+    renderWithClient(<ConnectorsPage />);
+    await waitFor(() => expect(statusCalls()).toBe(1));
+
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await waitFor(() => expect(statusCalls()).toBe(2));
+  });
+
+  it("does not carry a saved message over to another organization", async () => {
+    mockApi({ configured: true, organizations: [ACME, GLOBEX] });
+
+    renderWithClient(<ConnectorsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Save schedule" }));
+    expect(await screen.findByText("Schedule saved")).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Organization" }));
+    fireEvent.click(await screen.findByTitle("Globex"));
+
+    // Globex has no schedule: wait for its form, not the loading skeleton.
+    expect(await screen.findByText(/Not scheduled yet/)).toBeInTheDocument();
+    expect(screen.queryByText("Schedule saved")).not.toBeInTheDocument();
   });
 
   it("shows setup instructions and disables sync when not configured", async () => {
@@ -75,6 +147,7 @@ describe("ConnectorsPage", () => {
           },
         ]);
       if (url === "/api/connectors/linear/sync") return jsonResponse({ detail: "boom" }, 500);
+      if (url.endsWith("/sync-schedule")) return jsonResponse(null);
       throw new Error(`Unexpected fetch: ${url}`);
     });
 

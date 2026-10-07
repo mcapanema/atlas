@@ -194,6 +194,16 @@ weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,
 and Docker base-image dependencies — minor/patch bumps grouped per
 ecosystem — see `.github/dependabot.yml`.
 
+## Automatic sync
+
+On the Connectors page, the **Auto sync** card schedules each organization's
+Linear sync: pick the days, a time window, an interval, and a timezone (e.g.
+Mon–Fri, 08:00–18:00, every 2 h, America/Sao_Paulo). While Atlas runs, it
+syncs at each slot; a slot missed while it was off syncs once at startup. The
+card shows the next run and the last run's result, in the schedule's
+timezone. **Sync now** still works any time, and it counts for a scheduled
+run due within the next 15 minutes, so that one is skipped (ADR-0014).
+
 ## After upgrading Atlas: rebuild synced events
 
 Synced events are never rewritten by a normal sync, so a release that fixes

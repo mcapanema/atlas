@@ -40,7 +40,9 @@ Presentation is allowed to know a concrete adapter exists).
   (named for what it returns); `connectors.py` nests actions per vendor
   (`POST /api/connectors/linear/sync`); `metric_rules.py` is prefix-less
   because it serves both `/api/organizations/{id}/metric-rules` and
-  `/api/teams/{id}/metric-rules`.
+  `/api/teams/{id}/metric-rules`; `sync_schedules.py` mounts at
+  `/api/organizations` and serves `/{id}/sync-schedule`, nested under the
+  organization it schedules.
 - **Background recompute** (`recompute.py`): the in-process
   `RecomputeRunner` (one asyncio task, no queue) rewrites snapshot history
   after a rule change. A new schedule cancels and restarts it with every
@@ -48,6 +50,12 @@ Presentation is allowed to know a concrete adapter exists).
   resumes organizations left "running". A route that changes rules does
   its write inside `async with runner.paused()` (cancel first, write and
   commit, then `queue`): a running scope holds SQLite's write lock.
+- **Auto sync** (`auto_sync.py`, ADR-0014): the in-process
+  `AutoSyncRunner` ticks every minute and syncs each organization whose
+  schedule has a due slot (own session + commit inside
+  `recompute.paused()`, outcome recorded in a second session). Every sync entry point holds `runner.lock` and commits
+  inside it: `POST /api/connectors/linear/sync` does. A new one must too,
+  or two syncs race on the same external ids.
 - `mount_spa()` must be registered last in `create_app()` — the rule and
   its reason are owned by `app/infrastructure/CLAUDE.md`.
 - **MCP facade** (`mcp_server.py`): the MCP server's tools call Atlas's own

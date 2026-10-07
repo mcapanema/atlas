@@ -4,6 +4,8 @@ import { apiFetch } from "./client";
 
 export interface ConnectorStatus {
   configured: boolean;
+  /** An automatic sync is running; a manual sync waits for it. */
+  auto_syncing: boolean;
 }
 
 export interface SyncSummary {
@@ -19,6 +21,8 @@ export function useLinearStatus() {
   return useQuery({
     queryKey: ["connectors", "linear"],
     queryFn: () => apiFetch<ConnectorStatus>("/api/connectors/linear"),
+    // Polled so a scheduled sync that starts while the page is open shows up.
+    refetchInterval: 15_000,
   });
 }
 

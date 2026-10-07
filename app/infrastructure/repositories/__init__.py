@@ -8,6 +8,7 @@ from app.infrastructure.repositories import (
     personas,
     projects,
     snapshots,
+    sync_schedules,
     teams,
     work_items,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "personas",
     "projects",
     "snapshots",
+    "sync_schedules",
     "teams",
     "work_items",
 ]

@@ -7,7 +7,9 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import get_delivery_data_source
+from app.api.recompute import RecomputeRunner
 from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
@@ -56,14 +58,14 @@ async def test_status_reports_unconfigured(client: AsyncClient, linear_unconfigu
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False}
+    assert response.json() == {"configured": False, "auto_syncing": False}
 
 
 async def test_status_reports_configured(client: AsyncClient, linear_configured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": True}
+    assert response.json() == {"configured": True, "auto_syncing": False}
 
 
 async def test_sync_returns_409_when_unconfigured(
@@ -222,3 +224,57 @@ async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_
 
     assert response.status_code == 404
     assert recompute.status_code == 202
+
+
+async def test_manual_sync_holds_the_auto_sync_lock(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    runner = AutoSyncRunner(
+        test_app.state.sessionmaker,
+        lambda: None,
+        recompute=RecomputeRunner(test_app.state.sessionmaker),
+    )
+    test_app.state.auto_sync_runner = runner
+    seen: list[bool] = []
+
+    class LockProbe(FakeDataSource):
+        async def fetch_teams(self) -> list[SourceTeam]:
+            seen.append(runner.lock.locked())
+            return await super().fetch_teams()
+
+    # A lambda, not the class: FastAPI would read FakeDataSource.__init__'s
+    # parameters as request parameters.
+    test_app.dependency_overrides[get_delivery_data_source] = lambda: LockProbe(
+        teams=[SourceTeam(external_id="lt1", name="Platform")]
+    )
+
+    response = await client.post("/api/connectors/linear/sync", json={})
+
+    assert response.status_code == 200
+    assert seen == [True]
+    assert not runner.lock.locked()
+
+
+async def test_manual_sync_is_recorded_on_the_schedule(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+    org_id = (await client.post("/api/organizations", json={"name": "Acme"})).json()["id"]
+    schedule_url = f"/api/organizations/{org_id}/sync-schedule"
+    await client.put(
+        schedule_url,
+        json={
+            "enabled": True,
+            "days": [1, 2, 3, 4, 5, 6, 7],
+            "window_start": "00:00",
+            "window_end": "23:45",
+            "interval_minutes": 15,
+            "timezone": "UTC",
+        },
+    )
+    assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is None
+
+    response = await client.post("/api/connectors/linear/sync", json={"organization_id": org_id})
+
+    assert response.status_code == 200
+    assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is not None

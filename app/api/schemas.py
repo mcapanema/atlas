@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, Literal
 from uuid import UUID
 
@@ -117,6 +117,11 @@ class IntegrationStatusRead(BaseModel):
     configured: bool
 
 
+class LinearStatusRead(IntegrationStatusRead):
+    # An automatic sync is running now; a manual sync waits for it (ADR-0014).
+    auto_syncing: bool
+
+
 class SyncRequest(BaseModel):
     organization_id: UUID | None = None
     # Re-derive every returned item's source events from the current mapping,
@@ -135,6 +140,46 @@ class SyncSummaryRead(BaseModel):
     deleted: int
     state_types_filled: int
     rebuilt: int
+
+
+class SyncScheduleWrite(BaseModel):
+    """PUT body for an organization's auto-sync schedule (ADR-0014).
+
+    Ranges are the domain's to enforce (SyncSchedule.__post_init__ -> 422).
+    """
+
+    enabled: bool
+    # ISO weekdays: 1 = Monday … 7 = Sunday.
+    days: list[int]
+    # Wall-clock times in `timezone`; the window includes both ends.
+    window_start: time
+    window_end: time
+    interval_minutes: int
+    # IANA zone name, e.g. "America/Sao_Paulo".
+    timezone: str = Field(max_length=64)
+
+
+class SyncRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    slot_at: datetime
+    finished_at: datetime
+    error: str | None
+
+
+class SyncScheduleRead(BaseModel):
+    enabled: bool
+    days: list[int]
+    window_start: time
+    window_end: time
+    interval_minutes: int
+    timezone: str
+    updated_at: datetime
+    last_run: SyncRunRead | None
+    # When a manual "Sync now" last finished; it skips slots just after it.
+    last_manual_sync_at: datetime | None
+    # None while auto sync is off.
+    next_run_at: datetime | None
 
 
 class StatePeriodRead(BaseModel):

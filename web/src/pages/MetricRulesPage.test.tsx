@@ -93,7 +93,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("MetricRulesPage", () => {
+// Every test here drives the full rules form through AntD: 0.3–0.6 s idle,
+// but they crossed Vitest's 5 s default on CPU-starved runs (CI on main run
+// 37612629650 and PR #106; locally under coverage). Assertions unchanged.
+describe("MetricRulesPage", { timeout: 15_000 }, () => {
   it("shows the workspace default with built-in hints and nothing to save", async () => {
     mockApi(view());
 
