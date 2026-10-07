@@ -3,7 +3,17 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, ForeignKey, String, delete, select, update
+from sqlalchemy import (
+    CursorResult,
+    ForeignKey,
+    String,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -68,6 +78,12 @@ class EventModel(Base):
             external_id=event.external_id,
             recorded_at=event.recorded_at,
         )
+
+
+# A stored transition whose state types are still unknown (ADR-0011): no
+# to-type, or a from state whose type had no mapping when it was stored.
+_TO_UNTYPED = EventModel.to_state_type.is_(None)
+_FROM_UNTYPED = and_(EventModel.from_state.is_not(None), EventModel.from_state_type.is_(None))
 
 
 class SqlAlchemyEventRepository:
@@ -136,7 +152,7 @@ class SqlAlchemyEventRepository:
         for chunk in chunked(external_ids):
             result = await self._session.execute(
                 select(EventModel.external_id).where(
-                    EventModel.external_id.in_(chunk), EventModel.to_state_type.is_(None)
+                    EventModel.external_id.in_(chunk), or_(_TO_UNTYPED, _FROM_UNTYPED)
                 )
             )
             found.update(eid for eid in result.scalars() if eid is not None)
@@ -152,12 +168,15 @@ class SqlAlchemyEventRepository:
         for external_id, (from_type, to_type) in types_by_external_id.items():
             if to_type is None:
                 continue
+            from_value = from_type.value if from_type is not None else None
+            fillable = or_(_TO_UNTYPED, _FROM_UNTYPED) if from_value else _TO_UNTYPED
             result = await self._session.execute(
                 update(EventModel)
-                .where(EventModel.external_id == external_id, EventModel.to_state_type.is_(None))
+                .where(EventModel.external_id == external_id, fillable)
                 .values(
-                    from_state_type=from_type.value if from_type is not None else None,
-                    to_state_type=to_type.value,
+                    # COALESCE: fill only the empty side, never change a value.
+                    from_state_type=func.coalesce(EventModel.from_state_type, from_value),
+                    to_state_type=func.coalesce(EventModel.to_state_type, to_type.value),
                 )
             )
             filled += cast(CursorResult[Any], result).rowcount

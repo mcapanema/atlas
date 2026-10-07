@@ -804,6 +804,39 @@ async def test_sync_fills_missing_state_types_once_and_never_overwrites() -> Non
     assert second.events == 0
 
 
+async def test_sync_fills_an_empty_from_type_beside_a_known_to_type() -> None:
+    # A reopen out of Duplicate stored before "duplicate" mapped to canceled.
+    reopen = SourceEvent(
+        external_id="h1",
+        type=EventType.STATE_CHANGED,
+        occurred_at=CREATED_AT,
+        from_state="Duplicate",
+        to_state="Todo",
+        from_state_type=StateType.CANCELED,
+        to_state_type=StateType.UNSTARTED,
+    )
+    harness = Harness(_facts_source(_source_item("li1", events=(reopen,))))
+    await harness.service.sync()
+    [item] = await harness.work_items.list()
+    [stored] = [
+        e for e in await harness.events.list_for_work_item(item.id) if e.external_id == "h1"
+    ]
+    await harness.events.delete_for_work_items([item.id])
+    await harness.events.add(dataclasses.replace(stored, from_state_type=None))
+
+    first = await harness.service.sync()
+    second = await harness.service.sync()
+    [refilled] = [
+        e for e in await harness.events.list_for_work_item(item.id) if e.external_id == "h1"
+    ]
+
+    assert (first.state_types_filled, second.state_types_filled) == (1, 0)
+    assert (refilled.from_state_type, refilled.to_state_type) == (
+        StateType.CANCELED,
+        StateType.UNSTARTED,
+    )
+
+
 async def test_pruning_a_parent_keeps_its_children_unlinked() -> None:
     source = _facts_source(
         _source_item("child", parent_external_id="parent"), _source_item("parent")

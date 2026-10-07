@@ -491,3 +491,55 @@ def test_long_label_names_and_blockers_are_truncated_to_the_detail_column() -> N
     assert details
     assert all(len(d) == 255 for d in details)
     assert item.labels == ("x" * 255,)
+
+
+def test_a_duplicate_state_is_typed_canceled() -> None:
+    node = {**ISSUE_NODE, "state": {"name": "Duplicate", "type": "duplicate"}}
+
+    assert map_issue(node).state_type is StateType.CANCELED
+
+
+def test_transition_into_duplicate_is_typed_canceled_and_stops() -> None:
+    events = map_history_entry(_entry("started", "duplicate", "In Progress", "Duplicate"))
+
+    assert [e.type for e in events] == [EventType.STATE_CHANGED, EventType.STOPPED]
+    assert events[0].to_state_type is StateType.CANCELED
+
+
+def test_an_unknown_state_type_maps_to_none() -> None:
+    node = {**ISSUE_NODE, "state": {"name": "Parked", "type": "parked"}}
+
+    assert map_issue(node).state_type is None
+
+
+ARCHIVED_AT = "2026-09-22T23:24:09.271Z"
+
+
+def _archive_cancels(node: dict[str, Any]) -> list[str]:
+    return [e.external_id for e in map_issue(node).events if ":archived:" in e.external_id]
+
+
+def test_map_issue_archived_while_open_is_canceled_at_archive_time() -> None:
+    item = map_issue({**ISSUE_NODE, "archivedAt": ARCHIVED_AT})
+
+    [canceled] = [e for e in item.events if e.type is EventType.CANCELED]
+    assert canceled.external_id == f"i1:archived:{ARCHIVED_AT}"
+    assert canceled.occurred_at == datetime(2026, 9, 22, 23, 24, 9, 271000, tzinfo=UTC)
+    # The label still mirrors Linear; only the flow reads it as closed.
+    assert (item.state, item.state_type) == ("In Progress", StateType.STARTED)
+
+
+def test_map_issue_archived_after_closing_emits_no_archive_cancel() -> None:
+    # Linear auto-archives closed issues: a Done one must stay delivered.
+    for state in (
+        {"name": "Done", "type": "completed"},
+        {"name": "Canceled", "type": "canceled"},
+        {"name": "Duplicate", "type": "duplicate"},
+    ):
+        assert _archive_cancels({**ISSUE_NODE, "state": state, "archivedAt": ARCHIVED_AT}) == []
+
+
+def test_map_issue_not_archived_emits_no_archive_cancel() -> None:
+    # ISSUE_NODE has no archivedAt key at all: it must still map, not be skipped.
+    for node in (ISSUE_NODE, {**ISSUE_NODE, "archivedAt": None}):
+        assert _archive_cancels(node) == []

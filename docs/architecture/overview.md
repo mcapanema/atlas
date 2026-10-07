@@ -155,9 +155,11 @@ complete at creation (`:created-done`), which analytics treat as records, not
 flow: `ScopeSampleLoader` leaves these born-done items out of every metric;
 leaving a started state for a non-started, non-completed one emits STOPPED
 (ends WIP); `canceledAt` emits CANCELED (closed undelivered, excluded from WIP
-and forecast remaining, while Done → Canceled stays delivered). Archived issues
-are synced and trashed ones skipped; already-synced issues that are trashed or
-deleted upstream are pruned (ADR-0009). All of these use derived external ids,
+and forecast remaining, while Done → Canceled stays delivered); an issue
+archived while still open emits CANCELED at `archivedAt` (`:archived:`), and
+Linear's `duplicate` state type reads as `canceled`. Archived issues are synced
+and trashed ones skipped; already-synced issues that are trashed or deleted
+upstream are pruned (ADR-0009). All of these use derived external ids,
 so a re-sync backfills existing data.
 
 ## AI adapter

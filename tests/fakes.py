@@ -139,6 +139,13 @@ class InMemoryWorkItemRepository:
         return next((i for i in self._items.values() if i.external_id == external_id), None)
 
 
+def _untyped(event: Event) -> bool:
+    """Still missing a state type: no to-type, or a from state without its type."""
+    return event.to_state_type is None or (
+        event.from_state is not None and event.from_state_type is None
+    )
+
+
 class InMemoryEventRepository:
     """Also counts lookup calls so sync tests can assert query batching."""
 
@@ -195,9 +202,7 @@ class InMemoryEventRepository:
     async def external_ids_missing_state_types(self, external_ids: list[str]) -> set[str]:
         wanted = set(external_ids)
         return {
-            e.external_id
-            for e in self._events.values()
-            if e.external_id in wanted and e.to_state_type is None
+            e.external_id for e in self._events.values() if e.external_id in wanted and _untyped(e)
         }
 
     async def fill_state_types(
@@ -206,12 +211,17 @@ class InMemoryEventRepository:
         filled = 0
         for event_id, event in list(self._events.items()):
             types = types_by_external_id.get(event.external_id or "")
-            if types is None or types[1] is None or event.to_state_type is not None:
+            if types is None or types[1] is None or not _untyped(event):
                 continue
-            self._events[event_id] = replace(
-                event, from_state_type=types[0], to_state_type=types[1]
+            # Fill only the empty side, never change a value.
+            refilled = replace(
+                event,
+                from_state_type=event.from_state_type or types[0],
+                to_state_type=event.to_state_type or types[1],
             )
-            filled += 1
+            if refilled != event:
+                self._events[event_id] = refilled
+                filled += 1
         return filled
 
 

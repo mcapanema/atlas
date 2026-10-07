@@ -34,7 +34,10 @@ for work-item types (everything was TASK).
   nothing rather than an approximation (creation → blocker done).
 - **One exception to insert-only events:** a transition event's state-type
   columns, empty because the event predates them, are filled once by
-  sync — only where `to_state_type IS NULL`, never changing a value.
+  sync — where `to_state_type` is NULL, or `from_state_type` is NULL beside
+  a known `from_state` (a state type the connector learned to map later,
+  e.g. Linear's `duplicate`) — filling only the empty side, never changing
+  a value.
 
 ## Consequences
 
