@@ -123,3 +123,30 @@ async def test_record_run_stamps_finished_at_and_consumes_the_slot() -> None:
     assert view is not None
     assert view.schedule.last_run == SyncRun(slot_at=slot, finished_at=at, error="boom")
     assert await later.due() == []
+
+
+async def test_an_unchanged_resave_keeps_pending_slots_due() -> None:
+    # Saved at 10:30 local; the 12:00 slot is due at 12:00:30, and re-saving the
+    # same settings before the tick runs it must not cancel it.
+    org = Organization(name="Acme")
+    schedules = InMemorySyncScheduleRepository()
+    await _service(org, schedules=schedules).save(org.id, SETTINGS)
+    later = _service(org, now=datetime(2026, 10, 7, 15, 0, 30, tzinfo=UTC), schedules=schedules)
+
+    view = await later.save(org.id, SETTINGS)
+
+    assert view.schedule.updated_at == NOW
+    assert [job.slot_at for job in await later.due()] == [datetime(2026, 10, 7, 15, 0, tzinfo=UTC)]
+
+
+async def test_a_changed_resave_restamps_updated_at() -> None:
+    org = Organization(name="Acme")
+    schedules = InMemorySyncScheduleRepository()
+    await _service(org, schedules=schedules).save(org.id, SETTINGS)
+    at = datetime(2026, 10, 7, 15, 0, 30, tzinfo=UTC)
+
+    view = await _service(org, now=at, schedules=schedules).save(
+        org.id, replace(SETTINGS, interval_minutes=60)
+    )
+
+    assert view.schedule.updated_at == at

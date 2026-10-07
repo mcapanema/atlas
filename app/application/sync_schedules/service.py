@@ -39,6 +39,17 @@ class DueSync:
     slot_at: datetime
 
 
+def _settings_of(schedule: SyncSchedule) -> ScheduleSettings:
+    return ScheduleSettings(
+        enabled=schedule.enabled,
+        days=schedule.days,
+        window_start=schedule.window_start,
+        window_end=schedule.window_end,
+        interval_minutes=schedule.interval_minutes,
+        timezone=schedule.timezone,
+    )
+
+
 class SyncScheduleService:
     """Reads and edits schedules, and tells the auto-sync runner what is due."""
 
@@ -68,9 +79,14 @@ class SyncScheduleService:
             window_end=settings.window_end,
             interval_minutes=settings.interval_minutes,
             timezone=settings.timezone,
-            # Slots at or before this save never fire: saving at 10:05 does
-            # not trigger a run for 10:00.
-            updated_at=self._clock(),
+            # Slots at or before a change never fire: saving at 10:05 does
+            # not trigger a run for 10:00. An unchanged re-save keeps the
+            # stamp, so it can't cancel a slot that's due but not yet run.
+            updated_at=(
+                existing.updated_at
+                if existing is not None and _settings_of(existing) == settings
+                else self._clock()
+            ),
             last_run=existing.last_run if existing is not None else None,
         )
         await self._schedules.save(schedule)
