@@ -25,6 +25,7 @@ from app.api import (
     teams,
     work_items,
 )
+from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
@@ -33,6 +34,29 @@ from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.static import mount_spa
 
 logger = logging.getLogger(__name__)
+
+
+class _RedactSecret(logging.Filter):
+    """Masks a secret in log-record arguments — the MCP token in uvicorn's access log."""
+
+    def __init__(self, secret: str) -> None:
+        super().__init__()
+        self._secret = secret
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                arg.replace(self._secret, "***") if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
+
+
+def _mask_in_access_log(secret: str) -> None:
+    access = logging.getLogger("uvicorn.access")
+    for stale in [f for f in access.filters if isinstance(f, _RedactSecret)]:
+        access.removeFilter(stale)  # create_app() runs once per test app
+    access.addFilter(_RedactSecret(secret))
 
 
 @asynccontextmanager
@@ -102,9 +126,9 @@ def create_app() -> FastAPI:
     async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
         # Unique-index / FK violations (duplicate external_id, two concurrent
         # syncs inserting the same entity). The DB is the last line of defense
-        # here — report a conflict, not a server bug. Note: a violation that
-        # only surfaces at the commit in get_session's teardown may still 500;
-        # the constraint itself is what protects the data.
+        # here — report a conflict, not a server bug. Violations that surface
+        # at get_session's commit land here too: that teardown runs before
+        # the response is sent (SessionDep's scope="function").
         return JSONResponse(
             status_code=409,
             content={"detail": "Conflicting write: resource already exists"},
@@ -126,7 +150,15 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=502, content={"detail": f"Advisor error: {exc}"})
 
     settings = get_settings()
+    # UI and API to this machine only; the MCP mount (if any) to anyone
+    # holding its secret URL — the documented tunnel exposes nothing else.
+    app.add_middleware(
+        LocalOnlyMiddleware,
+        public_prefix=f"/mcp/{settings.mcp_token}" if settings.mcp_token else None,
+    )
     if settings.mcp_token:
+        # The token rides in the request path, which uvicorn logs per request.
+        _mask_in_access_log(settings.mcp_token)
         # Secret-URL auth: connector UIs (claude.ai, ChatGPT) can't send
         # custom headers, so the token rides in the path. No token, no route.
         mcp = mcp_server.build_mcp_server(app)

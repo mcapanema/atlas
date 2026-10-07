@@ -62,6 +62,18 @@ describe("ExecutiveDashboardPage", () => {
     expect(tooltip).toHaveTextContent("Work items in progress right now.");
   });
 
+  it("words the WIP column as of the range end when a custom range is set", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+    renderWithClient(<ExecutiveDashboardPage />, ["/?start=2026-06-01&end=2026-06-30"]);
+    await screen.findByText("Platform");
+
+    fireEvent.focus(screen.getAllByText("WIP")[0]);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(
+      "Work items in progress at the end of the selected range: started, and not yet completed, moved back, or canceled by then.",
+    );
+  });
+
   it("names the table for assistive tech", async () => {
     mockMetricsFetch({ "/api/teams": [teamFixture] });
     renderWithClient(<ExecutiveDashboardPage />);

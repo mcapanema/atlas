@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 
@@ -52,10 +53,48 @@ def test_real_env_var_beats_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert Settings(_env_file=env_file).advisor_model == "model-from-env"
 
 
+_GOOD_TOKEN = "test-token-0123456789abcdefghij"
+
+
 def test_mcp_token_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(_env_file=None)
 
     assert settings.mcp_token is None
 
-    monkeypatch.setenv("ATLAS_MCP_TOKEN", "sekret")
-    assert Settings(_env_file=None).mcp_token == "sekret"
+    monkeypatch.setenv("ATLAS_MCP_TOKEN", _GOOD_TOKEN)
+    assert Settings(_env_file=None).mcp_token == _GOOD_TOKEN
+
+
+def test_an_empty_mcp_token_disables_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_MCP_TOKEN", "")
+
+    assert Settings(_env_file=None).mcp_token == ""
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "sekret",  # short
+        "x" * 23,  # one under the floor
+        "{path}" + "x" * 30,  # Starlette would read a path parameter: matches anything
+        "a/b" + "x" * 30,  # a second path segment
+        "with space" + "x" * 30,
+    ],
+)
+def test_mcp_token_must_be_a_long_url_safe_segment(
+    monkeypatch: pytest.MonkeyPatch, token: str
+) -> None:
+    monkeypatch.setenv("ATLAS_MCP_TOKEN", token)
+
+    with pytest.raises(ValidationError, match="ATLAS_MCP_TOKEN"):
+        Settings(_env_file=None)
+
+
+def test_a_rejected_mcp_token_is_not_echoed_in_the_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "my-secret-token-1"
+    monkeypatch.setenv("ATLAS_MCP_TOKEN", secret)
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(_env_file=None)
+
+    assert secret not in str(excinfo.value)

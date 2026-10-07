@@ -5,6 +5,7 @@ Shared by the OpenRouter advisor's user message and the advice-context API
 stdlib over Domain types; belongs to the advisor slice's data.
 """
 
+import json
 from datetime import timedelta
 
 from app.domain.advisor.port import DeliveryContext, MeetingContext
@@ -66,6 +67,19 @@ def render_context(context: DeliveryContext) -> str:
 
 
 _AGING_LIMIT = 10
+_TITLE_MAX = 120
+
+
+def quote_title(title: str) -> str:
+    """An issue-tracker title as quoted, one-line, bounded data — never prompt text.
+
+    Anyone who can file an issue writes titles; quoting and truncating keeps
+    one from posing as instructions to the LLM or flooding its context.
+    """
+    one_line = " ".join(title.split())
+    if len(one_line) > _TITLE_MAX:
+        one_line = one_line[: _TITLE_MAX - 1] + "…"
+    return json.dumps(one_line, ensure_ascii=False)
 
 
 def render_meeting_context(context: MeetingContext) -> str:
@@ -94,7 +108,7 @@ def render_meeting_context(context: MeetingContext) -> str:
         lines = [header + ":"]
         for item in aging.items[:_AGING_LIMIT]:
             flag = f" [over p{aging.percentile}]" if item.over_percentile else ""
-            lines.append(f"- {item.title} — {item.state}, {_days(item.age)}{flag}")
+            lines.append(f"- {quote_title(item.title)} — {item.state}, {_days(item.age)}{flag}")
         if len(aging.items) > _AGING_LIMIT:
             lines.append(f"... and {len(aging.items) - _AGING_LIMIT} more")
         blocks.append("\n".join(lines))

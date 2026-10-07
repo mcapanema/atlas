@@ -109,7 +109,7 @@ class _Lifecycle:
         self.canceled = self.canceled or event.type is EventType.CANCELED
 
 
-def _reopens(event: Event) -> bool:
+def reopens(event: Event) -> bool:
     """A move from a Done or Canceled state back to a not-started one (typed transitions only)."""
     return (
         event.from_state_type in (StateType.COMPLETED, StateType.CANCELED)
@@ -162,7 +162,7 @@ def _apply(state: _Lifecycle, event: Event, rules: MetricRules) -> None:
         state.start(event.occurred_at, restart_clock=rules.restart_clock_after_move_back)
     elif event.type is EventType.COMPLETED:
         state.complete(event.occurred_at)
-    elif _reopens(event):
+    elif reopens(event):
         state.reopen(event, rules)
     elif event.type is EventType.CANCELED or (
         event.type is EventType.STOPPED and rules.move_back_ends_wip

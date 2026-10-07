@@ -165,6 +165,14 @@ class InMemoryEventRepository:
             if event.work_item_id not in doomed
         }
 
+    async def delete_sourced_for_work_items(self, work_item_ids: list[UUID]) -> None:
+        doomed = set(work_item_ids)
+        self._events = {
+            event_id: event
+            for event_id, event in self._events.items()
+            if event.work_item_id not in doomed or event.external_id is None
+        }
+
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
         return sorted(
             (e for e in self._events.values() if e.work_item_id == work_item_id),

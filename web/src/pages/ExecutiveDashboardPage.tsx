@@ -18,6 +18,7 @@ import {
   applyFiltersToSearchParams,
   filtersFromSearchParams,
   isDefaultFilters,
+  isRanged,
   periodText,
   windowLabel,
 } from "../lib/metricsFilters";
@@ -202,6 +203,7 @@ export function ExecutiveDashboardPage() {
       <TeamMetricsTable
         rows={rows}
         periodLabel={windowLabel(filters, 30)}
+        ranged={isRanged(filters)}
         loading={teams.isLoading}
       />
     </>

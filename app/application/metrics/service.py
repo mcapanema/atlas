@@ -29,10 +29,17 @@ class MetricsService:
         self._scope = ScopeSampleLoader(work_items, events, rules)
 
     async def load_scope_data(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        types: AbstractSet[WorkItemType] | None = None,
+        exclude_states: AbstractSet[str] | None = None,
     ) -> ScopeData:
-        """The scope's raw picture, for as-of replays (snapshot capture and recompute)."""
-        return await self._scope.load_data(team_id=team_id, project_id=project_id)
+        """The scope's raw picture, for as-of replays (snapshots, recompute, explicit periods)."""
+        return await self._scope.load_data(
+            team_id=team_id, project_id=project_id, types=types, exclude_states=exclude_states
+        )
 
     async def load_scope(
         self,

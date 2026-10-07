@@ -12,7 +12,8 @@ Presentation is allowed to know a concrete adapter exists).
   `schemas.py`, one `<Concept>Create` (input, validated) /
   `<Concept>Read` (output, `from_attributes=True`) pair per concept.
 - `deps.py` holds the FastAPI `Depends` chain: `get_session`
-  (commit-on-success / rollback-on-error, request-scoped) →
+  (commit-on-success / rollback-on-error; `scope="function"`, so the
+  commit lands before the response is sent — a 2xx means durable) →
   `get_<concept>_service` (constructs the service with its concrete
   adapters). See the `ponytail:` comment on `get_session` for the
   deliberate transaction-scope boundary — read it before "fixing" it.
@@ -56,6 +57,11 @@ Presentation is allowed to know a concrete adapter exists).
   budget). The endpoint mounts at `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()`
   (before `mount_spa`) only when the token is set, and `lifespan` must run
   `app.state.mcp.session_manager.run()` for it to serve.
+- **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
+  UI and every `/api/*` route to loopback, unproxied requests only; the MCP
+  mount is the one public path. A new route needs nothing — it is
+  local-only by default. A test client or in-process caller uses
+  `base_url="http://localhost"`.
 
 ## Testing
 

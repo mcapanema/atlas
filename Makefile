@@ -92,7 +92,7 @@ build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build
 
 run: build migrate ## Build the frontend and run the single-service production server
-	uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+	uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 clean: ## Remove build artifacts and caches
 	rm -rf web/dist .pytest_cache .mypy_cache .ruff_cache atlas.db

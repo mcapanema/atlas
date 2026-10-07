@@ -68,4 +68,10 @@ class PersonaService:
         source = await self._guidance.get_version(persona, version)
         if source is None:
             return None
-        return await self.add_guidance(persona, source.guidance)
+        # Keep the watermark: a restore changes the active text, not which
+        # feedback has been distilled. Stamping "now" would silently mark
+        # every pending entry as reflected (review 2026-10-04, F13).
+        latest = await self._guidance.latest(persona)
+        return await self.add_guidance(
+            persona, source.guidance, created_at=latest.created_at if latest else None
+        )
