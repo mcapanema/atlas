@@ -276,7 +276,9 @@ describe("MetricRulesPage", () => {
     expect(calls.some((call) => call.method === "PATCH")).toBe(false);
   });
 
-  it("confirms before a scope switch drops unsaved edits", async () => {
+  // Two full scope switches with modals: ~0.5 s locally, but it crossed the
+  // 5 s default on loaded CI runners (main run 37612629650, PR #106).
+  it("confirms before a scope switch drops unsaved edits", { timeout: 15_000 }, async () => {
     mockApi(view());
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
     fireEvent.click(await screen.findByRole("switch", { name: RESTART }));
