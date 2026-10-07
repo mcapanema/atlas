@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import get_delivery_data_source
+from app.api.recompute import RecomputeRunner
 from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
@@ -228,7 +229,11 @@ async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_
 async def test_manual_sync_holds_the_auto_sync_lock(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
-    runner = AutoSyncRunner(test_app.state.sessionmaker, lambda: None)
+    runner = AutoSyncRunner(
+        test_app.state.sessionmaker,
+        lambda: None,
+        recompute=RecomputeRunner(test_app.state.sessionmaker),
+    )
     test_app.state.auto_sync_runner = runner
     seen: list[bool] = []
 

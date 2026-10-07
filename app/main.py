@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Finish any history recompute a restart interrupted, without delaying
     # startup; resume() logs and gives up if the DB isn't migrated yet.
     resume = asyncio.create_task(runner.resume())
-    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source)
+    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, recompute=runner)
     app.state.auto_sync_runner = auto_sync
     # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).
     auto_sync.start()

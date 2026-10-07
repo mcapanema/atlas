@@ -38,6 +38,10 @@ one `asyncio.Lock`.
 - Missed slots (Atlas off, laptop asleep) collapse into one catch-up sync
   at startup, never a burst.
 - Saving a schedule never fires a slot that already passed.
+- Each auto sync runs with the metric-rules `RecomputeRunner` paused, like
+  every other writer: a scope rewrite holds SQLite's write lock.
+- A slot is attempted at most once per process: if recording its outcome
+  fails, it isn't re-synced every tick (a restart retries it once).
 - A failed sync, or an unset `ATLAS_LINEAR_API_KEY`, consumes its slot and
   shows the error on the Connectors page; there's no retry until the next
   slot.

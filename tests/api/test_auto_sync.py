@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import LINEAR_NOT_CONFIGURED
+from app.api.recompute import RecomputeRunner
+from app.application.sync_schedules.service import SyncScheduleService
 from app.domain._time import utcnow
 from app.domain.organizations.entities import Organization
 from app.domain.sync.port import DataSourceError
@@ -68,7 +70,7 @@ async def test_tick_syncs_a_due_organization_and_records_success(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _source)
+    runner = AutoSyncRunner(sessionmaker, _source, recompute=RecomputeRunner(sessionmaker))
 
     assert await runner.tick() == 1
 
@@ -85,7 +87,7 @@ async def test_tick_records_failure_and_does_not_retry_the_slot(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _FailingSource)
+    runner = AutoSyncRunner(sessionmaker, _FailingSource, recompute=RecomputeRunner(sessionmaker))
 
     assert await runner.tick() == 1
 
@@ -99,7 +101,7 @@ async def test_tick_records_unconfigured_connector(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, lambda: None)
+    runner = AutoSyncRunner(sessionmaker, lambda: None, recompute=RecomputeRunner(sessionmaker))
 
     assert await runner.tick() == 1
 
@@ -114,7 +116,7 @@ async def test_tick_skips_disabled_and_just_saved_schedules(
 ) -> None:
     await _seed(sessionmaker, enabled=False)
     await _seed(sessionmaker, updated_at=utcnow())  # latest slot predates the save
-    runner = AutoSyncRunner(sessionmaker, _source)
+    runner = AutoSyncRunner(sessionmaker, _source, recompute=RecomputeRunner(sessionmaker))
 
     assert await runner.tick() == 0
 
@@ -123,7 +125,7 @@ async def test_tick_skips_while_a_sync_holds_the_lock(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _source)
+    runner = AutoSyncRunner(sessionmaker, _source, recompute=RecomputeRunner(sessionmaker))
 
     async with runner.lock:  # a manual sync is running
         assert await runner.tick() == 0
@@ -135,7 +137,9 @@ async def test_tick_skips_while_a_sync_holds_the_lock(
 async def test_start_ticks_at_once_so_a_missed_slot_catches_up(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    runner = AutoSyncRunner(sessionmaker, _source, tick_seconds=3600)
+    runner = AutoSyncRunner(
+        sessionmaker, _source, recompute=RecomputeRunner(sessionmaker), tick_seconds=3600
+    )
     with mock.patch.object(AutoSyncRunner, "tick", autospec=True, return_value=0) as tick:
         runner.start()
         await asyncio.sleep(0)
@@ -150,7 +154,9 @@ async def test_start_ticks_at_once_so_a_missed_slot_catches_up(
 async def test_loop_survives_a_failing_tick(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    runner = AutoSyncRunner(sessionmaker, _source, tick_seconds=0)
+    runner = AutoSyncRunner(
+        sessionmaker, _source, recompute=RecomputeRunner(sessionmaker), tick_seconds=0
+    )
     with mock.patch.object(
         AutoSyncRunner, "tick", autospec=True, side_effect=[RuntimeError("db down"), 0, 0, 0]
     ) as tick:
@@ -160,3 +166,48 @@ async def test_loop_survives_a_failing_tick(
         await runner.close()
 
     assert tick.await_count >= 2
+
+
+async def test_a_failed_record_does_not_rerun_the_slot(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed(sessionmaker)
+    fetches: list[None] = []
+
+    class CountingSource(FakeDataSource):
+        async def fetch_teams(self) -> list[SourceTeam]:
+            fetches.append(None)
+            return await super().fetch_teams()
+
+    runner = AutoSyncRunner(sessionmaker, CountingSource, recompute=RecomputeRunner(sessionmaker))
+    with mock.patch.object(
+        SyncScheduleService,
+        "record_run",
+        autospec=True,
+        side_effect=RuntimeError("database is locked"),
+    ):
+        assert await runner.tick() == 1  # the record failed; the tick still returns
+        assert await runner.tick() == 0  # same slot: not synced again
+
+    assert len(fetches) == 1
+
+
+async def test_sync_runs_with_the_recompute_runner_paused(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # A history recompute holds SQLite's write lock while it rewrites a scope;
+    # a sync that writes beside it fails with "database is locked".
+    await _seed(sessionmaker)
+    recompute = RecomputeRunner(sessionmaker)
+    paused: list[bool] = []
+
+    class Probe(FakeDataSource):
+        async def fetch_teams(self) -> list[SourceTeam]:
+            paused.append(recompute._lock.locked())  # held for a paused() body
+            return await super().fetch_teams()
+
+    runner = AutoSyncRunner(sessionmaker, Probe, recompute=recompute)
+
+    assert await runner.tick() == 1
+    assert paused == [True]
+    assert not recompute._lock.locked()
