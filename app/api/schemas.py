@@ -117,6 +117,11 @@ class IntegrationStatusRead(BaseModel):
     configured: bool
 
 
+class LinearStatusRead(IntegrationStatusRead):
+    # An automatic sync is running now; a manual sync waits for it (ADR-0014).
+    auto_syncing: bool
+
+
 class SyncRequest(BaseModel):
     organization_id: UUID | None = None
     # Re-derive every returned item's source events from the current mapping,

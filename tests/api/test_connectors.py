@@ -58,14 +58,14 @@ async def test_status_reports_unconfigured(client: AsyncClient, linear_unconfigu
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False}
+    assert response.json() == {"configured": False, "auto_syncing": False}
 
 
 async def test_status_reports_configured(client: AsyncClient, linear_configured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": True}
+    assert response.json() == {"configured": True, "auto_syncing": False}
 
 
 async def test_sync_returns_409_when_unconfigured(

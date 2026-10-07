@@ -12,7 +12,7 @@ from app.api.deps import (
     SyncServiceDep,
 )
 from app.api.recompute import RecomputeRunnerDep
-from app.api.schemas import IntegrationStatusRead, SyncRequest, SyncSummaryRead
+from app.api.schemas import LinearStatusRead, SyncRequest, SyncSummaryRead
 from app.application.snapshots.service import SnapshotService
 from app.application.sync.service import SyncService, SyncSummary, UnknownOrganizationError
 from app.application.sync_schedules.service import SyncScheduleService
@@ -23,9 +23,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 
 
-@router.get("/linear", response_model=IntegrationStatusRead)
-async def linear_status() -> IntegrationStatusRead:
-    return IntegrationStatusRead(configured=bool(get_settings().linear_api_key))
+@router.get("/linear", response_model=LinearStatusRead)
+async def linear_status(auto_sync: AutoSyncRunnerDep) -> LinearStatusRead:
+    return LinearStatusRead(
+        configured=bool(get_settings().linear_api_key), auto_syncing=auto_sync.auto_syncing
+    )
 
 
 async def _run_sync(

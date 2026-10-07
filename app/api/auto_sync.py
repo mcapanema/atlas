@@ -63,10 +63,17 @@ class AutoSyncRunner:
         self._recompute = recompute
         self._tick_seconds = tick_seconds
         self._task: asyncio.Task[None] | None = None
+        # The organization an auto sync is running for, if any.
+        self._syncing: UUID | None = None
         # The last slot attempted per organization, recorded or not.
         self._attempted: dict[UUID, datetime] = {}
         # Held by every sync, manual or automatic: one at a time.
         self.lock = asyncio.Lock()
+
+    @property
+    def auto_syncing(self) -> bool:
+        """Whether an automatic sync is running now (a manual one waits for it)."""
+        return self._syncing is not None
 
     @property
     def running(self) -> bool:
@@ -95,7 +102,12 @@ class AutoSyncRunner:
                 ]
             for job in due:
                 self._attempted[job.organization_id] = job.slot_at
-                await self._record(job, await self._sync(job.organization_id))
+                self._syncing = job.organization_id
+                try:
+                    error = await self._sync(job.organization_id)
+                finally:
+                    self._syncing = None
+                await self._record(job, error)
             return len(due)
 
     async def _loop(self) -> None:
