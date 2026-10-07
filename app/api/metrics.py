@@ -15,7 +15,9 @@ from app.api.schemas import (
     LeadTimeDistributionRead,
     MetricSnapshotRead,
 )
-from app.api.scope import ItemFiltersDep, ScopeDep
+from app.api.scope import ItemFilters, ItemFiltersDep, Scope, ScopeDep
+from app.application.metrics.service import MetricsService
+from app.application.scope import ScopeSamples
 from app.domain.metrics.summary import DurationStats
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -74,6 +76,25 @@ async def get_period(start: date | None = None, end: date | None = None) -> Peri
 PeriodDep = Annotated[Period, Depends(get_period)]
 
 
+async def _period_samples(
+    service: MetricsService, scope: Scope, filters: ItemFilters, period: Period
+) -> tuple[ScopeSamples, datetime | None, int | None]:
+    """The scope's samples as they stood at the window's end, plus the resolved window.
+
+    An explicit period can end in the past: replaying events only up to its
+    end keeps point-in-time measures (WIP, blocked-now, health risk) from
+    reading today's state (review 2026-10-04, F6). With no period it is now.
+    """
+    data = await service.load_scope_data(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
+        types=filters.types,
+        exclude_states=filters.exclude_states,
+    )
+    now, period_days = period.resolve(data.rules.scope.tz)
+    return data.samples(as_of=now), now, period_days
+
+
 def _stats_read(stats: DurationStats | None) -> DurationStatsRead | None:
     if stats is None:
         return None
@@ -94,13 +115,7 @@ async def get_flow_metrics(
     period: PeriodDep,
     window_days: int = Query(default=30, ge=1, le=365),
 ) -> FlowMetricsRead:
-    samples = await service.load_scope(
-        team_id=scope.team_id,
-        project_id=scope.project_id,
-        types=filters.types,
-        exclude_states=filters.exclude_states,
-    )
-    now, period_days = period.resolve(samples.rules.tz)
+    samples, now, period_days = await _period_samples(service, scope, filters, period)
     metrics = await service.get_flow_metrics(
         scope=samples,
         window_days=period_days or window_days,
@@ -128,13 +143,7 @@ async def get_flow_history(
     period: PeriodDep,
     window_days: int = Query(default=90, ge=7, le=365),
 ) -> FlowHistoryRead:
-    samples = await service.load_scope(
-        team_id=scope.team_id,
-        project_id=scope.project_id,
-        types=filters.types,
-        exclude_states=filters.exclude_states,
-    )
-    now, period_days = period.resolve(samples.rules.tz)
+    samples, now, period_days = await _period_samples(service, scope, filters, period)
     history = await service.get_flow_history(
         scope=samples,
         window_days=period_days or window_days,
@@ -151,13 +160,7 @@ async def get_lead_time_distribution(
     period: PeriodDep,
     window_days: int = Query(default=90, ge=7, le=365),
 ) -> LeadTimeDistributionRead:
-    samples = await service.load_scope(
-        team_id=scope.team_id,
-        project_id=scope.project_id,
-        types=filters.types,
-        exclude_states=filters.exclude_states,
-    )
-    now, period_days = period.resolve(samples.rules.tz)
+    samples, now, period_days = await _period_samples(service, scope, filters, period)
     distribution = await service.get_lead_time_distribution(
         scope=samples,
         window_days=period_days or window_days,
@@ -214,13 +217,7 @@ async def get_delivery_health(
     period: PeriodDep,
     window_days: int = Query(default=30, ge=7, le=365),
 ) -> DeliveryHealthRead:
-    samples = await service.load_scope(
-        team_id=scope.team_id,
-        project_id=scope.project_id,
-        types=filters.types,
-        exclude_states=filters.exclude_states,
-    )
-    now, period_days = period.resolve(samples.rules.tz)
+    samples, now, period_days = await _period_samples(service, scope, filters, period)
     health = await service.get_delivery_health(
         scope=samples,
         window_days=period_days or window_days,

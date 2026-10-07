@@ -271,3 +271,26 @@ async def test_event_detail_and_types_round_trip(session: AsyncSession) -> None:
         "DEP-1309",
         None,
     )
+
+
+async def test_delete_sourced_for_work_items_keeps_events_recorded_through_the_api(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(batching, "BATCH_SIZE", 1)
+    repo = SqlAlchemyEventRepository(session)
+    item_id, other_id = await _work_item_id(session), await _work_item_id(session)
+    at = datetime(2026, 7, 1, tzinfo=UTC)
+    synced = Event(
+        work_item_id=item_id, type=EventType.CREATED, occurred_at=at, external_id="li1:created"
+    )
+    recorded = Event(work_item_id=item_id, type=EventType.BLOCKED, occurred_at=at)
+    elsewhere = Event(
+        work_item_id=other_id, type=EventType.CREATED, occurred_at=at, external_id="li2:created"
+    )
+    for event in (synced, recorded, elsewhere):
+        await repo.add(event)
+
+    await repo.delete_sourced_for_work_items([item_id])
+
+    remaining = await repo.list_for_work_items([item_id, other_id])
+    assert {event.id for event in remaining} == {recorded.id, elsewhere.id}

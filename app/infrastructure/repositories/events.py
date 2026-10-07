@@ -86,6 +86,14 @@ class SqlAlchemyEventRepository:
                 delete(EventModel).where(EventModel.work_item_id.in_(chunk))
             )
 
+    async def delete_sourced_for_work_items(self, work_item_ids: list[UUID]) -> None:
+        for chunk in chunked(work_item_ids):
+            await self._session.execute(
+                delete(EventModel).where(
+                    EventModel.work_item_id.in_(chunk), EventModel.external_id.is_not(None)
+                )
+            )
+
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]:
         result = await self._session.execute(
             select(EventModel)

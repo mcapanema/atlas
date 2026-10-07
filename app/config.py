@@ -1,6 +1,12 @@
+import re
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The MCP token is a URL path segment and the endpoint's only credential:
+# secrets.token_urlsafe(24) yields 32 of these characters.
+_MCP_TOKEN = re.compile(r"[A-Za-z0-9_-]{24,}")
 
 
 class Settings(BaseSettings):
@@ -12,7 +18,12 @@ class Settings(BaseSettings):
     entry there in the same commit.
     """
 
-    model_config = SettingsConfigDict(env_prefix="ATLAS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="ATLAS_",
+        env_file=".env",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
 
     database_url: str = "sqlite+aiosqlite:///./atlas.db"
     db_echo: bool = False
@@ -31,6 +42,21 @@ class Settings(BaseSettings):
     # Secret path token for the MCP endpoint (/mcp/<token>); None/empty
     # disables MCP chat access entirely (no route is mounted).
     mcp_token: str | None = None
+
+    @field_validator("mcp_token")
+    @classmethod
+    def _mcp_token_is_a_strong_path_segment(cls, value: str | None) -> str | None:
+        """Refuse a guessable or path-unsafe token at startup instead of serving it.
+
+        Empty or unset disables MCP. Anything else must be 24+ URL-safe
+        characters: a `{…}` would become a Starlette path parameter (the
+        mount would match every token), a `/` a second path segment.
+        """
+        if value and not _MCP_TOKEN.fullmatch(value):
+            raise ValueError(
+                "ATLAS_MCP_TOKEN must be at least 24 characters of A-Z, a-z, 0-9, '_' or '-'"
+            )
+        return value
 
 
 @lru_cache

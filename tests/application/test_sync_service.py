@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.application.sync.service import SyncService, UnknownOrganizationError
-from app.domain.events.entities import EventType
+from app.domain.events.entities import Event, EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
@@ -817,3 +817,148 @@ async def test_pruning_a_parent_keeps_its_children_unlinked() -> None:
 
     assert summary.deleted == 1
     assert (item.external_id, item.parent_id) == ("child", None)
+
+
+def _start_typed_as(source: FakeDataSource, event_type: EventType) -> None:
+    """Re-type li1's start event, as an older (or newer) connector mapping would."""
+    item = source.work_items[0]
+    created, started = item.events
+    source.work_items = [
+        dataclasses.replace(item, events=(created, dataclasses.replace(started, type=event_type)))
+    ]
+
+
+async def test_rebuild_replaces_events_stored_by_an_older_mapping() -> None:
+    source = full_source()
+    _start_typed_as(source, EventType.STATE_CHANGED)  # the old mapping's reading
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    recorded = Event(work_item_id=item.id, type=EventType.BLOCKED, occurred_at=CREATED_AT)
+    await harness.events.add(recorded)  # recorded through the events API: no external_id
+    _start_typed_as(source, EventType.STARTED)  # the fixed mapping
+
+    plain = await harness.service.sync(org_id)
+    stale = {e.external_id: e.type for e in await harness.events.list_for_work_item(item.id)}
+    rebuilt = await harness.service.sync(org_id, rebuild=True)
+
+    events = await harness.events.list_for_work_item(item.id)
+    assert stale["lh1"] is EventType.STATE_CHANGED  # insert-only: a plain sync never heals it
+    assert {e.external_id: e.type for e in events if e.external_id is not None} == {
+        "li1:created": EventType.CREATED,
+        "lh1": EventType.STARTED,
+    }
+    assert recorded.id in {e.id for e in events}
+    assert (plain.rebuilt, rebuilt.rebuilt, rebuilt.events) == (0, 1, 2)
+    assert rebuilt.organization_id == org_id
+
+
+async def test_rebuild_leaves_items_the_run_did_not_return_alone() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    source.work_items = []  # the team returned nothing: lost access, not deletion
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    assert (summary.rebuilt, summary.deleted) == (0, 0)
+    assert len(await harness.events.list_for_work_item(item.id)) == 2
+
+
+def _done_without_history(source: FakeDataSource, *, real_completion: bool) -> None:
+    """li1 is done upstream; its history has a COMPLETED event only when `real_completion`."""
+    item = source.work_items[0]
+    done_at = datetime(2026, 7, 5, 9, 0, tzinfo=UTC)
+    events = item.events
+    if real_completion:
+        events = (
+            *events,
+            SourceEvent(
+                external_id="lh2",
+                type=EventType.COMPLETED,
+                occurred_at=done_at,
+                from_state="In Progress",
+                to_state="Done",
+            ),
+        )
+    source.work_items = [
+        dataclasses.replace(item, completed_at=done_at, state="Done", events=events)
+    ]
+
+
+async def test_rebuild_drops_a_synthesized_completion_once_history_has_the_real_one() -> None:
+    source = full_source()
+    _done_without_history(source, real_completion=False)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # synthesizes li1:completed (a divergence)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    _done_without_history(source, real_completion=True)  # the fixed mapping emits the real one
+
+    await harness.service.sync(org_id, rebuild=True)
+
+    eids = {e.external_id for e in await harness.events.list_for_work_item(item.id)}
+    assert "lh2" in eids
+    assert "li1:completed" not in eids
+
+
+async def test_rebuild_re_synthesizes_a_completion_history_still_lacks() -> None:
+    source = full_source()
+    _done_without_history(source, real_completion=False)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    eids = {e.external_id for e in await harness.events.list_for_work_item(item.id)}
+    assert "li1:completed" in eids
+    assert summary.divergences == 1
+
+
+def _typed_items(team_external_id: str = "lt1") -> list[SourceWorkItem]:
+    """full_source()'s item with a typed lh1 event, team replaceable."""
+    item = full_source().work_items[0]
+    created, started = item.events
+    typed = dataclasses.replace(
+        started, from_state_type=StateType.UNSTARTED, to_state_type=StateType.STARTED
+    )
+    return [dataclasses.replace(item, events=(created, typed), team_external_id=team_external_id)]
+
+
+async def test_rebuild_still_fills_state_types_on_stored_events() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # lh1 stored untyped
+    # The item's team is no longer resolvable, so the rebuild skips it.
+    source.work_items = _typed_items(team_external_id="lt-gone")
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    assert summary.rebuilt == 0
+    assert summary.state_types_filled == 1
+    stored = await harness.events.get_by_external_id("lh1")
+    assert stored is not None
+    assert stored.to_state_type is StateType.STARTED
+
+
+async def test_rebuild_of_a_resolvable_item_does_not_count_its_events_as_filled() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # lh1 stored untyped
+    source.work_items = _typed_items()
+
+    summary = await harness.service.sync(org_id, rebuild=True)
+
+    assert summary.rebuilt == 1
+    assert summary.state_types_filled == 0

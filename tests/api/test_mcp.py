@@ -6,12 +6,16 @@ enter `session_manager.run()` explicitly. The MCP client is wired to the
 app in-process via an httpx ASGITransport factory.
 """
 
-from collections.abc import AsyncIterator, Callable
+import asyncio
+import logging
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 import httpx2
+import pytest
+import uvicorn
 from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
@@ -20,10 +24,19 @@ from mcp.types import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.mcp_server import _render_aging
-from app.main import create_app
+from app.main import _RedactSecret, create_app
 from tests.api.helpers import create_team
 
-TOKEN = "test-token-123"
+TOKEN = "test-token-0123456789abcdefghij"
+
+
+@pytest.fixture(autouse=True)
+def _drop_token_masks() -> Iterator[None]:
+    """create_app() masks the token on the global uvicorn.access logger; undo it per test."""
+    yield
+    access = logging.getLogger("uvicorn.access")
+    for mask in [f for f in access.filters if isinstance(f, _RedactSecret)]:
+        access.removeFilter(mask)
 
 
 @asynccontextmanager
@@ -75,13 +88,46 @@ def test_no_mcp_route_without_token(settings_env: Callable[..., None]) -> None:
     assert not [r for r in app.routes if getattr(r, "path", "").startswith("/mcp")]
 
 
+async def test_uvicorn_access_log_masks_the_token(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        # log_config=None: keep pytest's logging (uvicorn would replace the
+        # handlers); the real access logger still formats the real request.
+        server = uvicorn.Server(
+            uvicorn.Config(app, host="127.0.0.1", port=0, log_config=None, lifespan="off")
+        )
+        serving = asyncio.create_task(server.serve())
+        async with asyncio.timeout(10):
+            while not server.started:  # noqa: ASYNC110 — uvicorn exposes a flag, not an Event
+                await asyncio.sleep(0.01)
+        port = server.servers[0].sockets[0].getsockname()[1]
+        try:
+            with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+                async with httpx.AsyncClient(trust_env=False) as client:
+                    await client.post(f"http://127.0.0.1:{port}/mcp/{TOKEN}/", json={})
+        finally:
+            server.should_exit = True
+            async with asyncio.timeout(10):
+                await serving
+
+    # The mask on the global uvicorn.access logger was installed by create_app() inside
+    # running_app (and is removed by the autouse _drop_token_masks fixture).
+    # Only the server's access log: the client-side httpx logger echoes the URL.
+    access = "\n".join(r.getMessage() for r in caplog.records if r.name == "uvicorn.access")
+    assert TOKEN not in access
+    assert "/mcp/***/" in access
+
+
 async def test_wrong_token_is_not_served(
     sessionmaker: async_sessionmaker[AsyncSession],
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             response = await client.post("/mcp/wrong-token/", json={})
     # 404 normally; 405 if a local web/dist build made the SPA catch-all
     # answer the path (StaticFiles rejects POST). Never 200.
@@ -94,7 +140,7 @@ async def test_list_scopes_tool(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             await create_team(client)
 
         async with mcp_session(app) as session:
@@ -114,7 +160,7 @@ async def test_meeting_brief_composes_digest(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             team_id = await create_team(client)
 
         async with mcp_session(app) as session:
@@ -153,7 +199,7 @@ async def test_drilldown_tools(
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             team_id = await create_team(client)
             item = await client.post(
                 "/api/work-items", json={"team_id": team_id, "title": "Fix login flake"}
@@ -183,7 +229,7 @@ async def test_run_sync_surfaces_unconfigured_connector(
     async with running_app(sessionmaker, settings_env) as app:
         settings_env(mcp_token=TOKEN, linear_api_key="")
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             org = await client.post("/api/organizations", json={"name": "Acme"})
             org_id = org.json()["id"]
 
@@ -257,3 +303,14 @@ def test_aging_rows_are_capped_without_a_percentile() -> None:
     assert lines[0] == "Aging WIP:"
     assert len([line for line in lines if line.startswith("- ")]) == 10
     assert lines[-1].startswith("... and 2 more")
+
+
+def test_aging_titles_are_quoted() -> None:
+    item = {"title": "Fix login", "state": "In Progress", "age_seconds": 6 * 86400}
+    aging = {
+        "cycle_time_percentile_seconds": None,
+        "percentile": 85,
+        "items": [{**item, "over_percentile": False}],
+    }
+
+    assert '- "Fix login" — In Progress, 6.0d' in _render_aging(aging)

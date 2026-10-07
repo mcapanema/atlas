@@ -13,6 +13,13 @@ class EventRepository(Protocol):
 
     async def delete_for_work_items(self, work_item_ids: list[UUID]) -> None: ...
 
+    async def delete_sourced_for_work_items(self, work_item_ids: list[UUID]) -> None:
+        """Delete these items' source-derived events (external_id set) for a rebuild.
+
+        Events recorded through the events API carry no external_id and stay.
+        """
+        ...
+
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]: ...
 
     async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]: ...

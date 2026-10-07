@@ -117,6 +117,8 @@ make docker-up
 Builds the frontend and backend into a single image, runs database migrations
 on startup, and serves Atlas at http://localhost:8000. Data persists across
 restarts in the `atlas-data` Docker volume. Stop with `make docker-down`.
+Atlas is served to this machine only — opening it from another device on the
+LAN is refused (ADR-0012).
 
 ## Option 2: Makefile (native)
 
@@ -162,7 +164,7 @@ cd web && npm run dev
 
 # Production mode (single service)
 cd web && npm run build && cd ..
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 </details>
@@ -191,6 +193,19 @@ reverted — don't edit them until the push finishes.
 weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,
 and Docker base-image dependencies — minor/patch bumps grouped per
 ecosystem — see `.github/dependabot.yml`.
+
+## After upgrading Atlas: rebuild synced events
+
+Synced events are never rewritten by a normal sync, so a release that fixes
+how Linear history is mapped only reaches existing data through a rebuild:
+
+```bash
+curl -X POST http://localhost:8000/api/connectors/linear/sync \
+  -H 'content-type: application/json' -d '{"rebuild": true}'
+```
+
+It re-derives every synced issue's events and rewrites snapshot history;
+feedback, learned guidance, and metric rules are kept (ADR-0013).
 
 ## Chat access from Claude & ChatGPT (MCP)
 
@@ -222,6 +237,13 @@ cloudflared tunnel --url http://localhost:8000   # or: ngrok http 8000
 
 Copy the printed HTTPS origin; your connector URL is
 `https://<origin>/mcp/<token>/`.
+
+Only the MCP endpoint answers through the tunnel. Atlas serves its UI and
+REST API to this machine only: a request that arrives through a proxy (it
+carries `X-Forwarded-For` or a similar header) or under any hostname other
+than `localhost`/`127.0.0.1`/`[::1]` gets `403` everywhere except
+`/mcp/<token>/` (ADR-0012). The token is still that endpoint's only
+credential — treat the full URL like a password.
 
 ### 3. Connect a client
 
