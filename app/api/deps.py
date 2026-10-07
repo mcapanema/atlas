@@ -15,6 +15,7 @@ from app.application.personas.service import PersonaService
 from app.application.projects.service import ProjectService
 from app.application.snapshots.service import SnapshotService
 from app.application.sync.service import SyncService
+from app.application.sync_schedules.service import SyncScheduleService
 from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
 from app.config import get_settings
@@ -35,6 +36,7 @@ from app.infrastructure.repositories.snapshots import (
     SqlAlchemyForecastSnapshotRepository,
     SqlAlchemyMetricSnapshotRepository,
 )
+from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
 
@@ -160,20 +162,29 @@ def get_persona_service(session: SessionDep) -> PersonaService:
 PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
 
 
-def get_delivery_data_source() -> DeliveryDataSource:
+LINEAR_NOT_CONFIGURED = "Linear connector is not configured; set ATLAS_LINEAR_API_KEY"
+
+
+def linear_data_source() -> DeliveryDataSource | None:
+    """The Linear adapter, or None while ATLAS_LINEAR_API_KEY is unset."""
     settings = get_settings()
     if not settings.linear_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Linear connector is not configured; set ATLAS_LINEAR_API_KEY",
-        )
+        return None
     return LinearDataSource(LinearGraphQLClient(settings.linear_api_key))
+
+
+def get_delivery_data_source() -> DeliveryDataSource:
+    source = linear_data_source()
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=LINEAR_NOT_CONFIGURED)
+    return source
 
 
 DeliveryDataSourceDep = Annotated[DeliveryDataSource, Depends(get_delivery_data_source)]
 
 
-def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> SyncService:
+def sync_service_for(session: AsyncSession, source: DeliveryDataSource) -> SyncService:
+    """Built outside a request too: the auto-sync runner opens its own sessions."""
     return SyncService(
         source,
         SqlAlchemyOrganizationRepository(session),
@@ -182,6 +193,10 @@ def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> Sync
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
     )
+
+
+def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> SyncService:
+    return sync_service_for(session, source)
 
 
 SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
@@ -223,3 +238,17 @@ def get_metric_rules_service(session: SessionDep) -> MetricRulesService:
 
 
 MetricRulesServiceDep = Annotated[MetricRulesService, Depends(get_metric_rules_service)]
+
+
+def sync_schedule_service_for(session: AsyncSession) -> SyncScheduleService:
+    return SyncScheduleService(
+        SqlAlchemySyncScheduleRepository(session),
+        SqlAlchemyOrganizationRepository(session),
+    )
+
+
+def get_sync_schedule_service(session: SessionDep) -> SyncScheduleService:
+    return sync_schedule_service_for(session)
+
+
+SyncScheduleServiceDep = Annotated[SyncScheduleService, Depends(get_sync_schedule_service)]

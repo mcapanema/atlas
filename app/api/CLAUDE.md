@@ -40,7 +40,9 @@ Presentation is allowed to know a concrete adapter exists).
   (named for what it returns); `connectors.py` nests actions per vendor
   (`POST /api/connectors/linear/sync`); `metric_rules.py` is prefix-less
   because it serves both `/api/organizations/{id}/metric-rules` and
-  `/api/teams/{id}/metric-rules`.
+  `/api/teams/{id}/metric-rules`; `sync_schedules.py` mounts at
+  `/api/organizations` and serves `/{id}/sync-schedule`, nested under the
+  organization it schedules.
 - **Background recompute** (`recompute.py`): the in-process
   `RecomputeRunner` (one asyncio task, no queue) rewrites snapshot history
   after a rule change. A new schedule cancels and restarts it with every
