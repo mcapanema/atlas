@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import get_delivery_data_source
 from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
@@ -222,3 +223,28 @@ async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_
 
     assert response.status_code == 404
     assert recompute.status_code == 202
+
+
+async def test_manual_sync_holds_the_auto_sync_lock(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    runner = AutoSyncRunner(test_app.state.sessionmaker, lambda: None)
+    test_app.state.auto_sync_runner = runner
+    seen: list[bool] = []
+
+    class LockProbe(FakeDataSource):
+        async def fetch_teams(self) -> list[SourceTeam]:
+            seen.append(runner.lock.locked())
+            return await super().fetch_teams()
+
+    # A lambda, not the class: FastAPI would read FakeDataSource.__init__'s
+    # parameters as request parameters.
+    test_app.dependency_overrides[get_delivery_data_source] = lambda: LockProbe(
+        teams=[SourceTeam(external_id="lt1", name="Platform")]
+    )
+
+    response = await client.post("/api/connectors/linear/sync", json={})
+
+    assert response.status_code == 200
+    assert seen == [True]
+    assert not runner.lock.locked()

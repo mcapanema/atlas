@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.api.auto_sync import AutoSyncRunnerDep
 from app.api.deps import MetricRulesServiceDep, SessionDep, SnapshotServiceDep, SyncServiceDep
 from app.api.recompute import RecomputeRunnerDep
 from app.api.schemas import IntegrationStatusRead, SyncRequest, SyncSummaryRead
@@ -47,19 +48,25 @@ async def sync_linear(
     rules: MetricRulesServiceDep,
     session: SessionDep,
     runner: RecomputeRunnerDep,
+    auto_sync: AutoSyncRunnerDep,
 ) -> SyncSummaryRead:
-    if not payload.rebuild:
-        summary = await _run_sync(service, payload.organization_id, rebuild=False)
-        await _capture(snapshots)
-        return SyncSummaryRead.model_validate(summary)
-    # A rebuild rewrites stored events, so snapshot history computed from the
-    # old ones is rewritten too (ADR-0013). Paused before any write: a running
-    # scope rewrite holds SQLite's write lock (see metric_rules._save).
-    async with runner.paused() as queue:
-        summary = await _run_sync(service, payload.organization_id, rebuild=True)
-        await _capture(snapshots)
-        scopes = await rules.organization_scopes(summary.organization_id)
-        await rules.start_recompute(summary.organization_id)
-        await session.commit()
-        queue(summary.organization_id, scopes)
+    # One sync at a time (ADR-0014): a scheduled tick skips while this holds
+    # the lock, and the commit lands inside it, so the next sync starts
+    # from this one's writes.
+    async with auto_sync.lock:
+        if not payload.rebuild:
+            summary = await _run_sync(service, payload.organization_id, rebuild=False)
+            await _capture(snapshots)
+            await session.commit()
+            return SyncSummaryRead.model_validate(summary)
+        # A rebuild rewrites stored events, so snapshot history computed from the
+        # old ones is rewritten too (ADR-0013). Paused before any write: a running
+        # scope rewrite holds SQLite's write lock (see metric_rules._save).
+        async with runner.paused() as queue:
+            summary = await _run_sync(service, payload.organization_id, rebuild=True)
+            await _capture(snapshots)
+            scopes = await rules.organization_scopes(summary.organization_id)
+            await rules.start_recompute(summary.organization_id)
+            await session.commit()
+            queue(summary.organization_id, scopes)
     return SyncSummaryRead.model_validate(summary)
