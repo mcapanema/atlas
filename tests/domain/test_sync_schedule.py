@@ -214,3 +214,34 @@ def test_slots_missed_while_atlas_was_off_collapse_into_one_catch_up() -> None:
     schedule = _schedule(last_run=run)
 
     assert due_slot(schedule, _utc(9, 12)) == _utc(9, 11)
+
+
+# --- manual syncs ---------------------------------------------------------------
+
+
+def test_a_manual_sync_just_before_a_slot_covers_it() -> None:
+    # Sync now at 09:50 local: the 10:00 slot would re-fetch everything for
+    # ten minutes of freshness, so it's skipped and the next run is 12:00.
+    schedule = _schedule(last_manual_sync_at=_utc(7, 12, 50))
+
+    assert due_slot(schedule, _utc(7, 13, 1)) is None
+    assert next_slot(schedule, _utc(7, 12, 55)) == _utc(7, 15)
+
+
+def test_a_manual_sync_right_after_a_slot_covers_it() -> None:
+    # Sync now at 10:00:20, before the tick ran the 10:00 slot.
+    schedule = _schedule(last_manual_sync_at=_utc(7, 13).replace(second=20))
+
+    assert due_slot(schedule, _utc(7, 13, 1)) is None
+
+
+def test_a_manual_sync_long_before_a_slot_does_not_cover_it() -> None:
+    schedule = _schedule(last_manual_sync_at=_utc(7, 12, 30))
+
+    assert due_slot(schedule, _utc(7, 13, 1)) == _utc(7, 13)
+    assert next_slot(schedule, _utc(7, 12, 55)) == _utc(7, 13)
+
+
+def test_last_manual_sync_must_be_timezone_aware() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        _schedule(last_manual_sync_at=_utc(7, 12).replace(tzinfo=None))

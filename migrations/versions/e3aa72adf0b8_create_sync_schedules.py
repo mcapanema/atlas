@@ -34,6 +34,7 @@ def upgrade() -> None:
         sa.Column("last_slot_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
+        sa.Column("last_manual_sync_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("organization_id"),
     )
     # ### end Alembic commands ###

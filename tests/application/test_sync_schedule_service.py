@@ -150,3 +150,30 @@ async def test_a_changed_resave_restamps_updated_at() -> None:
     )
 
     assert view.schedule.updated_at == at
+
+
+async def test_record_manual_sync_covers_the_next_slot() -> None:
+    org = Organization(name="Acme")
+    schedules = InMemorySyncScheduleRepository()
+    await _service(org, schedules=schedules).save(org.id, SETTINGS)
+    # Sync now at 11:50 local, ten minutes before the 12:00 slot.
+    before_slot = _service(org, now=datetime(2026, 10, 7, 14, 50, tzinfo=UTC), schedules=schedules)
+
+    await before_slot.record_manual_sync(org.id)
+
+    view = await before_slot.get(org.id)
+    assert view is not None
+    assert view.schedule.last_manual_sync_at == datetime(2026, 10, 7, 14, 50, tzinfo=UTC)
+    assert view.next_run_at == datetime(2026, 10, 7, 17, 0, tzinfo=UTC)  # 14:00 local
+
+
+async def test_save_keeps_the_last_manual_sync() -> None:
+    org = Organization(name="Acme")
+    schedules = InMemorySyncScheduleRepository()
+    service = _service(org, schedules=schedules)
+    await service.save(org.id, SETTINGS)
+    await service.record_manual_sync(org.id)
+
+    view = await service.save(org.id, replace(SETTINGS, interval_minutes=60))
+
+    assert view.schedule.last_manual_sync_at == NOW

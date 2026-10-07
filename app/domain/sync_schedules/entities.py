@@ -40,6 +40,8 @@ class SyncSchedule:
     # Last settings change: slots at or before it never fire.
     updated_at: datetime = field(default_factory=utcnow)
     last_run: SyncRun | None = None
+    # When a manual "Sync now" last finished; it covers slots just after it.
+    last_manual_sync_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.days <= WEEKDAYS:
@@ -53,8 +55,9 @@ class SyncSchedule:
                 f"{MAX_INTERVAL_MINUTES} minutes"
             )
         _check_timezone(self.timezone)
-        if self.updated_at.tzinfo is None:
-            raise ValueError("updated_at must be timezone-aware")
+        for moment in (self.updated_at, self.last_manual_sync_at):
+            if moment is not None and moment.tzinfo is None:
+                raise ValueError("updated_at and last_manual_sync_at must be timezone-aware")
 
 
 def _check_window(start: time, end: time) -> None:

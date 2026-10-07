@@ -171,6 +171,8 @@ class SyncScheduleRead(BaseModel):
     timezone: str
     updated_at: datetime
     last_run: SyncRunRead | None
+    # When a manual "Sync now" last finished; it skips slots just after it.
+    last_manual_sync_at: datetime | None
     # None while auto sync is off.
     next_run_at: datetime | None
 

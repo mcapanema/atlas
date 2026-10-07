@@ -37,7 +37,12 @@ one `asyncio.Lock`.
 
 - Missed slots (Atlas off, laptop asleep) collapse into one catch-up sync
   at startup, never a burst.
-- Saving a schedule never fires a slot that already passed.
+- Saving a schedule never fires a slot that already passed; re-saving
+  unchanged settings keeps `updated_at`, so it can't cancel a due slot.
+- A manual sync covers the slots it makes redundant: one up to 15 minutes
+  (the minimum interval) after it, or one it lands just after. Those are
+  skipped and "Next run" moves past them, so "Sync now" at 09:59 isn't
+  followed by a full re-fetch at 10:00. Stored as `last_manual_sync_at`.
 - Each auto sync runs with the metric-rules `RecomputeRunner` paused, like
   every other writer: a scope rewrite holds SQLite's write lock.
 - A slot is attempted at most once per process: if recording its outcome

@@ -102,3 +102,30 @@ async def test_list_enabled_skips_disabled_schedules(session: AsyncSession) -> N
     await repository.save(_schedule(enabled=False))
 
     assert await repository.list_enabled() == [on]
+
+
+async def test_record_manual_sync_writes_only_that_time_and_save_keeps_it(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    schedule = _schedule()
+    at = datetime(2026, 10, 7, 12, 50, tzinfo=UTC)
+    edited = replace(schedule, interval_minutes=60)
+    async with sessionmaker() as session:
+        repository = SqlAlchemySyncScheduleRepository(session)
+        await repository.save(schedule)
+        await repository.record_manual_sync(schedule.organization_id, at)
+        await repository.save(edited)  # last_manual_sync_at None on the entity
+        await session.commit()
+
+    async with sessionmaker() as session:
+        loaded = await SqlAlchemySyncScheduleRepository(session).get(schedule.organization_id)
+
+    assert loaded == replace(edited, last_manual_sync_at=at)
+
+
+async def test_record_manual_sync_without_a_schedule_is_a_no_op(session: AsyncSession) -> None:
+    repository = SqlAlchemySyncScheduleRepository(session)
+
+    await repository.record_manual_sync(uuid4(), datetime(2026, 10, 7, tzinfo=UTC))
+
+    assert await repository.list_enabled() == []

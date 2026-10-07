@@ -10,10 +10,13 @@ already exists, and the two collapse into one slot.
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from app.domain.sync_schedules.entities import SyncSchedule
+from app.domain.sync_schedules.entities import MIN_INTERVAL_MINUTES, SyncSchedule
 
 # Today plus a full week either way: any selected weekday recurs within it.
 _SEARCH_DAYS = 8
+# A manual sync this close before a slot (or any time after it) makes the
+# slot redundant; the minimum interval, so skipping costs at most one interval.
+MANUAL_SYNC_COVERS = timedelta(minutes=MIN_INTERVAL_MINUTES)
 
 
 def slots_on(schedule: SyncSchedule, day: date) -> list[datetime]:
@@ -46,7 +49,9 @@ def next_slot(schedule: SyncSchedule, now: datetime) -> datetime | None:
     if not schedule.enabled:
         return None
     for day in _days_from(schedule, now, step=1):
-        upcoming = [slot for slot in slots_on(schedule, day) if slot > now]
+        upcoming = [
+            slot for slot in slots_on(schedule, day) if slot > now and not _covered(schedule, slot)
+        ]
         if upcoming:
             return upcoming[0]
     return None
@@ -56,8 +61,8 @@ def due_slot(schedule: SyncSchedule, now: datetime) -> datetime | None:
     """The slot to sync for now, if one is pending.
 
     Only the latest past slot counts, so slots missed while Atlas was off
-    collapse into one catch-up run. A slot at or before the last save, or
-    one already run, is never due.
+    collapse into one catch-up run. A slot at or before the last save, one
+    already run, or one a manual sync covered is never due.
     """
     if not schedule.enabled:
         return None
@@ -66,7 +71,13 @@ def due_slot(schedule: SyncSchedule, now: datetime) -> datetime | None:
         return None
     if schedule.last_run is not None and slot <= schedule.last_run.slot_at:
         return None
-    return slot
+    return None if _covered(schedule, slot) else slot
+
+
+def _covered(schedule: SyncSchedule, slot: datetime) -> bool:
+    """Whether a manual sync made this slot redundant."""
+    manual = schedule.last_manual_sync_at
+    return manual is not None and manual >= slot - MANUAL_SYNC_COVERS
 
 
 def _days_from(schedule: SyncSchedule, now: datetime, *, step: int) -> list[date]:

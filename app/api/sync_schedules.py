@@ -23,6 +23,7 @@ def _read(view: SyncScheduleView) -> SyncScheduleRead:
         timezone=schedule.timezone,
         updated_at=schedule.updated_at,
         last_run=SyncRunRead.model_validate(last_run) if last_run is not None else None,
+        last_manual_sync_at=schedule.last_manual_sync_at,
         next_run_at=view.next_run_at,
     )
 

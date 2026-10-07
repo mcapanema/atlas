@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -17,4 +18,8 @@ class SyncScheduleRepository(Protocol):
 
     async def record_run(self, organization_id: UUID, run: SyncRun) -> None:
         """Write only the schedule's last run; a no-op if the organization has none."""
+        ...
+
+    async def record_manual_sync(self, organization_id: UUID, at: datetime) -> None:
+        """Write only when a manual sync finished; a no-op if the organization has none."""
         ...

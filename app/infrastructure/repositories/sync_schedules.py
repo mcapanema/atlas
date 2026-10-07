@@ -29,6 +29,8 @@ class SyncScheduleModel(Base):
     last_slot_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     last_finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Written only by record_manual_sync (the manual sync route).
+    last_manual_sync_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     def to_domain(self) -> SyncSchedule:
         last_run = None
@@ -48,6 +50,7 @@ class SyncScheduleModel(Base):
             timezone=self.timezone,
             updated_at=self.updated_at,
             last_run=last_run,
+            last_manual_sync_at=self.last_manual_sync_at,
         )
 
     @classmethod
@@ -55,6 +58,7 @@ class SyncScheduleModel(Base):
         model = cls(organization_id=schedule.organization_id)
         model.set_settings(schedule)
         model.set_run(schedule.last_run)
+        model.last_manual_sync_at = schedule.last_manual_sync_at
         return model
 
     def set_settings(self, schedule: SyncSchedule) -> None:
@@ -91,8 +95,8 @@ class SqlAlchemySyncScheduleRepository:
         return [model.to_domain() for model in result.scalars()]
 
     async def save(self, schedule: SyncSchedule) -> None:
-        # An existing row keeps its last_* columns: the auto-sync runner owns
-        # them (record_run), so a settings edit can't erase a run's outcome.
+        # An existing row keeps its last_* columns: the sync paths own them
+        # (record_run, record_manual_sync), so a settings edit can't erase them.
         existing = await self._session.get(SyncScheduleModel, schedule.organization_id)
         if existing is None:
             self._session.add(SyncScheduleModel.from_domain(schedule))
@@ -105,4 +109,11 @@ class SqlAlchemySyncScheduleRepository:
         if existing is None:
             return
         existing.set_run(run)
+        await self._session.flush()
+
+    async def record_manual_sync(self, organization_id: UUID, at: datetime) -> None:
+        existing = await self._session.get(SyncScheduleModel, organization_id)
+        if existing is None:
+            return
+        existing.last_manual_sync_at = at
         await self._session.flush()

@@ -409,10 +409,21 @@ class InMemorySyncScheduleRepository:
         existing = self._rows.get(schedule.organization_id)
         # Mirrors the adapter: an existing row keeps its last run.
         self._rows[schedule.organization_id] = (
-            schedule if existing is None else replace(schedule, last_run=existing.last_run)
+            schedule
+            if existing is None
+            else replace(
+                schedule,
+                last_run=existing.last_run,
+                last_manual_sync_at=existing.last_manual_sync_at,
+            )
         )
 
     async def record_run(self, organization_id: UUID, run: SyncRun) -> None:
         existing = self._rows.get(organization_id)
         if existing is not None:
             self._rows[organization_id] = replace(existing, last_run=run)
+
+    async def record_manual_sync(self, organization_id: UUID, at: datetime) -> None:
+        existing = self._rows.get(organization_id)
+        if existing is not None:
+            self._rows[organization_id] = replace(existing, last_manual_sync_at=at)

@@ -88,6 +88,7 @@ class SyncScheduleService:
                 else self._clock()
             ),
             last_run=existing.last_run if existing is not None else None,
+            last_manual_sync_at=existing.last_manual_sync_at if existing is not None else None,
         )
         await self._schedules.save(schedule)
         return self._view(schedule)
@@ -105,6 +106,10 @@ class SyncScheduleService:
     ) -> None:
         run = SyncRun(slot_at=slot_at, finished_at=self._clock(), error=error)
         await self._schedules.record_run(organization_id, run)
+
+    async def record_manual_sync(self, organization_id: UUID) -> None:
+        """A manual sync just finished: the slots it makes redundant are skipped."""
+        await self._schedules.record_manual_sync(organization_id, self._clock())
 
     def _view(self, schedule: SyncSchedule) -> SyncScheduleView:
         return SyncScheduleView(schedule=schedule, next_run_at=next_slot(schedule, self._clock()))
