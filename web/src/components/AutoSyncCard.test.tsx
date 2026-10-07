@@ -130,4 +130,30 @@ describe("AutoSyncCard", () => {
       await screen.findByText(/Scheduled syncs fail until ATLAS_LINEAR_API_KEY is set/),
     ).toBeInTheDocument();
   });
+
+  it("keeps an overnight window as picked so the server can reject it", async () => {
+    const fetchMock = mockSchedule(saved, () =>
+      jsonResponse(
+        { detail: "The window must start before it ends; overnight windows aren't supported" },
+        422,
+      ),
+    );
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+
+    const start = await screen.findByDisplayValue("09:00");
+    const end = screen.getByDisplayValue("17:00");
+    fireEvent.mouseDown(start);
+    fireEvent.change(start, { target: { value: "22:00" } });
+    fireEvent.keyDown(start, { key: "Enter", code: "Enter" });
+    fireEvent.mouseDown(end);
+    fireEvent.change(end, { target: { value: "02:00" } });
+    fireEvent.keyDown(end, { key: "Enter", code: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+
+    await waitFor(() =>
+      expect(putBody(fetchMock)).toMatchObject({ window_start: "22:00", window_end: "02:00" }),
+    );
+    expect(await screen.findByText(/overnight windows aren't supported/)).toBeInTheDocument();
+  });
 });

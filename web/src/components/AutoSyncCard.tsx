@@ -121,7 +121,9 @@ function ScheduleForm({
       </Form.Item>
       <Space wrap align="start">
         <Form.Item name="window" label="Between">
-          <TimePicker.RangePicker format={CLOCK} minuteStep={15} allowClear={false} />
+          {/* order={false}: don't silently turn 22:00–02:00 into 02:00–22:00; the
+              server rejects an overnight window with a reason instead. */}
+          <TimePicker.RangePicker format={CLOCK} minuteStep={15} allowClear={false} order={false} />
         </Form.Item>
         <Form.Item name="interval_minutes" label="Every">
           <Select style={{ width: 110 }} options={intervalOptions(initial.interval_minutes)} />
