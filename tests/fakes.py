@@ -18,6 +18,7 @@ from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem
 
@@ -392,3 +393,26 @@ class InMemoryMetricRuleOverridesRepository:
         existing = await self.get(organization_id)
         row = existing or RuleOverrides(organization_id=organization_id)
         self._rows[row.id] = replace(row, recompute=status)
+
+
+class InMemorySyncScheduleRepository:
+    def __init__(self, schedules: list[SyncSchedule] | None = None) -> None:
+        self._rows: dict[UUID, SyncSchedule] = {s.organization_id: s for s in schedules or []}
+
+    async def get(self, organization_id: UUID) -> SyncSchedule | None:
+        return self._rows.get(organization_id)
+
+    async def list_enabled(self) -> list[SyncSchedule]:
+        return [s for s in self._rows.values() if s.enabled]
+
+    async def save(self, schedule: SyncSchedule) -> None:
+        existing = self._rows.get(schedule.organization_id)
+        # Mirrors the adapter: an existing row keeps its last run.
+        self._rows[schedule.organization_id] = (
+            schedule if existing is None else replace(schedule, last_run=existing.last_run)
+        )
+
+    async def record_run(self, organization_id: UUID, run: SyncRun) -> None:
+        existing = self._rows.get(organization_id)
+        if existing is not None:
+            self._rows[organization_id] = replace(existing, last_run=run)
