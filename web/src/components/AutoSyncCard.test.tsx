@@ -157,4 +157,55 @@ describe("AutoSyncCard", () => {
 
     expect(await screen.findByDisplayValue("02:30")).toBeInTheDocument();
   });
+
+  it("labels the switch on its own row", async () => {
+    mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+
+    expect(await screen.findByRole("switch", { name: "Sync automatically" })).toBeChecked();
+  });
+
+  it("greys out the schedule while auto sync is off, but still saves it", async () => {
+    const fetchMock = mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+
+    const mon = await screen.findByRole("checkbox", { name: "Mon" });
+    expect(mon).toBeEnabled();
+    fireEvent.click(screen.getByRole("switch", { name: "Sync automatically" }));
+
+    await waitFor(() => expect(mon).toBeDisabled());
+    expect(screen.getByDisplayValue("09:00")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+
+    await waitFor(() =>
+      expect(putBody(fetchMock)).toMatchObject({
+        enabled: false,
+        days: [1, 3],
+        window_start: "09:00",
+        window_end: "17:00",
+      }),
+    );
+  });
+
+  it("opens a switched-off schedule with its fields greyed out", async () => {
+    mockSchedule({ ...saved, enabled: false, next_run_at: null });
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+
+    expect(await screen.findByRole("checkbox", { name: "Mon" })).toBeDisabled();
+  });
+
+  it("confirms a save beside the Save button", async () => {
+    mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Save schedule" }));
+
+    const confirmation = await screen.findByText("Schedule saved");
+    // Re-queried: the saved schedule's new updated_at remounts the form.
+    const button = screen.getByRole("button", { name: "Save schedule" });
+    expect(button.parentElement).toContainElement(confirmation);
+  });
 });

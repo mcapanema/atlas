@@ -3,9 +3,9 @@ import {
   Button,
   Card,
   Checkbox,
+  Flex,
   Form,
   Select,
-  Space,
   Switch,
   TimePicker,
   Typography,
@@ -67,56 +67,73 @@ function toInput(values: FormValues): SyncScheduleInput {
 function ScheduleForm({
   initial,
   saving,
+  saved,
   onSave,
 }: {
   initial: SyncScheduleInput;
   saving: boolean;
+  saved: boolean;
   onSave: (input: SyncScheduleInput) => void;
 }) {
+  const [form] = Form.useForm<FormValues>();
+  // Watched so the schedule greys out while auto sync is off. Disabled fields
+  // still submit, so switching back on restores the same schedule.
+  const enabled = Form.useWatch("enabled", form) ?? initial.enabled;
   return (
     <Form<FormValues>
+      form={form}
       layout="vertical"
       initialValues={toFormValues(initial)}
       onFinish={(values) => onSave(toInput(values))}
     >
-      <Form.Item name="enabled" label="Sync automatically" valuePropName="checked">
+      <Form.Item
+        name="enabled"
+        label="Sync automatically"
+        valuePropName="checked"
+        layout="horizontal"
+        colon={false}
+      >
         <Switch />
       </Form.Item>
       <Form.Item name="days" label="Days">
-        <Checkbox.Group options={WEEKDAY_OPTIONS} />
+        <Checkbox.Group options={WEEKDAY_OPTIONS} disabled={!enabled} />
       </Form.Item>
-      <Space wrap align="start">
+      <Flex wrap gap="middle">
         <Form.Item name="window" label="Between">
           {/* order={false}: don't silently turn 22:00–02:00 into 02:00–22:00; the
               server rejects an overnight window with a reason instead. */}
-          <TimePicker.RangePicker format={CLOCK} minuteStep={15} allowClear={false} order={false} />
+          <TimePicker.RangePicker
+            format={CLOCK}
+            minuteStep={15}
+            allowClear={false}
+            order={false}
+            disabled={!enabled}
+          />
         </Form.Item>
         <Form.Item name="interval_minutes" label="Every">
-          <Select style={{ width: 110 }} options={intervalOptions(initial.interval_minutes)} />
+          <Select
+            style={{ width: 110 }}
+            options={intervalOptions(initial.interval_minutes)}
+            disabled={!enabled}
+          />
         </Form.Item>
         <Form.Item name="timezone" label="Timezone">
-          <Select showSearch style={{ width: 240 }} options={timeZoneOptions(initial.timezone)} />
+          <Select
+            showSearch
+            style={{ width: 240 }}
+            options={timeZoneOptions(initial.timezone)}
+            disabled={!enabled}
+          />
         </Form.Item>
-      </Space>
-      <Button type="primary" htmlType="submit" loading={saving}>
-        Save schedule
-      </Button>
+      </Flex>
+      <Flex gap="small" align="center">
+        <Button type="primary" htmlType="submit" loading={saving}>
+          Save schedule
+        </Button>
+        {saved && <Typography.Text type="success">Schedule saved</Typography.Text>}
+      </Flex>
     </Form>
   );
-}
-
-function SaveOutcome({ save }: { save: ReturnType<typeof useSaveSyncSchedule> }) {
-  if (save.isError) {
-    return (
-      <Alert
-        type="error"
-        showIcon
-        title="Could not save the schedule"
-        description={save.error.message}
-      />
-    );
-  }
-  return save.isSuccess ? <Typography.Text type="success">Schedule saved</Typography.Text> : null;
 }
 
 export function AutoSyncCard({ organizationId }: { organizationId: string }) {
@@ -134,16 +151,24 @@ export function AutoSyncCard({ organizationId }: { organizationId: string }) {
           description={schedule.error.message}
         />
       ) : (
-        <Space orientation="vertical" style={{ width: "100%" }}>
+        <Flex vertical gap="middle">
           {/* Keyed so a saved or switched schedule resets the form's values. */}
           <ScheduleForm
             key={`${organizationId}:${current?.updated_at ?? "new"}`}
             initial={current ?? defaultSchedule()}
             saving={save.isPending}
+            saved={save.isSuccess}
             onSave={(input) => save.mutate(input)}
           />
-          <SaveOutcome save={save} />
-        </Space>
+          {save.isError && (
+            <Alert
+              type="error"
+              showIcon
+              title="Could not save the schedule"
+              description={save.error.message}
+            />
+          )}
+        </Flex>
       )}
     </Card>
   );
