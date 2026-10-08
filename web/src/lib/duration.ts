@@ -4,8 +4,9 @@ function formatMinutes(totalMinutes: number): string {
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
   // Past a week the hours are noise: "94d 7h" scans slower than "94d" and
-  // no decision turns on them.
-  if (days >= 7) return `${days}d`;
+  // no decision turns on them. Round rather than truncate, so a 7d 23h P85
+  // doesn't read as a flattering 7d.
+  if (days >= 7) return `${Math.round(totalMinutes / 1440)}d`;
   if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
   if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   return `${minutes}m`;
