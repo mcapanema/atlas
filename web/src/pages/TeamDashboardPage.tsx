@@ -6,6 +6,7 @@ import { useTeams } from "../api/teams";
 import { CustomRulesTag } from "../components/CustomRulesTag";
 import { FlowDashboard } from "../components/FlowDashboard";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
+import { TeamSyncButton } from "../components/TeamSyncButton";
 import { applyFiltersToSearchParams, filtersFromSearchParams } from "../lib/metricsFilters";
 import type { MetricsFilters } from "../api/metrics";
 
@@ -14,6 +15,7 @@ export function TeamDashboardPage() {
   const teamId = searchParams.get("team") ?? undefined;
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
   const teams = useTeams();
+  const team = teams.data?.find((candidate) => candidate.id === teamId);
 
   const setFilters = (next: MetricsFilters) => {
     const params = new URLSearchParams(searchParams);
@@ -41,7 +43,9 @@ export function TeamDashboardPage() {
             loading={teams.isLoading}
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
-          <CustomRulesTag team={teams.data?.find((team) => team.id === teamId)} />
+          <CustomRulesTag team={team} />
+          {/* Keyed: one team's sync result must not carry over to the next. */}
+          {team && <TeamSyncButton key={team.id} team={team} />}
           {teamId && (
             <MetricsFilterBar filters={filters} scope={{ teamId }} onChange={setFilters} />
           )}

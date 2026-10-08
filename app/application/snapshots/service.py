@@ -68,6 +68,20 @@ class SnapshotService:
             captured += await self._capture(at, project_id=project.id)
         return captured
 
+    async def capture_team(self, team_id: UUID, *, now: datetime | None = None) -> int:
+        """Snapshot one team and its projects; returns scopes captured.
+
+        For a team sync: every other scope is still stale, and capturing it
+        now would freeze today's point from that stale data (idempotent per
+        day, so the organization sync later today would skip it).
+        """
+        at = now if now is not None else datetime.now(UTC)
+        captured = await self._capture(at, team_id=team_id)
+        for project in await self._projects.list():
+            if project.team_id == team_id:
+                captured += await self._capture(at, project_id=project.id)
+        return captured
+
     async def get_metric_history(
         self, *, team_id: UUID | None = None, project_id: UUID | None = None
     ) -> list[MetricSnapshot]:

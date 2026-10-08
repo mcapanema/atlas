@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -14,7 +15,7 @@ from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import WorkItemType
-from tests.api.helpers import settle
+from tests.api.helpers import create_org_and_team, settle
 from tests.fakes import FakeDataSource
 
 
@@ -278,3 +279,137 @@ async def test_manual_sync_is_recorded_on_the_schedule(
 
     assert response.status_code == 200
     assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is not None
+
+
+def _two_team_source() -> FakeDataSource:
+    source = _fake_source()
+    source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Mobile")]
+    source.work_items = [
+        *source.work_items,
+        dataclasses.replace(source.work_items[0], external_id="li2", team_external_id="lt2"),
+    ]
+    return source
+
+
+async def test_team_sync_pulls_only_that_teams_items(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _two_team_source
+    _, team_id = await create_org_and_team(client, external_id="lt1")
+
+    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    assert response.status_code == 200
+    assert response.json()["work_items"] == 1
+    items = (await client.get("/api/work-items")).json()["items"]
+    assert [item["team_id"] for item in items] == [team_id]
+
+
+async def test_team_sync_captures_the_teams_snapshot(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+    _, team_id = await create_org_and_team(client, external_id="lt1")
+
+    await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    snapshots = (await client.get(f"/api/metrics/snapshots?team_id={team_id}")).json()
+    assert len(snapshots) == 1
+
+
+async def test_team_sync_leaves_other_teams_snapshots_to_their_own_sync(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    # lt2 is stale after lt1's sync; a snapshot now would freeze today's
+    # point from stale data, and the org sync later today would skip it.
+    test_app.dependency_overrides[get_delivery_data_source] = _two_team_source
+    _, team_id = await create_org_and_team(client, external_id="lt1")
+
+    await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    teams = (await client.get("/api/teams")).json()
+    other_id = next(team["id"] for team in teams if team["external_id"] == "lt2")
+    assert (await client.get(f"/api/metrics/snapshots?team_id={other_id}")).json() == []
+
+
+async def test_team_sync_unknown_team_is_404(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+
+    response = await client.post(f"/api/connectors/linear/teams/{uuid4()}/sync")
+
+    assert response.status_code == 404
+
+
+async def test_team_sync_of_a_hand_made_team_is_422(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+    _, team_id = await create_org_and_team(client)
+
+    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    assert response.status_code == 422
+    assert "nothing to sync" in response.json()["detail"]
+
+
+async def test_team_sync_returns_409_when_unconfigured(
+    client: AsyncClient, linear_unconfigured: None
+) -> None:
+    response = await client.post(f"/api/connectors/linear/teams/{uuid4()}/sync")
+
+    assert response.status_code == 409
+
+
+async def test_team_sync_holds_the_auto_sync_lock(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    runner = AutoSyncRunner(
+        test_app.state.sessionmaker,
+        lambda: None,
+        recompute=RecomputeRunner(test_app.state.sessionmaker),
+    )
+    test_app.state.auto_sync_runner = runner
+    seen: list[bool] = []
+
+    class LockProbe(FakeDataSource):
+        async def fetch_teams(self) -> list[SourceTeam]:
+            seen.append(runner.lock.locked())
+            return await super().fetch_teams()
+
+    test_app.dependency_overrides[get_delivery_data_source] = lambda: LockProbe(
+        teams=[SourceTeam(external_id="lt1", name="Platform")]
+    )
+    _, team_id = await create_org_and_team(client, external_id="lt1")
+
+    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    assert response.status_code == 200
+    assert seen == [True]
+    assert not runner.lock.locked()
+
+
+async def test_team_sync_is_not_recorded_on_the_schedule(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    # One team's sync leaves the others stale: a due slot must still run.
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+    org_id, team_id = await create_org_and_team(client, external_id="lt1")
+    schedule_url = f"/api/organizations/{org_id}/sync-schedule"
+    await client.put(
+        schedule_url,
+        json={
+            "enabled": True,
+            "days": [1, 2, 3, 4, 5, 6, 7],
+            "window_start": "00:00",
+            "window_end": "23:45",
+            "interval_minutes": 15,
+            "timezone": "UTC",
+        },
+    )
+
+    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    assert response.status_code == 200
+    assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is None

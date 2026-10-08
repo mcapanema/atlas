@@ -87,8 +87,8 @@ query Labels($after: String) {
 # open reads as canceled (mapping._archive_events). Trashed ones were
 # deleted and are skipped in fetch_work_items.
 _ISSUES_QUERY = f"""
-query Issues($after: String) {{
-  issues(first: 50, after: $after, includeArchived: true) {{
+query Issues($after: String, $filter: IssueFilter) {{
+  issues(first: 50, after: $after, filter: $filter, includeArchived: true) {{
     nodes {{
       id
       title
@@ -143,19 +143,30 @@ class LinearDataSource:
             await self._nodes(_PROJECTS_QUERY, "projects"), map_project, "project"
         )
 
-    async def fetch_work_items(self) -> list[SourceWorkItem]:
+    async def fetch_work_items(self, team_external_id: str | None = None) -> list[SourceWorkItem]:
         labels = await self._nodes(_LABELS_QUERY, "issueLabels")
         label_names = {node["id"]: str(node["name"]) for node in labels}
+        # No team: the $filter variable is omitted (not null), so the argument
+        # is absent and Linear returns every team's issues.
+        variables = (
+            {}
+            if team_external_id is None
+            else {"filter": {"team": {"id": {"eq": team_external_id}}}}
+        )
         issues = [
-            node for node in await self._nodes(_ISSUES_QUERY, "issues") if not node.get("trashed")
+            node
+            for node in await self._nodes(_ISSUES_QUERY, "issues", variables)
+            if not node.get("trashed")
         ]
         return _map_tolerantly(issues, lambda node: map_issue(node, label_names), "issue")
 
-    async def _nodes(self, query: str, root: str) -> list[dict[str, Any]]:
+    async def _nodes(
+        self, query: str, root: str, variables: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         nodes: list[dict[str, Any]] = []
         cursor: str | None = None
         for _ in range(_MAX_PAGES):
-            data = await self._client.execute(query, {"after": cursor})
+            data = await self._client.execute(query, {**(variables or {}), "after": cursor})
             connection = data[root]
             nodes.extend(connection["nodes"])
             page_info = connection["pageInfo"]

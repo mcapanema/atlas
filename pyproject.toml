@@ -49,6 +49,10 @@ filterwarnings = ["error"]
 [tool.coverage.run]
 source = ["app"]
 branch = true
+# SQLAlchemy's async layer switches greenlets under every awaited query;
+# without "greenlet" the tracer loses the caller's frame there and reports
+# lines after such an await as unexecuted.
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 fail_under = 95

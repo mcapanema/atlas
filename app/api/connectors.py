@@ -14,7 +14,12 @@ from app.api.deps import (
 from app.api.recompute import RecomputeRunnerDep
 from app.api.schemas import LinearStatusRead, SyncRequest, SyncSummaryRead
 from app.application.snapshots.service import SnapshotService
-from app.application.sync.service import SyncService, SyncSummary, UnknownOrganizationError
+from app.application.sync.service import (
+    SyncService,
+    SyncSummary,
+    UnknownOrganizationError,
+    UnknownTeamError,
+)
 from app.application.sync_schedules.service import SyncScheduleService
 from app.config import get_settings
 
@@ -83,4 +88,26 @@ async def sync_linear(
             await rules.start_recompute(summary.organization_id)
             await session.commit()
             queue(summary.organization_id, scopes)
+    return SyncSummaryRead.model_validate(summary)
+
+
+@router.post("/linear/teams/{team_id}/sync", response_model=SyncSummaryRead)
+async def sync_linear_team(
+    team_id: UUID,
+    service: SyncServiceDep,
+    snapshots: SnapshotServiceDep,
+    session: SessionDep,
+    auto_sync: AutoSyncRunnerDep,
+) -> SyncSummaryRead:
+    # Same lock as every sync (ADR-0014). One team's sync leaves the others
+    # stale, so it's not recorded on the schedule (a due slot still runs)
+    # and only this team's scopes are snapshotted.
+    async with auto_sync.lock:
+        try:
+            summary = await service.sync_team(team_id)
+        except UnknownTeamError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        captured = await snapshots.capture_team(team_id)
+        logger.info("Captured snapshots for %d scope(s) post-team-sync", captured)
+        await session.commit()
     return SyncSummaryRead.model_validate(summary)

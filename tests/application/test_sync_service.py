@@ -5,10 +5,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.application.sync.service import SyncService, UnknownOrganizationError
+from app.application.sync.service import SyncService, UnknownOrganizationError, UnknownTeamError
 from app.domain.events.entities import Event, EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
+from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
 from tests.fakes import (
     FakeDataSource,
@@ -995,3 +996,112 @@ async def test_rebuild_of_a_resolvable_item_does_not_count_its_events_as_filled(
 
     assert summary.rebuilt == 1
     assert summary.state_types_filled == 0
+
+
+async def _synced_two_teams(harness: Harness, source: FakeDataSource) -> UUID:
+    """Org sync of lt1 (li1) + lt2 (li2); returns lt1's Atlas id."""
+    source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Mobile")]
+    source.work_items = [*source.work_items, _todo("li2", team_external_id="lt2")]
+    await harness.service.sync(await seed_org(harness))
+    team = await harness.teams.get_by_external_id("lt1")
+    assert team is not None
+    return team.id
+
+
+async def test_sync_team_writes_only_that_teams_items() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    source.work_items = [
+        dataclasses.replace(source.work_items[0], title="Fix login (renamed)"),
+        dataclasses.replace(source.work_items[1], title="Other team's change"),
+    ]
+
+    summary = await harness.service.sync_team(lt1_id)
+
+    assert summary.work_items == 1
+    mine = await harness.work_items.get_by_external_id("li1")
+    theirs = await harness.work_items.get_by_external_id("li2")
+    assert mine is not None
+    assert theirs is not None
+    assert mine.title == "Fix login (renamed)"
+    assert theirs.title == "Item li2"  # untouched: not this team's sync
+
+
+async def test_sync_team_reports_the_teams_organization() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    team = await harness.teams.get(lt1_id)
+    assert team is not None
+
+    summary = await harness.service.sync_team(lt1_id)
+
+    assert summary.organization_id == team.organization_id
+
+
+async def test_sync_team_does_not_prune_items_it_did_not_return() -> None:
+    # Moved to lt2 upstream: lt1's filtered fetch no longer returns li1, but
+    # that is not deletion. Only an org-wide sync may prune.
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    source.work_items = [
+        dataclasses.replace(source.work_items[0], team_external_id="lt2"),
+        source.work_items[1],
+        # A live lt1 item, so lt1 counts as "returned live work": without it
+        # the empty-fetch guard alone would spare li1 and this test proves nothing.
+        _todo("li3"),
+    ]
+
+    summary = await harness.service.sync_team(lt1_id)
+
+    assert summary.deleted == 0
+    assert await harness.work_items.get_by_external_id("li1") is not None
+
+
+async def test_sync_team_adopts_an_item_moved_into_it_upstream() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    source.work_items = [source.work_items[0], _todo("li2", team_external_id="lt1")]
+
+    await harness.service.sync_team(lt1_id)
+
+    moved = await harness.work_items.get_by_external_id("li2")
+    assert moved is not None
+    assert moved.team_id == lt1_id
+
+
+async def test_sync_team_creates_the_teams_new_projects() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    source.projects = [
+        *source.projects,
+        SourceProject(external_id="lp2", name="Q4 Launch", team_external_id="lt1"),
+    ]
+
+    summary = await harness.service.sync_team(lt1_id)
+
+    assert summary.projects == 1
+    project = await harness.projects.get_by_external_id("lp2")
+    assert project is not None
+    assert project.team_id == lt1_id
+
+
+async def test_sync_team_unknown_team_raises_unknown_team_error() -> None:
+    harness = Harness(full_source())
+
+    with pytest.raises(UnknownTeamError, match="does not exist"):
+        await harness.service.sync_team(uuid4())
+
+
+async def test_sync_team_without_external_id_is_a_value_error() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    manual = Team(organization_id=org_id, name="Made in Atlas")
+    await harness.teams.add(manual)
+
+    with pytest.raises(ValueError, match="not synced from a source"):
+        await harness.service.sync_team(manual.id)

@@ -268,3 +268,51 @@ def test_page_ceiling_covers_a_large_workspace() -> None:
     # 50 issues per page: the ceiling must comfortably exceed today's ~10k
     # issues (incl. archived), or sync aborts before finishing.
     assert datasource_module._MAX_PAGES * 50 >= 50_000
+
+
+def _issue_node(issue_id: str) -> dict[str, Any]:
+    return {
+        "id": issue_id,
+        "title": issue_id,
+        "createdAt": "2026-07-01T10:00:00.000Z",
+        "state": {"name": "Todo", "type": "unstarted"},
+        "team": {"id": "t1"},
+        "project": None,
+        "history": {"nodes": []},
+    }
+
+
+async def test_fetch_work_items_for_a_team_filters_every_page() -> None:
+    filters: list[object] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        assert "filter: $filter" in body["query"]
+        filters.append(body["variables"]["filter"])
+        if body["variables"]["after"] is None:
+            return _page("issues", [_issue_node("i1")], end_cursor="c1")
+        return _page("issues", [_issue_node("i2")])
+
+    items = await _datasource(handler).fetch_work_items(team_external_id="t1")
+
+    assert [i.external_id for i in items] == ["i1", "i2"]
+    assert filters == [{"team": {"id": {"eq": "t1"}}}] * 2
+
+
+async def test_fetch_work_items_without_a_team_sends_no_filter() -> None:
+    # Omitted, not an explicit null: an org-wide sync sends exactly the
+    # variables it always has, so it can't depend on how Linear reads null.
+    variables: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        variables.append(body["variables"])
+        return _page("issues", [_issue_node("i1")])
+
+    await _datasource(handler).fetch_work_items()
+
+    assert variables == [{"after": None}]
