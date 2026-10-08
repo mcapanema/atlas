@@ -42,4 +42,13 @@ describe("formatSeconds", () => {
   it("renders days and hours", () => {
     expect(formatSeconds(2 * 86400 + 3 * 3600)).toBe("2d 3h");
   });
+
+  it("drops hours once a duration reaches a week", () => {
+    expect(formatSeconds(94 * 86400 + 7 * 3600)).toBe("94d");
+    expect(formatSeconds(7 * 86400 + 3 * 3600)).toBe("7d");
+  });
+
+  it("keeps hours just under a week", () => {
+    expect(formatSeconds(6 * 86400 + 23 * 3600)).toBe("6d 23h");
+  });
 });
