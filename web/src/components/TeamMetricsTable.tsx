@@ -91,31 +91,60 @@ function columnHelp(label: string, help: string) {
   return <HelpLabel label={label} help={help} />;
 }
 
+// Explicit column keys throughout: without them AntD keys sort state by
+// position, and the expand column shifts positions — Health's sort
+// indicator landed on Team.
+
+const TEAM_COLUMN: ColumnsType<TeamRow>[number] = {
+  key: "team",
+  title: "Team",
+  sorter: (a, b) => a.team.name.localeCompare(b.team.name),
+  render: (_, row) => <Link to={`/teams?team=${row.team.id}`}>{row.team.name}</Link>,
+};
+
+const HEALTH_COLUMN: ColumnsType<TeamRow>[number] = {
+  key: "health",
+  title: columnHelp(
+    "Health",
+    "Composite delivery health, 0–100 — higher is better. Click a score to see each component and its reason.",
+  ),
+  // Worst first by default: risk is the sort key of an executive view.
+  defaultSortOrder: "ascend",
+  sorter: (a, b) => (a.health?.score ?? 101) - (b.health?.score ?? 101),
+  render: (_, row) => cell(row.state, () => <HealthBadge health={row.health} />),
+};
+
+const ACCURACY_COLUMN: ColumnsType<TeamRow>[number] = {
+  key: "forecast-accuracy",
+  title: columnHelp(
+    "Forecast accuracy (P85)",
+    "Of past forecasts with a known real finish, the share that finished by their predicted P85 date. Calibrated forecasts land near 85% — higher means predictions run conservative, lower means optimistic. “—” means no forecasts evaluated yet.",
+  ),
+  align: "right",
+  sorter: (a, b) => (a.accuracy?.p85_hit_rate ?? -1) - (b.accuracy?.p85_hit_rate ?? -1),
+  render: (_, row) =>
+    cell(row.state, () =>
+      row.accuracy && row.accuracy.evaluated > 0 && row.accuracy.p85_hit_rate != null ? (
+        <span className="fig">{Math.round(row.accuracy.p85_hit_rate * 100)}%</span>
+      ) : (
+        "—"
+      ),
+    ),
+};
+
 function buildColumns(
   periodLabel: string,
   ranged: boolean,
   showDeltas: boolean,
 ): ColumnsType<TeamRow> {
   return [
-    {
-      title: "Team",
-      sorter: (a, b) => a.team.name.localeCompare(b.team.name),
-      render: (_, row) => <Link to={`/teams?team=${row.team.id}`}>{row.team.name}</Link>,
-    },
-    {
-      title: columnHelp(
-        "Health",
-        "Composite delivery health, 0–100 — higher is better. Click a score to see each component and its reason.",
-      ),
-      // Worst first by default: risk is the sort key of an executive view.
-      defaultSortOrder: "ascend",
-      sorter: (a, b) => (a.health?.score ?? 101) - (b.health?.score ?? 101),
-      render: (_, row) => cell(row.state, () => <HealthBadge health={row.health} />),
-    },
+    TEAM_COLUMN,
+    HEALTH_COLUMN,
     {
       // Column headers drop the "(30d)" suffix — the window is stated once in
       // the as-of line and restated per-column in each tooltip; at 1288px the
       // suffixes were pushing the last column behind a horizontal scrollbar.
+      key: "throughput",
       title: columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`),
       align: "right",
       sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
@@ -131,6 +160,7 @@ function buildColumns(
         ),
     },
     {
+      key: "wip",
       title: columnHelp(
         "WIP",
         ranged
@@ -143,6 +173,7 @@ function buildColumns(
         cell(row.state, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
     },
     {
+      key: "lead-time",
       title: columnHelp(
         "Lead time P85",
         `85% of items completed in the last ${periodLabel} took no longer than this, created → done.`,
@@ -162,6 +193,7 @@ function buildColumns(
         ),
     },
     {
+      key: "flow-efficiency",
       title: columnHelp(
         "Flow efficiency",
         `Share of cycle time spent actively working (not blocked), averaged over completed items in the last ${periodLabel}.`,
@@ -178,6 +210,7 @@ function buildColumns(
         ),
     },
     {
+      key: "blocked-time",
       title: columnHelp(
         "Blocked time",
         `Time the items completed in the last ${periodLabel} spent blocked while in progress (start to done), summed across items.`,
@@ -193,22 +226,7 @@ function buildColumns(
           ),
         ),
     },
-    {
-      title: columnHelp(
-        "Forecast accuracy (P85)",
-        "Of past forecasts with a known real finish, the share that finished by their predicted P85 date. Calibrated forecasts land near 85% — higher means predictions run conservative, lower means optimistic. “—” means no forecasts evaluated yet.",
-      ),
-      align: "right",
-      sorter: (a, b) => (a.accuracy?.p85_hit_rate ?? -1) - (b.accuracy?.p85_hit_rate ?? -1),
-      render: (_, row) =>
-        cell(row.state, () =>
-          row.accuracy && row.accuracy.evaluated > 0 && row.accuracy.p85_hit_rate != null ? (
-            <span className="fig">{Math.round(row.accuracy.p85_hit_rate * 100)}%</span>
-          ) : (
-            "—"
-          ),
-        ),
-    },
+    ACCURACY_COLUMN,
   ];
 }
 

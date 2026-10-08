@@ -197,6 +197,21 @@ describe("ExecutiveDashboardPage", () => {
     });
   });
 
+  it("marks Health, not Team, as the sorted column", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+    await screen.findByRole("button", { name: "Hide risk reasons for Growth" });
+
+    // The expand column must not shift the sort indicator onto its neighbor.
+    const header = (label: string) =>
+      screen.getAllByRole("columnheader").find((th) => th.textContent === label);
+    expect(header("Health")).toHaveAttribute("aria-sort", "ascending");
+    expect(header("Team")).not.toHaveAttribute("aria-sort");
+  });
+
   it("annotates throughput and lead time with deltas vs the prior window", async () => {
     mockMetricsFetch({
       "/api/teams": [teamFixture],
