@@ -1,8 +1,7 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "./client";
 import { scopeParam, type MetricsScope } from "./metrics";
-import type { Team } from "./teams";
 
 export interface MetricSnapshot {
   captured_on: string;
@@ -40,23 +39,5 @@ export function useForecastAccuracy(scope: MetricsScope) {
     queryKey: ["forecasts", "accuracy", scope],
     enabled: param !== null,
     queryFn: () => apiFetch<ForecastAccuracy>(`/api/forecasts/accuracy?${param}`),
-  });
-}
-
-export function useAllTeamsSnapshots(teams: Team[]) {
-  return useQueries({
-    queries: teams.map((team) => ({
-      queryKey: ["metrics", "snapshots", { teamId: team.id }],
-      queryFn: () => apiFetch<MetricSnapshot[]>(`/api/metrics/snapshots?team_id=${team.id}`),
-    })),
-  });
-}
-
-export function useAllTeamsForecastAccuracy(teams: Team[]) {
-  return useQueries({
-    queries: teams.map((team) => ({
-      queryKey: ["forecasts", "accuracy", { teamId: team.id }],
-      queryFn: () => apiFetch<ForecastAccuracy>(`/api/forecasts/accuracy?team_id=${team.id}`),
-    })),
   });
 }

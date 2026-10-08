@@ -1,14 +1,10 @@
+import type { UseQueryResult } from "@tanstack/react-query";
 import { Alert, Button, Empty, Typography } from "antd";
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import {
-  useAllTeamsFlowMetrics,
-  useAllTeamsHealth,
-  type DeliveryHealth,
-  type MetricsFilters,
-} from "../api/metrics";
-import { useAllTeamsForecastAccuracy, useAllTeamsSnapshots } from "../api/snapshots";
+import type { DeliveryHealth, MetricsFilters } from "../api/metrics";
+import { useAllTeamsOverviews, type ScopeOverview } from "../api/overview";
 import { useTeams, type Team } from "../api/teams";
 import { HealthBadge } from "../components/HealthBadge";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
@@ -22,7 +18,7 @@ import {
   periodText,
   windowLabel,
 } from "../lib/metricsFilters";
-import { buildTeamRows, type TeamQueries, type TeamRow } from "../lib/teamRows";
+import { buildTeamRows, type TeamRow } from "../lib/teamRows";
 
 const BAND_RANK: Record<string, number> = { critical: 0, warning: 1 };
 
@@ -37,7 +33,7 @@ function Headline({ rows }: { rows: TeamRow[] }) {
   // name that count instead of silently shrinking the denominator. Pending
   // and failed teams are already covered by skeletons and the failure alert.
   const unscored = rows.filter(
-    (row) => row.healthState === "ready" && (row.health?.score == null || row.health?.band == null),
+    (row) => row.state === "ready" && (row.health?.score == null || row.health?.band == null),
   ).length;
   const note = unscored > 0 && (
     <span className="page-headline__note">
@@ -116,15 +112,18 @@ function AttentionSection({ rows }: { rows: TeamRow[] }) {
   );
 }
 
-function FailedTeamsAlert({ teams, queries }: { teams: Team[]; queries: TeamQueries }) {
-  const groups = [queries.metrics, queries.accuracy, queries.health, queries.snapshots];
-  const failed = teams.filter((_, index) => groups.some((group) => group[index]?.isError));
+function FailedTeamsAlert({
+  teams,
+  overviews,
+}: {
+  teams: Team[];
+  overviews: UseQueryResult<ScopeOverview>[];
+}) {
+  const failed = teams.filter((_, index) => overviews[index]?.isError);
   if (failed.length === 0) return null;
   const retryFailed = () => {
-    for (const group of groups) {
-      for (const query of group) {
-        if (query.isError) void query.refetch();
-      }
+    for (const query of overviews) {
+      if (query.isError) void query.refetch();
     }
   };
   return (
@@ -164,14 +163,10 @@ export function ExecutiveDashboardPage() {
   };
   const teams = useTeams();
   const teamList = teams.data ?? [];
-  // ponytail: four API calls per team (metrics, accuracy, health, snapshots);
-  // add a portfolio endpoint when team count makes 4N round trips slow (~20+).
-  const queries: TeamQueries = {
-    metrics: useAllTeamsFlowMetrics(teamList, filters),
-    accuracy: useAllTeamsForecastAccuracy(teamList),
-    health: useAllTeamsHealth(teamList, filters),
-    snapshots: useAllTeamsSnapshots(teamList),
-  };
+  // ponytail: one overview request (one server-side scope load) per team;
+  // add a portfolio endpoint or a per-sync scope cache once N loads per
+  // page open are slow (~50+ teams).
+  const overviews = useAllTeamsOverviews(teamList, filters);
 
   if (teams.isError) {
     return (
@@ -188,7 +183,7 @@ export function ExecutiveDashboardPage() {
   }
   if (teams.data && teams.data.length === 0) return <NoTeams />;
 
-  const rows = buildTeamRows(teamList, queries, isDefaultFilters(filters));
+  const rows = buildTeamRows(teamList, overviews, isDefaultFilters(filters));
   const windowSource = rows.find((row) => row.metrics)?.metrics;
   return (
     <>
@@ -198,7 +193,7 @@ export function ExecutiveDashboardPage() {
       <div style={{ marginBottom: 16 }}>
         <MetricsFilterBar filters={filters} onChange={setFilters} />
       </div>
-      <FailedTeamsAlert teams={teamList} queries={queries} />
+      <FailedTeamsAlert teams={teamList} overviews={overviews} />
       <AttentionSection rows={rows} />
       <TeamMetricsTable
         rows={rows}

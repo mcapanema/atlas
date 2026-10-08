@@ -165,6 +165,17 @@ export const healthFixture = {
   ],
 };
 
+/** A `/api/metrics/overview` body built from the per-concept fixtures. */
+export function overviewFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    metrics: metricsFixture,
+    health: healthFixture,
+    accuracy: accuracyFixture,
+    snapshots: snapshotsFixture,
+    ...overrides,
+  };
+}
+
 export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = requestUrl(input);
@@ -173,6 +184,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/work-items/states")) {
       return Promise.resolve(jsonResponse(statesFixture));
+    }
+    if (url.startsWith("/api/metrics/overview")) {
+      return Promise.resolve(jsonResponse(overviewFixture()));
     }
     if (url.startsWith("/api/metrics/snapshots")) {
       return Promise.resolve(jsonResponse(snapshotsFixture));

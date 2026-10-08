@@ -6,6 +6,7 @@ import {
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
+  overviewFixture,
   statesFixture,
   teamFixture,
   requestUrl,
@@ -88,8 +89,10 @@ describe("ExecutiveDashboardPage", () => {
     const growthMetrics = { ...metricsFixture, completed: 9 };
     mockMetricsFetch({
       "/api/teams": teams,
-      [`/api/metrics?team_id=${teams[0].id}`]: platformMetrics,
-      [`/api/metrics?team_id=${teams[1].id}`]: growthMetrics,
+      [`/api/metrics/overview?team_id=${teams[0].id}`]: overviewFixture({
+        metrics: platformMetrics,
+      }),
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ metrics: growthMetrics }),
     });
 
     renderWithClient(<ExecutiveDashboardPage />);
@@ -122,7 +125,7 @@ describe("ExecutiveDashboardPage", () => {
   it("headlines the worst team and raises an attention card when a team is at risk", async () => {
     mockMetricsFetch({
       "/api/teams": teams,
-      [`/api/metrics/health?team_id=${teams[1].id}`]: criticalHealth,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
@@ -146,7 +149,7 @@ describe("ExecutiveDashboardPage", () => {
   it("sorts the table worst-health-first by default", async () => {
     mockMetricsFetch({
       "/api/teams": teams,
-      [`/api/metrics/health?team_id=${teams[1].id}`]: criticalHealth,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
@@ -162,7 +165,7 @@ describe("ExecutiveDashboardPage", () => {
   it("annotates throughput and lead time with deltas vs the prior window", async () => {
     mockMetricsFetch({
       "/api/teams": [teamFixture],
-      "/api/metrics/snapshots": baselineSnapshots,
+      "/api/metrics/overview": overviewFixture({ snapshots: baselineSnapshots }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
@@ -190,23 +193,9 @@ describe("ExecutiveDashboardPage", () => {
       if (url.startsWith("/api/work-items/states")) {
         return Promise.resolve(jsonResponse(statesFixture));
       }
-      // Every query for the second team fails; the first team stays healthy.
+      // The second team's overview fails; the first team stays healthy.
       if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
-      if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
-      if (url.startsWith("/api/metrics/health"))
-        return Promise.resolve(jsonResponse(healthFixture));
-      if (url.startsWith("/api/forecasts/accuracy")) {
-        return Promise.resolve(
-          jsonResponse({
-            evaluated: 0,
-            pending: 0,
-            p50_hit_rate: null,
-            p85_hit_rate: null,
-            mean_abs_error_days: null,
-          }),
-        );
-      }
-      return Promise.resolve(jsonResponse(metricsFixture));
+      return Promise.resolve(jsonResponse(overviewFixture()));
     });
 
     renderWithClient(<ExecutiveDashboardPage />);
@@ -220,7 +209,7 @@ describe("ExecutiveDashboardPage", () => {
     // Failed cells say so — never the "—" that means "no data".
     const growthRow = screen.getByText("Growth").closest("tr");
     if (!growthRow) throw new Error("Expected Growth row to render");
-    // Health + 5 metrics columns + accuracy, all fed by failed queries.
+    // Health + 5 metrics columns + accuracy, all fed by the failed overview.
     expect(within(growthRow).getAllByText("unavailable")).toHaveLength(7);
     expect(within(growthRow).queryByText("—")).not.toBeInTheDocument();
   });
@@ -233,23 +222,9 @@ describe("ExecutiveDashboardPage", () => {
       if (url.startsWith("/api/work-items/states")) {
         return Promise.resolve(jsonResponse(statesFixture));
       }
-      if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
       if (failedOnce) return new Promise(() => {}); // the retry hangs
-      if (url.startsWith("/api/metrics?")) {
-        failedOnce = true;
-        return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
-      }
-      if (url.startsWith("/api/metrics/health"))
-        return Promise.resolve(jsonResponse(healthFixture));
-      return Promise.resolve(
-        jsonResponse({
-          evaluated: 0,
-          pending: 0,
-          p50_hit_rate: null,
-          p85_hit_rate: null,
-          mean_abs_error_days: null,
-        }),
-      );
+      failedOnce = true;
+      return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
     });
 
     renderWithClient(<ExecutiveDashboardPage />);
@@ -261,20 +236,24 @@ describe("ExecutiveDashboardPage", () => {
     expect(screen.queryByText("unavailable")).not.toBeInTheDocument();
   });
 
-  it("shows resolved figures instead of skeletons while other queries still load", async () => {
+  it("resolves each team's row independently", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = requestUrl(input);
-      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
-      if (url.startsWith("/api/metrics?")) return Promise.resolve(jsonResponse(metricsFixture));
-      if (url.startsWith("/api/metrics/snapshots")) return Promise.resolve(jsonResponse([]));
-      return new Promise(() => {}); // health + accuracy stay pending
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      if (url.startsWith("/api/work-items/states")) {
+        return Promise.resolve(jsonResponse(statesFixture));
+      }
+      if (url.includes(teams[1].id)) return new Promise(() => {}); // Growth stays in flight
+      return Promise.resolve(jsonResponse(overviewFixture()));
     });
 
     renderWithClient(<ExecutiveDashboardPage />);
 
-    // Metrics cells resolve (flow efficiency 75%) while health/accuracy skeleton.
-    expect(await screen.findByText("75%")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Loading").length).toBeGreaterThan(0);
+    const platformRow = (await screen.findByText("Platform")).closest("tr");
+    const growthRow = screen.getByText("Growth").closest("tr");
+    if (!platformRow || !growthRow) throw new Error("Expected team rows to render");
+    await waitFor(() => expect(within(platformRow).getByText("75%")).toBeInTheDocument());
+    expect(within(growthRow).getAllByLabelText("Loading").length).toBeGreaterThan(0);
   });
 
   it("shows a retryable error when teams fail to load", async () => {
@@ -299,13 +278,15 @@ describe("ExecutiveDashboardPage", () => {
   it("marks unchanged metrics as flat instead of inventing movement", async () => {
     mockMetricsFetch({
       "/api/teams": [teamFixture],
-      "/api/metrics/snapshots": [
-        {
-          ...baselineSnapshots[0],
-          completed: metricsFixture.completed,
-          lead_time_p85_seconds: metricsFixture.lead_time.p85_seconds,
-        },
-      ],
+      "/api/metrics/overview": overviewFixture({
+        snapshots: [
+          {
+            ...baselineSnapshots[0],
+            completed: metricsFixture.completed,
+            lead_time_p85_seconds: metricsFixture.lead_time.p85_seconds,
+          },
+        ],
+      }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
@@ -328,7 +309,7 @@ describe("ExecutiveDashboardPage", () => {
   it("sorts by any column on header click", async () => {
     mockMetricsFetch({
       "/api/teams": teams,
-      [`/api/metrics/health?team_id=${teams[1].id}`]: criticalHealth,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
     await screen.findByText("1 of 2 teams at risk");
@@ -354,7 +335,9 @@ describe("ExecutiveDashboardPage", () => {
   it("names a lone at-risk team instead of a one-of-one count", async () => {
     mockMetricsFetch({
       "/api/teams": [teamFixture],
-      [`/api/metrics/health?team_id=${teamFixture.id}`]: criticalHealth,
+      [`/api/metrics/overview?team_id=${teamFixture.id}`]: overviewFixture({
+        health: criticalHealth,
+      }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
@@ -369,12 +352,9 @@ describe("ExecutiveDashboardPage", () => {
   it("counts teams health could not score instead of hiding them", async () => {
     mockMetricsFetch({
       "/api/teams": teams,
-      [`/api/metrics/health?team_id=${teams[1].id}`]: {
-        ...healthFixture,
-        score: null,
-        band: null,
-        components: [],
-      },
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({
+        health: { ...healthFixture, score: null, band: null, components: [] },
+      }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
@@ -393,7 +373,7 @@ describe("ExecutiveDashboardPage", () => {
     expect(badge).toHaveTextContent("82");
   });
 
-  it("threads URL filters into per-team metrics requests", async () => {
+  it("threads URL filters into per-team overview requests", async () => {
     mockMetricsFetch({ "/api/teams": [teamFixture] });
     renderWithClient(<ExecutiveDashboardPage />, ["/?window=90&xstates=canceled"]);
 
@@ -406,9 +386,9 @@ describe("ExecutiveDashboardPage", () => {
     );
 
     const urls = vi.mocked(fetch).mock.calls.map((call) => requestUrl(call[0]));
-    const flowUrl = urls.find((url) => url.startsWith("/api/metrics?"));
-    expect(flowUrl).toContain("window_days=90");
-    expect(flowUrl).toContain("exclude_states=canceled");
+    const overviewUrl = urls.find((url) => url.startsWith("/api/metrics/overview?"));
+    expect(overviewUrl).toContain("window_days=90");
+    expect(overviewUrl).toContain("exclude_states=canceled");
   });
 
   it("updates the URL and requests when a filter changes", async () => {
@@ -426,7 +406,9 @@ describe("ExecutiveDashboardPage", () => {
     );
     const urls = vi.mocked(fetch).mock.calls.map((call) => requestUrl(call[0]));
     expect(
-      urls.some((url) => url.startsWith("/api/metrics?") && url.includes("window_days=90")),
+      urls.some(
+        (url) => url.startsWith("/api/metrics/overview?") && url.includes("window_days=90"),
+      ),
     ).toBe(true);
   });
 
@@ -445,5 +427,26 @@ describe("ExecutiveDashboardPage", () => {
     // metricsFixture.completed is 4 with a snapshot baseline of 3 — the default
     // view renders a delta chip; a 90d view must not (snapshots are 30d).
     expect(document.querySelector(".delta")).toBeNull();
+  });
+
+  it("asks for each team's row in one request, not four", async () => {
+    mockMetricsFetch({ "/api/teams": teams });
+    renderWithClient(<ExecutiveDashboardPage />);
+    await screen.findByText("All 2 teams healthy");
+
+    const urls = vi.mocked(fetch).mock.calls.map((call) => requestUrl(call[0]));
+    for (const team of teams) {
+      expect(
+        urls.filter((url) => url.startsWith(`/api/metrics/overview?team_id=${team.id}`)),
+      ).toHaveLength(1);
+    }
+    for (const legacy of [
+      "/api/metrics?",
+      "/api/metrics/health",
+      "/api/metrics/snapshots",
+      "/api/forecasts/accuracy",
+    ]) {
+      expect(urls.some((url) => url.startsWith(legacy))).toBe(false);
+    }
   });
 });
