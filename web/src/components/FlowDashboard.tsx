@@ -106,7 +106,7 @@ function StaleDataAlert({ history }: { history: FlowHistory }) {
     <Alert
       type="warning"
       showIcon
-      message={`Data last synced ${formatDateTime(history.data_as_of)}`}
+      title={`Data last synced ${formatDateTime(history.data_as_of)}`}
       description={`The last ${staleDays} day${staleDays === 1 ? "" : "s"} of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
     />
   );
@@ -314,7 +314,7 @@ export function FlowDashboard({
   const health = useDeliveryHealth(scope, filters);
 
   if (metrics.isError || history.isError || distribution.isError) {
-    return <Alert type="error" message="Failed to load metrics" />;
+    return <Alert type="error" title="Failed to load metrics" />;
   }
   if (metrics.isPending || history.isPending) {
     return <Skeleton active />;

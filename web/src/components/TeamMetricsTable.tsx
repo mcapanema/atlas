@@ -61,7 +61,8 @@ function DeltaChip({ delta, metric }: { delta: Delta | null; metric: string }) {
 
 /**
  * A figure plus its delta. When any row has a delta, every row reserves the
- * slot, so figures end on the same edge down a right-aligned column.
+ * slot — dashes and skeletons included — so everything in a right-aligned
+ * column ends on the same edge.
  */
 function FigureWithDelta({
   children,
@@ -148,16 +149,11 @@ function buildColumns(
       title: columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`),
       align: "right",
       sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
-      render: (_, row) =>
-        cell(row.state, () =>
-          row.metrics ? (
-            <FigureWithDelta delta={row.throughputDelta} metric="throughput" slot={showDeltas}>
-              {row.metrics.completed}
-            </FigureWithDelta>
-          ) : (
-            "—"
-          ),
-        ),
+      render: (_, row) => (
+        <FigureWithDelta delta={row.throughputDelta} metric="throughput" slot={showDeltas}>
+          {cell(row.state, () => row.metrics?.completed ?? "—")}
+        </FigureWithDelta>
+      ),
     },
     {
       key: "wip",
@@ -181,16 +177,13 @@ function buildColumns(
       align: "right",
       sorter: (a, b) =>
         (a.metrics?.lead_time?.p85_seconds ?? -1) - (b.metrics?.lead_time?.p85_seconds ?? -1),
-      render: (_, row) =>
-        cell(row.state, () =>
-          row.metrics?.lead_time ? (
-            <FigureWithDelta delta={row.leadDelta} metric="lead time" slot={showDeltas}>
-              {formatSeconds(row.metrics.lead_time.p85_seconds)}
-            </FigureWithDelta>
-          ) : (
-            "—"
-          ),
-        ),
+      render: (_, row) => (
+        <FigureWithDelta delta={row.leadDelta} metric="lead time" slot={showDeltas}>
+          {cell(row.state, () =>
+            row.metrics?.lead_time ? formatSeconds(row.metrics.lead_time.p85_seconds) : "—",
+          )}
+        </FigureWithDelta>
+      ),
     },
     {
       key: "flow-efficiency",
@@ -247,7 +240,8 @@ function renderRiskToggle({ expanded, expandable, onExpand, record, prefixCls }:
       type="button"
       className={`${icon} ${icon}-${expanded ? "expanded" : "collapsed"}`}
       aria-expanded={expanded}
-      aria-label={`${expanded ? "Hide" : "Show"} risk reasons for ${record.team.name}`}
+      // A disclosure button: fixed name, state in aria-expanded alone.
+      aria-label={`Risk reasons for ${record.team.name}`}
       onClick={(event) => {
         // The row itself navigates to the team; the toggle must not.
         event.stopPropagation();
@@ -331,6 +325,9 @@ export function TeamMetricsTable({
           rowExpandable: (row) => isAtRisk(row.health),
           expandedRowRender: (row) => <RiskDetail row={row} />,
           expandIcon: renderRiskToggle,
+          // No blank, unnamed column when nothing can open; explicit column
+          // keys keep sorting stable as it appears.
+          showExpandColumn: rows.some((row) => isAtRisk(row.health)),
         }}
         onRow={(row) => ({
           className: "row-link",

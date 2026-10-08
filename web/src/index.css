@@ -129,6 +129,10 @@ h5 {
   padding-left: 10px;
   border-left: 2px solid var(--ant-color-border);
   font-size: 12px;
+  /* The table sizes to max-content (scroll.x), so an unwrapped detail line
+     would widen it. Zero intrinsic width lets the line wrap to the columns
+     instead. */
+  contain: inline-size;
 }
 .risk-detail--critical {
   border-left-color: var(--ant-color-error);
@@ -158,10 +162,10 @@ h5 {
   white-space: nowrap;
 }
 /* Fixed-width home for a delta chip beside a right-aligned figure; wide
-   enough for "↑ 100%". */
+   enough for "↑ 1900%" (the arrow glyph runs wider than 1ch). */
 .delta-slot {
   display: inline-block;
-  min-width: 7ch;
+  min-width: 8ch;
   margin-left: 6px;
   font-size: 11px;
   text-align: left;

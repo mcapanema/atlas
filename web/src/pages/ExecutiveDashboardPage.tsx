@@ -8,7 +8,7 @@ import { useAllTeamsOverviews, type ScopeOverview } from "../api/overview";
 import { useTeams, type Team } from "../api/teams";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { TeamMetricsTable } from "../components/TeamMetricsTable";
-import { weakestComponents } from "../lib/health";
+import { isAtRisk, weakestComponents } from "../lib/health";
 import {
   applyFiltersToSearchParams,
   filtersFromSearchParams,
@@ -34,7 +34,7 @@ function Headline({ rows }: { rows: TeamRow[] }) {
       {unscored} not scored yet
     </span>
   );
-  const atRisk = scored.filter((row) => row.health!.band !== "healthy");
+  const atRisk = scored.filter((row) => isAtRisk(row.health));
   if (atRisk.length === 0) {
     return (
       <p className="page-headline">

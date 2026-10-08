@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -118,8 +119,11 @@ describe("ExecutiveDashboardPage", () => {
 
     expect(await screen.findByText("All 2 teams healthy")).toBeInTheDocument();
     expect(screen.getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
-    // A healthy portfolio is quiet: no risk rows to open.
-    expect(screen.queryByRole("button", { name: /risk reasons/ })).not.toBeInTheDocument();
+    // A healthy portfolio is quiet: no risk rows to open…
+    expect(screen.queryByRole("button", { name: /risk reasons/i })).not.toBeInTheDocument();
+    // …and no blank, unnamed toggle column waiting for one.
+    await screen.findByText("Platform");
+    expect(screen.getAllByRole("columnheader").filter((th) => th.textContent === "")).toEqual([]);
   });
 
   it("shows an at-risk team's reasons under its own row, open by default", async () => {
@@ -135,7 +139,7 @@ describe("ExecutiveDashboardPage", () => {
     ).toBeInTheDocument();
 
     // Health arrives after the row renders — it must still open by default.
-    const toggle = await screen.findByRole("button", { name: "Hide risk reasons for Growth" });
+    const toggle = await screen.findByRole("button", { name: "Risk reasons for Growth" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     const detail = toggle.closest("tr")?.nextElementSibling as HTMLElement;
     // Two weakest component reasons, verbatim…
@@ -160,9 +164,9 @@ describe("ExecutiveDashboardPage", () => {
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Hide risk reasons for Growth" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Risk reasons for Growth" }));
 
-    const toggle = await screen.findByRole("button", { name: "Show risk reasons for Growth" });
+    const toggle = await screen.findByRole("button", { name: "Risk reasons for Growth" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     // rc-table keeps a collapsed row's DOM and hides it with display:none.
     expect(
@@ -177,8 +181,56 @@ describe("ExecutiveDashboardPage", () => {
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
-    await screen.findByRole("button", { name: "Hide risk reasons for Growth" });
-    expect(screen.queryByRole("button", { name: /risk reasons for Platform/ })).toBeNull();
+    await screen.findByRole("button", { name: "Risk reasons for Growth" });
+    expect(screen.queryByRole("button", { name: /risk reasons for Platform/i })).toBeNull();
+  });
+
+  it("gives unscored and failed teams no risk toggle", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      if (url.startsWith("/api/work-items/states")) {
+        return Promise.resolve(jsonResponse(statesFixture));
+      }
+      // Growth's overview fails; Platform answers but health can't score it.
+      if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+      return Promise.resolve(
+        jsonResponse(
+          overviewFixture({
+            health: { ...healthFixture, score: null, band: null, components: [] },
+          }),
+        ),
+      );
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(
+      () => expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    expect(screen.queryByRole("button", { name: /risk reasons/i })).toBeNull();
+  });
+
+  it("opens a team from its row but not from its risk toggle", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(
+      <Routes>
+        <Route path="/" element={<ExecutiveDashboardPage />} />
+        <Route path="/teams" element={<p>Team page</p>} />
+      </Routes>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Risk reasons for Growth" }));
+    expect(screen.queryByText("Team page")).toBeNull();
+
+    // The row itself remains the shortcut to the team.
+    const growthRow = screen.getByText("Growth").closest("tr");
+    if (!growthRow) throw new Error("Expected Growth row to render");
+    fireEvent.click(within(growthRow).getAllByRole("cell")[3]);
+    expect(await screen.findByText("Team page")).toBeInTheDocument();
   });
 
   it("sorts the table worst-health-first by default", async () => {
@@ -203,7 +255,7 @@ describe("ExecutiveDashboardPage", () => {
       [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
     });
     renderWithClient(<ExecutiveDashboardPage />);
-    await screen.findByRole("button", { name: "Hide risk reasons for Growth" });
+    await screen.findByRole("button", { name: "Risk reasons for Growth" });
 
     // The expand column must not shift the sort indicator onto its neighbor.
     const header = (label: string) =>
@@ -445,6 +497,32 @@ describe("ExecutiveDashboardPage", () => {
       expect(screen.getByText("17").nextElementSibling).toHaveClass("delta-slot"),
     );
     expect(screen.getByText("23").nextElementSibling).toHaveClass("delta-slot");
+  });
+
+  it("keeps a missing figure's dash on the figures' edge", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[0].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 17 },
+        snapshots: baselineSnapshots,
+      }),
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, lead_time: null },
+        snapshots: [],
+      }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("17").nextElementSibling).toHaveClass("delta-slot"),
+    );
+    const growthRow = screen.getByText("Growth").closest("tr");
+    if (!growthRow) throw new Error("Expected Growth row to render");
+    // Growth has no lead time: its "—" reserves the same slot real figures do.
+    const slotted = within(growthRow)
+      .getAllByText("—")
+      .filter((dash) => dash.nextElementSibling?.classList.contains("delta-slot"));
+    expect(slotted).toHaveLength(1);
   });
 
   it("names a lone at-risk team instead of a one-of-one count", async () => {
