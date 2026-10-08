@@ -11,11 +11,10 @@ function nextRun(schedule: SyncSchedule | null): string {
 }
 
 function LastSyncText({ schedule }: { schedule: SyncSchedule | null }) {
-  // The server records manual syncs on the schedule row: with no row, the
-  // last sync is unknown, not absent.
-  if (!schedule) return <Typography.Text type="secondary">Not recorded</Typography.Text>;
-  const last = lastSync(schedule);
-  if (!last) return <Typography.Text type="secondary">Never</Typography.Text>;
+  // The server records manual syncs only on an existing schedule row, so a
+  // missing or empty row means the last sync is unknown, not absent.
+  const last = schedule ? lastSync(schedule) : null;
+  if (!schedule || !last) return <Typography.Text type="secondary">Not recorded</Typography.Text>;
   const when = formatInZone(last.at, schedule.timezone);
   return last.error ? (
     <Typography.Text type="danger">{`Failed · ${when}`}</Typography.Text>

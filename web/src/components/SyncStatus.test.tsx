@@ -79,13 +79,16 @@ describe("SyncStatus", () => {
     expect(screen.queryByText("Last auto sync failed")).not.toBeInTheDocument();
   });
 
-  it("says auto sync is off and nothing has synced yet", async () => {
+  it("doesn't claim 'Never' for a schedule row with no sync recorded on it", async () => {
+    // A Sync now before the row existed went unrecorded, so an empty row
+    // can't tell "never synced" from "synced before recording began".
     mockSchedule({ ...schedule, enabled: false, next_run_at: null });
 
     renderWithClient(<SyncStatus organizationId={ORG} />);
 
     expect(await screen.findByText("Auto sync is off")).toBeInTheDocument();
-    expect(screen.getByText("Never")).toBeInTheDocument();
+    expect(screen.getByText("Not recorded")).toBeInTheDocument();
+    expect(screen.queryByText("Never")).not.toBeInTheDocument();
   });
 
   it("doesn't claim 'Never' when no schedule row exists to record syncs", async () => {
