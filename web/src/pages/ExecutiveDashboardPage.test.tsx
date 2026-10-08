@@ -398,6 +398,40 @@ describe("ExecutiveDashboardPage", () => {
     expect(screen.getAllByText("Growth")).toHaveLength(1);
   });
 
+  it("right-aligns figures so magnitudes compare down a column", async () => {
+    mockMetricsFetch({
+      "/api/teams": [teamFixture],
+      [`/api/metrics/overview?team_id=${teamFixture.id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 17 },
+      }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    const figure = await screen.findByText("17");
+    expect(figure.closest("td")).toHaveStyle({ textAlign: "right" });
+  });
+
+  it("keeps figures aligned when only some teams have a delta", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[0].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 17 },
+        snapshots: baselineSnapshots,
+      }),
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 23 },
+        snapshots: [],
+      }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    // Both rows reserve the delta slot, so 17 and 23 end on the same edge.
+    await waitFor(() =>
+      expect(screen.getByText("17").nextElementSibling).toHaveClass("delta-slot"),
+    );
+    expect(screen.getByText("23").nextElementSibling).toHaveClass("delta-slot");
+  });
+
   it("names a lone at-risk team instead of a one-of-one count", async () => {
     mockMetricsFetch({
       "/api/teams": [teamFixture],

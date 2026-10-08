@@ -59,12 +59,43 @@ function DeltaChip({ delta, metric }: { delta: Delta | null; metric: string }) {
   );
 }
 
+/**
+ * A figure plus its delta. When any row has a delta, every row reserves the
+ * slot, so figures end on the same edge down a right-aligned column.
+ */
+function FigureWithDelta({
+  children,
+  delta,
+  metric,
+  slot,
+}: {
+  children: ReactNode;
+  delta: Delta | null;
+  metric: string;
+  slot: boolean;
+}) {
+  return (
+    <>
+      <span className="fig">{children}</span>
+      {slot && (
+        <span className="delta-slot">
+          <DeltaChip delta={delta} metric={metric} />
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Column header with a focus/hover definition — recognition over recall. */
 function columnHelp(label: string, help: string) {
   return <HelpLabel label={label} help={help} />;
 }
 
-function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow> {
+function buildColumns(
+  periodLabel: string,
+  ranged: boolean,
+  showDeltas: boolean,
+): ColumnsType<TeamRow> {
   return [
     {
       title: "Team",
@@ -86,14 +117,14 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       // the as-of line and restated per-column in each tooltip; at 1288px the
       // suffixes were pushing the last column behind a horizontal scrollbar.
       title: columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`),
+      align: "right",
       sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
       render: (_, row) =>
         cell(row.state, () =>
           row.metrics ? (
-            <>
-              <span className="fig">{row.metrics.completed}</span>{" "}
-              <DeltaChip delta={row.throughputDelta} metric="throughput" />
-            </>
+            <FigureWithDelta delta={row.throughputDelta} metric="throughput" slot={showDeltas}>
+              {row.metrics.completed}
+            </FigureWithDelta>
           ) : (
             "—"
           ),
@@ -106,6 +137,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
           ? "Work items in progress at the end of the selected range: started, and not yet completed, moved back, or canceled by then."
           : "Work items in progress right now.",
       ),
+      align: "right",
       sorter: (a, b) => (a.metrics?.wip ?? -1) - (b.metrics?.wip ?? -1),
       render: (_, row) =>
         cell(row.state, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
@@ -115,15 +147,15 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
         "Lead time P85",
         `85% of items completed in the last ${periodLabel} took no longer than this, created → done.`,
       ),
+      align: "right",
       sorter: (a, b) =>
         (a.metrics?.lead_time?.p85_seconds ?? -1) - (b.metrics?.lead_time?.p85_seconds ?? -1),
       render: (_, row) =>
         cell(row.state, () =>
           row.metrics?.lead_time ? (
-            <>
-              <span className="fig">{formatSeconds(row.metrics.lead_time.p85_seconds)}</span>{" "}
-              <DeltaChip delta={row.leadDelta} metric="lead time" />
-            </>
+            <FigureWithDelta delta={row.leadDelta} metric="lead time" slot={showDeltas}>
+              {formatSeconds(row.metrics.lead_time.p85_seconds)}
+            </FigureWithDelta>
           ) : (
             "—"
           ),
@@ -134,6 +166,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
         "Flow efficiency",
         `Share of cycle time spent actively working (not blocked), averaged over completed items in the last ${periodLabel}.`,
       ),
+      align: "right",
       sorter: (a, b) => (a.metrics?.flow_efficiency ?? -1) - (b.metrics?.flow_efficiency ?? -1),
       render: (_, row) =>
         cell(row.state, () =>
@@ -149,6 +182,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
         "Blocked time",
         `Time the items completed in the last ${periodLabel} spent blocked while in progress (start to done), summed across items.`,
       ),
+      align: "right",
       sorter: (a, b) => (a.metrics?.blocked_seconds ?? -1) - (b.metrics?.blocked_seconds ?? -1),
       render: (_, row) =>
         cell(row.state, () =>
@@ -164,6 +198,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
         "Forecast accuracy (P85)",
         "Of past forecasts with a known real finish, the share that finished by their predicted P85 date. Calibrated forecasts land near 85% — higher means predictions run conservative, lower means optimistic. “—” means no forecasts evaluated yet.",
       ),
+      align: "right",
       sorter: (a, b) => (a.accuracy?.p85_hit_rate ?? -1) - (b.accuracy?.p85_hit_rate ?? -1),
       render: (_, row) =>
         cell(row.state, () =>
@@ -262,10 +297,11 @@ export function TeamMetricsTable({
 }) {
   const navigate = useNavigate();
   const expansion = useRiskExpansion(rows);
+  const showDeltas = rows.some((row) => row.throughputDelta != null || row.leadDelta != null);
   return (
     <section aria-label="Delivery metrics by team">
       <Table
-        columns={buildColumns(periodLabel, ranged)}
+        columns={buildColumns(periodLabel, ranged, showDeltas)}
         components={TABLE_COMPONENTS}
         dataSource={rows}
         loading={loading}

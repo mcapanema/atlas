@@ -157,6 +157,15 @@ h5 {
   font-size: 11px;
   white-space: nowrap;
 }
+/* Fixed-width home for a delta chip beside a right-aligned figure; wide
+   enough for "↑ 100%". */
+.delta-slot {
+  display: inline-block;
+  min-width: 7ch;
+  margin-left: 6px;
+  font-size: 11px;
+  text-align: left;
+}
 .delta--good {
   color: var(--ant-color-success-text);
 }
