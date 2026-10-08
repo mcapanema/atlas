@@ -1,8 +1,7 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import type { DailyFlowCount, DurationBin, ThroughputBucket } from "../lib/charts";
 import { apiFetch } from "./client";
-import type { Team } from "./teams";
 
 export type { DailyFlowCount, DurationBin, ThroughputBucket };
 
@@ -86,16 +85,6 @@ export function useFlowHistory(scope: MetricsScope, filters: MetricsFilters = {}
   });
 }
 
-export function useAllTeamsFlowMetrics(teams: Team[], filters: MetricsFilters = {}) {
-  return useQueries({
-    queries: teams.map((team) => ({
-      queryKey: ["metrics", "flow", { teamId: team.id }, filters],
-      queryFn: () =>
-        apiFetch<FlowMetrics>(`/api/metrics?${metricsParams({ teamId: team.id }, filters)}`),
-    })),
-  });
-}
-
 export interface LeadTimeDistribution {
   window_start: string;
   window_end: string;
@@ -155,17 +144,5 @@ export function useDeliveryHealth(scope: MetricsScope, filters: MetricsFilters =
     queryKey: ["metrics", "health", scope, filters],
     enabled: params !== null,
     queryFn: () => apiFetch<DeliveryHealth>(`/api/metrics/health?${params}`),
-  });
-}
-
-export function useAllTeamsHealth(teams: Team[], filters: MetricsFilters = {}) {
-  return useQueries({
-    queries: teams.map((team) => ({
-      queryKey: ["metrics", "health", { teamId: team.id }, filters],
-      queryFn: () =>
-        apiFetch<DeliveryHealth>(
-          `/api/metrics/health?${metricsParams({ teamId: team.id }, filters)}`,
-        ),
-    })),
   });
 }

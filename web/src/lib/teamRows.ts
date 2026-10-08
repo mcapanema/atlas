@@ -1,11 +1,13 @@
 /**
- * One executive-dashboard row per team, joined from four index-aligned
- * per-team query arrays. Pure — no React, so the join is testable alone.
+ * One executive-dashboard row per team, from per-team overview queries
+ * index-aligned with the team list. Pure — no React, so the join is
+ * testable alone.
  */
 
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import type { DeliveryHealth, FlowMetrics } from "../api/metrics";
+import type { ScopeOverview } from "../api/overview";
 import type { ForecastAccuracy, MetricSnapshot } from "../api/snapshots";
 import type { Team } from "../api/teams";
 import { computeDelta, leadTimePulse, pickBaseline, type Delta, type Pulse } from "./deltas";
@@ -24,20 +26,11 @@ export interface TeamRow {
   metrics: FlowMetrics | undefined;
   accuracy: ForecastAccuracy | undefined;
   health: DeliveryHealth | undefined;
-  metricsState: CellState;
-  accuracyState: CellState;
-  healthState: CellState;
+  /** One request feeds the whole row, so every cell shares its state. */
+  state: CellState;
   throughputDelta: Delta | null;
   leadDelta: Delta | null;
   pulse: Pulse | null;
-}
-
-/** Per-team query results, each array index-aligned with the team list. */
-export interface TeamQueries {
-  metrics: UseQueryResult<FlowMetrics>[];
-  accuracy: UseQueryResult<ForecastAccuracy>[];
-  health: UseQueryResult<DeliveryHealth>[];
-  snapshots: UseQueryResult<MetricSnapshot[]>[];
 }
 
 function queryState(
@@ -75,21 +68,20 @@ function trends(
 
 export function buildTeamRows(
   teams: Team[],
-  queries: TeamQueries,
+  overviews: UseQueryResult<ScopeOverview>[],
   deltasEnabled: boolean,
 ): TeamRow[] {
   return teams.map((team, index) => {
-    const metrics = queries.metrics[index]?.data;
+    const overview = overviews[index];
+    const data = overview?.data;
     return {
       key: team.id,
       team,
-      metrics,
-      accuracy: queries.accuracy[index]?.data,
-      health: queries.health[index]?.data,
-      metricsState: queryState(queries.metrics[index]),
-      accuracyState: queryState(queries.accuracy[index]),
-      healthState: queryState(queries.health[index]),
-      ...trends(metrics, queries.snapshots[index]?.data ?? [], deltasEnabled),
+      metrics: data?.metrics,
+      accuracy: data?.accuracy,
+      health: data?.health,
+      state: queryState(overview),
+      ...trends(data?.metrics, data?.snapshots ?? [], deltasEnabled),
     };
   });
 }

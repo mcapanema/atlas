@@ -77,7 +77,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       // Worst first by default: risk is the sort key of an executive view.
       defaultSortOrder: "ascend",
       sorter: (a, b) => (a.health?.score ?? 101) - (b.health?.score ?? 101),
-      render: (_, row) => cell(row.healthState, () => <HealthBadge health={row.health} />),
+      render: (_, row) => cell(row.state, () => <HealthBadge health={row.health} />),
     },
     {
       // Column headers drop the "(30d)" suffix — the window is stated once in
@@ -86,7 +86,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       title: columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`),
       sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
       render: (_, row) =>
-        cell(row.metricsState, () =>
+        cell(row.state, () =>
           row.metrics ? (
             <>
               <span className="fig">{row.metrics.completed}</span>{" "}
@@ -106,7 +106,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       ),
       sorter: (a, b) => (a.metrics?.wip ?? -1) - (b.metrics?.wip ?? -1),
       render: (_, row) =>
-        cell(row.metricsState, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
+        cell(row.state, () => <span className="fig">{row.metrics?.wip ?? "—"}</span>),
     },
     {
       title: columnHelp(
@@ -116,7 +116,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       sorter: (a, b) =>
         (a.metrics?.lead_time?.p85_seconds ?? -1) - (b.metrics?.lead_time?.p85_seconds ?? -1),
       render: (_, row) =>
-        cell(row.metricsState, () =>
+        cell(row.state, () =>
           row.metrics?.lead_time ? (
             <>
               <span className="fig">{formatSeconds(row.metrics.lead_time.p85_seconds)}</span>{" "}
@@ -134,7 +134,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       ),
       sorter: (a, b) => (a.metrics?.flow_efficiency ?? -1) - (b.metrics?.flow_efficiency ?? -1),
       render: (_, row) =>
-        cell(row.metricsState, () =>
+        cell(row.state, () =>
           row.metrics?.flow_efficiency != null ? (
             <span className="fig">{Math.round(row.metrics.flow_efficiency * 100)}%</span>
           ) : (
@@ -149,7 +149,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       ),
       sorter: (a, b) => (a.metrics?.blocked_seconds ?? -1) - (b.metrics?.blocked_seconds ?? -1),
       render: (_, row) =>
-        cell(row.metricsState, () =>
+        cell(row.state, () =>
           row.metrics ? (
             <span className="fig">{formatSeconds(row.metrics.blocked_seconds)}</span>
           ) : (
@@ -164,7 +164,7 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
       ),
       sorter: (a, b) => (a.accuracy?.p85_hit_rate ?? -1) - (b.accuracy?.p85_hit_rate ?? -1),
       render: (_, row) =>
-        cell(row.accuracyState, () =>
+        cell(row.state, () =>
           row.accuracy && row.accuracy.evaluated > 0 && row.accuracy.p85_hit_rate != null ? (
             <span className="fig">{Math.round(row.accuracy.p85_hit_rate * 100)}%</span>
           ) : (

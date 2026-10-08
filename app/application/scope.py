@@ -10,8 +10,9 @@ exactly where remaining-count bugs hide.
 from collections import defaultdict
 from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
+from typing import Self
 from uuid import UUID
 
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
@@ -45,6 +46,28 @@ class ScopeSamples:
     stream_rules: list[MetricRules] = field(default_factory=list)
     rules: MetricRules = DEFAULT_RULES
     remaining_count: int | None = None
+
+
+def _filter_items(
+    items: list[WorkItem],
+    rules: ResolvedRules,
+    types: AbstractSet[WorkItemType] | None,
+    exclude_states: AbstractSet[str] | None,
+) -> list[WorkItem]:
+    """Items of the requested effective types, minus excluded states (case-insensitive).
+
+    The type filter reads each item's effective type (its team's
+    type_labels), not the stored one.
+
+    ponytail: in-Python filter over the scope's items; push into the
+    repository query if scopes grow past what one list comfortably holds.
+    """
+    if types is not None:
+        items = [item for item in items if rules.for_team(item.team_id).type_of(item) in types]
+    if exclude_states is not None:
+        excluded = {state.casefold() for state in exclude_states}
+        items = [item for item in items if item.state.casefold() not in excluded]
+    return items
 
 
 @dataclass(frozen=True)
@@ -87,6 +110,25 @@ class ScopeData:
             rules=self.rules.scope,
             remaining_count=remaining,
         )
+
+    def filtered(
+        self,
+        *,
+        types: AbstractSet[WorkItemType] | None = None,
+        exclude_states: AbstractSet[str] | None = None,
+    ) -> Self:
+        """This picture narrowed to the requested item types and states.
+
+        Returns `self` when nothing is filtered, so a caller holding both
+        views can reuse one fold. Same narrowing `ScopeSampleLoader` applies
+        at load time.
+        """
+        if types is None and exclude_states is None:
+            return self
+        items = _filter_items(self.items, self.rules, types, exclude_states)
+        kept = {item.id for item in items}
+        events = {item_id: stream for item_id, stream in self.events.items() if item_id in kept}
+        return replace(self, items=items, events=events)
 
     def _fold(
         self, item: WorkItem, as_of: datetime | None
@@ -170,13 +212,7 @@ class ScopeSampleLoader:
             if self._rules is not None
             else ResolvedRules()
         )
-        # ponytail: in-Python filter over the scope's items; push into the
-        # repository query if scopes grow past what one list comfortably holds.
-        if types is not None:
-            items = [item for item in items if rules.for_team(item.team_id).type_of(item) in types]
-        if exclude_states is not None:
-            excluded = {state.casefold() for state in exclude_states}
-            items = [item for item in items if item.state.casefold() not in excluded]
+        items = _filter_items(items, rules, types, exclude_states)
         events = await self._events.list_for_work_items([item.id for item in items])
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
         for event in events:

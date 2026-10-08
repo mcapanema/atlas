@@ -1,10 +1,15 @@
-from datetime import UTC, date, datetime
-from uuid import uuid4
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.metrics import Period
+from app.application.scope import ScopeData, ScopeSampleLoader
+from app.domain.snapshots.entities import ForecastSnapshot
+from app.infrastructure.repositories.snapshots import SqlAlchemyForecastSnapshotRepository
 from tests.api.helpers import create_team, days_ago
 
 
@@ -494,3 +499,166 @@ async def test_explicit_period_health_reads_wip_as_it_stood(client: AsyncClient)
     # window's end: parked throughout the range, in progress again today.
     assert "risk" not in {component["name"] for component in ranged["components"]}
     assert "risk" in {component["name"] for component in now["components"]}
+
+
+async def _seed_overview_team(client: AsyncClient) -> str:
+    """A done task, an in-progress task, and a started item sitting in a "Canceled" state."""
+    team_id = await create_team(client)
+    for title, state, history in (
+        ("Shipped", "Done", (("created", 20), ("started", 12), ("completed", 3))),
+        ("Doing", "In Progress", (("created", 9), ("started", 5))),
+        ("Dropped", "Canceled", (("created", 15), ("started", 14))),
+    ):
+        item = (
+            await client.post(
+                "/api/work-items", json={"team_id": team_id, "title": title, "state": state}
+            )
+        ).json()
+        for type_, days in history:
+            response = await client.post(
+                "/api/events",
+                json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+            )
+            assert response.status_code == 201
+    return team_id
+
+
+@pytest.mark.parametrize(
+    "extra",
+    # window_days is left out: an explicit period overrides it, so it is
+    # covered without one in test_overview_honors_window_days_without_a_period.
+    ["", "&exclude_states=canceled", "&types=bug"],
+)
+async def test_overview_matches_the_standalone_endpoints(client: AsyncClient, extra: str) -> None:
+    team_id = await _seed_overview_team(client)
+    # An explicit period pins `now`, so window bounds compare exactly.
+    end = datetime.now(UTC).date()
+    start = end - timedelta(days=29)
+    query = f"team_id={team_id}&start={start}&end={end}{extra}"
+
+    response = await client.get(f"/api/metrics/overview?{query}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["metrics"] == (await client.get(f"/api/metrics?{query}")).json()
+    assert body["health"] == (await client.get(f"/api/metrics/health?{query}")).json()
+    assert (
+        body["accuracy"] == (await client.get(f"/api/forecasts/accuracy?team_id={team_id}")).json()
+    )
+    assert (
+        body["snapshots"] == (await client.get(f"/api/metrics/snapshots?team_id={team_id}")).json()
+    )
+
+
+async def test_overview_defaults_to_the_trailing_30_days(client: AsyncClient) -> None:
+    team_id = await _seed_overview_team(client)
+
+    body = (await client.get(f"/api/metrics/overview?team_id={team_id}")).json()
+
+    metrics = body["metrics"]
+    window = datetime.fromisoformat(metrics["window_end"]) - datetime.fromisoformat(
+        metrics["window_start"]
+    )
+    assert window == timedelta(days=30)
+    assert metrics["completed"] == 1
+    health_window = datetime.fromisoformat(body["health"]["window_end"]) - datetime.fromisoformat(
+        body["health"]["window_start"]
+    )
+    assert health_window == timedelta(days=30)
+
+
+async def test_overview_honors_window_days_without_a_period(client: AsyncClient) -> None:
+    team_id = await _seed_overview_team(client)
+    # Completed 60 days ago: outside the default 30-day window, inside 90.
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Old"})).json()
+    for type_, days in (("created", 70), ("started", 65), ("completed", 60)):
+        response = await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+        assert response.status_code == 201
+
+    body = (await client.get(f"/api/metrics/overview?team_id={team_id}&window_days=90")).json()
+
+    for part in ("metrics", "health"):
+        window = datetime.fromisoformat(body[part]["window_end"]) - datetime.fromisoformat(
+            body[part]["window_start"]
+        )
+        assert window == timedelta(days=90), part
+    assert body["metrics"]["completed"] == 2
+    standalone = (await client.get(f"/api/metrics?team_id={team_id}&window_days=90")).json()
+    assert body["metrics"]["completed"] == standalone["completed"]
+
+
+async def test_overview_loads_the_scope_once(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team_id = await _seed_overview_team(client)
+    loads = 0
+    original = ScopeSampleLoader.load_data
+
+    async def counting(self: ScopeSampleLoader, **kwargs: Any) -> ScopeData:
+        nonlocal loads
+        loads += 1
+        return await original(self, **kwargs)
+
+    monkeypatch.setattr(ScopeSampleLoader, "load_data", counting)
+
+    response = await client.get(f"/api/metrics/overview?team_id={team_id}&exclude_states=canceled")
+
+    assert response.status_code == 200
+    assert loads == 1
+
+
+async def test_overview_scores_accuracy_against_unfiltered_completions(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    team_id = await _seed_overview_team(client)
+    # A forecast 10 days ago for 1 remaining item; "Shipped" (a task) completed
+    # 3 days ago resolves it. A `types=bug` view has no completions at all.
+    async with sessionmaker() as session:
+        await SqlAlchemyForecastSnapshotRepository(session).add(
+            ForecastSnapshot(
+                captured_on=(datetime.now(UTC) - timedelta(days=10)).date(),
+                window_days=90,
+                remaining=1,
+                p50_days=30,
+                p85_days=30,
+                team_id=UUID(team_id),
+                created_at=datetime.now(UTC) - timedelta(days=10),
+            )
+        )
+        await session.commit()
+
+    body = (await client.get(f"/api/metrics/overview?team_id={team_id}&types=bug")).json()
+
+    assert body["metrics"]["completed"] == 0
+    assert body["accuracy"]["evaluated"] == 1
+    assert body["accuracy"]["p85_hit_rate"] == 1.0
+
+
+async def test_overview_for_an_empty_team_is_empty_not_an_error(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+
+    response = await client.get(f"/api/metrics/overview?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["metrics"]["completed"] == 0
+    assert body["metrics"]["lead_time"] is None
+    assert body["accuracy"]["evaluated"] == 0
+    assert body["snapshots"] == []
+
+
+async def test_overview_for_unknown_team_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/metrics/overview?team_id={uuid4()}")
+
+    assert response.status_code == 404
+
+
+async def test_overview_window_days_floors_at_health_minimum(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+
+    response = await client.get(f"/api/metrics/overview?team_id={team_id}&window_days=6")
+
+    assert response.status_code == 422

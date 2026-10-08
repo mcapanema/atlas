@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
+from app.application.scope import ScopeSamples
 from app.application.snapshots.service import (
     METRICS_WINDOW_DAYS,
     SnapshotService,
@@ -171,3 +172,26 @@ async def test_get_forecast_accuracy_evaluates_resolved_past_forecasts() -> None
     assert accuracy.pending == 0
     assert accuracy.p50_hit_rate == 1.0
     assert accuracy.p85_hit_rate == 1.0
+
+
+async def test_get_forecast_accuracy_reuses_a_given_scope() -> None:
+    service, _, forecast_snapshots, team = _harness()
+    await forecast_snapshots.add(
+        ForecastSnapshot(
+            captured_on=(NOW - timedelta(days=7)).date(),
+            window_days=DEFAULT_RULES.forecast_history_days,
+            remaining=1,
+            p50_days=5,
+            p85_days=10,
+            team_id=team.id,
+            created_at=NOW - timedelta(days=7),
+        )
+    )
+    no_completions = ScopeSamples(streams=[], samples=[], item_count=0)
+
+    accuracy = await service.get_forecast_accuracy(team_id=team.id, scope=no_completions)
+
+    # The harness's repositories hold a completion that would resolve this
+    # forecast; the caller's scope wins, so it stays pending.
+    assert accuracy.evaluated == 0
+    assert accuracy.pending == 1
