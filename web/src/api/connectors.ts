@@ -39,3 +39,13 @@ export function useLinearSync() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations"] }),
   });
 }
+
+export function useTeamSync(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<SyncSummary>(`/api/connectors/linear/teams/${teamId}/sync`, { method: "POST" }),
+    // Any of the team's numbers may have moved: refetch whatever is on screen.
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+}
