@@ -6,11 +6,16 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 
-async def create_org_and_team(client: AsyncClient) -> tuple[str, str]:
+async def create_org_and_team(
+    client: AsyncClient, *, external_id: str | None = None
+) -> tuple[str, str]:
     org = await client.post("/api/organizations", json={"name": "Acme"})
     assert org.status_code in (200, 201)
     org_id: str = org.json()["id"]
-    team = await client.post("/api/teams", json={"organization_id": org_id, "name": "Platform"})
+    team = await client.post(
+        "/api/teams",
+        json={"organization_id": org_id, "name": "Platform", "external_id": external_id},
+    )
     assert team.status_code in (200, 201)
     team_id: str = team.json()["id"]
     return org_id, team_id
