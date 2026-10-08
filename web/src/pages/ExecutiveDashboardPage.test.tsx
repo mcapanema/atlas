@@ -214,6 +214,37 @@ describe("ExecutiveDashboardPage", () => {
     expect(within(growthRow).queryByText("—")).not.toBeInTheDocument();
   });
 
+  it("retries only the teams whose data failed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      if (url.startsWith("/api/work-items/states")) {
+        return Promise.resolve(jsonResponse(statesFixture));
+      }
+      if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+      return Promise.resolve(jsonResponse(overviewFixture()));
+    });
+    const overviewCalls = (teamId: string) =>
+      vi
+        .mocked(fetch)
+        .mock.calls.filter((call) =>
+          requestUrl(call[0]).startsWith(`/api/metrics/overview?team_id=${teamId}`),
+        ).length;
+
+    renderWithClient(<ExecutiveDashboardPage />);
+    await waitFor(
+      () => expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    const platformBefore = overviewCalls(teams[0].id);
+    const growthBefore = overviewCalls(teams[1].id);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(overviewCalls(teams[1].id)).toBe(growthBefore + 1));
+    expect(overviewCalls(teams[0].id)).toBe(platformBefore);
+  });
+
   it("re-skeletons failed cells while a retry is in flight", async () => {
     let failedOnce = false;
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {

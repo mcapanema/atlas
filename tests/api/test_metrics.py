@@ -525,7 +525,9 @@ async def _seed_overview_team(client: AsyncClient) -> str:
 
 @pytest.mark.parametrize(
     "extra",
-    ["", "&exclude_states=canceled", "&types=bug", "&window_days=90"],
+    # window_days is left out: an explicit period overrides it, so it is
+    # covered without one in test_overview_honors_window_days_without_a_period.
+    ["", "&exclude_states=canceled", "&types=bug"],
 )
 async def test_overview_matches_the_standalone_endpoints(client: AsyncClient, extra: str) -> None:
     team_id = await _seed_overview_team(client)
@@ -563,6 +565,29 @@ async def test_overview_defaults_to_the_trailing_30_days(client: AsyncClient) ->
         body["health"]["window_start"]
     )
     assert health_window == timedelta(days=30)
+
+
+async def test_overview_honors_window_days_without_a_period(client: AsyncClient) -> None:
+    team_id = await _seed_overview_team(client)
+    # Completed 60 days ago: outside the default 30-day window, inside 90.
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Old"})).json()
+    for type_, days in (("created", 70), ("started", 65), ("completed", 60)):
+        response = await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+        )
+        assert response.status_code == 201
+
+    body = (await client.get(f"/api/metrics/overview?team_id={team_id}&window_days=90")).json()
+
+    for part in ("metrics", "health"):
+        window = datetime.fromisoformat(body[part]["window_end"]) - datetime.fromisoformat(
+            body[part]["window_start"]
+        )
+        assert window == timedelta(days=90), part
+    assert body["metrics"]["completed"] == 2
+    standalone = (await client.get(f"/api/metrics?team_id={team_id}&window_days=90")).json()
+    assert body["metrics"]["completed"] == standalone["completed"]
 
 
 async def test_overview_loads_the_scope_once(
