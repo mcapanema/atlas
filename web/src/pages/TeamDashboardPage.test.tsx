@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { theme } from "antd";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../components/EChart", () => ({
@@ -124,7 +125,11 @@ describe("TeamDashboardPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Sync team/ }));
 
-    await screen.findByText("Updated 1 work item · 2 events");
+    const outcome = await screen.findByText("Updated 1 work item · 2 events");
+    // On the sync row, above the team selector.
+    expect(outcome.compareDocumentPosition(screen.getAllByRole("combobox")[0])).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     await waitFor(() => expect(metricsCalls()).toBeGreaterThan(before));
   });
 
@@ -173,7 +178,11 @@ describe("TeamDashboardPage", () => {
     );
     renderPage(`/teams?team=${teamFixture.id}`);
     fireEvent.click(await screen.findByRole("button", { name: /Sync team/ }));
-    await screen.findByText("Linear is not configured");
+    const error = await screen.findByText("Linear is not configured");
+    // On the sync row, above the team selector.
+    expect(error.compareDocumentPosition(screen.getAllByRole("combobox")[0])).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
 
     fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
     fireEvent.click(await screen.findByTitle("Mobile"));
@@ -219,5 +228,29 @@ describe("TeamDashboardPage", () => {
     const teamSelect = screen.getAllByRole("combobox")[0];
     expect(sync.compareDocumentPosition(hint)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(hint.compareDocumentPosition(teamSelect)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("reserves the sync row while a deep-linked team loads", () => {
+    // Teams never arrive: the page stays in its loading state.
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => {}));
+
+    renderPage(`/teams?team=${teamFixture.id}`);
+
+    // The button's height, held so the selector doesn't jump down once teams load.
+    const row = screen.getByRole("heading", { name: "Team Dashboard" }).nextElementSibling;
+    expect(row).toHaveStyle({ minHeight: `${theme.getDesignToken().controlHeight}px` });
+    expect(row).not.toContainElement(screen.getAllByRole("combobox")[0]);
+  });
+
+  it("leaves no sync row for a team id that isn't in the list", async () => {
+    mockMetricsFetch({ "/api/teams": [teamFixture] });
+
+    renderPage("/teams?team=55555555-5555-5555-5555-555555555555");
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Team Dashboard" }).nextElementSibling,
+      ).toContainElement(screen.getAllByRole("combobox")[0]),
+    );
   });
 });
