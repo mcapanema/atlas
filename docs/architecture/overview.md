@@ -80,7 +80,10 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
 `/api/metrics/health`, `/api/forecasts`, and `GET /api/recommendations` (409 until
-`ATLAS_OPENROUTER_API_KEY` is set — ADR-0005). The frontend consumes them
+`ATLAS_OPENROUTER_API_KEY` is set — ADR-0005). `GET /api/metrics/overview`
+is the Executive Dashboard's per-team row: flow metrics, health, forecast
+accuracy and snapshot history from one scope load, identical to the
+standalone endpoints for the same query. The frontend consumes them
 on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
 dashboards — charted with Apache ECharts (ADR-0007) — plus the Flow
 Metrics (`/metrics`) and Advisor (`/advisor`) pages.

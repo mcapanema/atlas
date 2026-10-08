@@ -392,6 +392,15 @@ class DeliveryHealthRead(BaseModel):
     components: list[HealthComponentRead]
 
 
+class ScopeOverviewRead(BaseModel):
+    """One scope's dashboard row, from a single scope load (Executive Dashboard)."""
+
+    metrics: FlowMetricsRead
+    health: DeliveryHealthRead
+    accuracy: ForecastAccuracyRead
+    snapshots: list[MetricSnapshotRead]
+
+
 class AdviceFeedbackCreate(BaseModel):
     rating: Literal["up", "down"]
     comment: str | None = Field(default=None, max_length=2000)
