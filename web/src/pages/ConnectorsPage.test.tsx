@@ -21,20 +21,28 @@ function mockApi({
   autoSyncing = false,
   organizations = [ACME],
   statusPending = false,
+  organizationsAfterSync = organizations,
+  scheduleAfterSync = null,
 }: {
   configured: boolean;
   autoSyncing?: boolean;
   organizations?: (typeof ACME)[];
   statusPending?: boolean;
+  /** What the server returns once a Sync now has finished. */
+  organizationsAfterSync?: (typeof ACME)[];
+  scheduleAfterSync?: object | null;
 }) {
+  let synced = false;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/linear")
       return statusPending
         ? new Promise<Response>(() => {})
         : jsonResponse({ configured, auto_syncing: autoSyncing });
-    if (url === "/api/organizations") return jsonResponse(organizations);
-    if (url === "/api/connectors/linear/sync")
+    if (url === "/api/organizations")
+      return jsonResponse(synced ? organizationsAfterSync : organizations);
+    if (url === "/api/connectors/linear/sync") {
+      synced = true;
       return jsonResponse({
         teams: 1,
         projects: 2,
@@ -43,6 +51,7 @@ function mockApi({
         divergences: 7,
         deleted: 9,
       });
+    }
     if (url.endsWith("/sync-schedule") && init?.method === "PUT")
       return jsonResponse({
         ...(JSON.parse(init.body as string) as object),
@@ -51,7 +60,7 @@ function mockApi({
         last_manual_sync_at: null,
         next_run_at: null,
       });
-    if (url.endsWith("/sync-schedule")) return jsonResponse(null);
+    if (url.endsWith("/sync-schedule")) return jsonResponse(synced ? scheduleAfterSync : null);
     throw new Error(`Unexpected fetch: ${url}`);
   });
 }
@@ -154,20 +163,59 @@ describe("ConnectorsPage", () => {
   });
 
   it("refreshes the last sync after Sync now", async () => {
-    const fetchMock = mockApi({ configured: true });
-    const scheduleReads = () =>
-      fetchMock.mock.calls.filter(
-        ([input, init]) => requestUrl(input).endsWith("/sync-schedule") && init?.method !== "PUT",
-      ).length;
+    mockApi({
+      configured: true,
+      scheduleAfterSync: {
+        enabled: false,
+        days: [1],
+        window_start: "09:00:00",
+        window_end: "17:00:00",
+        interval_minutes: 60,
+        timezone: "UTC",
+        updated_at: "2026-10-07T12:00:00Z",
+        last_run: null,
+        last_manual_sync_at: "2026-10-08T12:00:00Z",
+        next_run_at: null,
+      },
+    });
+
+    renderWithClient(<ConnectorsPage />);
+    expect(await screen.findByText("Not recorded")).toBeInTheDocument();
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
+
+    fireEvent.click(button);
+
+    expect(await screen.findByText("08-10-2026 12:00 (UTC) · manual")).toBeInTheDocument();
+  });
+
+  it("clears the sync outcome when another organization is picked", async () => {
+    mockApi({ configured: true, organizations: [ACME, GLOBEX] });
 
     renderWithClient(<ConnectorsPage />);
     const button = await screen.findByRole("button", { name: /Sync now/ });
     await waitFor(() => expect(button).toBeEnabled());
-    await waitFor(() => expect(scheduleReads()).toBe(1));
+    fireEvent.click(button);
+    const outcome = /^Updated 1 team/;
+    expect(await screen.findByText(outcome)).toBeInTheDocument();
 
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Organization" }));
+    fireEvent.click(await screen.findByTitle("Globex"));
+
+    await waitFor(() => expect(screen.queryByText(outcome)).not.toBeInTheDocument());
+  });
+
+  it("keeps the outcome of a first sync that created the organization", async () => {
+    mockApi({ configured: true, organizations: [], organizationsAfterSync: [ACME] });
+
+    renderWithClient(<ConnectorsPage />);
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
 
-    await waitFor(() => expect(scheduleReads()).toBe(2));
+    // The new organization becomes the selection without anyone picking it.
+    expect(await screen.findByRole("combobox", { name: "Organization" })).toBeInTheDocument();
+    expect(screen.getByText(/^Updated 1 team/)).toBeInTheDocument();
   });
 
   it("shows an error when sync fails", async () => {

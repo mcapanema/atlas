@@ -56,17 +56,20 @@ function OrganizationPicker({
   ) : null;
 }
 
+type LinearSync = ReturnType<typeof useLinearSync>;
+
 /** Manual sync, matching the Team Dashboard's Sync team: icon, inline wait hint and outcome. */
 function SyncNow({
+  sync,
   organizationId,
   configured,
   autoSyncing,
 }: {
+  sync: LinearSync;
   organizationId: string | undefined;
   configured: boolean;
   autoSyncing: boolean;
 }) {
-  const sync = useLinearSync();
   return (
     <Flex vertical gap="small">
       <Flex wrap gap="small" align="center">
@@ -95,10 +98,12 @@ function SyncNow({
 
 function LinearCard({
   status,
+  sync,
   organizationId,
   loading,
 }: {
   status: ConnectorStatus | undefined;
+  sync: LinearSync;
   organizationId: string | undefined;
   loading: boolean;
 }) {
@@ -114,6 +119,7 @@ function LinearCard({
       <Flex vertical gap="middle">
         {organizationId && <SyncStatus organizationId={organizationId} />}
         <SyncNow
+          sync={sync}
           organizationId={organizationId}
           configured={configured}
           autoSyncing={status?.auto_syncing ?? false}
@@ -131,6 +137,13 @@ function ConnectorsWorkspace({
   organizations: ReturnType<typeof useOrganizations>;
 }) {
   const [organizationId, setOrganizationId] = useState<string>();
+  // Owned here, not in SyncNow, so picking another organization can clear
+  // the last outcome; a first sync that creates the organization keeps it.
+  const sync = useLinearSync();
+  const pickOrganization = (id: string) => {
+    sync.reset();
+    setOrganizationId(id);
+  };
   const orgList = organizations.data ?? [];
   // Default to the first organization once loaded; the picker can override.
   const selectedOrgId = organizationId ?? orgList[0]?.id;
@@ -143,11 +156,16 @@ function ConnectorsWorkspace({
         <OrganizationPicker
           organizations={orgList}
           value={selectedOrgId}
-          onChange={setOrganizationId}
+          onChange={pickOrganization}
           canBootstrap={configured === true}
         />
       )}
-      <LinearCard status={status.data} organizationId={selectedOrgId} loading={loading} />
+      <LinearCard
+        status={status.data}
+        sync={sync}
+        organizationId={selectedOrgId}
+        loading={loading}
+      />
       {selectedOrgId && (
         // Keyed: another organization's save result must not carry over.
         <AutoSyncCard key={selectedOrgId} organizationId={selectedOrgId} />
