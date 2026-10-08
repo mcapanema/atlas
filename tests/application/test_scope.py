@@ -151,3 +151,42 @@ async def test_load_leaves_born_done_items_out_of_every_count() -> None:
     # item was closed anyway.
     closed = sum(1 for sample in scope.samples if sample.completed_at is not None)
     assert scope.item_count - closed == 1
+
+
+async def test_filtered_without_filters_is_the_same_data() -> None:
+    team_id = uuid4()
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([_item(team_id)]), InMemoryEventRepository([])
+    )
+
+    data = await loader.load_data(team_id=team_id)
+
+    assert data.filtered() is data
+
+
+async def test_filtered_matches_a_filtered_load() -> None:
+    team_id = uuid4()
+    story = WorkItem(team_id=team_id, title="Story", type=WorkItemType.STORY, state="Done")
+    bug = WorkItem(team_id=team_id, title="Bug", type=WorkItemType.BUG)
+    junk = WorkItem(team_id=team_id, title="Junk", type=WorkItemType.STORY, state="Canceled")
+    events = [
+        _event(story, EventType.CREATED, 10),
+        _event(story, EventType.COMPLETED, 2),
+        _event(bug, EventType.CREATED, 8),
+        _event(junk, EventType.CREATED, 9),
+        _event(junk, EventType.STARTED, 7),
+    ]
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([story, bug, junk]), InMemoryEventRepository(events)
+    )
+
+    data = await loader.load_data(team_id=team_id)
+    narrowed = data.filtered(types={WorkItemType.STORY}, exclude_states={"canceled"}).samples()
+    loaded = await loader.load(
+        team_id=team_id, types={WorkItemType.STORY}, exclude_states={"canceled"}
+    )
+
+    assert narrowed.item_count == loaded.item_count == 1
+    assert narrowed.samples == loaded.samples
+    assert narrowed.streams == loaded.streams
+    assert narrowed.remaining_count == loaded.remaining_count

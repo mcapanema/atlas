@@ -89,11 +89,20 @@ class SnapshotService:
         return await self._metric_snapshots.list(team_id=team_id, project_id=project_id)
 
     async def get_forecast_accuracy(
-        self, *, team_id: UUID | None = None, project_id: UUID | None = None
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        scope: ScopeSamples | None = None,
     ) -> ForecastAccuracy:
-        """Calibration of the scope's past forecasts against actual completions."""
+        """Calibration of the scope's past forecasts against actual completions.
+
+        `scope`, when given, must be the scope's current unfiltered samples
+        (the forecasts were captured unfiltered); it spares a reload.
+        """
         snapshots = await self._forecast_snapshots.list(team_id=team_id, project_id=project_id)
-        scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
+        if scope is None:
+            scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
         completions = [s.completed_at for s in scope.samples if s.completed_at is not None]
         return evaluate_forecast_accuracy(snapshots, completions)
 
