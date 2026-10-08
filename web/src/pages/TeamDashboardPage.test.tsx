@@ -191,4 +191,33 @@ describe("TeamDashboardPage", () => {
     await screen.findByText("Select a team to see its dashboard.");
     expect(screen.queryByRole("button", { name: /Sync team/ })).not.toBeInTheDocument();
   });
+
+  it("places Sync team between the title and the team selector", async () => {
+    mockMetricsFetch({ "/api/teams": [{ ...teamFixture, external_id: "lt1" }] });
+
+    renderPage(`/teams?team=${teamFixture.id}`);
+
+    const title = screen.getByRole("heading", { name: "Team Dashboard" });
+    const sync = await screen.findByRole("button", { name: /Sync team/ });
+    const teamSelect = screen.getAllByRole("combobox")[0];
+    expect(title.compareDocumentPosition(sync)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(sync.compareDocumentPosition(teamSelect)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("shows the auto-sync wait hint on the sync row, above the team selector", async () => {
+    mockMetricsFetch({
+      "/api/teams": [{ ...teamFixture, external_id: "lt1" }],
+      "/api/connectors/linear": { configured: true, auto_syncing: true },
+    });
+
+    renderPage(`/teams?team=${teamFixture.id}`);
+
+    const hint = await screen.findByText(
+      "An automatic sync is running; Sync team starts when it finishes.",
+    );
+    const sync = screen.getByRole("button", { name: /Sync team/ });
+    const teamSelect = screen.getAllByRole("combobox")[0];
+    expect(sync.compareDocumentPosition(hint)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(hint.compareDocumentPosition(teamSelect)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 });

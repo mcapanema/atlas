@@ -1,5 +1,5 @@
 import { SyncOutlined } from "@ant-design/icons";
-import { Button, Tooltip, Typography } from "antd";
+import { Button, Space, Tooltip, Typography } from "antd";
 
 import { useLinearStatus, useTeamSync } from "../api/connectors";
 import type { Team } from "../api/teams";
@@ -11,8 +11,9 @@ export function TeamSyncButton({ team }: { team: Team }) {
   // Every sync takes one lock (ADR-0014): a click waits for a running auto sync.
   const autoSyncing = useLinearStatus().data?.auto_syncing ?? false;
   const fromSource = team.external_id !== null;
+  // Its own wrapping row: the wait hint and the outcome sit beside the button.
   return (
-    <>
+    <Space wrap>
       <Tooltip title={fromSource ? undefined : "Created in Atlas, so there is nothing to sync"}>
         <Button
           icon={<SyncOutlined />}
@@ -30,6 +31,6 @@ export function TeamSyncButton({ team }: { team: Team }) {
       )}
       {sync.isError && <Typography.Text type="danger">{sync.error.message}</Typography.Text>}
       {sync.data && <Typography.Text type="secondary">{syncOutcome(sync.data)}</Typography.Text>}
-    </>
+    </Space>
   );
 }

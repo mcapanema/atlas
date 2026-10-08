@@ -29,6 +29,12 @@ export function TeamDashboardPage() {
   return (
     <>
       <Typography.Title level={3}>Team Dashboard</Typography.Title>
+      {team && (
+        <div style={{ marginBottom: 12 }}>
+          {/* Keyed: one team's sync result must not carry over to the next. */}
+          <TeamSyncButton key={team.id} team={team} />
+        </div>
+      )}
       <Space direction="vertical" style={{ width: "100%" }} size="large">
         <Space wrap>
           <Select
@@ -44,8 +50,6 @@ export function TeamDashboardPage() {
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
           <CustomRulesTag team={team} />
-          {/* Keyed: one team's sync result must not carry over to the next. */}
-          {team && <TeamSyncButton key={team.id} team={team} />}
           {teamId && (
             <MetricsFilterBar filters={filters} scope={{ teamId }} onChange={setFilters} />
           )}
