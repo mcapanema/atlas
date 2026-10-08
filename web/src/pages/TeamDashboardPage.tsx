@@ -1,4 +1,4 @@
-import { Alert, Select, Space, Typography } from "antd";
+import { Alert, Select, Space, Typography, theme } from "antd";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -16,6 +16,7 @@ export function TeamDashboardPage() {
   const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams]);
   const teams = useTeams();
   const team = teams.data?.find((candidate) => candidate.id === teamId);
+  const { token } = theme.useToken();
 
   const setFilters = (next: MetricsFilters) => {
     const params = new URLSearchParams(searchParams);
@@ -29,6 +30,14 @@ export function TeamDashboardPage() {
   return (
     <>
       <Typography.Title level={3}>Team Dashboard</Typography.Title>
+      {teamId && (team || teams.isLoading) && (
+        // Held at the button's height while a deep-linked team loads, so the
+        // selector doesn't jump down when it arrives.
+        <div style={{ marginBottom: 12, minHeight: token.controlHeight }}>
+          {/* Keyed: one team's sync result must not carry over to the next. */}
+          {team && <TeamSyncButton key={team.id} team={team} />}
+        </div>
+      )}
       <Space direction="vertical" style={{ width: "100%" }} size="large">
         <Space wrap>
           <Select
@@ -44,8 +53,6 @@ export function TeamDashboardPage() {
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
           <CustomRulesTag team={team} />
-          {/* Keyed: one team's sync result must not carry over to the next. */}
-          {team && <TeamSyncButton key={team.id} team={team} />}
           {teamId && (
             <MetricsFilterBar filters={filters} scope={{ teamId }} onChange={setFilters} />
           )}
