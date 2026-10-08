@@ -247,8 +247,10 @@ class FakeDataSource:
     async def fetch_projects(self) -> list[SourceProject]:
         return self.projects
 
-    async def fetch_work_items(self) -> list[SourceWorkItem]:
-        return self.work_items
+    async def fetch_work_items(self, team_external_id: str | None = None) -> list[SourceWorkItem]:
+        if team_external_id is None:
+            return self.work_items
+        return [i for i in self.work_items if i.team_external_id == team_external_id]
 
     async def fetch_organization_name(self) -> str:
         return self.organization_name

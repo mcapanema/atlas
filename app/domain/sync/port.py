@@ -19,7 +19,9 @@ class DeliveryDataSource(Protocol):
 
     async def fetch_projects(self) -> list[SourceProject]: ...
 
-    async def fetch_work_items(self) -> list[SourceWorkItem]: ...
+    async def fetch_work_items(self, team_external_id: str | None = None) -> list[SourceWorkItem]:
+        """Every work item, or only one team's when team_external_id is given."""
+        ...
 
     async def fetch_organization_name(self) -> str:
         """Name of the workspace the credentials are scoped to."""
