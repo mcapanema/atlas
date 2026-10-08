@@ -99,14 +99,15 @@ async def sync_linear_team(
     session: SessionDep,
     auto_sync: AutoSyncRunnerDep,
 ) -> SyncSummaryRead:
-    # Same lock as every sync (ADR-0014). Not recorded on the schedule:
-    # one team's sync leaves the others stale, so a due slot still runs.
+    # Same lock as every sync (ADR-0014). One team's sync leaves the others
+    # stale, so it's not recorded on the schedule (a due slot still runs)
+    # and only this team's scopes are snapshotted.
     async with auto_sync.lock:
         try:
             summary = await service.sync_team(team_id)
         except UnknownTeamError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-        captured = await snapshots.capture_all()
+        captured = await snapshots.capture_team(team_id)
         logger.info("Captured snapshots for %d scope(s) post-team-sync", captured)
         await session.commit()
     return SyncSummaryRead.model_validate(summary)

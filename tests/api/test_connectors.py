@@ -317,6 +317,21 @@ async def test_team_sync_captures_the_teams_snapshot(
     assert len(snapshots) == 1
 
 
+async def test_team_sync_leaves_other_teams_snapshots_to_their_own_sync(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    # lt2 is stale after lt1's sync; a snapshot now would freeze today's
+    # point from stale data, and the org sync later today would skip it.
+    test_app.dependency_overrides[get_delivery_data_source] = _two_team_source
+    _, team_id = await create_org_and_team(client, external_id="lt1")
+
+    await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+
+    teams = (await client.get("/api/teams")).json()
+    other_id = next(team["id"] for team in teams if team["external_id"] == "lt2")
+    assert (await client.get(f"/api/metrics/snapshots?team_id={other_id}")).json() == []
+
+
 async def test_team_sync_unknown_team_is_404(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:

@@ -129,9 +129,10 @@ resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
   source-derived events from the current mapping and rewrites snapshot
   history (ADR-0013) — the upgrade path after a mapping fix.
   A team sync (`POST /api/connectors/linear/teams/{id}/sync`, the Team
-  Dashboard's "Sync team" button) fetches only that team's work items and
-  never prunes — a filtered fetch can't tell deleted from moved — so
-  deletions wait for the next organization sync.
+  Dashboard's "Sync team" button) fetches only that team's work items,
+  snapshots only that team and its projects, and never prunes — a
+  filtered fetch can't tell deleted from moved — so deletions wait for the
+  next organization sync.
   Auto sync (ADR-0014): an organization's `SyncSchedule`
   (`app/domain/sync_schedules/`: weekdays, a local time window, an interval,
   an IANA zone; slot math in `slots.py`) is served by

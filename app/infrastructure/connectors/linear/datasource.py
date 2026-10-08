@@ -146,13 +146,16 @@ class LinearDataSource:
     async def fetch_work_items(self, team_external_id: str | None = None) -> list[SourceWorkItem]:
         labels = await self._nodes(_LABELS_QUERY, "issueLabels")
         label_names = {node["id"]: str(node["name"]) for node in labels}
-        # A null filter is Linear's "no filter": every team's issues.
-        issue_filter = (
-            None if team_external_id is None else {"team": {"id": {"eq": team_external_id}}}
+        # No team: the $filter variable is omitted (not null), so the argument
+        # is absent and Linear returns every team's issues.
+        variables = (
+            {}
+            if team_external_id is None
+            else {"filter": {"team": {"id": {"eq": team_external_id}}}}
         )
         issues = [
             node
-            for node in await self._nodes(_ISSUES_QUERY, "issues", {"filter": issue_filter})
+            for node in await self._nodes(_ISSUES_QUERY, "issues", variables)
             if not node.get("trashed")
         ]
         return _map_tolerantly(issues, lambda node: map_issue(node, label_names), "issue")

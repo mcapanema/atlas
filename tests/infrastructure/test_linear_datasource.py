@@ -302,15 +302,17 @@ async def test_fetch_work_items_for_a_team_filters_every_page() -> None:
 
 
 async def test_fetch_work_items_without_a_team_sends_no_filter() -> None:
-    filters: list[object] = []
+    # Omitted, not an explicit null: an org-wide sync sends exactly the
+    # variables it always has, so it can't depend on how Linear reads null.
+    variables: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if "issueLabels(" in body["query"]:
             return _page("issueLabels", [])
-        filters.append(body["variables"]["filter"])
+        variables.append(body["variables"])
         return _page("issues", [_issue_node("i1")])
 
     await _datasource(handler).fetch_work_items()
 
-    assert filters == [None]
+    assert variables == [{"after": None}]

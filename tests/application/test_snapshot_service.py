@@ -112,6 +112,34 @@ async def test_capture_all_captures_again_next_day() -> None:
     assert len(await metric_snapshots.list(team_id=team.id)) == 2
 
 
+async def test_capture_team_snapshots_only_that_team_and_its_projects() -> None:
+    # A team sync refreshed one team: snapshotting the others would freeze
+    # today's point from stale data (capture is idempotent per day).
+    team = Team(organization_id=uuid4(), name="Platform")
+    other = Team(organization_id=team.organization_id, name="Mobile")
+    project = Project(team_id=team.id, name="Q3 Launch")
+    other_project = Project(team_id=other.id, name="App")
+    metric_snapshots = InMemoryMetricSnapshotRepository()
+    work_items = InMemoryWorkItemRepository()
+    events = InMemoryEventRepository()
+    service = SnapshotService(
+        MetricsService(work_items, events),
+        ForecastService(work_items, events),
+        InMemoryTeamRepository([team, other]),
+        InMemoryProjectRepository([project, other_project]),
+        metric_snapshots,
+        InMemoryForecastSnapshotRepository(),
+    )
+
+    captured = await service.capture_team(team.id, now=NOW)
+
+    assert captured == 2
+    assert len(await metric_snapshots.list(team_id=team.id)) == 1
+    assert len(await metric_snapshots.list(project_id=project.id)) == 1
+    assert await metric_snapshots.list(team_id=other.id) == []
+    assert await metric_snapshots.list(project_id=other_project.id) == []
+
+
 async def test_get_metric_history_returns_scope_snapshots() -> None:
     service, _, _, team = _harness()
     await service.capture_all(now=NOW)
