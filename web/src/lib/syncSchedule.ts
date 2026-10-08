@@ -1,4 +1,4 @@
-import type { SyncScheduleInput } from "../api/syncSchedule";
+import type { SyncSchedule, SyncScheduleInput } from "../api/syncSchedule";
 
 /** ISO weekdays, as the API stores them: 1 = Monday … 7 = Sunday (not getDay()). */
 export const WEEKDAY_OPTIONS = [
@@ -68,4 +68,25 @@ export function formatInZone(iso: string, timeZone: string): string {
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? "";
   return `${part("day")}-${part("month")}-${part("year")} ${part("hour")}:${part("minute")} (${timeZone})`;
+}
+
+export interface LastSync {
+  at: string;
+  kind: "auto" | "manual";
+  error: string | null;
+}
+
+/**
+ * The most recent sync, auto or manual. A manual sync after a failed auto run
+ * supersedes it: the data is fresh again, so the failure is no longer news.
+ */
+export function lastSync(
+  schedule: Pick<SyncSchedule, "last_run" | "last_manual_sync_at">,
+): LastSync | null {
+  const run = schedule.last_run;
+  const manual = schedule.last_manual_sync_at;
+  if (run && (!manual || Date.parse(run.finished_at) >= Date.parse(manual))) {
+    return { at: run.finished_at, kind: "auto", error: run.error };
+  }
+  return manual ? { at: manual, kind: "manual", error: null } : null;
 }

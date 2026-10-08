@@ -321,6 +321,11 @@ h5 {
   max-width: 1440px;
   margin-inline: auto;
 }
+/* Settings pages (Connectors): one readable column. Full-width cards left
+   their controls clustered in the left third of a 1440px page. */
+.page-settings {
+  max-width: 960px;
+}
 
 /* Focus visibility for plain links and custom elements; AntD controls
    carry their own focus styles. */

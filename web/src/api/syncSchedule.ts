@@ -23,6 +23,8 @@ interface SyncRun {
 export interface SyncSchedule extends SyncScheduleInput {
   updated_at: string;
   last_run: SyncRun | null;
+  /** When a manual "Sync now" last succeeded; recorded only once a schedule exists. */
+  last_manual_sync_at: string | null;
   next_run_at: string | null;
 }
 

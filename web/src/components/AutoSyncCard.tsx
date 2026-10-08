@@ -3,26 +3,20 @@ import {
   Button,
   Card,
   Checkbox,
+  Flex,
   Form,
   Select,
-  Space,
   Switch,
   TimePicker,
   Typography,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 
-import {
-  useSaveSyncSchedule,
-  useSyncSchedule,
-  type SyncSchedule,
-  type SyncScheduleInput,
-} from "../api/syncSchedule";
+import { useSaveSyncSchedule, useSyncSchedule, type SyncScheduleInput } from "../api/syncSchedule";
 import {
   WEEKDAY_OPTIONS,
   clockParts,
   defaultSchedule,
-  formatInZone,
   intervalOptions,
   timeZoneOptions,
 } from "../lib/syncSchedule";
@@ -70,127 +64,112 @@ function toInput(values: FormValues): SyncScheduleInput {
   };
 }
 
-function RunStatus({ schedule }: { schedule: SyncSchedule | null }) {
-  if (!schedule) {
-    return (
-      <Typography.Text type="secondary">
-        Not scheduled yet: Atlas syncs only when you click Sync now.
-      </Typography.Text>
-    );
-  }
-  const run = schedule.last_run;
-  return (
-    <Space direction="vertical" size={4} style={{ width: "100%" }}>
-      <Typography.Text>
-        {schedule.next_run_at
-          ? `Next run: ${formatInZone(schedule.next_run_at, schedule.timezone)}`
-          : "Auto sync is off"}
-      </Typography.Text>
-      {run?.error && (
-        <Alert
-          type="error"
-          showIcon
-          message={`Last auto sync failed (${formatInZone(run.finished_at, schedule.timezone)})`}
-          description={run.error}
-        />
-      )}
-      {run && !run.error && (
-        <Typography.Text type="secondary">
-          Last auto sync: {formatInZone(run.finished_at, schedule.timezone)}, succeeded
-        </Typography.Text>
-      )}
-    </Space>
-  );
-}
-
 function ScheduleForm({
   initial,
   saving,
+  saved,
   onSave,
 }: {
   initial: SyncScheduleInput;
   saving: boolean;
+  saved: boolean;
   onSave: (input: SyncScheduleInput) => void;
 }) {
+  const [form] = Form.useForm<FormValues>();
+  // Watched so the schedule greys out while auto sync is off. Disabled fields
+  // still submit, so switching back on restores the same schedule.
+  const enabled = Form.useWatch("enabled", form) ?? initial.enabled;
   return (
     <Form<FormValues>
+      form={form}
       layout="vertical"
       initialValues={toFormValues(initial)}
       onFinish={(values) => onSave(toInput(values))}
     >
-      <Form.Item name="enabled" label="Sync automatically" valuePropName="checked">
+      <Form.Item
+        name="enabled"
+        label="Sync automatically"
+        valuePropName="checked"
+        layout="horizontal"
+        colon={false}
+      >
         <Switch />
       </Form.Item>
       <Form.Item name="days" label="Days">
-        <Checkbox.Group options={WEEKDAY_OPTIONS} />
+        <Checkbox.Group options={WEEKDAY_OPTIONS} disabled={!enabled} />
       </Form.Item>
-      <Space wrap align="start">
+      <Flex wrap gap="middle">
         <Form.Item name="window" label="Between">
           {/* order={false}: don't silently turn 22:00–02:00 into 02:00–22:00; the
               server rejects an overnight window with a reason instead. */}
-          <TimePicker.RangePicker format={CLOCK} minuteStep={15} allowClear={false} order={false} />
+          <TimePicker.RangePicker
+            format={CLOCK}
+            minuteStep={15}
+            allowClear={false}
+            order={false}
+            disabled={!enabled}
+          />
         </Form.Item>
         <Form.Item name="interval_minutes" label="Every">
-          <Select style={{ width: 110 }} options={intervalOptions(initial.interval_minutes)} />
+          <Select
+            style={{ width: 110 }}
+            options={intervalOptions(initial.interval_minutes)}
+            disabled={!enabled}
+          />
         </Form.Item>
         <Form.Item name="timezone" label="Timezone">
-          <Select showSearch style={{ width: 240 }} options={timeZoneOptions(initial.timezone)} />
+          <Select
+            showSearch
+            style={{ width: 240 }}
+            options={timeZoneOptions(initial.timezone)}
+            disabled={!enabled}
+          />
         </Form.Item>
-      </Space>
-      <Button type="primary" htmlType="submit" loading={saving}>
-        Save schedule
-      </Button>
+      </Flex>
+      <Flex gap="small" align="center">
+        <Button type="primary" htmlType="submit" loading={saving}>
+          Save schedule
+        </Button>
+        {saved && <Typography.Text type="success">Schedule saved</Typography.Text>}
+      </Flex>
     </Form>
   );
 }
 
-function SaveOutcome({ save }: { save: ReturnType<typeof useSaveSyncSchedule> }) {
-  if (save.isError) {
-    return (
-      <Alert type="error" message="Could not save the schedule" description={save.error.message} />
-    );
-  }
-  return save.isSuccess ? <Typography.Text type="success">Schedule saved</Typography.Text> : null;
-}
-
-export function AutoSyncCard({
-  organizationId,
-  configured,
-}: {
-  organizationId: string;
-  /** undefined while the connector status loads: no warning until it's known. */
-  configured: boolean | undefined;
-}) {
+export function AutoSyncCard({ organizationId }: { organizationId: string }) {
   const schedule = useSyncSchedule(organizationId);
   const save = useSaveSyncSchedule(organizationId);
   const current = schedule.data ?? null;
 
   return (
     <Card title="Auto sync" loading={schedule.isLoading}>
-      <Space direction="vertical" style={{ width: "100%" }}>
-        {configured === false && (
-          <Alert type="warning" message="Scheduled syncs fail until ATLAS_LINEAR_API_KEY is set." />
-        )}
-        {schedule.isError ? (
-          <Alert
-            type="error"
-            message="Failed to load the auto-sync schedule"
-            description={schedule.error.message}
+      {schedule.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="Failed to load the auto-sync schedule"
+          description={schedule.error.message}
+        />
+      ) : (
+        <Flex vertical gap="middle">
+          {/* Keyed so a saved or switched schedule resets the form's values. */}
+          <ScheduleForm
+            key={`${organizationId}:${current?.updated_at ?? "new"}`}
+            initial={current ?? defaultSchedule()}
+            saving={save.isPending}
+            saved={save.isSuccess}
+            onSave={(input) => save.mutate(input)}
           />
-        ) : (
-          <>
-            <RunStatus schedule={current} />
-            {/* Keyed so a saved or switched schedule resets the form's values. */}
-            <ScheduleForm
-              key={`${organizationId}:${current?.updated_at ?? "new"}`}
-              initial={current ?? defaultSchedule()}
-              saving={save.isPending}
-              onSave={(input) => save.mutate(input)}
+          {save.isError && (
+            <Alert
+              type="error"
+              showIcon
+              title="Could not save the schedule"
+              description={save.error.message}
             />
-            <SaveOutcome save={save} />
-          </>
-        )}
-      </Space>
+          )}
+        </Flex>
+      )}
     </Card>
   );
 }

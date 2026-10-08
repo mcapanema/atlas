@@ -20,6 +20,7 @@ const saved: SyncSchedule = {
   timezone: "UTC",
   updated_at: "2026-10-07T12:00:00Z",
   last_run: null,
+  last_manual_sync_at: null,
   next_run_at: NEXT_RUN,
 };
 
@@ -46,41 +47,24 @@ afterEach(() => {
 });
 
 describe("AutoSyncCard", () => {
-  it("shows the saved schedule and its next run", async () => {
+  it("shows the saved schedule", async () => {
     mockSchedule(saved);
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
 
     expect(await screen.findByDisplayValue("09:00")).toBeInTheDocument();
     expect(screen.getByDisplayValue("17:00")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Mon" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Tue" })).not.toBeChecked();
     expect(screen.getByRole("switch")).toBeChecked();
-    expect(screen.getByText("Next run: 08-10-2026 09:00 (UTC)")).toBeInTheDocument();
-  });
-
-  it("shows why the last auto sync failed", async () => {
-    mockSchedule({
-      ...saved,
-      last_run: {
-        slot_at: "2026-10-07T09:00:00Z",
-        finished_at: "2026-10-07T09:01:00Z",
-        error: "Upstream data source error: rate limited",
-      },
-    });
-
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
-
-    expect(await screen.findByText(/Last auto sync failed/)).toBeInTheDocument();
-    expect(screen.getByText("Upstream data source error: rate limited")).toBeInTheDocument();
   });
 
   it("starts a new schedule on weekdays in the browser's zone and saves it", async () => {
     const fetchMock = mockSchedule(null);
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
 
-    expect(await screen.findByText(/Not scheduled yet/)).toBeInTheDocument();
+    await screen.findByRole("button", { name: "Save schedule" });
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
 
     await waitFor(() => expect(screen.getByText("Schedule saved")).toBeInTheDocument());
@@ -90,7 +74,7 @@ describe("AutoSyncCard", () => {
   it("saves the days as ISO weekdays, Sunday as 7", async () => {
     const fetchMock = mockSchedule(saved);
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Sun" }));
     fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
@@ -111,7 +95,7 @@ describe("AutoSyncCard", () => {
       jsonResponse({ detail: "An enabled auto sync needs at least one day" }, 422),
     );
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
 
     fireEvent.click(await screen.findByRole("checkbox", { name: "Mon" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Wed" }));
@@ -119,16 +103,6 @@ describe("AutoSyncCard", () => {
 
     expect(
       await screen.findByText("An enabled auto sync needs at least one day"),
-    ).toBeInTheDocument();
-  });
-
-  it("warns that scheduled syncs fail while Linear is not configured", async () => {
-    mockSchedule(saved);
-
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured={false} />);
-
-    expect(
-      await screen.findByText(/Scheduled syncs fail until ATLAS_LINEAR_API_KEY is set/),
     ).toBeInTheDocument();
   });
 
@@ -140,7 +114,7 @@ describe("AutoSyncCard", () => {
       ),
     );
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
 
     const start = await screen.findByDisplayValue("09:00");
     const end = screen.getByDisplayValue("17:00");
@@ -158,31 +132,12 @@ describe("AutoSyncCard", () => {
     expect(await screen.findByText(/overnight windows aren't supported/)).toBeInTheDocument();
   });
 
-  it("does not warn about Linear while its status is still unknown", async () => {
-    mockSchedule(saved);
-
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured={undefined} />);
-
-    expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
-    expect(screen.queryByText(/Scheduled syncs fail/)).not.toBeInTheDocument();
-  });
-
-  it("shows run times in the schedule's zone, not the browser's", async () => {
-    mockSchedule({ ...saved, timezone: "America/Sao_Paulo", next_run_at: "2026-10-08T11:00:00Z" });
-
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
-
-    expect(
-      await screen.findByText("Next run: 08-10-2026 08:00 (America/Sao_Paulo)"),
-    ).toBeInTheDocument();
-  });
-
   it("refreshes the next and last run while the page stays open", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchMock = mockSchedule(saved);
     const reads = () => fetchMock.mock.calls.filter(([, init]) => init?.method !== "PUT").length;
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
     await waitFor(() => expect(reads()).toBe(1));
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -198,8 +153,59 @@ describe("AutoSyncCard", () => {
     vi.setSystemTime(new Date("2026-03-08T12:00:00Z"));
     mockSchedule({ ...saved, window_start: "02:30:00" });
 
-    renderWithClient(<AutoSyncCard organizationId={ORG} configured />);
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
 
     expect(await screen.findByDisplayValue("02:30")).toBeInTheDocument();
+  });
+
+  it("labels the switch on its own row", async () => {
+    mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+
+    expect(await screen.findByRole("switch", { name: "Sync automatically" })).toBeChecked();
+  });
+
+  it("greys out the schedule while auto sync is off, but still saves it", async () => {
+    const fetchMock = mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+
+    const mon = await screen.findByRole("checkbox", { name: "Mon" });
+    expect(mon).toBeEnabled();
+    fireEvent.click(screen.getByRole("switch", { name: "Sync automatically" }));
+
+    await waitFor(() => expect(mon).toBeDisabled());
+    expect(screen.getByDisplayValue("09:00")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+
+    await waitFor(() =>
+      expect(putBody(fetchMock)).toMatchObject({
+        enabled: false,
+        days: [1, 3],
+        window_start: "09:00",
+        window_end: "17:00",
+      }),
+    );
+  });
+
+  it("opens a switched-off schedule with its fields greyed out", async () => {
+    mockSchedule({ ...saved, enabled: false, next_run_at: null });
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+
+    expect(await screen.findByRole("checkbox", { name: "Mon" })).toBeDisabled();
+  });
+
+  it("confirms a save beside the Save button", async () => {
+    mockSchedule(saved);
+
+    renderWithClient(<AutoSyncCard organizationId={ORG} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Save schedule" }));
+
+    const confirmation = await screen.findByText("Schedule saved");
+    // Re-queried: the saved schedule's new updated_at remounts the form.
+    const button = screen.getByRole("button", { name: "Save schedule" });
+    expect(button.parentElement).toContainElement(confirmation);
   });
 });

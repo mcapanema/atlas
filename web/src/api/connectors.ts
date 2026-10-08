@@ -36,7 +36,13 @@ export function useLinearSync() {
         method: "POST",
         body: JSON.stringify({ organization_id: organizationId ?? null }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations"] }),
+    // The organization list may have been bootstrapped, and the schedule row
+    // now carries this sync's time (last_manual_sync_at).
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["organizations"] }),
+        queryClient.invalidateQueries({ queryKey: ["sync-schedule"] }),
+      ]),
   });
 }
 

@@ -28,4 +28,14 @@ describe("syncOutcome", () => {
       "Updated 1 work item · 1 event",
     );
   });
+
+  it("reports removed work items after the updates", () => {
+    expect(syncOutcome({ ...nothing, work_items: 3, deleted: 9 })).toBe(
+      "Updated 3 work items · 9 work items removed",
+    );
+  });
+
+  it("reports a sync that only removed items", () => {
+    expect(syncOutcome({ ...nothing, deleted: 1 })).toBe("1 work item removed");
+  });
 });
