@@ -15,27 +15,42 @@ const summary = {
   deleted: 0,
 };
 
+/** Connector status + the team-sync POST; a fresh Response per call (a body reads once). */
+function mockApi({
+  autoSyncing = false,
+  sync = () => jsonResponse(summary),
+}: { autoSyncing?: boolean; sync?: () => Response } = {}) {
+  return vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation((input) =>
+      Promise.resolve(
+        requestUrl(input) === "/api/connectors/linear"
+          ? jsonResponse({ configured: true, auto_syncing: autoSyncing })
+          : sync(),
+      ),
+    );
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("TeamSyncButton", () => {
   it("syncs the team and reports what changed", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(summary));
+    const fetchMock = mockApi();
 
     renderWithClient(<TeamSyncButton team={syncedTeam} />);
     fireEvent.click(screen.getByRole("button", { name: /Sync team/ }));
 
     expect(await screen.findByText("Updated 3 work items · 12 events")).toBeInTheDocument();
-    const [input, init] = fetchMock.mock.calls[0];
-    expect(requestUrl(input)).toBe(`/api/connectors/linear/teams/${syncedTeam.id}/sync`);
-    expect(init?.method).toBe("POST");
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(post && requestUrl(post[0])).toBe(`/api/connectors/linear/teams/${syncedTeam.id}/sync`);
+    // The status query was fetched first and settled by now: no auto sync, no hint.
+    expect(screen.queryByText(/An automatic sync is running/)).not.toBeInTheDocument();
   });
 
   it("says when the team was already up to date", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse({ ...summary, work_items: 0, events: 0 }),
-    );
+    mockApi({ sync: () => jsonResponse({ ...summary, work_items: 0, events: 0 }) });
 
     renderWithClient(<TeamSyncButton team={syncedTeam} />);
     fireEvent.click(screen.getByRole("button", { name: /Sync team/ }));
@@ -44,9 +59,7 @@ describe("TeamSyncButton", () => {
   });
 
   it("shows the server's reason when the sync fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      jsonResponse({ detail: "Linear is not configured" }, 409),
-    );
+    mockApi({ sync: () => jsonResponse({ detail: "Linear is not configured" }, 409) });
 
     renderWithClient(<TeamSyncButton team={syncedTeam} />);
     fireEvent.click(screen.getByRole("button", { name: /Sync team/ }));
@@ -55,8 +68,20 @@ describe("TeamSyncButton", () => {
   });
 
   it("is disabled for a team made in Atlas", () => {
+    mockApi();
+
     renderWithClient(<TeamSyncButton team={teamFixture} />);
 
     expect(screen.getByRole("button", { name: /Sync team/ })).toBeDisabled();
+  });
+
+  it("says why the sync waits while an automatic sync runs", async () => {
+    mockApi({ autoSyncing: true });
+
+    renderWithClient(<TeamSyncButton team={syncedTeam} />);
+
+    expect(
+      await screen.findByText("An automatic sync is running; Sync team starts when it finishes."),
+    ).toBeInTheDocument();
   });
 });

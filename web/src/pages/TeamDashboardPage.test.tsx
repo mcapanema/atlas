@@ -124,7 +124,7 @@ describe("TeamDashboardPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Sync team/ }));
 
-    await screen.findByText("Updated 1 work items · 2 events");
+    await screen.findByText("Updated 1 work item · 2 events");
     await waitFor(() => expect(metricsCalls()).toBeGreaterThan(before));
   });
 
@@ -146,13 +146,40 @@ describe("TeamDashboardPage", () => {
     });
     renderPage(`/teams?team=${teamFixture.id}`);
     fireEvent.click(await screen.findByRole("button", { name: /Sync team/ }));
-    await screen.findByText("Updated 1 work items · 2 events");
+    await screen.findByText("Updated 1 work item · 2 events");
 
     fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
     fireEvent.click(await screen.findByTitle("Mobile"));
 
     await waitFor(() =>
-      expect(screen.queryByText("Updated 1 work items · 2 events")).not.toBeInTheDocument(),
+      expect(screen.queryByText("Updated 1 work item · 2 events")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does not carry one team's sync error over to another team", async () => {
+    const other = { ...teamFixture, id: "44444444-4444-4444-4444-444444444444", name: "Mobile" };
+    mockMetricsFetch({
+      "/api/teams": [
+        { ...teamFixture, external_id: "lt1" },
+        { ...other, external_id: "lt2" },
+      ],
+    });
+    // mockMetricsFetch answers 200 only: route the sync POST to a 409 instead.
+    const metrics = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      requestUrl(input).startsWith("/api/connectors/linear/teams/")
+        ? Promise.resolve(jsonResponse({ detail: "Linear is not configured" }, 409))
+        : metrics(input, init),
+    );
+    renderPage(`/teams?team=${teamFixture.id}`);
+    fireEvent.click(await screen.findByRole("button", { name: /Sync team/ }));
+    await screen.findByText("Linear is not configured");
+
+    fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByTitle("Mobile"));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Linear is not configured")).not.toBeInTheDocument(),
     );
   });
 
