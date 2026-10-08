@@ -26,6 +26,10 @@ class UnknownOrganizationError(Exception):
     """
 
 
+class UnknownTeamError(Exception):
+    """A team sync was requested for a team that doesn't exist (404, not 422)."""
+
+
 @dataclass(frozen=True)
 class SyncSummary:
     """Counts of entities written (created or updated) by one sync run."""
@@ -67,7 +71,8 @@ class SyncService:
     no organization_id is given, sync reuses the single existing
     organization or creates one named after the source workspace. With
     rebuild=True, every returned item's source-derived events are deleted and
-    re-inserted from the current mapping (ADR-0013).
+    re-inserted from the current mapping (ADR-0013). sync_team() syncs one
+    team's work items and never prunes.
     """
 
     def __init__(
@@ -91,18 +96,41 @@ class SyncService:
     ) -> SyncSummary:
         resolved = await self._resolve_organization(organization_id)
         logger.info("Sync started for organization %s (rebuild=%s)", resolved, rebuild)
-        teams = await self._sync_teams(resolved)
+        return await self._run(resolved, None, rebuild=rebuild)
+
+    async def sync_team(self, team_id: UUID) -> SyncSummary:
+        """Sync one team's work items; teams and projects still sync org-wide.
+
+        Nothing is pruned: a team-filtered fetch can't tell an item deleted
+        upstream from one moved to another team, so deletions wait for the
+        next organization sync (manual or scheduled).
+        """
+        team = await self._teams.get(team_id)
+        if team is None:
+            raise UnknownTeamError(f"Team {team_id} does not exist")
+        if team.external_id is None:
+            # ValueError on purpose: the global handler answers 422.
+            raise ValueError(
+                f"Team {team.name!r} was not synced from a source; there is nothing to sync"
+            )
+        logger.info("Sync started for team %s (%s)", team.id, team.name)
+        return await self._run(team.organization_id, team.external_id, rebuild=False)
+
+    async def _run(
+        self, organization_id: UUID, team_external_id: str | None, *, rebuild: bool
+    ) -> SyncSummary:
+        teams = await self._sync_teams(organization_id)
         projects = await self._sync_projects()
-        sources = await self._source.fetch_work_items()
+        sources = await self._source.fetch_work_items(team_external_id=team_external_id)
         work_items, events, divergences, deleted, rebuilt = await self._sync_work_items(
-            sources, rebuild=rebuild
+            sources, rebuild=rebuild, prune=team_external_id is None
         )
         # After the work-item sync: rebuilt and newly inserted events already carry
         # their types, so only stored events left untyped are filled — exact in both
         # modes, including items a rebuild skips (team unresolved).
         filled = await self._fill_state_types(sources)
         summary = SyncSummary(
-            organization_id=resolved,
+            organization_id=organization_id,
             teams=teams,
             projects=projects,
             work_items=work_items,
@@ -115,7 +143,7 @@ class SyncService:
         logger.info(
             "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
             "events=%d divergences=%d deleted=%d state_types_filled=%d rebuilt=%d",
-            resolved,
+            organization_id,
             summary.teams,
             summary.projects,
             summary.work_items,
@@ -292,7 +320,7 @@ class SyncService:
         return written
 
     async def _sync_work_items(
-        self, sources: list[SourceWorkItem], *, rebuild: bool = False
+        self, sources: list[SourceWorkItem], *, rebuild: bool = False, prune: bool = True
     ) -> tuple[int, int, int, int, int]:
         events_written = 0
         divergences = 0
@@ -337,7 +365,7 @@ class SyncService:
             events_written += n
             divergences += diverged
         written |= await self._link_parents(sources, {**items_by_eid, **synced})
-        deleted = await self._prune_vanished(sources, teams_by_eid, items_by_eid)
+        deleted = await self._prune_vanished(sources, teams_by_eid, items_by_eid) if prune else 0
         return len(written), events_written, divergences, deleted, rebuilt
 
     async def _drop_source_events(
