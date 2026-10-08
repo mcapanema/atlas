@@ -62,8 +62,8 @@ function duration(stats: DurationStats | null, key: keyof DurationStats): string
 
 /**
  * Health leads the page — same vocabulary as the executive dashboard:
- * quiet badge + window when healthy, tinted attention card with the two
- * weakest component reasons when at risk.
+ * quiet badge + window when healthy; the two weakest component reasons,
+ * tinted by band, when at risk.
  */
 function HealthStrip({
   health,

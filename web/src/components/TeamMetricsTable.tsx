@@ -1,14 +1,16 @@
-import { Table, Tooltip } from "antd";
+import { Table, Tooltip, type TableProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { HTMLAttributes, ReactNode } from "react";
+import { useState, type HTMLAttributes, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { formatDay } from "../lib/dates";
 import type { Delta } from "../lib/deltas";
 import { formatSeconds } from "../lib/duration";
+import { isAtRisk, weakestComponents } from "../lib/health";
 import type { CellState, TeamRow } from "../lib/teamRows";
 import { HealthBadge } from "./HealthBadge";
 import { HelpLabel } from "./HelpLabel";
+import { Sparkline } from "./Sparkline";
 
 // AntD's Table doesn't forward aria props to the <table> element itself;
 // screen-reader table navigation needs the name there, not on the section.
@@ -175,6 +177,77 @@ function buildColumns(periodLabel: string, ranged: boolean): ColumnsType<TeamRow
   ];
 }
 
+type ExpandIconProps = Parameters<
+  NonNullable<NonNullable<TableProps<TeamRow>["expandable"]>["expandIcon"]>
+>[0];
+
+/**
+ * The row toggle, named per team. AntD's default renders a hidden
+ * "Expand row" button on every row, even rows that can't expand; this one
+ * exists only where there is something to show.
+ */
+function renderRiskToggle({ expanded, expandable, onExpand, record, prefixCls }: ExpandIconProps) {
+  if (!expandable) return null;
+  const icon = `${prefixCls}-row-expand-icon`;
+  return (
+    <button
+      type="button"
+      className={`${icon} ${icon}-${expanded ? "expanded" : "collapsed"}`}
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "Hide" : "Show"} risk reasons for ${record.team.name}`}
+      onClick={(event) => {
+        // The row itself navigates to the team; the toggle must not.
+        event.stopPropagation();
+        onExpand(record, event);
+      }}
+    />
+  );
+}
+
+/** Beneath an at-risk row: its two weakest health components and the 7-day pulse. */
+function RiskDetail({ row }: { row: TeamRow }) {
+  const health = row.health!;
+  return (
+    <div className={`risk-detail risk-detail--${health.band}`}>
+      <ul className="risk-detail__reasons">
+        {weakestComponents(health, 2).map((component) => (
+          <li key={component.name}>
+            <strong>{component.name}</strong> {component.reason}
+          </li>
+        ))}
+      </ul>
+      {row.pulse && (
+        <span className="risk-detail__pulse">
+          <Sparkline points={row.pulse.points} />
+          <span>lead time P85 {row.pulse.trend} this week</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * At-risk rows open by default so their reasons can't be missed; the EM
+ * can fold any away. Tracks what was collapsed rather than what is open,
+ * because a row turns at-risk only once its team's query lands — after
+ * mount, where AntD's defaultExpandedRowKeys no longer applies.
+ */
+function useRiskExpansion(rows: TeamRow[]) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const expandedRowKeys = rows
+    .filter((row) => isAtRisk(row.health) && !collapsed.has(row.key))
+    .map((row) => row.key);
+  const onExpand = (expanded: boolean, row: TeamRow) => {
+    setCollapsed((previous) => {
+      const next = new Set(previous);
+      if (expanded) next.delete(row.key);
+      else next.add(row.key);
+      return next;
+    });
+  };
+  return { expandedRowKeys, onExpand };
+}
+
 /** The executive dashboard's per-team table; a row click opens that team. */
 export function TeamMetricsTable({
   rows,
@@ -188,6 +261,7 @@ export function TeamMetricsTable({
   loading: boolean;
 }) {
   const navigate = useNavigate();
+  const expansion = useRiskExpansion(rows);
   return (
     <section aria-label="Delivery metrics by team">
       <Table
@@ -198,6 +272,12 @@ export function TeamMetricsTable({
         pagination={false}
         showSorterTooltip={false}
         scroll={{ x: "max-content" }}
+        expandable={{
+          ...expansion,
+          rowExpandable: (row) => isAtRisk(row.health),
+          expandedRowRender: (row) => <RiskDetail row={row} />,
+          expandIcon: renderRiskToggle,
+        }}
         onRow={(row) => ({
           className: "row-link",
           onClick: (event) => {

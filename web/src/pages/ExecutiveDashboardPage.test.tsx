@@ -118,11 +118,11 @@ describe("ExecutiveDashboardPage", () => {
 
     expect(await screen.findByText("All 2 teams healthy")).toBeInTheDocument();
     expect(screen.getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
-    // Healthy portfolio renders no attention section.
-    expect(screen.queryByLabelText("Teams needing attention")).not.toBeInTheDocument();
+    // A healthy portfolio is quiet: no risk rows to open.
+    expect(screen.queryByRole("button", { name: /risk reasons/ })).not.toBeInTheDocument();
   });
 
-  it("headlines the worst team and raises an attention card when a team is at risk", async () => {
+  it("shows an at-risk team's reasons under its own row, open by default", async () => {
     mockMetricsFetch({
       "/api/teams": teams,
       [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
@@ -134,16 +134,51 @@ describe("ExecutiveDashboardPage", () => {
       screen.getByText(/Growth: 4 of 6 in-progress items blocked or aging past cycle p85/),
     ).toBeInTheDocument();
 
-    const attention = await screen.findByLabelText("Teams needing attention");
-    // Two weakest component reasons, verbatim.
+    // Health arrives after the row renders — it must still open by default.
+    const toggle = await screen.findByRole("button", { name: "Hide risk reasons for Growth" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const detail = toggle.closest("tr")?.nextElementSibling as HTMLElement;
+    // Two weakest component reasons, verbatim…
     expect(
-      within(attention).getByText("4 of 6 in-progress items blocked or aging past cycle p85"),
+      within(detail).getByText("4 of 6 in-progress items blocked or aging past cycle p85"),
     ).toBeInTheDocument();
     expect(
-      within(attention).getByText("completed 1 recently vs 5 in the prior half-window"),
+      within(detail).getByText("completed 1 recently vs 5 in the prior half-window"),
     ).toBeInTheDocument();
-    // ...but not the third-weakest.
-    expect(within(attention).queryByText("lead time p95 is 2.9x p50")).not.toBeInTheDocument();
+    // …not the third-weakest…
+    expect(within(detail).queryByText("lead time p95 is 2.9x p50")).not.toBeInTheDocument();
+    // …and the 7-day lead-time pulse (snapshotsFixture: 345600 → 432000, +25%).
+    expect(within(detail).getByText("lead time P85 worsening this week")).toBeInTheDocument();
+    // No separate card stack restating the table.
+    expect(screen.queryByLabelText("Teams needing attention")).not.toBeInTheDocument();
+  });
+
+  it("lets the EM fold an at-risk team's reasons away", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Hide risk reasons for Growth" }));
+
+    const toggle = await screen.findByRole("button", { name: "Show risk reasons for Growth" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // rc-table keeps a collapsed row's DOM and hides it with display:none.
+    expect(
+      screen.getByText("completed 1 recently vs 5 in the prior half-window"),
+    ).not.toBeVisible();
+  });
+
+  it("gives healthy teams no risk toggle", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await screen.findByRole("button", { name: "Hide risk reasons for Growth" });
+    expect(screen.queryByRole("button", { name: /risk reasons for Platform/ })).toBeNull();
   });
 
   it("sorts the table worst-health-first by default", async () => {
@@ -359,8 +394,8 @@ describe("ExecutiveDashboardPage", () => {
     }
     // After sorting by team name ascending then others, the table still lists both teams.
     expect(screen.getByText("Platform")).toBeInTheDocument();
-    // Growth renders twice: attention card + table row.
-    expect(screen.getAllByText("Growth").length).toBeGreaterThanOrEqual(2);
+    // Growth renders once — its table row; no card restates it.
+    expect(screen.getAllByText("Growth")).toHaveLength(1);
   });
 
   it("names a lone at-risk team instead of a one-of-one count", async () => {

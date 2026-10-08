@@ -64,7 +64,7 @@ h5 {
   text-underline-offset: 3px;
 }
 
-/* Executive page: headline, as-of, attention section, deltas */
+/* Executive page: headline, as-of, risk rows, deltas */
 .page-headline {
   font-family:
     "Red Hat Display Variable",
@@ -98,12 +98,6 @@ h5 {
   font-size: 12px;
   margin: 0 0 16px;
 }
-.attention {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 20px;
-}
 .attention-card {
   border-radius: 4px;
   padding: 10px 14px;
@@ -116,13 +110,6 @@ h5 {
   background: color-mix(in srgb, var(--ant-color-warning) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--ant-color-warning) 40%, transparent);
 }
-.attention-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-weight: 600;
-}
 .attention-card__reasons {
   margin: 6px 0 0;
   padding-left: 18px;
@@ -131,12 +118,39 @@ h5 {
 .attention-card__reasons strong {
   font-weight: 600;
 }
-.attention-card__pulse {
+/* An at-risk row's reasons, opened beneath it. The band rule ties it to the
+   row's badge; the band word stays in that badge, so color is never the
+   only cue. */
+.risk-detail {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 24px;
+  padding-left: 10px;
+  border-left: 2px solid var(--ant-color-border);
+  font-size: 12px;
+}
+.risk-detail--critical {
+  border-left-color: var(--ant-color-error);
+}
+.risk-detail--warning {
+  border-left-color: var(--ant-color-warning);
+}
+.risk-detail__reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.risk-detail__reasons strong {
+  font-weight: 600;
+}
+.risk-detail__pulse {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
-  font-size: 12px;
   color: var(--ant-color-text-secondary);
 }
 .delta {

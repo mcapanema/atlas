@@ -6,9 +6,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { MetricsFilters } from "../api/metrics";
 import { useAllTeamsOverviews, type ScopeOverview } from "../api/overview";
 import { useTeams, type Team } from "../api/teams";
-import { HealthBadge } from "../components/HealthBadge";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
-import { Sparkline } from "../components/Sparkline";
 import { TeamMetricsTable } from "../components/TeamMetricsTable";
 import { weakestComponents } from "../lib/health";
 import {
@@ -20,8 +18,6 @@ import {
   windowLabel,
 } from "../lib/metricsFilters";
 import { buildTeamRows, type TeamRow } from "../lib/teamRows";
-
-const BAND_RANK: Record<string, number> = { critical: 0, warning: 1 };
 
 function Headline({ rows }: { rows: TeamRow[] }) {
   const scored = rows.filter((row) => row.health?.band != null && row.health.score != null);
@@ -69,46 +65,6 @@ function Headline({ rows }: { rows: TeamRow[] }) {
   );
 }
 
-function AttentionSection({ rows }: { rows: TeamRow[] }) {
-  const atRisk = rows
-    .filter((row) => row.health?.band === "critical" || row.health?.band === "warning")
-    .sort(
-      (a, b) =>
-        (BAND_RANK[a.health!.band!] ?? 9) - (BAND_RANK[b.health!.band!] ?? 9) ||
-        (a.health!.score ?? 101) - (b.health!.score ?? 101),
-    );
-  if (atRisk.length === 0) return null;
-  return (
-    <section aria-label="Teams needing attention" className="attention">
-      {atRisk.map((row) => {
-        const health = row.health!;
-        const reasons = [...health.components].sort((a, b) => a.score - b.score).slice(0, 2);
-        return (
-          <div key={row.team.id} className={`attention-card attention-card--${health.band}`}>
-            <div className="attention-card__head">
-              <Link to={`/teams?team=${row.team.id}`}>{row.team.name}</Link>
-              <HealthBadge health={health} />
-            </div>
-            <ul className="attention-card__reasons">
-              {reasons.map((component) => (
-                <li key={component.name}>
-                  <strong>{component.name}</strong> {component.reason}
-                </li>
-              ))}
-            </ul>
-            {row.pulse && (
-              <div className="attention-card__pulse">
-                <Sparkline points={row.pulse.points} />
-                <span>lead time P85 {row.pulse.trend} this week</span>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
 function FailedTeamsAlert({
   teams,
   overviews,
@@ -127,7 +83,7 @@ function FailedTeamsAlert({
     <Alert
       type="warning"
       style={{ marginBottom: 16 }}
-      message={`Data failed to load for ${failed.map((team) => team.name).join(", ")}`}
+      title={`Data failed to load for ${failed.map((team) => team.name).join(", ")}`}
       action={
         <Button size="small" onClick={retryFailed}>
           Retry
@@ -169,7 +125,7 @@ export function ExecutiveDashboardPage() {
     return (
       <Alert
         type="error"
-        message="Couldn't load teams"
+        title="Couldn't load teams"
         action={
           <Button size="small" onClick={() => void teams.refetch()}>
             Retry
@@ -191,7 +147,6 @@ export function ExecutiveDashboardPage() {
         <MetricsFilterBar filters={filters} onChange={setFilters} />
       </div>
       <FailedTeamsAlert teams={teamList} overviews={overviews} />
-      <AttentionSection rows={rows} />
       <TeamMetricsTable
         rows={rows}
         periodLabel={windowLabel(filters, 30)}
