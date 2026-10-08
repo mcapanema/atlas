@@ -20,15 +20,19 @@ function mockApi({
   configured,
   autoSyncing = false,
   organizations = [ACME],
+  statusPending = false,
 }: {
   configured: boolean;
   autoSyncing?: boolean;
   organizations?: (typeof ACME)[];
+  statusPending?: boolean;
 }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/linear")
-      return jsonResponse({ configured, auto_syncing: autoSyncing });
+      return statusPending
+        ? new Promise<Response>(() => {})
+        : jsonResponse({ configured, auto_syncing: autoSyncing });
     if (url === "/api/organizations") return jsonResponse(organizations);
     if (url === "/api/connectors/linear/sync")
       return jsonResponse({
@@ -58,30 +62,32 @@ afterEach(() => {
 });
 
 describe("ConnectorsPage", () => {
-  it("shows configured status and displays sync results", async () => {
+  it("shows configured status and the sync outcome in one line", async () => {
     mockApi({ configured: true });
 
     renderWithClient(<ConnectorsPage />);
 
-    await waitFor(() => expect(screen.getByText("Configured")).toBeInTheDocument());
-    const button = await screen.findByRole("button", { name: "Sync now" });
+    expect(await screen.findByText("Configured")).toBeInTheDocument();
+    const button = await screen.findByRole("button", { name: /Sync now/ });
     await waitFor(() => expect(button).toBeEnabled());
 
     fireEvent.click(button);
 
-    await waitFor(() => expect(screen.getByText("42")).toBeInTheDocument());
-    expect(screen.getByText("Divergences")).toBeInTheDocument();
-    expect(screen.getByText("7")).toBeInTheDocument();
-    expect(screen.getByText("Deleted")).toBeInTheDocument();
-    expect(screen.getByText("9")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Updated 1 team · 2 projects · 3 work items · 42 events · 9 work items removed",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("shows the auto-sync card for the selected organization", async () => {
+  it("shows the sync status and the auto-sync card for the selected organization", async () => {
     mockApi({ configured: true });
 
     renderWithClient(<ConnectorsPage />);
 
-    expect(await screen.findByText("Auto sync")).toBeInTheDocument();
+    expect(await screen.findByText("Next run")).toBeInTheDocument();
+    expect(await screen.findByText("Not scheduled")).toBeInTheDocument();
+    expect(screen.getByText("Auto sync")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
   });
 
@@ -121,17 +127,47 @@ describe("ConnectorsPage", () => {
     fireEvent.click(await screen.findByTitle("Globex"));
 
     // Globex has no schedule: wait for its form, not the loading skeleton.
-    expect(await screen.findByText(/Not scheduled yet/)).toBeInTheDocument();
+    expect(await screen.findByText("Not scheduled")).toBeInTheDocument();
     expect(screen.queryByText("Schedule saved")).not.toBeInTheDocument();
   });
 
-  it("shows setup instructions and disables sync when not configured", async () => {
+  it("warns once, at page level, and disables sync when not configured", async () => {
     mockApi({ configured: false });
 
     renderWithClient(<ConnectorsPage />);
 
-    await waitFor(() => expect(screen.getByText(/ATLAS_LINEAR_API_KEY/)).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Sync now" })).toBeDisabled();
+    expect(await screen.findByText("Linear isn't configured")).toBeInTheDocument();
+    expect(screen.getAllByText("ATLAS_LINEAR_API_KEY")).toHaveLength(1);
+    expect(screen.getByText(/scheduled syncs fail/)).toBeInTheDocument();
+    expect(screen.getByText("Not configured")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Sync now/ })).toBeDisabled();
+  });
+
+  it("neither warns nor says 'Not configured' while the status is unknown", async () => {
+    mockApi({ configured: false, statusPending: true });
+
+    renderWithClient(<ConnectorsPage />);
+
+    expect(await screen.findByText("Connectors")).toBeInTheDocument();
+    expect(screen.queryByText("Linear isn't configured")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
+  });
+
+  it("refreshes the last sync after Sync now", async () => {
+    const fetchMock = mockApi({ configured: true });
+    const scheduleReads = () =>
+      fetchMock.mock.calls.filter(
+        ([input, init]) => requestUrl(input).endsWith("/sync-schedule") && init?.method !== "PUT",
+      ).length;
+
+    renderWithClient(<ConnectorsPage />);
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    await waitFor(() => expect(scheduleReads()).toBe(1));
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(scheduleReads()).toBe(2));
   });
 
   it("shows an error when sync fails", async () => {
@@ -153,7 +189,7 @@ describe("ConnectorsPage", () => {
 
     renderWithClient(<ConnectorsPage />);
 
-    const button = await screen.findByRole("button", { name: "Sync now" });
+    const button = await screen.findByRole("button", { name: /Sync now/ });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
 
@@ -202,12 +238,13 @@ describe("ConnectorsPage", () => {
     renderWithClient(<ConnectorsPage />);
 
     await waitFor(() => expect(screen.getByText(/first sync will create/i)).toBeInTheDocument());
-    const button = screen.getByRole("button", { name: "Sync now" });
+    expect(screen.queryByRole("combobox", { name: "Organization" })).not.toBeInTheDocument();
+    const button = await screen.findByRole("button", { name: /Sync now/ });
     expect(button).toBeEnabled();
 
     fireEvent.click(button);
 
-    await waitFor(() => expect(screen.getByText("Teams")).toBeInTheDocument());
+    expect(await screen.findByText("Updated 1 team")).toBeInTheDocument();
     const orgCalls = fetchMock.mock.calls.filter(
       (call) => requestUrl(call[0]) === "/api/organizations",
     );

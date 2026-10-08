@@ -12,17 +12,11 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 
-import {
-  useSaveSyncSchedule,
-  useSyncSchedule,
-  type SyncSchedule,
-  type SyncScheduleInput,
-} from "../api/syncSchedule";
+import { useSaveSyncSchedule, useSyncSchedule, type SyncScheduleInput } from "../api/syncSchedule";
 import {
   WEEKDAY_OPTIONS,
   clockParts,
   defaultSchedule,
-  formatInZone,
   intervalOptions,
   timeZoneOptions,
 } from "../lib/syncSchedule";
@@ -70,39 +64,6 @@ function toInput(values: FormValues): SyncScheduleInput {
   };
 }
 
-function RunStatus({ schedule }: { schedule: SyncSchedule | null }) {
-  if (!schedule) {
-    return (
-      <Typography.Text type="secondary">
-        Not scheduled yet: Atlas syncs only when you click Sync now.
-      </Typography.Text>
-    );
-  }
-  const run = schedule.last_run;
-  return (
-    <Space direction="vertical" size={4} style={{ width: "100%" }}>
-      <Typography.Text>
-        {schedule.next_run_at
-          ? `Next run: ${formatInZone(schedule.next_run_at, schedule.timezone)}`
-          : "Auto sync is off"}
-      </Typography.Text>
-      {run?.error && (
-        <Alert
-          type="error"
-          showIcon
-          message={`Last auto sync failed (${formatInZone(run.finished_at, schedule.timezone)})`}
-          description={run.error}
-        />
-      )}
-      {run && !run.error && (
-        <Typography.Text type="secondary">
-          Last auto sync: {formatInZone(run.finished_at, schedule.timezone)}, succeeded
-        </Typography.Text>
-      )}
-    </Space>
-  );
-}
-
 function ScheduleForm({
   initial,
   saving,
@@ -147,50 +108,43 @@ function ScheduleForm({
 function SaveOutcome({ save }: { save: ReturnType<typeof useSaveSyncSchedule> }) {
   if (save.isError) {
     return (
-      <Alert type="error" message="Could not save the schedule" description={save.error.message} />
+      <Alert
+        type="error"
+        showIcon
+        title="Could not save the schedule"
+        description={save.error.message}
+      />
     );
   }
   return save.isSuccess ? <Typography.Text type="success">Schedule saved</Typography.Text> : null;
 }
 
-export function AutoSyncCard({
-  organizationId,
-  configured,
-}: {
-  organizationId: string;
-  /** undefined while the connector status loads: no warning until it's known. */
-  configured: boolean | undefined;
-}) {
+export function AutoSyncCard({ organizationId }: { organizationId: string }) {
   const schedule = useSyncSchedule(organizationId);
   const save = useSaveSyncSchedule(organizationId);
   const current = schedule.data ?? null;
 
   return (
     <Card title="Auto sync" loading={schedule.isLoading}>
-      <Space direction="vertical" style={{ width: "100%" }}>
-        {configured === false && (
-          <Alert type="warning" message="Scheduled syncs fail until ATLAS_LINEAR_API_KEY is set." />
-        )}
-        {schedule.isError ? (
-          <Alert
-            type="error"
-            message="Failed to load the auto-sync schedule"
-            description={schedule.error.message}
+      {schedule.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="Failed to load the auto-sync schedule"
+          description={schedule.error.message}
+        />
+      ) : (
+        <Space orientation="vertical" style={{ width: "100%" }}>
+          {/* Keyed so a saved or switched schedule resets the form's values. */}
+          <ScheduleForm
+            key={`${organizationId}:${current?.updated_at ?? "new"}`}
+            initial={current ?? defaultSchedule()}
+            saving={save.isPending}
+            onSave={(input) => save.mutate(input)}
           />
-        ) : (
-          <>
-            <RunStatus schedule={current} />
-            {/* Keyed so a saved or switched schedule resets the form's values. */}
-            <ScheduleForm
-              key={`${organizationId}:${current?.updated_at ?? "new"}`}
-              initial={current ?? defaultSchedule()}
-              saving={save.isPending}
-              onSave={(input) => save.mutate(input)}
-            />
-            <SaveOutcome save={save} />
-          </>
-        )}
-      </Space>
+          <SaveOutcome save={save} />
+        </Space>
+      )}
     </Card>
   );
 }
