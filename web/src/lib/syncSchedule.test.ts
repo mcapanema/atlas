@@ -6,6 +6,7 @@ import {
   defaultSchedule,
   formatInZone,
   intervalOptions,
+  lastSync,
   timeZoneOptions,
 } from "./syncSchedule";
 
@@ -66,5 +67,41 @@ describe("syncSchedule helpers", () => {
     expect(formatInZone("2026-10-08T23:30:00Z", "Asia/Tokyo")).toBe(
       "09-10-2026 08:30 (Asia/Tokyo)",
     );
+  });
+});
+
+describe("lastSync", () => {
+  const failedRun = {
+    slot_at: "2026-10-07T09:00:00Z",
+    finished_at: "2026-10-07T09:01:00Z",
+    error: "rate limited",
+  };
+
+  it("is null when nothing has synced", () => {
+    expect(lastSync({ last_run: null, last_manual_sync_at: null })).toBeNull();
+  });
+
+  it("reports the auto run, failure included, when it is the latest", () => {
+    expect(lastSync({ last_run: failedRun, last_manual_sync_at: "2026-10-07T08:00:00Z" })).toEqual({
+      at: "2026-10-07T09:01:00Z",
+      kind: "auto",
+      error: "rate limited",
+    });
+  });
+
+  it("lets a newer manual sync supersede a failed auto run", () => {
+    expect(lastSync({ last_run: failedRun, last_manual_sync_at: "2026-10-07T10:00:00Z" })).toEqual({
+      at: "2026-10-07T10:00:00Z",
+      kind: "manual",
+      error: null,
+    });
+  });
+
+  it("reports a manual sync when no auto run has happened", () => {
+    expect(lastSync({ last_run: null, last_manual_sync_at: "2026-10-07T10:00:00Z" })).toEqual({
+      at: "2026-10-07T10:00:00Z",
+      kind: "manual",
+      error: null,
+    });
   });
 });

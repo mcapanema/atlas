@@ -20,6 +20,7 @@ const saved: SyncSchedule = {
   timezone: "UTC",
   updated_at: "2026-10-07T12:00:00Z",
   last_run: null,
+  last_manual_sync_at: null,
   next_run_at: NEXT_RUN,
 };
 
