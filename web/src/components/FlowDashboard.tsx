@@ -30,6 +30,7 @@ import {
 import { formatDateTime } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
 import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
+import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
@@ -71,10 +72,8 @@ function HealthStrip({
   health: DeliveryHealth;
   periodText: string | null;
 }) {
-  const atRisk = health.band === "critical" || health.band === "warning";
-  const reasons = atRisk
-    ? [...health.components].sort((a, b) => a.score - b.score).slice(0, 2)
-    : [];
+  const atRisk = isAtRisk(health);
+  const reasons = atRisk ? weakestComponents(health, 2) : [];
   return (
     <section aria-label="Delivery health" className="health-strip">
       <div className="health-strip__row">

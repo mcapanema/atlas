@@ -3,13 +3,14 @@ import { Alert, Button, Empty, Typography } from "antd";
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import type { DeliveryHealth, MetricsFilters } from "../api/metrics";
+import type { MetricsFilters } from "../api/metrics";
 import { useAllTeamsOverviews, type ScopeOverview } from "../api/overview";
 import { useTeams, type Team } from "../api/teams";
 import { HealthBadge } from "../components/HealthBadge";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { Sparkline } from "../components/Sparkline";
 import { TeamMetricsTable } from "../components/TeamMetricsTable";
+import { weakestComponents } from "../lib/health";
 import {
   applyFiltersToSearchParams,
   filtersFromSearchParams,
@@ -21,10 +22,6 @@ import {
 import { buildTeamRows, type TeamRow } from "../lib/teamRows";
 
 const BAND_RANK: Record<string, number> = { critical: 0, warning: 1 };
-
-function weakestComponent(health: DeliveryHealth) {
-  return [...health.components].sort((a, b) => a.score - b.score)[0];
-}
 
 function Headline({ rows }: { rows: TeamRow[] }) {
   const scored = rows.filter((row) => row.health?.band != null && row.health.score != null);
@@ -53,7 +50,7 @@ function Headline({ rows }: { rows: TeamRow[] }) {
     );
   }
   const worst = [...atRisk].sort((a, b) => a.health!.score! - b.health!.score!)[0];
-  const signal = worst.health ? weakestComponent(worst.health) : null;
+  const signal = weakestComponents(worst.health!, 1).at(0);
   return (
     <p className="page-headline">
       <span className={`page-headline__count page-headline__count--${worst.health!.band}`}>
