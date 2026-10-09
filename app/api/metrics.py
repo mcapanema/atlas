@@ -239,6 +239,7 @@ async def get_aging_wip(
             else None
         ),
         percentile=aging.percentile,
+        history_days=aging.history_days,
         items=[
             AgingItemRead(
                 work_item_id=item.work_item_id,

@@ -235,6 +235,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "number", min: 50, max: 99, step: 1 },
       },
       {
+        name: "aging_history_days",
+        label: "Aging reference history",
+        help: "The aging line is the aging percentile of cycle times for items completed in this many recent days. It also feeds the health risk score.",
+        control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
+      },
+      {
         name: "health_min_sample",
         label: "Minimum items per component",
         help: "A health component scores only with at least this many items behind it: completions in the window, or items in progress for risk. With fewer it's left out, and a team with no component left reads not scored yet.",

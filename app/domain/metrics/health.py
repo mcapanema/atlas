@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
-from app.domain.metrics.cycle_time import cycle_times
+from app.domain.metrics.aging import aging_reference
 from app.domain.metrics.flow_efficiency import flow_efficiency, measured_cycles
 from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.samples import (
@@ -184,13 +184,6 @@ def _item_states(
     return [(sample, sample.blocked_now) for sample in derived if sample is not None]
 
 
-def _cycle_percentile(samples: list[FlowSample], pct: int) -> timedelta | None:
-    completed = cycle_times(samples)
-    if not completed:
-        return None
-    return timedelta(seconds=percentile([c.total_seconds() for c in completed], pct))
-
-
 def _score(
     components: tuple[HealthComponent, ...], rules: MetricRules
 ) -> tuple[tuple[HealthComponent, ...], int | None, str | None]:
@@ -257,7 +250,12 @@ def compute_delivery_health(
         _risk(
             item_states,
             now=now,
-            cycle_limit=_cycle_percentile(all_samples, rules.aging_percentile),
+            cycle_limit=aging_reference(
+                all_samples,
+                now=now,
+                pct=rules.aging_percentile,
+                history_days=rules.aging_history_days,
+            ),
             aging_percentile=rules.aging_percentile,
             min_sample=floor,
         ),

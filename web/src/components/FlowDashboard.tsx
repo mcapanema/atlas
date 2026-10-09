@@ -263,11 +263,19 @@ function FlowCharts({
   );
 }
 
-function AgingWipCard({ items, percentile }: { items: AgingItem[]; percentile: number }) {
+function AgingWipCard({
+  items,
+  percentile,
+  historyDays,
+}: {
+  items: AgingItem[];
+  percentile: number;
+  historyDays: number;
+}) {
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. Flagged when they have already been open longer than ${percentile}% of completed items took (the team's aging percentile, set in Metric rules).`}
+      help={`Items currently in progress, oldest first. Flagged when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules).`}
     >
       <Table
         size="small"
@@ -324,7 +332,11 @@ export function FlowDashboard({
         chartLabel={windowLabel(filters, 90)}
       />
       {aging.data && aging.data.items.length > 0 && (
-        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
+        <AgingWipCard
+          items={aging.data.items}
+          percentile={aging.data.percentile}
+          historyDays={aging.data.history_days}
+        />
       )}
       <ForecastCard scope={scope} filters={filters} />
     </Space>

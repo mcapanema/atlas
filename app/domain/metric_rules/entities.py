@@ -69,6 +69,7 @@ _INTEGERS = (
     "healthy_min",
     "warning_min",
     "aging_percentile",
+    "aging_history_days",
     "health_min_sample",
     "daily_bucket_max_days",
     "forecast_history_days",
@@ -80,6 +81,7 @@ _RANGES: dict[str, tuple[float, float]] = {
     "stability_best_weeks": (0, 52),
     "stability_worst_weeks": (0.1, 52),
     "aging_percentile": (50, 99),
+    "aging_history_days": (7, 365),
     "health_min_sample": (1, 50),
     **{f"weight_{name}": (0, 10) for name in HEALTH_COMPONENTS},
     "daily_bucket_max_days": (1, 90),
@@ -120,6 +122,9 @@ class MetricRules:
     stability_best_weeks: float = 1.0
     stability_worst_weeks: float = 5.0
     aging_percentile: int = 85
+    # Completed cycles the aging line (and health risk) read: the trailing
+    # days, so a team's 2025 pace doesn't set its 2026 aging flags.
+    aging_history_days: int = 90
     # A component backed by fewer items (window completions; in-progress
     # items for risk) is left out: one stuck item is an anecdote, not a
     # team's health.

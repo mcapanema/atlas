@@ -20,6 +20,7 @@ const BUILT_IN: MetricRules = {
   stability_best_weeks: 1,
   stability_worst_weeks: 5,
   aging_percentile: 85,
+  aging_history_days: 90,
   health_min_sample: 5,
   weight_predictability: 1,
   weight_efficiency: 1,

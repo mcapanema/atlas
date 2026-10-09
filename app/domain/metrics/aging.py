@@ -1,14 +1,17 @@
 """Aging WIP: how long current in-progress items have been in flight.
 
-Flags items whose in-progress age exceeds the scope's completed cycle-time
-percentile (the team's aging_percentile, P85 by default) — the "this one is
-quietly getting stuck" signal from Kanban practice.
+Flags items whose in-progress age exceeds the scope's recent completed
+cycle-time percentile (the team's aging_percentile over its aging_history_days,
+P85 over 90 days by default) — the "this one is quietly getting stuck" signal
+from Kanban practice.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.samples import FlowSample, in_progress
 from app.domain.metrics.stats import percentile
@@ -30,33 +33,48 @@ class AgingItem:
 class AgingWip:
     """In-progress items at `now`, oldest first, with the cycle-time reference line.
 
-    `cycle_time_percentile` is the completed cycle time at `percentile`, the
-    team's aging_percentile (85 by default).
+    `cycle_time_percentile` is the `percentile` (the team's aging_percentile)
+    of cycle times completed in the trailing `history_days` (its
+    aging_history_days); None when nothing completed in them.
     """
 
     now: datetime
     cycle_time_percentile: timedelta | None
     items: tuple[AgingItem, ...]
-    percentile: int = 85
+    percentile: int = DEFAULT_RULES.aging_percentile
+    history_days: int = DEFAULT_RULES.aging_history_days
+
+
+def aging_reference(
+    samples: Sequence[FlowSample], *, now: datetime, pct: int, history_days: int
+) -> timedelta | None:
+    """The `pct` percentile of cycle times completed in (now - history_days, now]."""
+    since = now - timedelta(days=history_days)
+    recent = cycle_times(
+        [s for s in samples if s.completed_at is not None and since < s.completed_at <= now]
+    )
+    if not recent:
+        return None
+    return timedelta(seconds=percentile([c.total_seconds() for c in recent], pct))
 
 
 def compute_aging_wip(
     items_with_samples: list[tuple[WorkItem, FlowSample]],
     *,
     now: datetime,
-    aging_percentile: int = 85,
+    aging_percentile: int = DEFAULT_RULES.aging_percentile,
+    history_days: int = DEFAULT_RULES.aging_history_days,
 ) -> AgingWip:
     """Age of every item in progress at `now` (started, not completed).
 
-    The reference line is the scope's completed cycle-time percentile at
-    `aging_percentile`; over_percentile is False everywhere when there is no
-    completed history to compare against.
+    The reference line is `aging_reference`; over_percentile is False
+    everywhere when nothing completed in the aging history.
     """
-    completed = cycle_times([sample for _, sample in items_with_samples])
-    limit = (
-        timedelta(seconds=percentile([c.total_seconds() for c in completed], aging_percentile))
-        if completed
-        else None
+    limit = aging_reference(
+        [sample for _, sample in items_with_samples],
+        now=now,
+        pct=aging_percentile,
+        history_days=history_days,
     )
     aging: list[AgingItem] = []
     for item, sample in items_with_samples:
@@ -74,5 +92,9 @@ def compute_aging_wip(
         )
     aging.sort(key=lambda a: a.age, reverse=True)
     return AgingWip(
-        now=now, cycle_time_percentile=limit, items=tuple(aging), percentile=aging_percentile
+        now=now,
+        cycle_time_percentile=limit,
+        items=tuple(aging),
+        percentile=aging_percentile,
+        history_days=history_days,
     )

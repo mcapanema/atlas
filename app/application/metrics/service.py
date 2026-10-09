@@ -124,7 +124,10 @@ class MetricsService:
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
         return compute_aging_wip(
-            scope.items_with_samples, now=at, aging_percentile=scope.rules.aging_percentile
+            scope.items_with_samples,
+            now=at,
+            aging_percentile=scope.rules.aging_percentile,
+            history_days=scope.rules.aging_history_days,
         )
 
     async def get_delivery_health(
