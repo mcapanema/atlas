@@ -207,3 +207,25 @@ async def test_delete_detaches_children_instead_of_failing(session: AsyncSession
     assert await repo.get(parent.id) is None
     assert stored is not None
     assert stored.parent_id is None
+
+
+async def test_assignee_roundtrips(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=await _team_id(session), title="Add login", assignee="Ada Lovelace")
+
+    await repo.add(item)
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.assignee == "Ada Lovelace"
+
+
+async def test_assignee_defaults_to_none(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=await _team_id(session), title="Add login")
+
+    await repo.add(item)
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.assignee is None

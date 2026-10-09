@@ -148,6 +148,63 @@ async def test_changed_url_is_updated() -> None:
     assert item.url == "https://linear.app/b/E-1"
 
 
+async def test_first_sync_stores_assignee() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    harness = Harness(source)
+
+    await harness.service.sync(await seed_org(harness))
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.assignee == "Ada Lovelace"
+
+
+async def test_resync_backfills_assignee() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # stored with assignee=None, as before this feature
+    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.assignee == "Ada Lovelace"
+
+
+async def test_changed_assignee_is_updated() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Grace Hopper")]
+
+    await harness.service.sync(org_id)
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.assignee == "Grace Hopper"
+
+
+async def test_cleared_assignee_is_removed() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = [dataclasses.replace(source.work_items[0], assignee=None)]
+
+    await harness.service.sync(org_id)
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.assignee is None
+
+
 async def test_second_sync_is_a_no_op() -> None:
     harness = Harness(full_source())
     org_id = await seed_org(harness)

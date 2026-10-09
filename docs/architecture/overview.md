@@ -176,10 +176,10 @@ mapping functions, and a paginating `LinearDataSource`. Exposed as
 `POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
 and the Connectors page in the frontend. The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
-events, state types on transitions, and each issue's labels and parent
-(ADR-0011); the team's metric rules decide at read time what counts as
-blocked (labels, workflow-state names, relations), which items are
-parents, and which types and states count.
+events, state types on transitions, and each issue's labels, parent and
+current assignee name (ADR-0011); the team's metric rules decide at read
+time what counts as blocked (labels, workflow-state names, relations),
+which items are parents, and which types and states count.
 Issues created directly in a started-type state start at creation, and
 issues created directly in a completed-type state (logged after the fact)
 complete at creation (`:created-done`), which analytics treat as records, not

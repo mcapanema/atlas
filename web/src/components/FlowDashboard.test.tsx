@@ -182,6 +182,21 @@ describe("FlowDashboard", () => {
     await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
     expect(screen.getByText("Stuck item")).toBeInTheDocument();
     expect(screen.getByText("over P85")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+  });
+
+  it("marks unassigned aging items", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [{ ...agingWipFixture.items[0], assignee: null }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("Unassigned")).toBeInTheDocument();
   });
 
   const inDocumentOrder = (nodes: Node[]) =>

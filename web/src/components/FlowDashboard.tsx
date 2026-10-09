@@ -1,4 +1,4 @@
-import { Alert, Col, Row, Skeleton, Space, Table, Tag } from "antd";
+import { Alert, Col, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -45,6 +45,12 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
       title: "Title",
       dataIndex: "title",
       render: (title, item) => <Link to={`/work-items/${item.work_item_id}`}>{title}</Link>,
+    },
+    {
+      title: "Owner",
+      dataIndex: "assignee",
+      render: (assignee: string | null) =>
+        assignee ?? <Typography.Text type="secondary">Unassigned</Typography.Text>,
     },
     { title: "State", dataIndex: "state" },
     { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },

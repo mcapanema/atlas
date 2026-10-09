@@ -286,6 +286,7 @@ class SyncService:
                 url=source.url,
                 state_type=source.state_type,
                 labels=source.labels,
+                assignee=source.assignee,
                 created_at=source.created_at,
             )
             await self._work_items.add(item)
@@ -300,6 +301,7 @@ class SyncService:
             url=source.url,
             state_type=source.state_type,
             labels=source.labels,
+            assignee=source.assignee,
         )
         if item == existing:
             return existing, False

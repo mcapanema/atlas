@@ -27,6 +27,8 @@ class AgingItem:
     state: str
     age: timedelta
     over_percentile: bool
+    # Who the item is assigned to as of the last sync; None when unassigned.
+    assignee: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,7 @@ def compute_aging_wip(
                 state=item.state,
                 age=age,
                 over_percentile=limit is not None and age > limit,
+                assignee=item.assignee,
             )
         )
     aging.sort(key=lambda a: a.age, reverse=True)

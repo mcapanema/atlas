@@ -87,6 +87,21 @@ def _initial_events(node: dict[str, Any], created_at: datetime) -> list[SourceEv
     return events
 
 
+# work_items.assignee is String(255): a longer name would fail the insert on PostgreSQL.
+_NAME_MAX = 255
+
+
+# ponytail: the assignee is stored as a display name, not a user identity —
+# enough to show who owns an item. A renamed user shows the new name only
+# after the issue syncs again. Upgrade path: sync Linear users into a
+# Person aggregate and store the id if per-person analytics are ever needed.
+def _assignee(node: dict[str, Any]) -> str | None:
+    # .get: a nameless assignee reads as unassigned — a KeyError would drop
+    # (and prune) the whole issue.
+    name = (node.get("assignee") or {}).get("name")
+    return str(name)[:_NAME_MAX] if name else None
+
+
 def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None) -> SourceWorkItem:
     names = label_names or {}
     created_at = datetime.fromisoformat(node["createdAt"])
@@ -129,6 +144,7 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
         state_type=_state_type(node["state"]),
         labels=tuple(_detail(names[i]) for i in node.get("labelIds") or () if i in names),
         parent_external_id=(node.get("parent") or {}).get("id"),
+        assignee=_assignee(node),
         team_external_id=node["team"]["id"],
         project_external_id=project["id"] if project else None,
         created_at=created_at,
