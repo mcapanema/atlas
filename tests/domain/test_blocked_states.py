@@ -4,7 +4,12 @@ from uuid import uuid4
 import pytest
 
 from app.domain.events.entities import Event, EventType
-from app.domain.events.timeline import BlockedPeriod, blocked_periods, creation_state
+from app.domain.events.timeline import (
+    BlockedPeriod,
+    blocked_periods,
+    creation_state,
+    derive_timeline,
+)
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules, resolve_rules
 from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.samples import derive_flow_sample
@@ -144,6 +149,66 @@ def test_an_as_of_slice_keeps_the_creation_state_of_the_full_history() -> None:
 
     assert born_in == "Blocked"  # transitions outrank the current state
     assert blocked_periods(as_of_day_5, born_in=born_in) == (BlockedPeriod(_day(1), None),)
+
+
+def test_a_detail_on_an_event_that_is_not_a_label_or_blocker_never_blocks() -> None:
+    events = [_at(EventType.CREATED, 1), _at(EventType.ASSIGNED, 2, "Blocked")]
+
+    assert blocked_periods(events) == ()
+
+
+def test_same_instant_moves_stored_out_of_order_follow_the_state_chain() -> None:
+    # An automation moved In Progress → Blocked → In Review in one instant;
+    # storage returned the second move first.
+    events = [
+        _at(EventType.CREATED, 1),
+        _move(EventType.STARTED, 2, "Todo", "In Progress"),
+        _move(EventType.STATE_CHANGED, 3, "Blocked", "In Review"),
+        _move(EventType.STATE_CHANGED, 3, "In Progress", "Blocked"),
+    ]
+    sample = derive_flow_sample(events)
+
+    assert blocked_periods(events) == ()  # in and out of Blocked at once: no time
+    assert sample is not None
+    assert sample.blocked_now is False
+    assert derive_timeline(events).state_periods[-1].state == "In Review"
+
+
+def test_a_same_instant_round_trip_starts_from_the_state_the_item_was_in() -> None:
+    # Both moves' from-states are the other's to-state: only the prior state
+    # (In Progress) says which came first.
+    events = [
+        _at(EventType.CREATED, 1),
+        _move(EventType.STARTED, 2, "Todo", "In Progress"),
+        _move(EventType.STATE_CHANGED, 3, "Blocked", "In Progress"),
+        _move(EventType.STATE_CHANGED, 3, "In Progress", "Blocked"),
+    ]
+
+    assert blocked_periods(events) == ()
+    assert derive_timeline(events).state_periods[-1].state == "In Progress"
+
+
+def test_same_instant_first_moves_chain_from_the_one_nothing_leads_into() -> None:
+    # No earlier move: the chain starts at Todo, the from-state no move enters.
+    events = [
+        _at(EventType.CREATED, 1),
+        _move(EventType.STATE_CHANGED, 2, "Blocked", "In Progress"),
+        _move(EventType.STARTED, 2, "Todo", "Blocked"),
+    ]
+
+    assert blocked_periods(events) == ()
+    assert creation_state(events) == "Todo"
+
+
+def test_same_instant_moves_that_do_not_chain_keep_storage_order() -> None:
+    events = [
+        _at(EventType.CREATED, 1),
+        _move(EventType.STARTED, 2, "Todo", "In Progress"),
+        _move(EventType.STATE_CHANGED, 3, "In Review", "QA"),
+        _move(EventType.STATE_CHANGED, 3, "Staging", "Done"),
+    ]
+
+    assert [p.state for p in derive_timeline(events).state_periods][-2:] == ["QA", "Done"]
 
 
 def test_blocked_state_time_lowers_flow_efficiency_and_sets_blocked_now() -> None:
