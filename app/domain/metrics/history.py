@@ -12,6 +12,7 @@ from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cfd import DailyFlowCount, daily_flow_counts
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from app.domain.metrics.throughput import ThroughputBucket, bucketed_throughput
+from app.domain.metrics.windows import CHART_WINDOW_DAYS
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,7 @@ def compute_flow_history(
     event_streams: list[list[Event]],
     *,
     now: datetime,
-    window_days: int = 90,
+    window_days: int = CHART_WINDOW_DAYS,
     samples: Sequence[FlowSample] | None = None,
     stream_rules: Sequence[MetricRules] | None = None,
     rules: MetricRules = DEFAULT_RULES,

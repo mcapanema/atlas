@@ -17,6 +17,7 @@ from app.domain.forecasting.accuracy import (
     ForecastAccuracy,
     evaluate_forecast_accuracy,
 )
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
 from app.domain.projects.repository import ProjectRepository
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.snapshots.repository import (
@@ -25,7 +26,7 @@ from app.domain.snapshots.repository import (
 )
 from app.domain.teams.repository import TeamRepository
 
-METRICS_WINDOW_DAYS = 30
+METRICS_WINDOW_DAYS = STATS_WINDOW_DAYS
 
 
 class SnapshotService:

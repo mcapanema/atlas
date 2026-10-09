@@ -13,6 +13,7 @@ from app.domain.metrics.distribution import (
 from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.history import FlowHistory, compute_flow_history
 from app.domain.metrics.summary import FlowMetrics, compute_flow_metrics
+from app.domain.metrics.windows import CHART_WINDOW_DAYS, STATS_WINDOW_DAYS
 from app.domain.projects.repository import ProjectRepository
 from app.domain.teams.repository import TeamRepository
 from app.domain.work_items.entities import WorkItemType
@@ -69,7 +70,7 @@ class MetricsService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 30,
+        window_days: int = STATS_WINDOW_DAYS,
         now: datetime | None = None,
         scope: ScopeSamples | None = None,
     ) -> FlowMetrics:
@@ -84,7 +85,7 @@ class MetricsService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 90,
+        window_days: int = CHART_WINDOW_DAYS,
         now: datetime | None = None,
         scope: ScopeSamples | None = None,
     ) -> FlowHistory:
@@ -117,7 +118,7 @@ class MetricsService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 90,
+        window_days: int = CHART_WINDOW_DAYS,
         now: datetime | None = None,
         scope: ScopeSamples | None = None,
     ) -> LeadTimeDistribution:
@@ -153,7 +154,7 @@ class MetricsService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 30,
+        window_days: int = STATS_WINDOW_DAYS,
         now: datetime | None = None,
         scope: ScopeSamples | None = None,
     ) -> DeliveryHealth:

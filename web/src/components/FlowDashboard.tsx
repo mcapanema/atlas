@@ -30,6 +30,7 @@ import { formatSeconds } from "../lib/duration";
 import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
 import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
+import { CHART_WINDOW_DAYS, STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
 import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
@@ -322,14 +323,14 @@ export function FlowDashboard({
         ))}
       <FlowStats
         data={metrics.data}
-        statLabel={windowLabel(filters, 30)}
+        statLabel={windowLabel(filters, STATS_WINDOW_DAYS)}
         ranged={isRanged(filters)}
       />
       <FlowCharts
         history={history.data}
         distribution={distribution.data}
         snapshots={snapshots.data}
-        chartLabel={windowLabel(filters, 90)}
+        chartLabel={windowLabel(filters, CHART_WINDOW_DAYS)}
       />
       {aging.data && aging.data.items.length > 0 && (
         <AgingWipCard

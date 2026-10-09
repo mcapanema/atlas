@@ -6,6 +6,7 @@ from app.api.scope import ScopeDep
 from app.config import get_settings
 from app.domain.advisor.entities import Persona
 from app.domain.advisor.render import render_context
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
@@ -19,7 +20,7 @@ async def advisor_status() -> IntegrationStatusRead:
 async def get_advice_context(
     service: AdvisorServiceDep,
     scope: ScopeDep,
-    window_days: int = Query(default=30, ge=7, le=365),
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=7, le=365),
 ) -> AdviceContextRead:
     """The advisor's input digest, for clients that bring their own LLM (MCP)."""
     context = await service.build_context(
@@ -41,7 +42,7 @@ async def get_recommendations(
     session: SessionDep,
     personas: PersonaServiceDep,
     scope: ScopeDep,
-    window_days: int = Query(default=30, ge=7, le=365),
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=7, le=365),
     # ponytail: no ge/le-style constraint needed, so a plain default (not
     # Query(default=...)) is enough — FastAPI still treats it as a query
     # param and 422s on an unrecognized value. Query() also works but ruff's

@@ -30,6 +30,7 @@ from app.domain.advisor.entities import (
 )
 from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
 from app.domain.advisor.render import render_context, render_meeting_context
+from app.domain.metrics.windows import CHART_WINDOW_DAYS
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -163,7 +164,7 @@ _MEETING_INSTRUCTIONS: dict[MeetingType, str] = {
     ),
     MeetingType.RETROSPECTIVE: (
         "Prepare talking points for a retrospective covering the flow window in "
-        "the metrics. Contrast that window against the trailing 90-day "
+        f"the metrics. Contrast that window against the trailing {CHART_WINDOW_DAYS}-day "
         "distribution, call out the weakest delivery-health components, and "
         "propose 2-3 discussion topics phrased as open questions for the team — "
         "not verdicts — each grounded in a quoted number. Note explicitly where "

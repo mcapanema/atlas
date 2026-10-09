@@ -8,6 +8,7 @@ import type { Delta } from "../lib/deltas";
 import { formatSeconds } from "../lib/duration";
 import { isAtRisk, weakestComponents } from "../lib/health";
 import type { CellState, TeamRow } from "../lib/teamRows";
+import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { HealthBadge } from "./HealthBadge";
 import { HelpLabel } from "./HelpLabel";
 import { Sparkline } from "./Sparkline";
@@ -47,11 +48,13 @@ function DeltaChip({ delta, metric }: { delta: Delta | null; metric: string }) {
   const tone = delta.good == null ? "flat" : delta.good ? "good" : "bad";
   const pct = delta.direction === "flat" ? "0%" : `${Math.round(Math.abs(delta.pct) * 100)}%`;
   return (
-    <Tooltip title={`vs prior 30d window (baseline ${formatDay(delta.baselineDate)})`}>
+    <Tooltip
+      title={`vs prior ${STATS_WINDOW_DAYS}d window (baseline ${formatDay(delta.baselineDate)})`}
+    >
       <span
         className={`delta delta--${tone}`}
         tabIndex={0}
-        aria-label={`${metric} ${delta.direction === "flat" ? "unchanged" : `${delta.direction} ${pct}`} versus prior 30-day window`}
+        aria-label={`${metric} ${delta.direction === "flat" ? "unchanged" : `${delta.direction} ${pct}`} versus prior ${STATS_WINDOW_DAYS}-day window`}
       >
         {arrow} {pct}
       </span>

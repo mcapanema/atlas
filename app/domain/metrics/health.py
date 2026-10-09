@@ -29,6 +29,7 @@ from app.domain.metrics.samples import (
 )
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.throughput import throughput
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
 from app.domain.metrics.wip import wip
 
 
@@ -206,7 +207,7 @@ def compute_delivery_health(
     streams: list[list[Event]],
     *,
     now: datetime,
-    window_days: int = 30,
+    window_days: int = STATS_WINDOW_DAYS,
     samples: Sequence[FlowSample | None] | None = None,
     rules: MetricRules = DEFAULT_RULES,
 ) -> DeliveryHealth:

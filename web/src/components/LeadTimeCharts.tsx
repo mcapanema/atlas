@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { LeadTimeDistribution } from "../api/metrics";
 import type { MetricSnapshot } from "../api/snapshots";
 import { buildLeadTimeDistributionOption, buildLeadTimeTrendOption } from "../lib/charts";
+import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
 import { ChartCard, ChartEmpty } from "./ChartCard";
 import { EChart } from "./EChart";
@@ -65,7 +66,7 @@ export function LeadTimeCharts({
         <Col xs={24} lg={12}>
           <ChartCard
             label="Lead time trend"
-            help="Daily snapshots of lead time P50 and P85. Always the unfiltered 30-day baseline, so it does not follow the filters above."
+            help={`Daily snapshots of lead time P50 and P85. Always the unfiltered ${STATS_WINDOW_DAYS}-day baseline, so it does not follow the filters above.`}
           >
             {trendOption ? (
               <EChart option={trendOption} />

@@ -4,6 +4,7 @@ from uuid import UUID
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
 from app.domain.advisor.port import DeliveryContext, MeetingContext
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 
 class AdvisorService:
@@ -25,7 +26,7 @@ class AdvisorService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 30,
+        window_days: int = STATS_WINDOW_DAYS,
         now: datetime | None = None,
     ) -> DeliveryContext:
         """Assemble the scope's current delivery picture for the advisor.
@@ -49,7 +50,7 @@ class AdvisorService:
         *,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = 30,
+        window_days: int = STATS_WINDOW_DAYS,
         remaining: int | None = None,
         target_date: date | None = None,
         now: datetime | None = None,
