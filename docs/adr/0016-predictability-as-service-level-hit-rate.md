@@ -46,5 +46,11 @@ history). A scope with less prior history leaves predictability out.
   pace. That is the point: its track record stopped predicting its work.
 - Scores moved on live data: Deployment 78 -> 28 (42% hit, against 77% the
   window before), Regras Auditoria 27 -> 100, AI Team 7 -> 100.
-- A stored `predictability_worst_ratio` override is ignored and logged as
-  unknown. Health is computed on read, so no history is rewritten.
+- On a view longer than the 30-day default (Last 180 days, or a custom
+  range), the reference is the aging history before that whole view, so
+  the score grades the view against an older commitment. A scope without
+  that much history before the view leaves predictability out there.
+- Migration `c4e7a2d9b1f3` drops any stored `predictability_worst_ratio`
+  override. The write schema forbids unknown keys, so it could never be
+  cleared, and the resolver logged it on every scope load. Health is
+  computed on read, so no history is rewritten.
