@@ -163,6 +163,20 @@ describe("MetricRulesPage", { timeout: 15_000 }, () => {
     expect(screen.getByText("Work item types")).toBeInTheDocument();
   });
 
+  it("flags a floor at or above the aging percentile before Save", async () => {
+    mockApi(view());
+
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    const floor = await screen.findByRole("spinbutton", { name: "Predictability: floor hit rate" });
+    fireEvent.change(floor, { target: { value: "85" } });
+
+    expect(
+      screen.getByText("Predictability: floor hit rate must be below Aging flag percentile."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
   it("tunes predictability by its floor hit rate, not a lead-time spread", async () => {
     mockApi(view());
 
