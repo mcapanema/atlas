@@ -13,13 +13,26 @@ import { StatCard } from "./StatCard";
 
 const DAY_MS = 86_400_000;
 
-function methodHelp(historyDays: number): string {
+function methodHelp(historyDays: number, trials: number | undefined): string {
+  const runs =
+    trials !== undefined ? `${trials.toLocaleString("en-US")} simulations` : "simulations";
   return (
-    "Runs 2,000 simulations of the remaining work. Each simulated day draws a completion " +
+    `Runs ${runs} of the remaining work. Each simulated day draws a completion ` +
     `count from this scope's actual daily throughput over its last ${historyDays} days of ` +
     "history (the team's forecast history, set in Metric rules; shorter for a young scope), " +
     "zero-throughput days included. Each bar is how many simulations finished on that date; " +
     "the dashed lines mark P50 and P85."
+  );
+}
+
+/** The forecast replays past throughput; a long gap since the last completion makes it optimistic. */
+function LastCompletion({ at, origin }: { at: string | null; origin: string }) {
+  if (!at) return null;
+  const days = Math.floor((Date.parse(origin) - Date.parse(at)) / DAY_MS);
+  return (
+    <span className="page-asof">
+      Last completion {formatDay(at)} · {days === 0 ? "today" : `${days} days ago`}
+    </span>
   );
 }
 
@@ -146,8 +159,8 @@ export function ForecastCard({
   const [targetDate, setTargetDate] = useState<string>();
   const [assumedRemaining, setAssumedRemaining] = useState<number>();
   // Typed digits stay local until blur/Enter commit them to assumedRemaining —
-  // committing per keystroke would re-run the backend's 2,000-trial Monte
-  // Carlo simulation on every digit and throw away all but the last result.
+  // committing per keystroke would re-run the backend's Monte Carlo
+  // simulation on every digit and throw away all but the last result.
   const [draftRemaining, setDraftRemaining] = useState<number>();
   const forecast = useForecast(scope, { filters, targetDate, remaining: assumedRemaining });
   const accuracy = useForecastAccuracy(scope);
@@ -171,7 +184,7 @@ export function ForecastCard({
     return <Alert type="error" title="Failed to load forecast" />;
   }
   if (!data) {
-    // Holds the card's place (and title) while the 2,000-trial simulation
+    // Holds the card's place (and title) while the backend's Monte Carlo simulation
     // runs, so the page doesn't grow abruptly when it lands.
     return (
       <Card title="Completion forecast">
@@ -183,7 +196,9 @@ export function ForecastCard({
   const historyDays = Math.round(
     (Date.parse(data.window_end) - Date.parse(data.window_start)) / DAY_MS,
   );
-  const title = <HelpLabel label="Completion forecast" help={methodHelp(historyDays)} />;
+  const title = (
+    <HelpLabel label="Completion forecast" help={methodHelp(historyDays, completion?.trials)} />
+  );
 
   if (!completion) {
     return (
@@ -200,6 +215,7 @@ export function ForecastCard({
           assumed={assumedRemaining !== undefined}
           completion={completion}
         />
+        <LastCompletion at={data.last_completed_at} origin={data.window_end} />
         <Space wrap size="large">
           <AssumedRemainingInput
             measured={data.remaining}

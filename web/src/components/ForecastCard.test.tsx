@@ -59,6 +59,33 @@ describe("ForecastCard", () => {
     );
   });
 
+  it("says when work last completed, next to the dates it drives", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText(/Last completion/)).toBeInTheDocument();
+  });
+
+  it("names the simulation count the API ran", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({
+          ...forecastFixture,
+          completion: { ...forecastFixture.completion, trials: 500 },
+        }),
+      ),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    fireEvent.focus(screen.getByText("Completion forecast"));
+    expect(await screen.findByText(/Runs 500 simulations/)).toBeInTheDocument();
+  });
+
   it("fetches confidence for a picked target date", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = requestUrl(input);

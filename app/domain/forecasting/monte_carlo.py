@@ -110,6 +110,8 @@ class DeliveryForecast:
 
     window_end doubles as the forecast origin ("now"); completion and
     confidence are None when the scope has no throughput history.
+    last_completed_at is the scope's latest completion at or before the origin;
+    None if none.
     """
 
     window_start: datetime
@@ -117,3 +119,4 @@ class DeliveryForecast:
     remaining: int
     completion: CompletionForecast | None
     confidence: float | None
+    last_completed_at: datetime | None = None

@@ -21,6 +21,7 @@ export interface Forecast {
   remaining: number;
   completion: CompletionForecast | null;
   confidence: number | null;
+  last_completed_at: string | null;
 }
 
 export interface ForecastOptions {
