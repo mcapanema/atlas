@@ -166,7 +166,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "blocked_label_pattern",
         label: "Labels named like 'Blocked'",
-        help: "Labels such as Blocked, Blocker: external or Blocking mark an item blocked while applied. Whole words only: 'regras-blockly' doesn't count.",
+        help: "Labels such as Blocked, Blocker: external, Blocking, Bloqueado or Bloqueante mark an item blocked while applied. Whole words only: 'regras-blockly' and 'Desbloqueado' don't count.",
         control: { kind: "switch" },
       },
       {
@@ -178,7 +178,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "blocked_state_pattern",
         label: "Workflow states named like 'Blocked'",
-        help: "An item is blocked while it sits in a workflow state such as Blocked or Blocked by vendor. Whole words only: 'Unblocked' doesn't count.",
+        help: "An item is blocked while it sits in a workflow state such as Blocked, Blocked by vendor or Bloqueado. Whole words only: 'Unblocked' and 'Desbloqueado' don't count.",
         control: { kind: "switch" },
       },
       {

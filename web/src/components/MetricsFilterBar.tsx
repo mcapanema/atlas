@@ -1,4 +1,4 @@
-import { DatePicker, Select, Space } from "antd";
+import { DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 
 import type { MetricsFilters, MetricsScope } from "../api/metrics";
@@ -17,6 +17,11 @@ const PERIOD_OPTIONS = [
 
 const ISO = "YYYY-MM-DD";
 
+/**
+ * The period, type and excluded-state filters, as sibling controls with no
+ * box of their own: the caller's wrapping Flex row lays them out, so beside
+ * a scope selector each control wraps on its own instead of as one block.
+ */
 export function MetricsFilterBar({
   filters,
   scope,
@@ -33,7 +38,7 @@ export function MetricsFilterBar({
   const periodValue = custom ? "custom" : String(windowDays ?? 30);
 
   return (
-    <Space wrap>
+    <>
       <Select
         aria-label="Analysis period"
         style={{ width: 150 }}
@@ -97,6 +102,6 @@ export function MetricsFilterBar({
         options={(states.data ?? []).map((state) => ({ value: state, label: state }))}
         onChange={(next) => onChange({ ...filters, excludeStates: next.length ? next : undefined })}
       />
-    </Space>
+    </>
   );
 }

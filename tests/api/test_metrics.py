@@ -218,7 +218,7 @@ async def test_aging_wip_requires_exactly_one_scope(client: AsyncClient) -> None
 
 async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    for title in ("Ship", "Ship again", "Ship more"):
+    for title in ("Ship", "Ship again", "Ship more", "Ship four", "Ship five"):
         item = (
             await client.post("/api/work-items", json={"team_id": team_id, "title": title})
         ).json()
@@ -497,7 +497,7 @@ async def test_explicit_period_history_and_distribution_count_completions_as_the
 
 
 async def test_explicit_period_health_reads_wip_as_it_stood(client: AsyncClient) -> None:
-    team_id = await _parked_then_restarted(client, items=3)
+    team_id = await _parked_then_restarted(client, items=5)
     period = f"team_id={team_id}&start={days_ago(22)[:10]}&end={days_ago(15)[:10]}"
 
     ranged = (await client.get(f"/api/metrics/health?{period}")).json()

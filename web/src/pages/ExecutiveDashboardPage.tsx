@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Alert, Button, Empty, Typography } from "antd";
+import { Alert, Button, Empty, Flex, Typography } from "antd";
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -143,9 +143,9 @@ export function ExecutiveDashboardPage() {
       <Typography.Title level={3}>Executive Dashboard</Typography.Title>
       <Headline rows={rows} />
       {windowSource && <p className="page-asof">{periodText(filters, windowSource)}</p>}
-      <div style={{ marginBottom: 16 }}>
+      <Flex wrap gap="small" align="center" style={{ marginBottom: 16 }}>
         <MetricsFilterBar filters={filters} onChange={setFilters} />
-      </div>
+      </Flex>
       <FailedTeamsAlert teams={teamList} overviews={overviews} />
       <TeamMetricsTable
         rows={rows}

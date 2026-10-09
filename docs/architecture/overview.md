@@ -109,7 +109,9 @@ Every rule that changes how a metric is computed — lifecycle
 interpretation (incl. reopens, parent issues, lead-time start), the blocked
 signal, health scales, weights and evidence floor, timezone, chart bucketing, forecast
 history and remaining, label → type mapping — is a field of `MetricRules`
-(`app/domain/metric_rules/entities.py`, defaults = the previous built-in behavior).
+(`app/domain/metric_rules/entities.py`, defaults = the previous built-in
+behavior, except the blocked sources — all on — and the health floor —
+ADR-0015).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace

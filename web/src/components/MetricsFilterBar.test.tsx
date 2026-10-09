@@ -14,6 +14,13 @@ describe("MetricsFilterBar", () => {
   beforeEach(() => mockMetricsFetch());
   afterEach(() => vi.restoreAllMocks());
 
+  it("adds no wrapping box of its own, so the caller's row wraps each control", () => {
+    const { container } = renderWithClient(<MetricsFilterBar filters={{}} onChange={vi.fn()} />);
+
+    expect(container.querySelector(".ant-space")).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Analysis period" })).toBeInTheDocument();
+  });
+
   it("emits a preset window change", () => {
     const onChange = vi.fn();
     renderWithClient(<MetricsFilterBar filters={{}} onChange={onChange} />);
