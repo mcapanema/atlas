@@ -201,8 +201,36 @@ describe("buildForecastOption", () => {
     const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter;
 
     expect(formatter({ dataIndex: 0 })).toBe(
-      "400 of 2,000 simulations finished by 20-07-2026 (20.0%)",
+      "400 of 2,000 simulations finished on 20-07-2026 (20.0%)",
     );
+  });
+
+  it("marks the target date when it falls on the chart", () => {
+    const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", {
+      ...percentiles,
+      targetDate: "2026-07-20",
+    });
+    const marks = (option.series as Series[])[0].markLine?.data as {
+      xAxis: string;
+      label: { formatter: string };
+    }[];
+
+    expect(marks.map((m) => [m.label.formatter, m.xAxis])).toContainEqual(["Target", "20-07-2026"]);
+  });
+
+  it("leaves the target off when it falls outside the simulated range", () => {
+    // Snapping it to the edge bucket would claim a date it isn't; the
+    // confidence sentence already says 0% or 100%.
+    for (const targetDate of ["2026-07-15", "2026-08-30"]) {
+      const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", {
+        ...percentiles,
+        targetDate,
+      });
+      const marks = (option.series as Series[])[0].markLine?.data as {
+        label: { formatter: string };
+      }[];
+      expect(marks.map((m) => m.label.formatter)).toEqual(["P50", "P85"]);
+    }
   });
 });
 

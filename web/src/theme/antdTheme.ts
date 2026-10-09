@@ -79,7 +79,6 @@ export function buildThemeConfig(mode: ThemeMode): ThemeConfig {
       },
       Card: { headerFontSize: 13 },
       Table: { headerColor: p.inkSecondary },
-      Statistic: { titleFontSize: 12, contentFontSize: 22 },
       // Dark primary is a bright needle (L 0.70): dark label text reads at
       // 7.6:1 where white would fail (2.6:1).
       ...(dark ? { Button: { primaryColor: p.bg } } : {}),

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, DatePicker, InputNumber, Skeleton, Space, Statistic } from "antd";
+import { Alert, Button, Card, DatePicker, InputNumber, Skeleton, Space } from "antd";
 import { useMemo, useState } from "react";
 
 import { useForecast, type CompletionForecast } from "../api/forecasts";
@@ -126,6 +126,16 @@ function AccuracyStats({ accuracy }: { accuracy: ForecastAccuracy }) {
   );
 }
 
+/** "82% of simulations finish by 01-09-2026" — the figure, said in full. */
+function ConfidenceReadout({ confidence, targetDate }: { confidence: number; targetDate: string }) {
+  return (
+    <span aria-live="polite">
+      <span className="fig">{percent(confidence)}</span> of simulations finish by{" "}
+      {formatDay(targetDate)}
+    </span>
+  );
+}
+
 export function ForecastCard({
   scope,
   filters,
@@ -150,15 +160,15 @@ export function ForecastCard({
         ? buildForecastOption(
             completion.outcomes,
             data.window_end,
-            { p50Date: completion.p50_date, p85Date: completion.p85_date },
+            { p50Date: completion.p50_date, p85Date: completion.p85_date, targetDate },
             mode,
           )
         : null,
-    [data, completion, mode],
+    [data, completion, targetDate, mode],
   );
 
   if (forecast.isError) {
-    return <Alert type="error" message="Failed to load forecast" />;
+    return <Alert type="error" title="Failed to load forecast" />;
   }
   if (!data) {
     // Holds the card's place while the 2,000-trial simulation runs, so the
@@ -178,7 +188,7 @@ export function ForecastCard({
   if (!completion) {
     return (
       <Card title={title}>
-        <Alert type="info" message="Not enough delivery history to forecast." />
+        <Alert type="info" title="Not enough delivery history to forecast." />
       </Card>
     );
   }
@@ -204,7 +214,9 @@ export function ForecastCard({
               format={DATE_FORMAT}
               onChange={(value) => setTargetDate(value ? value.format("YYYY-MM-DD") : undefined)}
             />
-            {data.confidence != null && <Statistic value={percent(data.confidence)} />}
+            {data.confidence != null && targetDate && (
+              <ConfidenceReadout confidence={data.confidence} targetDate={targetDate} />
+            )}
           </Space>
         </Space>
         {outcomesOption && <EChart option={outcomesOption} />}

@@ -77,6 +77,7 @@ describe("ForecastCard", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
+    expect(screen.getByText(/of simulations finish by 01-09-2026/)).toBeInTheDocument();
   });
 
   it("shows an error when the forecast fails to load", async () => {

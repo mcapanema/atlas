@@ -310,6 +310,19 @@ export function buildLeadTimeTrendOption(
 export interface ForecastPercentiles {
   p50Date: string;
   p85Date: string;
+  /** The date the EM asked about (YYYY-MM-DD); drawn only when it falls on the chart. */
+  targetDate?: string;
+}
+
+/**
+ * Whether a day offset lies within the simulated range. An off-range target
+ * isn't snapped to an edge bar — that would claim a date it isn't; the
+ * confidence sentence still states 0% or 100%.
+ */
+function onChart(outcomes: OutcomeBucket[], days: number): boolean {
+  return (
+    outcomes.length > 0 && days >= outcomes[0].days && days <= outcomes[outcomes.length - 1].days
+  );
 }
 
 export function buildForecastOption(
@@ -328,32 +341,32 @@ export function buildForecastOption(
   // 12 days, P50 at 11). Snap forward to the first bucket at or after it and
   // reuse that bucket's own axis label: keying a markLine on a date string the
   // category axis never emitted would silently draw nothing.
+  const offsetDays = (iso: string) => Math.round((new Date(iso).getTime() - origin) / 86_400_000);
   const markAt = (iso: string, name: string) => {
-    const days = Math.round((new Date(iso).getTime() - origin) / 86_400_000);
-    const index = outcomes.findIndex((o) => o.days >= days);
+    const index = outcomes.findIndex((o) => o.days >= offsetDays(iso));
     return referenceLine(labels[index === -1 ? labels.length - 1 : index], name, n);
   };
+  const marks = [markAt(percentiles.p50Date, "P50"), markAt(percentiles.p85Date, "P85")];
+  const target = percentiles.targetDate;
+  if (target && onChart(outcomes, offsetDays(target))) marks.push(markAt(target, "Target"));
 
   const series = barSeries(
     "Simulations",
     outcomes.map((o) => o.trials),
   ) as [Record<string, unknown>];
-  series[0].markLine = {
-    silent: true,
-    symbol: "none",
-    data: [markAt(percentiles.p50Date, "P50"), markAt(percentiles.p85Date, "P85")],
-  };
+  series[0].markLine = { silent: true, symbol: "none", data: marks };
 
   return {
     tooltip: {
       trigger: "item",
       // "1600" on its own reads as a quantity of work. It is a count of
-      // simulated futures — say so, and give the share it represents.
+      // simulated futures — say so, and give the share it represents. A bar
+      // counts the simulations finishing *on* its day, not by it.
       formatter: (params: unknown) => {
         const { dataIndex } = params as { dataIndex: number };
         const bucket = outcomes[dataIndex];
         const share = ((bucket.trials / total) * 100).toFixed(1);
-        return `${bucket.trials.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} simulations finished by ${labels[dataIndex]} (${share}%)`;
+        return `${bucket.trials.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} simulations finished on ${labels[dataIndex]} (${share}%)`;
       },
     },
     grid: { left: 56, right: 16, top: 32, bottom: 56 },

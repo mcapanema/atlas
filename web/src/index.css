@@ -48,13 +48,11 @@ h5 {
 
 /* Figures are the interface: metric values render in the mono cut, and
    anything tabular gets lining tabular numerals so columns align. */
-.ant-statistic-content,
 .fig {
   font-family: "Red Hat Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: -0.02em;
 }
-.ant-table,
-.ant-statistic-content {
+.ant-table {
   font-variant-numeric: tabular-nums;
 }
 /* Column-header definitions: discoverable on hover and keyboard focus. */
