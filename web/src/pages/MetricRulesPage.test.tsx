@@ -20,6 +20,7 @@ const BUILT_IN: MetricRules = {
   stability_best_weeks: 1,
   stability_worst_weeks: 5,
   aging_percentile: 85,
+  health_min_sample: 5,
   weight_predictability: 1,
   weight_efficiency: 1,
   weight_flow: 1,
@@ -34,7 +35,9 @@ const BUILT_IN: MetricRules = {
   canceled_then_reopened: "canceled",
   blocked_label_pattern: true,
   blocked_label_names: [],
-  blocked_by_relations: false,
+  blocked_by_relations: true,
+  blocked_state_pattern: true,
+  blocked_state_names: [],
   remaining_state_types: ["triage", "backlog", "unstarted", "started"],
   type_labels: [],
 };
@@ -152,6 +155,9 @@ describe("MetricRulesPage", { timeout: 15_000 }, () => {
 
     expect(await screen.findByText("Blocked")).toBeInTheDocument();
     expect(screen.getByText("Count Linear 'blocked by' relations")).toBeInTheDocument();
+    expect(screen.getByText("Workflow states named like 'Blocked'")).toBeInTheDocument();
+    expect(screen.getByText("More blocked states")).toBeInTheDocument();
+    expect(screen.getByText("Minimum items per component")).toBeInTheDocument();
     expect(screen.getByText("Work item types")).toBeInTheDocument();
   });
 

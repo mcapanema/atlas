@@ -24,6 +24,14 @@ describe("RuleControl", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("opens no empty suggestion list for blocked state names", () => {
+    render(<RuleControl spec={spec("blocked_state_names")} value={[]} onChange={vi.fn()} />);
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "More blocked states" }));
+
+    expect(screen.queryAllByText("No data")).toHaveLength(0);
+  });
+
   it("renders choice and time zone selects with the current value", () => {
     render(
       <>

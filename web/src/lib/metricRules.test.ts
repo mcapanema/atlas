@@ -94,6 +94,11 @@ describe("list-valued rules", () => {
   });
 
   it("formats list values for the inherited hint", () => {
+    expect(formatRuleValue(ruleSpec("blocked_state_names"), [])).toBe("None");
+    expect(
+      formatRuleValue(ruleSpec("blocked_state_names"), ["Blocked", "Aguardando cliente"]),
+    ).toBe("Blocked, Aguardando cliente");
+    expect(formatRuleValue(ruleSpec("health_min_sample"), 3)).toBe("3 items");
     expect(formatRuleValue(ruleSpec("blocked_label_names"), [])).toBe("None");
     expect(formatRuleValue(ruleSpec("blocked_label_names"), ["Blocked", "On hold"])).toBe(
       "Blocked, On hold",

@@ -25,6 +25,8 @@ export function LabelsControl({
       style={{ width: 320 }}
       value={value}
       options={asOptions(labelOptions)}
+      // Free-typed tags: an empty list means "type a name", not "No data".
+      notFoundContent={null}
       onChange={onChange}
     />
   );

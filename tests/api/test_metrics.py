@@ -221,12 +221,15 @@ async def test_aging_wip_requires_exactly_one_scope(client: AsyncClient) -> None
 
 async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
-    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
-    for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
-        await client.post(
-            "/api/events",
-            json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
-        )
+    for title in ("Ship", "Ship again", "Ship more", "Ship four", "Ship five"):
+        item = (
+            await client.post("/api/work-items", json={"team_id": team_id, "title": title})
+        ).json()
+        for type_, days in (("created", 10), ("started", 6), ("completed", 2)):
+            await client.post(
+                "/api/events",
+                json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+            )
 
     response = await client.get(f"/api/metrics/health?team_id={team_id}")
 
@@ -424,18 +427,23 @@ def test_period_days_is_inclusive_and_zero_when_open() -> None:
     assert Period().days == 0
 
 
-async def _parked_then_restarted(client: AsyncClient) -> str:
-    """Started 30d ago, moved back 25d ago, restarted 2d ago."""
+async def _parked_then_restarted(client: AsyncClient, items: int = 1) -> str:
+    """`items` items, each started 30d ago, moved back 25d ago, restarted 2d ago."""
     team_id = await create_team(client)
-    item = (
-        await client.post("/api/work-items", json={"team_id": team_id, "title": "Parked"})
-    ).json()
-    for event_type, days in (("created", 40), ("started", 30), ("stopped", 25), ("started", 2)):
-        response = await client.post(
-            "/api/events",
-            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
-        )
-        assert response.status_code == 201
+    for _ in range(items):
+        item = (
+            await client.post("/api/work-items", json={"team_id": team_id, "title": "Parked"})
+        ).json()
+        for event_type, days in (("created", 40), ("started", 30), ("stopped", 25), ("started", 2)):
+            response = await client.post(
+                "/api/events",
+                json={
+                    "work_item_id": item["id"],
+                    "type": event_type,
+                    "occurred_at": days_ago(days),
+                },
+            )
+            assert response.status_code == 201
     return team_id
 
 
@@ -492,13 +500,13 @@ async def test_explicit_period_history_and_distribution_count_completions_as_the
 
 
 async def test_explicit_period_health_reads_wip_as_it_stood(client: AsyncClient) -> None:
-    team_id = await _parked_then_restarted(client)
+    team_id = await _parked_then_restarted(client, items=5)
     period = f"team_id={team_id}&start={days_ago(22)[:10]}&end={days_ago(15)[:10]}"
 
     ranged = (await client.get(f"/api/metrics/health?{period}")).json()
     now = (await client.get(f"/api/metrics/health?team_id={team_id}")).json()
 
-    # The risk component exists only while something is in progress at the
+    # The risk component exists only while enough items are in progress at the
     # window's end: parked throughout the range, in progress again today.
     assert "risk" not in {component["name"] for component in ranged["components"]}
     assert "risk" in {component["name"] for component in now["components"]}

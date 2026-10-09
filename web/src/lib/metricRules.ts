@@ -18,6 +18,7 @@ type Control =
   | { kind: "number"; min: number; max: number; step: number; suffix?: string }
   | { kind: "timezone" }
   | { kind: "labels" }
+  | { kind: "names" }
   | { kind: "states" }
   | { kind: "typeLabels" };
 
@@ -165,7 +166,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "blocked_label_pattern",
         label: "Labels named like 'Blocked'",
-        help: "Labels such as Blocked, Blocker: external or Blocking mark an item blocked while applied. Whole words only: 'regras-blockly' doesn't count.",
+        help: "Labels such as Blocked, Blocker: external, Blocking, Bloqueado or Bloqueante mark an item blocked while applied. Whole words only: 'regras-blockly' and 'Desbloqueado' don't count.",
         control: { kind: "switch" },
       },
       {
@@ -173,6 +174,18 @@ export const RULE_GROUPS: RuleGroup[] = [
         label: "More blocked labels",
         help: "Further label names that mark an item blocked while applied (any case).",
         control: { kind: "labels" },
+      },
+      {
+        name: "blocked_state_pattern",
+        label: "Workflow states named like 'Blocked'",
+        help: "An item is blocked while it sits in a workflow state such as Blocked, Blocked by vendor or Bloqueado. Whole words only: 'Unblocked' and 'Desbloqueado' don't count.",
+        control: { kind: "switch" },
+      },
+      {
+        name: "blocked_state_names",
+        label: "More blocked states",
+        help: "Further workflow state names an item is blocked while in (any case), e.g. Aguardando cliente.",
+        control: { kind: "names" },
       },
       {
         name: "blocked_by_relations",
@@ -220,6 +233,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         label: "Aging flag percentile",
         help: "In-progress items older than this percentile of completed cycle times are flagged as aging; it also feeds the health risk score.",
         control: { kind: "number", min: 50, max: 99, step: 1 },
+      },
+      {
+        name: "health_min_sample",
+        label: "Minimum items per component",
+        help: "A health component scores only with at least this many items behind it: completions in the window, or items in progress for risk. With fewer it's left out, and a team with no component left reads not scored yet.",
+        control: { kind: "number", min: 1, max: 50, step: 1, suffix: "items" },
       },
       weight("weight_predictability", "predictability"),
       weight("weight_efficiency", "efficiency"),
@@ -281,7 +300,7 @@ export function timeZoneOptions() {
 }
 
 function formatListValue(kind: Control["kind"], value: RuleValue): string | undefined {
-  if (kind === "labels") {
+  if (kind === "labels" || kind === "names") {
     const names = value as string[];
     return names.length ? names.join(", ") : "None";
   }

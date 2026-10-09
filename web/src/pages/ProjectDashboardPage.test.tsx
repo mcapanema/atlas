@@ -22,6 +22,23 @@ afterEach(() => {
 });
 
 describe("ProjectDashboardPage", () => {
+  it("wraps the project selector and each filter in one row, control by control", async () => {
+    mockMetricsFetch({ "/api/projects": [project] });
+
+    renderWithClient(<ProjectDashboardPage />, [`/projects?project=${project.id}`]);
+
+    await screen.findByRole("combobox", { name: "Analysis period" });
+    const row = screen.getByRole("combobox", { name: "Project" }).closest(".ant-flex");
+    expect(row).toHaveClass("ant-flex-wrap-wrap");
+    for (const name of ["Project", "Analysis period", "Work item types", "Excluded states"]) {
+      const control = screen.getByRole("combobox", { name });
+      expect(control.closest(".ant-flex")).toBe(row);
+      // No box between a control and the row: a nested Space wraps as one block.
+      const space = control.closest(".ant-space");
+      expect(space === null || space.contains(row)).toBe(true);
+    }
+  });
+
   it("shows the dashboard scoped to the selected project", async () => {
     mockMetricsFetch({ "/api/projects": [project] });
 

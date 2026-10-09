@@ -215,18 +215,27 @@ async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
 
 async def test_delivery_health_for_team() -> None:
     team_id = uuid4()
-    done, doing = _item(team_id), _item(team_id)
-    service = MetricsService(
-        InMemoryWorkItemRepository([done, doing]),
-        InMemoryEventRepository(
-            [
-                _event(done, EventType.CREATED, 10),
-                _event(done, EventType.STARTED, 8),
-                _event(done, EventType.COMPLETED, 2),
-                _event(doing, EventType.CREATED, 5),
-                _event(doing, EventType.STARTED, 4),
-            ]
+    # Five of each: the built-in health_min_sample floor.
+    done = [_item(team_id) for _ in range(5)]
+    doing = [_item(team_id) for _ in range(5)]
+    events = [
+        *(
+            event
+            for item in done
+            for event in (
+                _event(item, EventType.CREATED, 10),
+                _event(item, EventType.STARTED, 8),
+                _event(item, EventType.COMPLETED, 2),
+            )
         ),
+        *(
+            event
+            for item in doing
+            for event in (_event(item, EventType.CREATED, 5), _event(item, EventType.STARTED, 4))
+        ),
+    ]
+    service = MetricsService(
+        InMemoryWorkItemRepository([*done, *doing]), InMemoryEventRepository(events)
     )
 
     health = await service.get_delivery_health(team_id=team_id, now=NOW)
@@ -234,3 +243,21 @@ async def test_delivery_health_for_team() -> None:
     assert health.score is not None
     assert health.band in ("healthy", "warning", "critical")
     assert any(c.name == "risk" for c in health.components)
+
+
+async def test_items_created_in_a_blocked_state_that_never_moved_count_as_blocked() -> None:
+    # Linear stamps CREATED+STARTED at creation with no state names; only the
+    # stored state says these items have sat in "Blocked" all along.
+    team_id = uuid4()
+    stuck = [WorkItem(team_id=team_id, title="Item", state="Blocked") for _ in range(5)]
+    events = [
+        event
+        for item in stuck
+        for event in (_event(item, EventType.CREATED, 1), _event(item, EventType.STARTED, 1))
+    ]
+    service = MetricsService(InMemoryWorkItemRepository(stuck), InMemoryEventRepository(events))
+
+    health = await service.get_delivery_health(team_id=team_id, now=NOW)
+
+    risk = next(c for c in health.components if c.name == "risk")
+    assert risk.reason.startswith("5 of 5")

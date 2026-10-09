@@ -53,7 +53,9 @@ persisted events; these slices have no tables and no migrations.
   daily/weekly throughput buckets (`history.py`), and a lead-time histogram
   (`distribution.py`). The metrics slice also computes Queue Time, Touch
   Time, Aging WIP, and a Delivery Health composite (predictability /
-  efficiency / flow / stability / risk, each 0–100 with a reason string).
+  efficiency / flow / stability / risk, each 0–100 with a reason string;
+  a component backed by fewer than `health_min_sample` items is left out,
+  and with none left the scope is unscored).
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
@@ -105,9 +107,11 @@ and Executive Dashboard).
 
 Every rule that changes how a metric is computed — lifecycle
 interpretation (incl. reopens, parent issues, lead-time start), the blocked
-signal, health scales and weights, timezone, chart bucketing, forecast
+signal, health scales, weights and evidence floor, timezone, chart bucketing, forecast
 history and remaining, label → type mapping — is a field of `MetricRules`
-(`app/domain/metric_rules/entities.py`, defaults = the previous built-in behavior).
+(`app/domain/metric_rules/entities.py`, defaults = the previous built-in
+behavior, except the blocked sources — all on — and the health floor —
+ADR-0015).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace
@@ -163,7 +167,8 @@ and the Connectors page in the frontend. The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events, state types on transitions, and each issue's labels and parent
 (ADR-0011); the team's metric rules decide at read time what counts as
-blocked, which items are parents, and which types and states count.
+blocked (labels, workflow-state names, relations), which items are
+parents, and which types and states count.
 Issues created directly in a started-type state start at creation, and
 issues created directly in a completed-type state (logged after the fact)
 complete at creation (`:created-done`), which analytics treat as records, not
