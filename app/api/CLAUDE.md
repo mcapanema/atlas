@@ -62,8 +62,12 @@ Presentation is allowed to know a concrete adapter exists).
   REST API in-process (httpx `ASGITransport`) and return compact text —
   never duplicate scope validation, DTO mapping, or error semantics inside
   a tool, and never return raw endpoint JSON (chat context windows are the
-  budget). The endpoint mounts at `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()`
-  (before `mount_spa`) only when the token is set, and `lifespan` must run
+  budget). Text that `app/domain/advisor/render.py` already renders is not
+  re-rendered here: parse the endpoint JSON with its `*Read` DTO, rebuild
+  the domain value, and call the shared renderer (exemplar:
+  `_aging_from_json` + `render_aging`). The endpoint mounts at
+  `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()` (before `mount_spa`) only when
+  the token is set, and `lifespan` must run
   `app.state.mcp.session_manager.run()` for it to serve.
 - **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
   UI and every `/api/*` route to loopback, unproxied requests only; the MCP

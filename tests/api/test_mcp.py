@@ -10,7 +10,8 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import httpx
 import httpx2
@@ -23,9 +24,11 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.mcp_server import _render_aging
+from app.api.mcp_server import _aging_from_json
+from app.api.schemas import AgingItemRead, AgingWipRead
+from app.domain.metrics.aging import AgingItem, AgingWip
 from app.main import _RedactSecret, create_app
-from tests.api.helpers import create_team
+from tests.api.helpers import create_team, days_ago
 
 TOKEN = "test-token-0123456789abcdefghij"
 
@@ -259,58 +262,107 @@ async def test_meeting_prompts(
         assert "meeting_brief" in content.text
 
 
-def test_aging_copy_names_the_configured_percentile() -> None:
-    item = {"title": "Fix login", "state": "In Progress", "age_seconds": 6 * 86400}
-    aging = {
-        "cycle_time_percentile_seconds": 4 * 86400,
-        "percentile": 70,
-        "items": [{**item, "over_percentile": True}],
-    }
+async def _seed_item(
+    client: httpx.AsyncClient, team_id: str, title: str, *events: tuple[str, int]
+) -> None:
+    """A work item with (event type, days ago) events, through the REST API."""
+    item = await client.post("/api/work-items", json={"team_id": team_id, "title": title})
+    assert item.status_code == 201
+    item_id = item.json()["id"]
+    for type_, days in events:
+        response = await client.post(
+            "/api/events",
+            json={"work_item_id": item_id, "type": type_, "occurred_at": days_ago(days)},
+        )
+        assert response.status_code == 201
 
-    text = _render_aging(aging)
 
-    assert "(cycle-time p70 = 4.0d)" in text
-    assert "6.0d [over p70]" in text
+async def test_meeting_brief_names_the_aging_history(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    # Review focus 5: the real tool path, not just the helpers.
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            team_id = await create_team(client)
+            await _seed_item(
+                client, team_id, "Shipped", ("created", 10), ("started", 6), ("completed", 2)
+            )
+            await _seed_item(client, team_id, "Stuck", ("created", 10), ("started", 6))
+
+        async with mcp_session(app) as session:
+            result = await session.call_tool("meeting_brief", {"team_id": team_id})
+            assert not result.is_error
+            text = tool_text(result)
+            assert "Aging WIP (cycle-time p85 over the last 90 days = 4.0d):" in text
+            (stuck,) = [line for line in text.splitlines() if line.startswith('- "Stuck"')]
+            assert stuck.endswith("[over p85]")
 
 
-def _many_aging(threshold_seconds: float | None) -> dict[str, Any]:
-    return {
-        "cycle_time_percentile_seconds": threshold_seconds,
-        "percentile": 85,
-        "items": [
-            {
-                "title": f"Item {n}",
-                "state": "In Progress",
-                "age_seconds": 86400.0,
-                "over_percentile": False,
-            }
-            for n in range(12)
+async def test_aging_wip_tool_caps_at_fifty_without_pointing_at_itself(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    # Review focus 4: the full-list tool must not tell the model to call itself.
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            team_id = await create_team(client)
+            for n in range(51):
+                await _seed_item(client, team_id, f"Item {n}", ("created", 5), ("started", 3))
+
+        async with mcp_session(app) as session:
+            result = await session.call_tool("aging_wip", {"team_id": team_id})
+            assert not result.is_error
+            lines = tool_text(result).splitlines()
+            assert len([line for line in lines if line.startswith("- ")]) == 50
+            assert lines[-1] == "... and 1 more"
+
+
+@pytest.mark.parametrize("reference", [timedelta(days=4.25), None])
+def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> None:
+    # Review focus 1-3: a non-default history and percentile, the no-reference
+    # case, and the real wire format (str UUIDs/datetimes, fractional seconds).
+    domain = AgingWip(
+        now=datetime(2026, 10, 9, 12, tzinfo=UTC),
+        cycle_time_percentile=reference,
+        items=(
+            AgingItem(
+                work_item_id=uuid4(),
+                title="Fix login\nnow",
+                state="In Progress",
+                age=timedelta(days=6, hours=3),
+                over_percentile=reference is not None,
+            ),
+            AgingItem(
+                work_item_id=uuid4(),
+                title="Docs",
+                state="Review",
+                age=timedelta(hours=30, seconds=0.5),
+                over_percentile=False,
+            ),
+        ),
+        percentile=70,
+        history_days=30,
+    )
+    wire = AgingWipRead(
+        now=domain.now,
+        cycle_time_percentile_seconds=(
+            reference.total_seconds() if reference is not None else None
+        ),
+        percentile=domain.percentile,
+        history_days=domain.history_days,
+        items=[
+            AgingItemRead(
+                work_item_id=item.work_item_id,
+                title=item.title,
+                state=item.state,
+                age_seconds=item.age.total_seconds(),
+                over_percentile=item.over_percentile,
+            )
+            for item in domain.items
         ],
-    }
+    ).model_dump(mode="json")
 
-
-def test_aging_rows_are_capped_with_a_numeric_percentile() -> None:
-    lines = _render_aging(_many_aging(4 * 86400)).splitlines()
-
-    assert len([line for line in lines if line.startswith("- ")]) == 10
-    assert lines[-1].startswith("... and 2 more")
-
-
-def test_aging_rows_are_capped_without_a_percentile() -> None:
-    text = _render_aging(_many_aging(None))
-    lines = text.splitlines()
-
-    assert lines[0] == "Aging WIP:"
-    assert len([line for line in lines if line.startswith("- ")]) == 10
-    assert lines[-1].startswith("... and 2 more")
-
-
-def test_aging_titles_are_quoted() -> None:
-    item = {"title": "Fix login", "state": "In Progress", "age_seconds": 6 * 86400}
-    aging = {
-        "cycle_time_percentile_seconds": None,
-        "percentile": 85,
-        "items": [{**item, "over_percentile": False}],
-    }
-
-    assert '- "Fix login" — In Progress, 6.0d' in _render_aging(aging)
+    assert _aging_from_json(wire) == domain

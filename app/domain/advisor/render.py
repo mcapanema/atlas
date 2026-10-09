@@ -1,14 +1,15 @@
-"""Render a DeliveryContext as compact text.
+"""Render advisor inputs as compact text.
 
-Shared by the OpenRouter advisor's user message and the advice-context API
-(and therefore MCP chat clients) — one renderer, one vocabulary. Pure
-stdlib over Domain types; belongs to the advisor slice's data.
+Shared by the OpenRouter advisor's user message, the advice-context API and
+the MCP chat tools — one renderer, one vocabulary. Pure stdlib over Domain
+types; belongs to the advisor slice's data.
 """
 
 import json
 from datetime import timedelta
 
 from app.domain.advisor.port import DeliveryContext, MeetingContext
+from app.domain.metrics.aging import AgingWip
 
 
 def _days(delta: timedelta) -> str:
@@ -82,11 +83,34 @@ def quote_title(title: str) -> str:
     return json.dumps(one_line, ensure_ascii=False)
 
 
+def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str = "") -> str:
+    """Aging WIP as text: the reference line, then the `limit` oldest items.
+
+    `more_hint` follows the "... and N more" line, e.g. which tool lists the rest.
+    """
+    if not aging.items:
+        return "Aging WIP: nothing in progress."
+    header = "Aging WIP"
+    if aging.cycle_time_percentile is not None:
+        header += (
+            f" (cycle-time p{aging.percentile} over the last {aging.history_days} days"
+            f" = {_days(aging.cycle_time_percentile)})"
+        )
+    lines = [header + ":"]
+    for item in aging.items[:limit]:
+        flag = f" [over p{aging.percentile}]" if item.over_percentile else ""
+        lines.append(f"- {quote_title(item.title)} — {item.state}, {_days(item.age)}{flag}")
+    if len(aging.items) > limit:
+        lines.append(f"... and {len(aging.items) - limit} more{more_hint}")
+    return "\n".join(lines)
+
+
 def render_meeting_context(context: MeetingContext) -> str:
     """Render the meeting digest: advisor context + delivery health + aging WIP.
 
-    Same vocabulary as the MCP meeting_brief tool — one meeting-prep
-    rendering whether the LLM is external (MCP) or internal (OpenRouter).
+    The aging block is `render_aging`, the same text the MCP meeting_brief
+    tool shows — one meeting-prep rendering whether the LLM is external
+    (MCP) or internal (OpenRouter).
     """
     blocks = [render_context(context.delivery)]
 
@@ -98,22 +122,5 @@ def render_meeting_context(context: MeetingContext) -> str:
         lines += [f"- {c.name} {c.score}: {c.reason}" for c in health.components]
         blocks.append("\n".join(lines))
 
-    aging = context.aging
-    if not aging.items:
-        blocks.append("Aging WIP: nothing in progress.")
-    else:
-        header = "Aging WIP"
-        if aging.cycle_time_percentile is not None:
-            header += (
-                f" (cycle-time p{aging.percentile} over the last {aging.history_days} days"
-                f" = {_days(aging.cycle_time_percentile)})"
-            )
-        lines = [header + ":"]
-        for item in aging.items[:_AGING_LIMIT]:
-            flag = f" [over p{aging.percentile}]" if item.over_percentile else ""
-            lines.append(f"- {quote_title(item.title)} — {item.state}, {_days(item.age)}{flag}")
-        if len(aging.items) > _AGING_LIMIT:
-            lines.append(f"... and {len(aging.items) - _AGING_LIMIT} more")
-        blocks.append("\n".join(lines))
-
+    blocks.append(render_aging(context.aging))
     return "\n\n".join(blocks)
