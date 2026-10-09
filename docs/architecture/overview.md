@@ -126,6 +126,11 @@ snapshot history through the background `RecomputeRunner` in
 `app/api/recompute.py` (it cancels the running task before a save writes,
 then restarts with the pending scopes; status on the organization row,
 resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
+One rule changes no metric: `sprint_length_days` (`MEETING_RULES`), the
+retrospective's default window on the Meetings page, `GET /api/meetings/prep`
+and the MCP `retrospective` prompt (teams carry it in `GET /api/teams`).
+Changing it rewrites no snapshot history and doesn't mark a team's rules as
+custom.
 
 ### Ports to external systems
 

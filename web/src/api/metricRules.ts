@@ -9,7 +9,7 @@ export interface TypeLabel {
   type: WorkItemTypeName;
 }
 
-/** Every rule that changes how a metric is computed (app/domain/metric_rules). */
+/** Every per-team rule (app/domain/metric_rules): how metrics are computed, plus meeting defaults. */
 export interface MetricRules {
   exclude_born_done: boolean;
   move_back_ends_wip: boolean;
@@ -43,6 +43,7 @@ export interface MetricRules {
   blocked_state_names: string[];
   remaining_state_types: OpenStateType[];
   type_labels: TypeLabel[];
+  sprint_length_days: number;
 }
 
 export type RuleName = keyof MetricRules;

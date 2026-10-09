@@ -3,8 +3,17 @@ from uuid import UUID
 
 from app.application.forecasting.service import ForecastService
 from app.application.metrics.service import MetricsService
+from app.domain.advisor.entities import MeetingType
 from app.domain.advisor.port import DeliveryContext, MeetingContext
+from app.domain.metric_rules.entities import MetricRules
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
+
+
+def _meeting_window(meeting: MeetingType, rules: MetricRules) -> int:
+    """A retrospective covers the team's last sprint; other meetings read the stats window."""
+    if meeting is MeetingType.RETROSPECTIVE:
+        return rules.sprint_length_days
+    return STATS_WINDOW_DAYS
 
 
 class AdvisorService:
@@ -48,9 +57,10 @@ class AdvisorService:
     async def build_meeting_context(
         self,
         *,
+        meeting: MeetingType,
         team_id: UUID | None = None,
         project_id: UUID | None = None,
-        window_days: int = STATS_WINDOW_DAYS,
+        window_days: int | None = None,
         remaining: int | None = None,
         target_date: date | None = None,
         now: datetime | None = None,
@@ -58,21 +68,22 @@ class AdvisorService:
         """Assemble the meeting-prep picture: the advisor context plus
         delivery health and aging WIP (parity with the MCP meeting_brief).
 
+        `window_days` defaults to the team's sprint length for a
+        retrospective and to the stats window otherwise.
         `remaining`/`target_date` are the planning-session what-ifs,
         forwarded to the forecast. The scope's items and events are loaded
         once and shared by all five computations.
         """
         window_end = now if now is not None else datetime.now(UTC)
         scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
-        flow = await self._metrics.get_flow_metrics(
-            window_days=window_days, now=window_end, scope=scope
-        )
+        window = window_days if window_days is not None else _meeting_window(meeting, scope.rules)
+        flow = await self._metrics.get_flow_metrics(window_days=window, now=window_end, scope=scope)
         distribution = await self._metrics.get_lead_time_distribution(now=window_end, scope=scope)
         forecast = await self._forecasts.get_forecast(
             now=window_end, scope=scope, remaining=remaining, target_date=target_date
         )
         health = await self._metrics.get_delivery_health(
-            window_days=window_days, now=window_end, scope=scope
+            window_days=window, now=window_end, scope=scope
         )
         aging = await self._metrics.get_aging_wip(now=window_end, scope=scope)
         return MeetingContext(

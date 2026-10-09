@@ -117,13 +117,51 @@ async def test_unknown_and_invalid_rules_are_rejected() -> None:
         await service.update_team(alpha.id, {"aging_percentile": 5})
 
 
-async def test_custom_team_ids_lists_teams_whose_rules_differ_from_the_workspace() -> None:
+async def test_team_summaries_flag_teams_whose_rules_differ_from_the_workspace() -> None:
     service, org, alpha, beta, *_ = _world()
     await service.update_organization(org.id, {"aging_percentile": 70})
     await service.update_team(alpha.id, {"aging_percentile": 75})
     await service.update_team(beta.id, {"aging_percentile": 70})  # same as the workspace
 
-    assert await service.custom_team_ids([alpha, beta]) == {alpha.id}
+    summaries = await service.team_summaries([alpha, beta])
+
+    assert {team_id: s.custom for team_id, s in summaries.items()} == {
+        alpha.id: True,
+        beta.id: False,
+    }
+    assert summaries[alpha.id].effective.aging_percentile == 75
+    assert summaries[beta.id].effective.aging_percentile == 70
+
+
+async def test_a_sprint_length_change_rewrites_no_history_and_is_not_custom() -> None:
+    service, org, alpha, beta, *_ = _world()
+
+    team_change = await service.update_team(alpha.id, {"sprint_length_days": 7})
+    workspace_change = await service.update_organization(org.id, {"sprint_length_days": 21})
+    summaries = await service.team_summaries([alpha, beta])
+
+    assert team_change is not None
+    assert workspace_change is not None
+    assert team_change.scopes == ()
+    assert team_change.view.recompute.state == "idle"
+    assert workspace_change.scopes == ()
+    assert workspace_change.view.recompute.state == "idle"
+    assert summaries[alpha.id].effective.sprint_length_days == 7  # its own override wins
+    assert summaries[beta.id].effective.sprint_length_days == 21  # inherits the workspace
+    assert not summaries[alpha.id].custom
+
+
+async def test_a_metric_rule_override_next_to_a_sprint_length_still_queues_and_is_custom() -> None:
+    service, _org, alpha, _beta, *_ = _world()
+
+    change = await service.update_team(alpha.id, {"aging_percentile": 75, "sprint_length_days": 7})
+    summaries = await service.team_summaries([alpha])
+
+    assert change is not None
+    assert change.scopes  # the metric rule still rewrites history
+    assert summaries[alpha.id].custom
+    assert summaries[alpha.id].effective.sprint_length_days == 7
+    assert summaries[alpha.id].effective.aging_percentile == 75
 
 
 async def test_recompute_status_lifecycle() -> None:

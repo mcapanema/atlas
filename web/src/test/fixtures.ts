@@ -100,6 +100,7 @@ export const teamFixture = {
   external_id: null,
   created_at: "2026-07-01T00:00:00Z",
   has_custom_rules: false,
+  sprint_length_days: 14,
 };
 
 export const snapshotsFixture = [
