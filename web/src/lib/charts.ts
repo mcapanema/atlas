@@ -341,7 +341,11 @@ export function buildForecastOption(
   // 12 days, P50 at 11). Snap forward to the first bucket at or after it and
   // reuse that bucket's own axis label: keying a markLine on a date string the
   // category axis never emitted would silently draw nothing.
-  const offsetDays = (iso: string) => Math.round((new Date(iso).getTime() - origin) / 86_400_000);
+  // Whole calendar days between UTC dates, as the backend counts them: a
+  // forecast run at 19:35 must not pull a date-only target a day early.
+  const originDay = Date.parse(windowEnd.slice(0, 10));
+  const offsetDays = (iso: string) =>
+    Math.round((Date.parse(iso.slice(0, 10)) - originDay) / 86_400_000);
   const markAt = (iso: string, name: string) => {
     const index = outcomes.findIndex((o) => o.days >= offsetDays(iso));
     return referenceLine(labels[index === -1 ? labels.length - 1 : index], name, n);

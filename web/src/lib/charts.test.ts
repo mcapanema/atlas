@@ -218,6 +218,23 @@ describe("buildForecastOption", () => {
     expect(marks.map((m) => [m.label.formatter, m.xAxis])).toContainEqual(["Target", "20-07-2026"]);
   });
 
+  it("places the target by calendar day when the forecast ran in the afternoon", () => {
+    // window_end carries the run's time of day; the backend counts whole
+    // calendar days from its date, so 19:35 must not pull the line a day early.
+    const afternoon = "2026-07-10T19:35:00Z";
+    const marksFor = (targetDate: string) =>
+      (
+        (
+          buildForecastOption(outcomes, afternoon, { ...percentiles, targetDate })
+            .series as Series[]
+        )[0].markLine?.data as { xAxis: string; label: { formatter: string } }[]
+      ).map((m) => [m.label.formatter, m.xAxis]);
+
+    expect(marksFor("2026-07-20")).toContainEqual(["Target", "20-07-2026"]);
+    // One day past the last simulated finish (22-07) is off the chart.
+    expect(marksFor("2026-07-23").map(([name]) => name)).toEqual(["P50", "P85"]);
+  });
+
   it("leaves the target off when it falls outside the simulated range", () => {
     // Snapping it to the edge bucket would claim a date it isn't; the
     // confidence sentence already says 0% or 100%.

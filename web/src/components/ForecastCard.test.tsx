@@ -80,6 +80,34 @@ describe("ForecastCard", () => {
     expect(screen.getByText(/of simulations finish by 01-09-2026/)).toBeInTheDocument();
   });
 
+  it("never pairs the previous target's confidence with a newly picked date", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("target_date=2026-09-02")) return new Promise(() => {});
+      if (url.includes("target_date=2026-09-01")) {
+        return Promise.resolve(jsonResponse({ ...forecastFixture, confidence: 0.82 }));
+      }
+      return Promise.resolve(jsonResponse(forecastFixture));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    const input = screen.getByPlaceholderText("Select date");
+    const pick = (value: string) => {
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    };
+
+    pick("01-09-2026");
+    await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
+    // 02-09's simulation is still running: 82% belongs to 01-09, so it must
+    // not be read out against the new date.
+    pick("02-09-2026");
+    await waitFor(() => expect(screen.queryByText("82%")).toBeNull());
+    expect(screen.queryByText(/of simulations finish by/)).toBeNull();
+  });
+
   it("shows an error when the forecast fails to load", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({}, 500));
 

@@ -129,7 +129,7 @@ function AccuracyStats({ accuracy }: { accuracy: ForecastAccuracy }) {
 /** "82% of simulations finish by 01-09-2026" — the figure, said in full. */
 function ConfidenceReadout({ confidence, targetDate }: { confidence: number; targetDate: string }) {
   return (
-    <span aria-live="polite">
+    <span>
       <span className="fig">{percent(confidence)}</span> of simulations finish by{" "}
       {formatDay(targetDate)}
     </span>
@@ -214,9 +214,14 @@ export function ForecastCard({
               format={DATE_FORMAT}
               onChange={(value) => setTargetDate(value ? value.format("YYYY-MM-DD") : undefined)}
             />
-            {data.confidence != null && targetDate && (
-              <ConfidenceReadout confidence={data.confidence} targetDate={targetDate} />
-            )}
+            {/* Always mounted, so a screen reader announces the first readout
+                too. Placeholder data is the previous target's answer: never
+                read it out against the newly picked date. */}
+            <span aria-live="polite">
+              {data.confidence != null && targetDate && !forecast.isPlaceholderData && (
+                <ConfidenceReadout confidence={data.confidence} targetDate={targetDate} />
+              )}
+            </span>
           </Space>
         </Space>
         {outcomesOption && <EChart option={outcomesOption} />}
