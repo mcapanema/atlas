@@ -1,6 +1,6 @@
-import { Alert, Card, Col, Row, Skeleton, Space, Table, Tag } from "antd";
+import { Alert, Col, Row, Skeleton, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -21,8 +21,6 @@ import {
 import { useMetricSnapshots, type MetricSnapshot } from "../api/snapshots";
 import {
   buildCfdOption,
-  buildLeadTimeDistributionOption,
-  buildLeadTimeTrendOption,
   buildThroughputOption,
   buildWipOption,
   throughputTitle,
@@ -33,10 +31,11 @@ import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
 import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
+import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { HealthBadge } from "./HealthBadge";
-import { HelpLabel } from "./HelpLabel";
+import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 
 function agingColumns(percentile: number): ColumnsType<AgingItem> {
@@ -58,6 +57,23 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
 
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
+}
+
+/**
+ * An unscored scope says so instead of leaving a hole: the health floor
+ * (health_min_sample) leaves small or idle teams without a score.
+ */
+function UnscoredHealth({ periodText }: { periodText: string | null }) {
+  return (
+    <section aria-label="Delivery health" className="health-strip">
+      <div className="health-strip__row">
+        <span className="page-asof">
+          Health not scored yet: too few items completed or in progress to score it.
+        </span>
+        {periodText && <span className="page-asof">{periodText}</span>}
+      </div>
+    </section>
+  );
 }
 
 /**
@@ -102,12 +118,14 @@ function StaleDataAlert({ history }: { history: FlowHistory }) {
     return null;
   }
   const staleDays = Math.floor(staleHours / 24);
+  const tail =
+    staleDays === 1 ? "last day of this window is" : `last ${staleDays} days of this window are`;
+  // One line: the warning qualifies the charts below, it isn't the page's news.
   return (
     <Alert
       type="warning"
       showIcon
-      title={`Data last synced ${formatDateTime(history.data_as_of)}`}
-      description={`The last ${staleDays} day${staleDays === 1 ? "" : "s"} of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
+      title={`Data last synced ${formatDateTime(history.data_as_of)} — the ${tail} not ingested yet, so its zeros don't mean nothing was delivered.`}
     />
   );
 }
@@ -121,8 +139,10 @@ function FlowStats({
   statLabel: string;
   ranged: boolean;
 }) {
+  // Five columns of pairs — volume, lead time, cycle time, time split,
+  // waste — so each P50 reads directly against its P85.
   return (
-    <Row gutter={[16, 16]}>
+    <div className="stat-grid stat-grid--paired">
       <StatCard
         title={`Throughput (${statLabel})`}
         value={data.completed}
@@ -158,16 +178,6 @@ function FlowStats({
         help="85% of items went from started to completed in this time or less."
       />
       <StatCard
-        title={`Blocked time (${statLabel})`}
-        value={formatSeconds(data.blocked_seconds)}
-        help={`Time the items completed in the last ${statLabel} spent blocked while in progress (start to done), summed across items.`}
-      />
-      <StatCard
-        title="Flow efficiency"
-        value={data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"}
-        help="Touch time divided by lead time. The share of an item's life that was active work rather than waiting."
-      />
-      <StatCard
         title="Queue time P50"
         value={duration(data.queue_time, "p50_seconds")}
         help="Median time an item waited between being created and work starting."
@@ -177,20 +187,18 @@ function FlowStats({
         value={duration(data.touch_time, "p50_seconds")}
         help="Median time an item spent actively worked on, excluding queued and blocked time."
       />
-    </Row>
+      <StatCard
+        title={`Blocked time (${statLabel})`}
+        value={formatSeconds(data.blocked_seconds)}
+        help={`Time the items completed in the last ${statLabel} spent blocked while in progress (start to done), summed across items.`}
+      />
+      <StatCard
+        title="Flow efficiency"
+        value={data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"}
+        help="Touch time divided by lead time. The share of an item's life that was active work rather than waiting."
+      />
+    </div>
   );
-}
-
-function ChartCard({
-  label,
-  help,
-  children,
-}: {
-  label: string;
-  help: string;
-  children: ReactNode;
-}) {
-  return <Card title={<HelpLabel label={label} help={help} />}>{children}</Card>;
 }
 
 function FlowCharts({
@@ -216,14 +224,6 @@ function FlowCharts({
         ? buildThroughputOption(history.buckets, history.bucket_days, mode)
         : null,
     [history, mode],
-  );
-  const distributionOption = useMemo(
-    () => (distribution ? buildLeadTimeDistributionOption(distribution.bins, mode) : null),
-    [distribution, mode],
-  );
-  const trendOption = useMemo(
-    () => (snapshots && snapshots.length > 0 ? buildLeadTimeTrendOption(snapshots, mode) : null),
-    [snapshots, mode],
   );
 
   return (
@@ -258,26 +258,7 @@ function FlowCharts({
           <EChart option={wipOption} />
         </ChartCard>
       </Col>
-      {distributionOption && (
-        <Col xs={24} lg={12}>
-          <ChartCard
-            label={`Lead time distribution (${chartLabel})`}
-            help="How many completed items fell into each lead-time bucket. A long right tail means a few items took far longer than typical."
-          >
-            <EChart option={distributionOption} />
-          </ChartCard>
-        </Col>
-      )}
-      {trendOption && (
-        <Col xs={24} lg={12}>
-          <ChartCard
-            label="Lead time trend"
-            help="Daily snapshots of lead time P50 and P85. Always the unfiltered 30-day baseline, so it does not follow the filters above."
-          >
-            <EChart option={trendOption} />
-          </ChartCard>
-        </Col>
-      )}
+      <LeadTimeCharts distribution={distribution} snapshots={snapshots} chartLabel={chartLabel} />
     </Row>
   );
 }
@@ -320,27 +301,32 @@ export function FlowDashboard({
     return <Skeleton active />;
   }
 
+  // Answers before diagnostics: what's stuck (the health strip's usual top
+  // reason) and when it lands, then the charts that explain why.
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
       <StaleDataAlert history={history.data} />
-      {health.data?.score != null && health.data.band != null && (
-        <HealthStrip health={health.data} periodText={periodText(filters, metrics.data)} />
-      )}
+      {health.data &&
+        (health.data.score != null && health.data.band != null ? (
+          <HealthStrip health={health.data} periodText={periodText(filters, metrics.data)} />
+        ) : (
+          <UnscoredHealth periodText={periodText(filters, metrics.data)} />
+        ))}
       <FlowStats
         data={metrics.data}
         statLabel={windowLabel(filters, 30)}
         ranged={isRanged(filters)}
       />
+      {aging.data && aging.data.items.length > 0 && (
+        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
+      )}
+      <ForecastCard scope={scope} filters={filters} />
       <FlowCharts
         history={history.data}
         distribution={distribution.data}
         snapshots={snapshots.data}
         chartLabel={windowLabel(filters, 90)}
       />
-      {aging.data && aging.data.items.length > 0 && (
-        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
-      )}
-      <ForecastCard scope={scope} filters={filters} />
     </Space>
   );
 }

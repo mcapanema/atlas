@@ -212,24 +212,57 @@ function barSeries(name: string, data: number[]): EChartsOption["series"] {
   ];
 }
 
+/** A dashed, labeled reference line on a category axis — histograms' percentile vocabulary. */
+function referenceLine(xAxis: string, name: string, n: Neutrals) {
+  return {
+    xAxis,
+    label: { formatter: name, color: n.inkSecondary },
+    lineStyle: { color: n.inkSecondary, type: "dashed" as const },
+  };
+}
+
+/** A lead-time histogram plus its window's exact percentiles (null when empty). */
+export interface LeadTimeHistogram {
+  bins: DurationBin[];
+  p50_seconds: number | null;
+  p85_seconds: number | null;
+}
+
+/** The P50/P85 lines, each on the day bin holding its exact percentile. */
+function percentileLines(histogram: LeadTimeHistogram, labels: string[], n: Neutrals) {
+  const lines = [
+    { name: "P50", seconds: histogram.p50_seconds },
+    { name: "P85", seconds: histogram.p85_seconds },
+  ];
+  return lines.flatMap(({ name, seconds }) => {
+    const label = seconds == null ? undefined : labels[Math.floor(seconds / 86_400)];
+    return label === undefined ? [] : [referenceLine(label, name, n)];
+  });
+}
+
 export function buildLeadTimeDistributionOption(
-  bins: DurationBin[],
+  histogram: LeadTimeHistogram,
   mode: ThemeMode = "light",
 ): EChartsOption {
   const n = neutrals(mode);
+  const { bins } = histogram;
+  const labels = bins.map((b) => `${b.start_days}d`);
+  const series = barSeries(
+    "Completed items",
+    bins.map((b) => b.count),
+  ) as [Record<string, unknown>];
+  series[0].markLine = {
+    silent: true,
+    symbol: "none",
+    data: percentileLines(histogram, labels, n),
+  };
   return {
     tooltip: { trigger: "item" },
-    grid: { left: 64, right: 16, top: 24, bottom: 48 },
-    xAxis: dayAxis(
-      bins.map((b) => `${b.start_days}d`),
-      n,
-      "Lead time",
-    ),
+    // top 32, not 24: room for the P50/P85 labels above the plot.
+    grid: { left: 64, right: 16, top: 32, bottom: 48 },
+    xAxis: dayAxis(labels, n, "Lead time"),
     yAxis: valueAxis(n, "Items completed"),
-    series: barSeries(
-      "Completed items",
-      bins.map((b) => b.count),
-    ),
+    series,
   };
 }
 
@@ -282,6 +315,19 @@ export function buildLeadTimeTrendOption(
 export interface ForecastPercentiles {
   p50Date: string;
   p85Date: string;
+  /** The date the EM asked about (YYYY-MM-DD); drawn only when it falls on the chart. */
+  targetDate?: string;
+}
+
+/**
+ * Whether a day offset lies within the simulated range. An off-range target
+ * isn't snapped to an edge bar — that would claim a date it isn't; the
+ * confidence sentence still states 0% or 100%.
+ */
+function onChart(outcomes: OutcomeBucket[], days: number): boolean {
+  return (
+    outcomes.length > 0 && days >= outcomes[0].days && days <= outcomes[outcomes.length - 1].days
+  );
 }
 
 export function buildForecastOption(
@@ -300,36 +346,36 @@ export function buildForecastOption(
   // 12 days, P50 at 11). Snap forward to the first bucket at or after it and
   // reuse that bucket's own axis label: keying a markLine on a date string the
   // category axis never emitted would silently draw nothing.
+  // Whole calendar days between UTC dates, as the backend counts them: a
+  // forecast run at 19:35 must not pull a date-only target a day early.
+  const originDay = Date.parse(windowEnd.slice(0, 10));
+  const offsetDays = (iso: string) =>
+    Math.round((Date.parse(iso.slice(0, 10)) - originDay) / 86_400_000);
   const markAt = (iso: string, name: string) => {
-    const days = Math.round((new Date(iso).getTime() - origin) / 86_400_000);
-    const index = outcomes.findIndex((o) => o.days >= days);
-    return {
-      xAxis: labels[index === -1 ? labels.length - 1 : index],
-      label: { formatter: name, color: n.inkSecondary },
-      lineStyle: { color: n.inkSecondary, type: "dashed" as const },
-    };
+    const index = outcomes.findIndex((o) => o.days >= offsetDays(iso));
+    return referenceLine(labels[index === -1 ? labels.length - 1 : index], name, n);
   };
+  const marks = [markAt(percentiles.p50Date, "P50"), markAt(percentiles.p85Date, "P85")];
+  const target = percentiles.targetDate;
+  if (target && onChart(outcomes, offsetDays(target))) marks.push(markAt(target, "Target"));
 
   const series = barSeries(
     "Simulations",
     outcomes.map((o) => o.trials),
   ) as [Record<string, unknown>];
-  series[0].markLine = {
-    silent: true,
-    symbol: "none",
-    data: [markAt(percentiles.p50Date, "P50"), markAt(percentiles.p85Date, "P85")],
-  };
+  series[0].markLine = { silent: true, symbol: "none", data: marks };
 
   return {
     tooltip: {
       trigger: "item",
       // "1600" on its own reads as a quantity of work. It is a count of
-      // simulated futures — say so, and give the share it represents.
+      // simulated futures — say so, and give the share it represents. A bar
+      // counts the simulations finishing *on* its day, not by it.
       formatter: (params: unknown) => {
         const { dataIndex } = params as { dataIndex: number };
         const bucket = outcomes[dataIndex];
         const share = ((bucket.trials / total) * 100).toFixed(1);
-        return `${bucket.trials.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} simulations finished by ${labels[dataIndex]} (${share}%)`;
+        return `${bucket.trials.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} simulations finished on ${labels[dataIndex]} (${share}%)`;
       },
     },
     grid: { left: 56, right: 16, top: 32, bottom: 56 },

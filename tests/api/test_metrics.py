@@ -159,6 +159,9 @@ async def test_lead_time_distribution_end_to_end(client: AsyncClient) -> None:
     assert len(body["bins"]) == 9  # bins for days 0..8
     assert body["bins"][8] == {"start_days": 8, "end_days": 9, "count": 1}
     assert sum(b["count"] for b in body["bins"]) == 1
+    # One item: every percentile is its own lead time.
+    assert body["p50_seconds"] == pytest.approx(8 * 86400)
+    assert body["p85_seconds"] == pytest.approx(8 * 86400)
 
 
 async def test_lead_time_distribution_requires_exactly_one_scope(client: AsyncClient) -> None:

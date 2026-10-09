@@ -67,6 +67,8 @@ export const distributionFixture = {
     { start_days: 1, end_days: 2, count: 2 },
     { start_days: 2, end_days: 3, count: 1 },
   ],
+  p50_seconds: 129600,
+  p85_seconds: 190080,
 };
 
 export const forecastFixture = {

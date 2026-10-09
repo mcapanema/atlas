@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.domain.metrics.distribution import (
     DurationBin,
     compute_lead_time_distribution,
@@ -48,3 +50,21 @@ def test_distribution_of_empty_scope_has_no_bins() -> None:
     dist = compute_lead_time_distribution([], now=NOW)
 
     assert dist.bins == ()
+
+
+def test_distribution_carries_exact_lead_time_percentiles() -> None:
+    # The histogram's reference lines use the tiles' own percentile method
+    # (linear-interpolated), not a bin-level approximation.
+    samples = [_completed_sample(days + 1, 1) for days in (1, 2, 3, 10)]
+
+    dist = compute_lead_time_distribution(samples, now=NOW)
+
+    assert dist.p50_seconds == pytest.approx(timedelta(days=2.5).total_seconds())
+    assert dist.p85_seconds == pytest.approx(timedelta(days=6.85).total_seconds())
+
+
+def test_distribution_of_nothing_has_no_percentiles() -> None:
+    dist = compute_lead_time_distribution([], now=NOW)
+
+    assert dist.p50_seconds is None
+    assert dist.p85_seconds is None

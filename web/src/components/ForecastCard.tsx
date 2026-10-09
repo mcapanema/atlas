@@ -1,4 +1,4 @@
-import { Alert, Button, Card, DatePicker, InputNumber, Row, Space, Statistic } from "antd";
+import { Alert, Button, Card, DatePicker, InputNumber, Skeleton, Space } from "antd";
 import { useMemo, useState } from "react";
 
 import { useForecast, type CompletionForecast } from "../api/forecasts";
@@ -37,7 +37,7 @@ function FinishDates({
   completion: CompletionForecast;
 }) {
   return (
-    <Row gutter={[16, 16]}>
+    <div className="stat-grid">
       <StatCard
         title={assumed ? "Remaining items (assumed)" : "Remaining items"}
         value={remaining}
@@ -62,7 +62,7 @@ function FinishDates({
         value={formatDay(completion.p95_date)}
         help="95% of simulations finished by then. Only the worst 1 in 20 runs went past it."
       />
-    </Row>
+    </div>
   );
 }
 
@@ -111,7 +111,7 @@ function AssumedRemainingInput({
 
 function AccuracyStats({ accuracy }: { accuracy: ForecastAccuracy }) {
   return (
-    <Row gutter={[16, 16]}>
+    <div className="stat-grid">
       <StatCard
         title="Past forecasts within P85"
         value={percent(accuracy.p85_hit_rate)}
@@ -122,7 +122,17 @@ function AccuracyStats({ accuracy }: { accuracy: ForecastAccuracy }) {
         value={accuracy.evaluated}
         help="How many past forecasts have a known outcome to score against. A small number means the hit rate is still noisy."
       />
-    </Row>
+    </div>
+  );
+}
+
+/** "82% of simulations finish by 01-09-2026" — the figure, said in full. */
+function ConfidenceReadout({ confidence, targetDate }: { confidence: number; targetDate: string }) {
+  return (
+    <span>
+      <span className="fig">{percent(confidence)}</span> of simulations finish by{" "}
+      {formatDay(targetDate)}
+    </span>
   );
 }
 
@@ -150,17 +160,25 @@ export function ForecastCard({
         ? buildForecastOption(
             completion.outcomes,
             data.window_end,
-            { p50Date: completion.p50_date, p85Date: completion.p85_date },
+            { p50Date: completion.p50_date, p85Date: completion.p85_date, targetDate },
             mode,
           )
         : null,
-    [data, completion, mode],
+    [data, completion, targetDate, mode],
   );
 
   if (forecast.isError) {
-    return <Alert type="error" message="Failed to load forecast" />;
+    return <Alert type="error" title="Failed to load forecast" />;
   }
-  if (!data) return null;
+  if (!data) {
+    // Holds the card's place while the 2,000-trial simulation runs, so the
+    // charts below it don't jump down when it lands.
+    return (
+      <Card title="Completion forecast">
+        <Skeleton active />
+      </Card>
+    );
+  }
 
   const historyDays = Math.round(
     (Date.parse(data.window_end) - Date.parse(data.window_start)) / DAY_MS,
@@ -170,7 +188,7 @@ export function ForecastCard({
   if (!completion) {
     return (
       <Card title={title}>
-        <Alert type="info" message="Not enough delivery history to forecast." />
+        <Alert type="info" title="Not enough delivery history to forecast." />
       </Card>
     );
   }
@@ -196,7 +214,14 @@ export function ForecastCard({
               format={DATE_FORMAT}
               onChange={(value) => setTargetDate(value ? value.format("YYYY-MM-DD") : undefined)}
             />
-            {data.confidence != null && <Statistic value={percent(data.confidence)} />}
+            {/* Always mounted, so a screen reader announces the first readout
+                too. Placeholder data is the previous target's answer: never
+                read it out against the newly picked date. */}
+            <span aria-live="polite">
+              {data.confidence != null && targetDate && !forecast.isPlaceholderData && (
+                <ConfidenceReadout confidence={data.confidence} targetDate={targetDate} />
+              )}
+            </span>
           </Space>
         </Space>
         {outcomesOption && <EChart option={outcomesOption} />}

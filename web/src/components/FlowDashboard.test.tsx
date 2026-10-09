@@ -11,12 +11,14 @@ vi.mock("./EChart", () => ({
 
 import {
   agingWipFixture,
+  distributionFixture,
   healthFixture,
   historyFixture,
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
   requestUrl,
+  snapshotsFixture,
 } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
@@ -133,7 +135,9 @@ describe("FlowDashboard", () => {
     rerender(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     expect(captured.options).toHaveLength(6);
-    captured.options.forEach((option, i) => expect(option).toBe(firstRender[i]));
+    // By identity, not position: firstRender accumulates every render while
+    // the queries settle, so its order is load order, not page order.
+    captured.options.forEach((option) => expect(firstRender).toContain(option));
   });
 
   it("renders queue and touch time tiles", async () => {
@@ -145,6 +149,31 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Touch time P50")).toBeInTheDocument();
   });
 
+  it("pairs each P50 tile with its P85 in a column-first stat grid", async () => {
+    mockMetricsFetch();
+
+    const { container } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Throughput (30d)");
+    const grid = container.querySelector(".stat-grid--paired");
+    expect(grid).not.toBeNull();
+    // DOM order is the pairs: the wide grid flows column-first (P50 above
+    // P85), the narrow 2-column grid flows row-first (P50 beside P85).
+    const labels = [...grid!.querySelectorAll(".stat__label")].map((el) => el.textContent);
+    expect(labels).toEqual([
+      "Throughput (30d)",
+      "WIP (now)",
+      "Lead time P50",
+      "Lead time P85",
+      "Cycle time P50",
+      "Cycle time P85",
+      "Queue time P50",
+      "Touch time P50",
+      "Blocked time (30d)",
+      "Flow efficiency",
+    ]);
+  });
+
   it("renders the aging WIP table", async () => {
     mockMetricsFetch();
 
@@ -153,6 +182,55 @@ describe("FlowDashboard", () => {
     await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
     expect(screen.getByText("Stuck item")).toBeInTheDocument();
     expect(screen.getByText("over P85")).toBeInTheDocument();
+  });
+
+  it("puts aging WIP, then the forecast, before the diagnostic charts", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const forecast = await screen.findByText("Completion forecast", {}, { timeout: 5000 });
+    const aging = screen.getByText("Aging WIP");
+    const cfd = screen.getByText("Cumulative flow (90d)");
+    const follows = (a: Node, b: Node) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(aging, forecast)).toBe(true);
+    expect(follows(forecast, cfd)).toBe(true);
+  });
+
+  it("says so instead of drawing empty axes when nothing completed in the window", async () => {
+    mockMetricsFetch({
+      "/api/metrics/lead-time-distribution": {
+        // What the API sends when nothing completed: no bins, no percentiles.
+        ...distributionFixture,
+        bins: [],
+        p50_seconds: null,
+        p85_seconds: null,
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("No items completed in this window.")).toBeInTheDocument();
+    expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
+    // CFD, throughput, WIP, trend, forecast — no distribution chart.
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5), {
+      timeout: 5000,
+    });
+  });
+
+  it("waits for two snapshots with a lead time before drawing the trend", async () => {
+    mockMetricsFetch({
+      "/api/metrics/snapshots": [
+        { ...snapshotsFixture[0], lead_time_p50_seconds: null, lead_time_p85_seconds: null },
+        snapshotsFixture[1],
+      ],
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText(/trend starts once two daily snapshots/i)).toBeInTheDocument();
+    expect(screen.getByText("Lead time trend")).toBeInTheDocument();
   });
 
   it("omits the aging WIP card when nothing is in progress", async () => {
@@ -210,15 +288,19 @@ describe("FlowDashboard", () => {
     expect(screen.queryByText("lead time p95 is 2.9x p50")).toBeNull();
   });
 
-  it("omits the health strip when the scope has no health data", async () => {
+  it("says health isn't scored yet when too few items back it", async () => {
+    // Since health_min_sample, a small or idle team is unscored: the strip
+    // says so (the Executive page's words) instead of silently vanishing.
     mockMetricsFetch({
       "/api/metrics/health": { ...healthFixture, score: null, band: null, components: [] },
     });
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    expect(screen.queryByRole("region", { name: "Delivery health" })).toBeNull();
+    const strip = await screen.findByRole("region", { name: "Delivery health" });
+    expect(strip).toHaveTextContent(/Health not scored yet/);
+    expect(strip).toHaveTextContent(/too few items/);
+    expect(strip.querySelector(".health-badge")).toBeNull();
   });
 
   it("warns when the data is older than the window it is charting", async () => {
@@ -236,10 +318,12 @@ describe("FlowDashboard", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/last synced/i);
     expect(alert).toHaveTextContent("07-07-2026");
-    expect(alert).toHaveTextContent(/3 days/i);
+    expect(alert).toHaveTextContent(/the last 3 days of this window are not ingested yet/i);
+    // One line: the explanation is the title itself, not a second paragraph.
+    expect(alert.querySelector(".ant-alert-description")).toBeNull();
   });
 
-  it("uses the singular day when the data is only one day stale", async () => {
+  it("uses the singular when the data is only one day stale", async () => {
     mockMetricsFetch({
       "/api/metrics/history": {
         ...historyFixture,
@@ -250,7 +334,8 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/1 day of this window/i);
+    expect(alert).toHaveTextContent(/the last day of this window is not ingested yet/i);
+    expect(alert).not.toHaveTextContent(/1 day/);
   });
 
   it("tolerates exactly the staleness threshold without warning", async () => {

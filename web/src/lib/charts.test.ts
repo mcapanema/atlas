@@ -115,12 +115,15 @@ describe("buildWipOption", () => {
 });
 
 describe("buildLeadTimeDistributionOption", () => {
+  const DAY = 86_400;
+  const histogram = (counts: number[], p50Days: number | null, p85Days: number | null) => ({
+    bins: counts.map((count, day) => ({ start_days: day, end_days: day + 1, count })),
+    p50_seconds: p50Days == null ? null : p50Days * DAY,
+    p85_seconds: p85Days == null ? null : p85Days * DAY,
+  });
+
   it("plots one bar per day bin, keeping empty bins", () => {
-    const option = buildLeadTimeDistributionOption([
-      { start_days: 0, end_days: 1, count: 3 },
-      { start_days: 1, end_days: 2, count: 0 },
-      { start_days: 2, end_days: 3, count: 1 },
-    ]);
+    const option = buildLeadTimeDistributionOption(histogram([3, 0, 1], 0.5, 2.2));
     const series = option.series as Series[];
 
     expect(series).toHaveLength(1);
@@ -129,10 +132,31 @@ describe("buildLeadTimeDistributionOption", () => {
   });
 
   it("labels the lead time distribution axes", () => {
-    const option = buildLeadTimeDistributionOption([{ start_days: 0, end_days: 1, count: 2 }]);
+    const option = buildLeadTimeDistributionOption(histogram([2], 0.5, 0.5));
 
     expect((option.xAxis as { name: string }).name).toBe("Lead time");
     expect((option.yAxis as { name: string }).name).toBe("Items completed");
+  });
+
+  it("marks the bins holding the window's exact P50 and P85", () => {
+    // Exact (interpolated) percentiles, as the stat tiles compute them: P50
+    // 1.4d sits in the 1d bin, P85 2.9d in the 2d bin.
+    const option = buildLeadTimeDistributionOption(histogram([0, 2, 1], 1.4, 2.9));
+    const marks = (option.series as Series[])[0].markLine?.data as {
+      xAxis: string;
+      label: { formatter: string };
+    }[];
+
+    expect(marks.map((m) => [m.label.formatter, m.xAxis])).toEqual([
+      ["P50", "1d"],
+      ["P85", "2d"],
+    ]);
+  });
+
+  it("draws no reference lines when the window has no percentiles", () => {
+    const option = buildLeadTimeDistributionOption(histogram([], null, null));
+
+    expect((option.series as Series[])[0].markLine?.data).toEqual([]);
   });
 });
 
@@ -176,8 +200,53 @@ describe("buildForecastOption", () => {
     const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter;
 
     expect(formatter({ dataIndex: 0 })).toBe(
-      "400 of 2,000 simulations finished by 20-07-2026 (20.0%)",
+      "400 of 2,000 simulations finished on 20-07-2026 (20.0%)",
     );
+  });
+
+  it("marks the target date when it falls on the chart", () => {
+    const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", {
+      ...percentiles,
+      targetDate: "2026-07-20",
+    });
+    const marks = (option.series as Series[])[0].markLine?.data as {
+      xAxis: string;
+      label: { formatter: string };
+    }[];
+
+    expect(marks.map((m) => [m.label.formatter, m.xAxis])).toContainEqual(["Target", "20-07-2026"]);
+  });
+
+  it("places the target by calendar day when the forecast ran in the afternoon", () => {
+    // window_end carries the run's time of day; the backend counts whole
+    // calendar days from its date, so 19:35 must not pull the line a day early.
+    const afternoon = "2026-07-10T19:35:00Z";
+    const marksFor = (targetDate: string) =>
+      (
+        (
+          buildForecastOption(outcomes, afternoon, { ...percentiles, targetDate })
+            .series as Series[]
+        )[0].markLine?.data as { xAxis: string; label: { formatter: string } }[]
+      ).map((m) => [m.label.formatter, m.xAxis]);
+
+    expect(marksFor("2026-07-20")).toContainEqual(["Target", "20-07-2026"]);
+    // One day past the last simulated finish (22-07) is off the chart.
+    expect(marksFor("2026-07-23").map(([name]) => name)).toEqual(["P50", "P85"]);
+  });
+
+  it("leaves the target off when it falls outside the simulated range", () => {
+    // Snapping it to the edge bucket would claim a date it isn't; the
+    // confidence sentence already says 0% or 100%.
+    for (const targetDate of ["2026-07-15", "2026-08-30"]) {
+      const option = buildForecastOption(outcomes, "2026-07-10T00:00:00Z", {
+        ...percentiles,
+        targetDate,
+      });
+      const marks = (option.series as Series[])[0].markLine?.data as {
+        label: { formatter: string };
+      }[];
+      expect(marks.map((m) => m.label.formatter)).toEqual(["P50", "P85"]);
+    }
   });
 });
 

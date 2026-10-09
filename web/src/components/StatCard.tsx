@@ -1,11 +1,10 @@
-import { Col } from "antd";
-
 import { HelpLabel } from "./HelpLabel";
 
 /**
  * Instrument stat tile: hairline border, 11px secondary label, mono figure.
  * Deliberately not an AntD Card/Statistic — the stock treatment reads as
- * the admin-template anti-reference PRODUCT.md designs away from.
+ * the admin-template anti-reference PRODUCT.md designs away from. Place
+ * tiles in a `.stat-grid` (index.css), which owns the columns.
  */
 export function StatCard({
   title,
@@ -18,11 +17,9 @@ export function StatCard({
   help?: string;
 }) {
   return (
-    <Col xs={12} lg={6}>
-      <div className="stat">
-        <div className="stat__label">{help ? <HelpLabel label={title} help={help} /> : title}</div>
-        <div className="stat__value fig">{value}</div>
-      </div>
-    </Col>
+    <div className="stat">
+      <div className="stat__label">{help ? <HelpLabel label={title} help={help} /> : title}</div>
+      <div className="stat__value fig">{value}</div>
+    </div>
   );
 }

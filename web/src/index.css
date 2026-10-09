@@ -48,13 +48,11 @@ h5 {
 
 /* Figures are the interface: metric values render in the mono cut, and
    anything tabular gets lining tabular numerals so columns align. */
-.ant-statistic-content,
 .fig {
   font-family: "Red Hat Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: -0.02em;
 }
-.ant-table,
-.ant-statistic-content {
+.ant-table {
   font-variant-numeric: tabular-nums;
 }
 /* Column-header definitions: discoverable on hover and keyboard focus. */
@@ -291,6 +289,37 @@ h5 {
 .stat__value {
   font-size: 20px;
   line-height: 1.4;
+}
+/* Stat tiles: 2 columns on narrow screens, 4 on wide (AntD's lg = 992px).
+   The paired variant (scope dashboards) is 5 columns × 2 rows filled
+   column-first, so each P50 sits above its P85; its DOM order is the
+   pairs, so the narrow 2-column flow keeps them side by side too. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (min-width: 992px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .stat-grid--paired {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(2, auto);
+    grid-auto-flow: column;
+  }
+}
+/* A chart card with nothing to plot: one quiet line at EChart's default
+   height, so a paired card beside it stays level. */
+.chart-empty {
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
 }
 
 /* App shell (used by AppLayout) */

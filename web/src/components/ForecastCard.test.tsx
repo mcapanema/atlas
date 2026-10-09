@@ -25,7 +25,7 @@ describe("ForecastCard", () => {
       Promise.resolve(jsonResponse(forecastFixture)),
     );
 
-    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    const { container } = renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
 
     await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
     expect(screen.getByText("12")).toBeInTheDocument();
@@ -34,6 +34,17 @@ describe("ForecastCard", () => {
     expect(screen.getByTestId("echart")).toBeInTheDocument();
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain("/api/forecasts?team_id=team-1");
+    // First grid = the finish dates; accuracy tiles get their own grid.
+    expect(container.querySelector(".stat-grid")!.querySelectorAll(".stat")).toHaveLength(4);
+  });
+
+  it("holds its place with a skeleton while the simulation runs", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise(() => {}));
+
+    const { container } = renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    expect(screen.getByText("Completion forecast")).toBeInTheDocument();
+    expect(container.querySelector(".ant-skeleton")).not.toBeNull();
   });
 
   it("explains when there is no history to forecast from", async () => {
@@ -66,6 +77,35 @@ describe("ForecastCard", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
+    expect(screen.getByText(/of simulations finish by 01-09-2026/)).toBeInTheDocument();
+  });
+
+  it("never pairs the previous target's confidence with a newly picked date", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.includes("target_date=2026-09-02")) return new Promise(() => {});
+      if (url.includes("target_date=2026-09-01")) {
+        return Promise.resolve(jsonResponse({ ...forecastFixture, confidence: 0.82 }));
+      }
+      return Promise.resolve(jsonResponse(forecastFixture));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    const input = screen.getByPlaceholderText("Select date");
+    const pick = (value: string) => {
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    };
+
+    pick("01-09-2026");
+    await waitFor(() => expect(screen.getByText("82%")).toBeInTheDocument());
+    // 02-09's simulation is still running: 82% belongs to 01-09, so it must
+    // not be read out against the new date.
+    pick("02-09-2026");
+    await waitFor(() => expect(screen.queryByText("82%")).toBeNull());
+    expect(screen.queryByText(/of simulations finish by/)).toBeNull();
   });
 
   it("shows an error when the forecast fails to load", async () => {
@@ -107,7 +147,9 @@ describe("ForecastCard", () => {
 
     renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getByText("Completion forecast")).toBeInTheDocument());
+    // Not "Completion forecast": the loading skeleton already shows that title,
+    // without the method definition behind it.
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
     fireEvent.focus(screen.getByText("Completion forecast"));
     expect(await screen.findByText(/2,000 simulations of the remaining work/)).toBeInTheDocument();
 

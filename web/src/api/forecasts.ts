@@ -58,8 +58,8 @@ export function useForecast(scope: MetricsScope, options: ForecastOptions = {}) 
     queryFn: () => apiFetch<Forecast>(`/api/forecasts?${search.toString()}`),
     // The `remaining` scenario override changes the query key on every
     // keystroke; without this, `data` goes undefined mid-refetch and
-    // ForecastCard's `if (!data) return null` unmounts the whole card,
-    // dropping keyboard focus out of the input the user is still typing in.
+    // ForecastCard swaps the whole card for its loading skeleton, dropping
+    // keyboard focus out of the input the user is still typing in.
     placeholderData: keepPreviousData,
   });
 }
