@@ -133,6 +133,8 @@ export function useAgingWip(scope: MetricsScope, filters: MetricsFilters = {}) {
 export interface HealthComponent {
   name: string;
   score: number;
+  /** The score read against the scope's cutoffs, like the overall band. */
+  band: "healthy" | "warning" | "critical";
   reason: string;
 }
 

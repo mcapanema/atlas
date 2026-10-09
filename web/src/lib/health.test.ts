@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DeliveryHealth } from "../api/metrics";
 import { healthFixture } from "../test/fixtures";
-import { isAtRisk, weakestComponents } from "./health";
+import { componentHelp, isAtRisk, weakestComponents } from "./health";
 
 const health = healthFixture as DeliveryHealth;
 const withBand = (band: DeliveryHealth["band"]): DeliveryHealth => ({ ...health, band });
@@ -37,5 +37,17 @@ describe("weakestComponents", () => {
 
   it("returns nothing when health has no components", () => {
     expect(weakestComponents({ ...health, components: [] }, 2)).toEqual([]);
+  });
+});
+
+describe("componentHelp", () => {
+  it("defines every component the backend scores", () => {
+    for (const name of ["predictability", "efficiency", "flow", "stability", "risk"]) {
+      expect(componentHelp(name)).toMatch(/\w/);
+    }
+  });
+
+  it("has no definition for a name it doesn't know", () => {
+    expect(componentHelp("cadence")).toBeUndefined();
   });
 });
