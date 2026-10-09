@@ -16,7 +16,7 @@ const BUILT_IN: MetricRules = {
   done_then_canceled: "delivered",
   healthy_min: 70,
   warning_min: 40,
-  predictability_worst_ratio: 20,
+  predictability_floor: 25,
   stability_best_weeks: 1,
   stability_worst_weeks: 5,
   aging_percentile: 85,
@@ -161,6 +161,29 @@ describe("MetricRulesPage", { timeout: 15_000 }, () => {
     expect(screen.getByText("More blocked states")).toBeInTheDocument();
     expect(screen.getByText("Minimum items per component")).toBeInTheDocument();
     expect(screen.getByText("Work item types")).toBeInTheDocument();
+  });
+
+  it("flags a floor at or above the aging percentile before Save", async () => {
+    mockApi(view());
+
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    const floor = await screen.findByRole("spinbutton", { name: "Predictability: floor hit rate" });
+    fireEvent.change(floor, { target: { value: "85" } });
+
+    expect(
+      screen.getByText("Predictability: floor hit rate must be below Aging flag percentile."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("tunes predictability by its floor hit rate, not a lead-time spread", async () => {
+    mockApi(view());
+
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    expect(await screen.findByText("Predictability: floor hit rate")).toBeInTheDocument();
+    expect(screen.queryByText(/worst lead-time spread/)).toBeNull();
   });
 
   it("shows the recompute banner while history is rewritten, and lets you restart it", async () => {

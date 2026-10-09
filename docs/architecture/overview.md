@@ -55,7 +55,8 @@ persisted events; these slices have no tables and no migrations.
   Time, Aging WIP, and a Delivery Health composite (predictability /
   efficiency / flow / stability / risk, each 0–100 with a reason string and a
   band read against the same cutoffs as the overall score;
-  predictability scores the lead-time p95/p50 spread on a log scale, and
+  predictability scores how often recent cycles met the team's own service
+  level, the aging percentile over the history before the window (ADR-0016), and
   efficiency carries no weight in the built-in rules (it can't discriminate
   until queue-state waits are measured);
   a component backed by fewer than `health_min_sample` items is left out,

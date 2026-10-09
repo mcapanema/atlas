@@ -21,7 +21,9 @@ describe("HealthBadge", () => {
     render(<HealthBadge health={health} />);
     const badge = screen.getByRole("button");
     fireEvent.click(badge);
-    expect(screen.getByText("lead time p95 is 1.8x p50")).toBeInTheDocument();
+    expect(
+      screen.getByText("69% of 40 items finished within 6d (cycle p85 of the 90 days before)"),
+    ).toBeInTheDocument();
     // Component scores state their scale — a critical "risk 0" must read as
     // 0-out-of-100, not "zero risk".
     expect(screen.getAllByText(/\/100/)).toHaveLength(health.components.length);

@@ -289,7 +289,11 @@ describe("FlowDashboard", () => {
     const panel = await screen.findByRole("region", { name: "Delivery health" });
     expect(within(panel).getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
     // Healthy still shows the components: no click needed to read them.
-    expect(within(panel).getByText("lead time p95 is 1.8x p50")).toBeInTheDocument();
+    expect(
+      within(panel).getByText(
+        "69% of 40 items finished within 6d (cycle p85 of the 90 days before)",
+      ),
+    ).toBeInTheDocument();
     expect(
       panel.compareDocumentPosition(screen.getByText("Throughput (30d)")) &
         Node.DOCUMENT_POSITION_FOLLOWING,

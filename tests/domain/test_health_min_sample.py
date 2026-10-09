@@ -37,6 +37,14 @@ def _done(*completed_days_ago: int) -> list[list[Event]]:
     ]
 
 
+def _prior(count: int) -> list[list[Event]]:
+    """`count` 2-day cycles completed 40 days ago: a service level for predictability."""
+    return [
+        _stream((EventType.CREATED, 60), (EventType.STARTED, 42), (EventType.COMPLETED, 40))
+        for _ in range(count)
+    ]
+
+
 def test_the_floor_defaults_to_five_items() -> None:
     assert DEFAULT_RULES.health_min_sample == 5
 
@@ -72,7 +80,7 @@ def test_four_completions_are_not_enough_for_the_completion_components() -> None
 
 
 def test_five_completions_score_the_completion_components() -> None:
-    health = compute_delivery_health([BACKLOG, *_done(9, 8, 6, 5, 3)], now=NOW)
+    health = compute_delivery_health([BACKLOG, *_prior(5), *_done(9, 8, 6, 5, 3)], now=NOW)
 
     assert {c.name for c in health.components} == {
         "predictability",
@@ -81,13 +89,21 @@ def test_five_completions_score_the_completion_components() -> None:
     }
 
 
+def test_four_prior_completions_set_no_service_level() -> None:
+    # Review focus 1: the floor applies to the reference too: four prior
+    # cycles are an anecdote, not a commitment.
+    health = compute_delivery_health([BACKLOG, *_prior(4), *_done(9, 8, 6, 5, 3)], now=NOW)
+
+    assert "predictability" not in {c.name for c in health.components}
+
+
 def test_a_zero_length_cycle_does_not_count_toward_the_efficiency_floor() -> None:
     # Started and completed in one instant (an automation): flow efficiency
     # can't measure it, so it can't help efficiency reach the floor.
     instant = _stream((EventType.CREATED, 12), (EventType.STARTED, 5), (EventType.COMPLETED, 5))
 
     health = compute_delivery_health(
-        [*_done(9, 8, 6, 3), instant], now=NOW, rules=MetricRules(weight_efficiency=1.0)
+        [*_prior(5), *_done(9, 8, 6, 3), instant], now=NOW, rules=MetricRules(weight_efficiency=1.0)
     )
 
     names = {c.name for c in health.components}

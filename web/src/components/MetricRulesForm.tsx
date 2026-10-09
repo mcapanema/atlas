@@ -16,6 +16,7 @@ import {
   pendingChanges,
   type RuleSpec,
 } from "../lib/metricRules";
+import { draftRules, orderProblems } from "../lib/ruleOrder";
 import { RuleControl } from "./RuleControl";
 
 function RuleRow({
@@ -82,6 +83,7 @@ export function MetricRulesForm({
   const labels = useWorkItemLabels(scope.kind === "team" ? { teamId: scope.id } : {});
   const changes = pendingChanges(view.overrides, draft);
   const dirty = Object.keys(changes).length > 0;
+  const problems = orderProblems(draftRules(view, draft));
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   // An unmounted form has nothing unsaved, even if no new form replaces it yet.
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
@@ -116,9 +118,23 @@ export function MetricRulesForm({
           ))}
         </Card>
       ))}
+      {problems.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          message="These rules conflict"
+          description={
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          }
+        />
+      )}
       <Button
         type="primary"
-        disabled={!dirty}
+        disabled={!dirty || problems.length > 0}
         loading={save.isPending}
         onClick={() => save.mutate(changes, { onSuccess: (saved) => setDraft(saved.overrides) })}
       >

@@ -20,7 +20,7 @@ export function weakestComponents(health: DeliveryHealth, count: number): Health
 const COMPONENT_HELP = new Map<string, string>([
   [
     "predictability",
-    "How far lead time P95 sits above P50, on a log scale. P95 equal to P50 scores 100; the worst ratio in Metric rules scores 0.",
+    "Share of the window's completed items that finished within the service level: the aging percentile of cycle times over the aging history before the window. Meeting it at that percentile's own rate scores 100; at the floor in Metric rules it scores 0.",
   ],
   [
     "efficiency",

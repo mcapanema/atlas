@@ -211,10 +211,10 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "number", min: 0, max: 99, step: 1 },
       },
       {
-        name: "predictability_worst_ratio",
-        label: "Predictability: worst lead-time spread",
-        help: "Lead-time p95 equal to p50 scores 100; at this multiple of p50 it scores 0. Log scale: every doubling of the spread costs the same points.",
-        control: { kind: "number", min: 1.1, max: 20, step: 0.1, suffix: "× p50" },
+        name: "predictability_floor",
+        label: "Predictability: floor hit rate",
+        help: "Predictability is the share of recently completed items that finished within the service level: the aging percentile of cycle times over the aging history before the window. Meeting it at that percentile's own rate scores 100; at this share it scores 0.",
+        control: { kind: "number", min: 0, max: 98, step: 1, suffix: "%" },
       },
       {
         name: "stability_best_weeks",
@@ -231,19 +231,19 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "aging_percentile",
         label: "Aging flag percentile",
-        help: "In-progress items older than this percentile of completed cycle times are flagged as aging; it also feeds the health risk score.",
+        help: "In-progress items older than this percentile of completed cycle times are flagged as aging. It also feeds the health risk score, and sets the predictability service level and its target hit rate (the predictability floor must stay below it).",
         control: { kind: "number", min: 50, max: 99, step: 1 },
       },
       {
         name: "aging_history_days",
         label: "Aging reference history",
-        help: "The aging line is the aging percentile of cycle times for items completed in this many recent days. It also feeds the health risk score.",
+        help: "The aging line is the aging percentile of cycle times for items completed in this many recent days. It also feeds the health risk score, and predictability reads the same span just before its window as its service level.",
         control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
       },
       {
         name: "health_min_sample",
         label: "Minimum items per component",
-        help: "A health component scores only with at least this many items behind it: completions in the window, or items in progress for risk. With fewer it's left out, and a team with no component left reads not scored yet.",
+        help: "A health component scores only with at least this many items behind it: completions in the window (for predictability, also completions in the aging history before it), or items in progress for risk. With fewer it's left out, and a team with no component left reads not scored yet.",
         control: { kind: "number", min: 1, max: 50, step: 1, suffix: "items" },
       },
       weight("weight_predictability", "predictability"),

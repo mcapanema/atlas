@@ -256,6 +256,15 @@ async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
                 "/api/events",
                 json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
             )
+    for title in ("Shipped", "Shipped again", "Shipped more", "Shipped four", "Shipped five"):
+        item = (
+            await client.post("/api/work-items", json={"team_id": team_id, "title": title})
+        ).json()
+        for type_, days in (("created", 60), ("started", 45), ("completed", 40)):
+            await client.post(
+                "/api/events",
+                json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+            )
 
     response = await client.get(f"/api/metrics/health?team_id={team_id}")
 

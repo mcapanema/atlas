@@ -9,19 +9,19 @@ Predict"). Scales, the aging percentile and history, component weights and
 band cutoffs come from the scope's MetricRules; the cutoffs band each
 component as well as the overall score. A component backed by fewer than
 the rules' health_min_sample items is left out; with none left the scope
-is unscored, not critical.
+is unscored, not critical. Predictability is the share of recent cycles
+within the team's own service level (ADR-0016), not the lead-time spread.
 """
 
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
-from app.domain.metrics.aging import aging_reference
+from app.domain.metrics.aging import aging_reference, completed_cycles
+from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency, measured_cycles
-from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.samples import (
     FlowSample,
     derive_flow_sample,
@@ -72,26 +72,47 @@ def _clamp(value: float) -> int:
     return max(0, min(100, round(value)))
 
 
-def _predictability(
-    lead: list[timedelta], *, worst_ratio: float, min_sample: int
-) -> _Reading | None:
-    """Lead-time spread on a log scale: p95 at p50 scores 100, at `worst_ratio` x p50 scores 0.
+def _short_duration(duration: timedelta) -> str:
+    """'36d', '6h' or '20m': a short service level must never read '0d' or '0h'."""
+    minutes = duration.total_seconds() / 60
+    if round(minutes) < 60:
+        return f"{minutes:.0f}m"
+    hours = minutes / 60
+    return f"{hours:.0f}h" if round(hours) < 24 else f"{hours / 24:.0f}d"
 
-    Log, because the spread is a ratio: each doubling of p95/p50 costs the
-    same points, so a team going from 16x to 8x gains as much as one going
-    from 2x to 1x. A linear 4x scale pinned 7 of 9 live teams at 0.
+
+def _predictability(
+    samples: list[FlowSample],
+    in_window: list[FlowSample],
+    *,
+    window_start: datetime,
+    rules: MetricRules,
+) -> _Reading | None:
+    """Service-level hit rate: the window's cycles within the SLE set before it (ADR-0016).
+
+    The SLE is the aging percentile (P85) of cycle times completed in the
+    aging history ending where the window starts: the commitment as it
+    stood, which the window can't move by being slow. Hitting it at the
+    percentile's own rate or better scores 100; at `predictability_floor`,
+    0. Spread doesn't cost points: a slow-but-steady team is predictable,
+    and how wide its P85 is shows in the SLE the reason states. Items
+    completed without a start have no cycle time and count on neither side.
     """
-    if len(lead) < min_sample:
+    window = cycle_times(in_window)
+    reference = completed_cycles(samples, end=window_start, history_days=rules.aging_history_days)
+    if min(len(window), len(reference)) < rules.health_min_sample:
         return None
-    seconds = [d.total_seconds() for d in lead]
-    p50 = percentile(seconds, 50)
-    if p50 <= 0:
-        return None
-    ratio = percentile(seconds, 95) / p50
+    pct = rules.aging_percentile
+    sle = timedelta(seconds=percentile([c.total_seconds() for c in reference], pct))
+    hit = sum(cycle <= sle for cycle in window) / len(window)
+    floor = rules.predictability_floor / 100
     return _Reading(
         name="predictability",
-        score=_clamp(100 * (1 - math.log(ratio) / math.log(worst_ratio))),
-        reason=f"lead time p95 is {ratio:.1f}x p50",
+        score=_clamp(100 * (hit - floor) / (pct / 100 - floor)),
+        reason=(
+            f"{hit:.0%} of {len(window)} items finished within {_short_duration(sle)} "
+            f"(cycle p{pct} of the {rules.aging_history_days} days before)"
+        ),
     )
 
 
@@ -266,9 +287,7 @@ def compute_delivery_health(
     tracked_days = observed_history_days(all_samples, end=now, days=window_days)
     floor = rules.health_min_sample
     candidates = (
-        _predictability(
-            lead_times(in_window), worst_ratio=rules.predictability_worst_ratio, min_sample=floor
-        ),
+        _predictability(all_samples, in_window, window_start=window_start, rules=rules),
         _efficiency(in_window, min_sample=floor),
         (
             _flow(all_samples, window_start=window_start, mid=mid, now=now, min_sample=floor)

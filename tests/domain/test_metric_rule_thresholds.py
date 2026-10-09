@@ -39,31 +39,50 @@ def _only(component: str) -> MetricRules:
 
 
 def test_zero_weights_drop_components_from_the_score() -> None:
-    health = compute_delivery_health(SCOPE, now=NOW, rules=_only("predictability"))
+    health = compute_delivery_health(SCOPE, now=NOW, rules=_only("stability"))
 
-    assert [c.name for c in health.components] == ["predictability"]
+    assert [c.name for c in health.components] == ["stability"]
     assert health.score == health.components[0].score
 
 
-def test_predictability_scale_follows_the_worst_ratio() -> None:
-    # lead times 1d and 3d: p50 2d, p95 2.9d -> ratio 1.45, on a log scale:
-    # 100 * (1 - ln 1.45 / ln worst)
-    rules = _only("predictability")
-
-    default = compute_delivery_health(SCOPE, now=NOW, rules=rules)
-    tighter = compute_delivery_health(
-        SCOPE, now=NOW, rules=replace(rules, predictability_worst_ratio=2.0)
+def _cycle(started: int, completed: int) -> list[Event]:
+    return _stream(
+        (EventType.CREATED, 150), (EventType.STARTED, started), (EventType.COMPLETED, completed)
     )
 
-    assert (default.score, tighter.score) == (88, 46)
+
+# Service level: P85 of prior cycles 1-5d (completed 40 days ago, inside the
+# 90 days before the window) is 4.4d. Window cycles 1, 2, 3, 6, 8d: 3 of 5 hit.
+SLE_SCOPE = [
+    *[_cycle(40 + days, 40) for days in (1, 2, 3, 4, 5)],
+    *[_cycle(2 + days, 2) for days in (1, 2, 3, 6, 8)],
+]
 
 
-def test_predictability_halves_at_the_square_root_of_the_worst_ratio() -> None:
-    # Log scale: every doubling of the spread costs the same points, so a
-    # spread of sqrt(worst) scores exactly half.
-    rules = replace(_only("predictability"), predictability_worst_ratio=1.45**2)
+def test_predictability_falls_from_the_target_to_the_floor() -> None:
+    # 60% hit: 100 * (0.60 - 0.25) / (0.85 - 0.25) = 58; with no floor, 100 * 0.60 / 0.85 = 71.
+    rules = _only("predictability")
 
-    assert compute_delivery_health(SCOPE, now=NOW, rules=rules).score == 50
+    default = compute_delivery_health(SLE_SCOPE, now=NOW, rules=rules)
+    no_floor = compute_delivery_health(
+        SLE_SCOPE, now=NOW, rules=replace(rules, predictability_floor=0)
+    )
+
+    assert (default.score, no_floor.score) == (58, 71)
+    assert default.components[0].reason == (
+        "60% of 5 items finished within 4d (cycle p85 of the 90 days before)"
+    )
+
+
+def test_the_target_follows_the_aging_percentile() -> None:
+    # Review focus 4. P70 of 1-5d is 3.8d; 3 of 5 hit (60%):
+    # 100 * (0.60 - 0.25) / (0.70 - 0.25) = 78.
+    rules = replace(_only("predictability"), aging_percentile=70)
+
+    health = compute_delivery_health(SLE_SCOPE, now=NOW, rules=rules)
+
+    assert health.score == 78
+    assert "cycle p70" in health.components[0].reason
 
 
 def test_stability_scale_follows_the_best_and_worst_weeks() -> None:

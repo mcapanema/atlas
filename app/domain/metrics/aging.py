@@ -47,14 +47,21 @@ class AgingWip:
     history_days: int = DEFAULT_RULES.aging_history_days
 
 
+def completed_cycles(
+    samples: Sequence[FlowSample], *, end: datetime, history_days: int
+) -> list[timedelta]:
+    """Cycle times of the samples completed in (end - history_days, end]."""
+    since = end - timedelta(days=history_days)
+    return cycle_times(
+        [s for s in samples if s.completed_at is not None and since < s.completed_at <= end]
+    )
+
+
 def aging_reference(
     samples: Sequence[FlowSample], *, now: datetime, pct: int, history_days: int
 ) -> timedelta | None:
     """The `pct` percentile of cycle times completed in (now - history_days, now]."""
-    since = now - timedelta(days=history_days)
-    recent = cycle_times(
-        [s for s in samples if s.completed_at is not None and since < s.completed_at <= now]
-    )
+    recent = completed_cycles(samples, end=now, history_days=history_days)
     if not recent:
         return None
     return timedelta(seconds=percentile([c.total_seconds() for c in recent], pct))

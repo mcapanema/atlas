@@ -54,6 +54,11 @@ describe("componentHelp", () => {
     expect(componentHelp("risk")).toMatch(/nothing completed/);
   });
 
+  it("defines predictability as a service-level hit rate, not a spread", () => {
+    expect(componentHelp("predictability")).toMatch(/service level/);
+    expect(componentHelp("predictability")).not.toMatch(/P95/);
+  });
+
   it("has no definition for a name it doesn't know", () => {
     expect(componentHelp("cadence")).toBeUndefined();
   });
