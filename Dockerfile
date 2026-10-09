@@ -1,11 +1,13 @@
-# syntax=docker/dockerfile:1
+# syntax=mirror.gcr.io/docker/dockerfile:1
 
-# Pinned so Dependabot's docker ecosystem can bump them (an unpinned tag
-# can't be bumped — or reproduced). Node major tracks web/.nvmrc.
+# Docker Hub images come through mirror.gcr.io, Google's public Docker Hub
+# mirror: CI's anonymous Docker Hub pulls hit its rate limit (429 Too Many
+# Requests). Pinned so Dependabot's docker ecosystem can bump them (an
+# unpinned tag can't be bumped — or reproduced). Node major tracks web/.nvmrc.
 FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
 
 # --- Frontend build -----------------------------------------------------
-FROM node:24-alpine AS frontend-build
+FROM mirror.gcr.io/library/node:24-alpine AS frontend-build
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -13,7 +15,7 @@ COPY web/ ./
 RUN npm run build
 
 # --- Backend + compiled frontend ----------------------------------------
-FROM python:3.13-slim AS backend
+FROM mirror.gcr.io/library/python:3.13-slim AS backend
 COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 
