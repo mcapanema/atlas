@@ -60,6 +60,23 @@ function duration(stats: DurationStats | null, key: keyof DurationStats): string
 }
 
 /**
+ * An unscored scope says so instead of leaving a hole: the health floor
+ * (health_min_sample) leaves small or idle teams without a score.
+ */
+function UnscoredHealth({ periodText }: { periodText: string | null }) {
+  return (
+    <section aria-label="Delivery health" className="health-strip">
+      <div className="health-strip__row">
+        <span className="page-asof">
+          Health not scored yet: too few items completed or in progress to score it.
+        </span>
+        {periodText && <span className="page-asof">{periodText}</span>}
+      </div>
+    </section>
+  );
+}
+
+/**
  * Health leads the page — same vocabulary as the executive dashboard:
  * quiet badge + window when healthy; the two weakest component reasons,
  * tinted by band, when at risk.
@@ -289,9 +306,12 @@ export function FlowDashboard({
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
       <StaleDataAlert history={history.data} />
-      {health.data?.score != null && health.data.band != null && (
-        <HealthStrip health={health.data} periodText={periodText(filters, metrics.data)} />
-      )}
+      {health.data &&
+        (health.data.score != null && health.data.band != null ? (
+          <HealthStrip health={health.data} periodText={periodText(filters, metrics.data)} />
+        ) : (
+          <UnscoredHealth periodText={periodText(filters, metrics.data)} />
+        ))}
       <FlowStats
         data={metrics.data}
         statLabel={windowLabel(filters, 30)}

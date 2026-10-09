@@ -288,15 +288,19 @@ describe("FlowDashboard", () => {
     expect(screen.queryByText("lead time p95 is 2.9x p50")).toBeNull();
   });
 
-  it("omits the health strip when the scope has no health data", async () => {
+  it("says health isn't scored yet when too few items back it", async () => {
+    // Since health_min_sample, a small or idle team is unscored: the strip
+    // says so (the Executive page's words) instead of silently vanishing.
     mockMetricsFetch({
       "/api/metrics/health": { ...healthFixture, score: null, band: null, components: [] },
     });
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getByText("Throughput (30d)")).toBeInTheDocument());
-    expect(screen.queryByRole("region", { name: "Delivery health" })).toBeNull();
+    const strip = await screen.findByRole("region", { name: "Delivery health" });
+    expect(strip).toHaveTextContent(/Health not scored yet/);
+    expect(strip).toHaveTextContent(/too few items/);
+    expect(strip.querySelector(".health-badge")).toBeNull();
   });
 
   it("warns when the data is older than the window it is charting", async () => {
