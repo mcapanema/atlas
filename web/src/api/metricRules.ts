@@ -22,6 +22,7 @@ export interface MetricRules {
   stability_best_weeks: number;
   stability_worst_weeks: number;
   aging_percentile: number;
+  aging_history_days: number;
   health_min_sample: number;
   weight_predictability: number;
   weight_efficiency: number;

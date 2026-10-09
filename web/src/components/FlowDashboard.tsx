@@ -30,6 +30,7 @@ import { formatSeconds } from "../lib/duration";
 import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
 import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
+import { CHART_WINDOW_DAYS, STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
 import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
@@ -160,12 +161,12 @@ function FlowStats({
       <StatCard
         title="Lead time P50"
         value={duration(data.lead_time, "p50_seconds")}
-        help="Median time from an item being created to being completed. Half of completed items took less than this."
+        help="Median time from an item arriving to being completed. It arrives when created, or when it leaves Triage if the team's metric rules say so. Half of completed items took less than this."
       />
       <StatCard
         title="Lead time P85"
         value={duration(data.lead_time, "p85_seconds")}
-        help="85% of items went from created to completed in this time or less. The number to quote when committing to a date."
+        help="85% of items went from arriving to completed in this time or less. The number to quote when committing to a date."
       />
       <StatCard
         title="Cycle time P50"
@@ -180,12 +181,12 @@ function FlowStats({
       <StatCard
         title="Queue time P50"
         value={duration(data.queue_time, "p50_seconds")}
-        help="Median time an item waited between being created and work starting."
+        help="Median time an item spent waiting: from arriving until work started, plus any time it was blocked while in progress."
       />
       <StatCard
         title="Touch time P50"
         value={duration(data.touch_time, "p50_seconds")}
-        help="Median time an item spent actively worked on, excluding queued and blocked time."
+        help="Median time an item was in progress and not blocked."
       />
       <StatCard
         title={`Blocked time (${statLabel})`}
@@ -195,7 +196,7 @@ function FlowStats({
       <StatCard
         title="Flow efficiency"
         value={data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"}
-        help="Touch time divided by lead time. The share of an item's life that was active work rather than waiting."
+        help="For each completed item, the share of its in-progress time that was not blocked, averaged across items. Waiting before work started isn't counted here (see Queue time), and only blocked labels, states and relations count as waiting, so teams that rarely mark work blocked read close to 100%."
       />
     </div>
   );
@@ -263,11 +264,19 @@ function FlowCharts({
   );
 }
 
-function AgingWipCard({ items, percentile }: { items: AgingItem[]; percentile: number }) {
+function AgingWipCard({
+  items,
+  percentile,
+  historyDays,
+}: {
+  items: AgingItem[];
+  percentile: number;
+  historyDays: number;
+}) {
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. Flagged when they have already been open longer than ${percentile}% of completed items took (the team's aging percentile, set in Metric rules).`}
+      help={`Items currently in progress, oldest first. Flagged when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules).`}
     >
       <Table
         size="small"
@@ -314,17 +323,21 @@ export function FlowDashboard({
         ))}
       <FlowStats
         data={metrics.data}
-        statLabel={windowLabel(filters, 30)}
+        statLabel={windowLabel(filters, STATS_WINDOW_DAYS)}
         ranged={isRanged(filters)}
       />
       <FlowCharts
         history={history.data}
         distribution={distribution.data}
         snapshots={snapshots.data}
-        chartLabel={windowLabel(filters, 90)}
+        chartLabel={windowLabel(filters, CHART_WINDOW_DAYS)}
       />
       {aging.data && aging.data.items.length > 0 && (
-        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
+        <AgingWipCard
+          items={aging.data.items}
+          percentile={aging.data.percentile}
+          historyDays={aging.data.history_days}
+        />
       )}
       <ForecastCard scope={scope} filters={filters} />
     </Space>

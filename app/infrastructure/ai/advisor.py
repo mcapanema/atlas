@@ -30,13 +30,17 @@ from app.domain.advisor.entities import (
 )
 from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
 from app.domain.advisor.render import render_context, render_meeting_context
+from app.domain.metrics.windows import CHART_WINDOW_DAYS
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Hard bounds on the LLM loop (review 2026-10-04, F4): a reply's billable
 # length, list sizes the prompts promise, learned-guidance size, and how
-# much feedback one reflection reads.
-_MAX_TOKENS = 4096
+# much feedback one reflection reads. The token budget and HTTP timeout are
+# deployment settings (ATLAS_ADVISOR_MAX_TOKENS / _TIMEOUT_SECONDS); these
+# are their defaults.
+DEFAULT_MAX_TOKENS = 4096
+DEFAULT_TIMEOUT_SECONDS = 120.0
 _MAX_RECOMMENDATIONS = 5
 _MAX_TALKING_POINTS = 10
 _MAX_GUIDANCE_CHARS = 2000
@@ -139,7 +143,7 @@ metrics (e.g. "wip=12", "lead time p85=8.0d").
 Rules:
 - Write for an Engineering Manager: plain language, no jargon without a gloss.
 - Produce a short delivery summary (3-6 sentences) describing what is actually \
-happening, then 1 to 5 recommendations ordered most important first.
+happening, then 1 to {_MAX_RECOMMENDATIONS} recommendations ordered most important first.
 - Each recommendation names the problem, its most likely root cause given the \
 evidence, and one concrete next action.
 - If the data is too sparse to support a recommendation, say so in the summary \
@@ -157,13 +161,13 @@ _MEETING_INSTRUCTIONS: dict[MeetingType, str] = {
     MeetingType.DAILY_STANDUP: (
         "Prepare talking points for today's daily standup. Report, in order: "
         "items over the aging percentile line (by name), anything blocked, and "
-        "how WIP compares to the recent completion rate. At most 10 points, "
+        f"how WIP compares to the recent completion rate. At most {_MAX_TALKING_POINTS} points, "
         "ordered by what needs a decision in the meeting; mark those with "
         "needs_decision. Flag anything the data cannot answer instead of guessing."
     ),
     MeetingType.RETROSPECTIVE: (
         "Prepare talking points for a retrospective covering the flow window in "
-        "the metrics. Contrast that window against the trailing 90-day "
+        f"the metrics. Contrast that window against the trailing {CHART_WINDOW_DAYS}-day "
         "distribution, call out the weakest delivery-health components, and "
         "propose 2-3 discussion topics phrased as open questions for the team — "
         "not verdicts — each grounded in a quoted number. Note explicitly where "
@@ -336,6 +340,8 @@ class OpenRouterAdvisor:
         client_factory: Callable[[], httpx.AsyncClient] | None = None,
         *,
         self_critique: bool = False,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         # One code path serves tests and production: tests inject a factory
         # returning a MockTransport-backed client; production builds a real
@@ -344,10 +350,13 @@ class OpenRouterAdvisor:
         # ponytail: a fresh connection per call, same as the Linear connector.
         # Hold a pooled AsyncClient (with aclose() on app shutdown) if
         # sustained-throughput latency ever matters.
-        self._client_factory = client_factory or (lambda: httpx.AsyncClient(timeout=120.0))
+        self._client_factory = client_factory or (
+            lambda: httpx.AsyncClient(timeout=timeout_seconds)
+        )
         self._api_key = api_key
         self._model = model
         self._self_critique = self_critique
+        self._max_tokens = max_tokens
 
     async def _complete(
         self,
@@ -358,7 +367,7 @@ class OpenRouterAdvisor:
         body: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
-            "max_tokens": _MAX_TOKENS,
+            "max_tokens": self._max_tokens,
         }
         if response_format is not None:
             body["response_format"] = response_format

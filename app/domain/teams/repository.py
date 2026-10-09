@@ -1,3 +1,5 @@
+from collections.abc import Collection
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -16,3 +18,5 @@ class TeamRepository(Protocol):
     async def get(self, team_id: UUID) -> Team | None: ...
 
     async def get_by_external_id(self, external_id: str) -> Team | None: ...
+
+    async def mark_synced(self, team_ids: Collection[UUID], at: datetime) -> None: ...

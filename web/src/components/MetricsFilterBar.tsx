@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import type { MetricsFilters, MetricsScope } from "../api/metrics";
 import { useWorkItemStates } from "../api/workItems";
 import { DATE_FORMAT } from "../lib/dates";
+import { STATS_WINDOW_DAYS } from "../lib/windows";
 
 const TYPE_OPTIONS = ["story", "task", "bug", "spike", "other"].map((value) => ({
   value,
@@ -35,7 +36,7 @@ export function MetricsFilterBar({
   const states = useWorkItemStates(scope);
   const custom = Boolean(filters.start && filters.end);
   const { start, end, windowDays, ...itemFilters } = filters;
-  const periodValue = custom ? "custom" : String(windowDays ?? 30);
+  const periodValue = custom ? "custom" : String(windowDays ?? STATS_WINDOW_DAYS);
 
   return (
     <>
@@ -49,7 +50,7 @@ export function MetricsFilterBar({
             value === "custom"
               ? {
                   ...itemFilters,
-                  start: dayjs().subtract(30, "day").format(ISO),
+                  start: dayjs().subtract(STATS_WINDOW_DAYS, "day").format(ISO),
                   end: dayjs().format(ISO),
                 }
               : { ...itemFilters, windowDays: Number(value) },

@@ -75,6 +75,7 @@ export const forecastFixture = {
   window_start: "2026-04-11T00:00:00Z",
   window_end: "2026-07-10T00:00:00Z",
   remaining: 12,
+  last_completed_at: "2026-07-08T12:00:00Z",
   completion: {
     trials: 2000,
     p50_date: "2026-07-22T00:00:00Z",
@@ -142,6 +143,7 @@ export const agingWipFixture = {
   now: "2026-07-10T00:00:00Z",
   cycle_time_percentile_seconds: 259200,
   percentile: 85,
+  history_days: 90,
   items: [
     {
       work_item_id: "44444444-4444-4444-4444-444444444444",

@@ -6,7 +6,7 @@ Protocol/fake mismatches hide. Each fake accepts optional seed data and
 stores entities in insertion order (dict keyed by id).
 """
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import replace
 from datetime import date, datetime
 from uuid import UUID
@@ -55,6 +55,11 @@ class InMemoryTeamRepository:
 
     async def get_by_external_id(self, external_id: str) -> Team | None:
         return next((t for t in self._teams.values() if t.external_id == external_id), None)
+
+    async def mark_synced(self, team_ids: Collection[UUID], at: datetime) -> None:
+        for team_id in team_ids:
+            if (team := self._teams.get(team_id)) is not None:
+                self._teams[team_id] = replace(team, last_synced_at=at)
 
 
 class InMemoryProjectRepository:

@@ -253,3 +253,17 @@ def in_progress(sample: FlowSample, at: datetime) -> bool:
     if sample.started_at is None or sample.started_at > at:
         return False
     return all(ended is None or ended > at for ended in (sample.completed_at, sample.stopped_at))
+
+
+def observed_history_days(samples: Sequence[FlowSample], *, end: datetime, days: int) -> int:
+    """`days`, shortened to the whole days since the scope's first event.
+
+    Days before a scope's first event aren't zero-throughput days — nothing
+    was tracked yet. Sampling them drags a young scope's forecast toward zero
+    throughput, and reads its health trend as growth from nothing. The
+    partial first day counts; never less than one day.
+    """
+    if not samples:
+        return days
+    first = min(sample.created_at for sample in samples)
+    return max(1, min(days, (end - first) // timedelta(days=1) + 1))

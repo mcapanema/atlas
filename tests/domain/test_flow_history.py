@@ -109,3 +109,27 @@ def test_weekly_buckets_cover_the_whole_window() -> None:
     assert history.buckets[0].end == NOW - timedelta(days=28)
     assert history.buckets[-1].end == NOW
     assert sum(b.completed for b in history.buckets) == 1
+
+
+def test_a_sync_newer_than_every_event_dates_the_data() -> None:
+    # The live SRE & Data case (2026-10-09): synced at 14:30 with no new
+    # events, it read "last synced 2026-10-07" and showed the stale banner.
+    synced = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
+    stream = [
+        Event(
+            work_item_id=uuid4(),
+            type=EventType.CREATED,
+            occurred_at=NOW - timedelta(days=9),
+            recorded_at=datetime(2026, 7, 1, 9, 0, tzinfo=UTC),
+        )
+    ]
+
+    history = compute_flow_history([stream], now=NOW, window_days=14, synced_at=synced)
+
+    assert history.data_as_of == synced
+
+
+def test_an_eventless_scope_is_dated_by_its_sync() -> None:
+    synced = datetime(2026, 7, 9, 12, 0, tzinfo=UTC)
+
+    assert compute_flow_history([], now=NOW, window_days=14, synced_at=synced).data_as_of == synced

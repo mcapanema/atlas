@@ -1,7 +1,7 @@
 import re
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The MCP token is a URL path segment and the endpoint's only credential:
@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # Run a draft -> critique -> revise loop inside every advice request
     # (~3x LLM cost and latency). Off by default.
     advisor_self_critique: bool = False
+    # Hard bounds on one advisor LLM call: the reply's token budget (a reply
+    # cut off at it fails the request) and the HTTP timeout in seconds.
+    # Raise both for a wordier or reasoning model.
+    advisor_max_tokens: int = Field(default=4096, ge=256, le=200_000)
+    advisor_timeout_seconds: float = Field(default=120.0, gt=0, le=900)
 
     # Secret path token for the MCP endpoint (/mcp/<token>); None/empty
     # disables MCP chat access entirely (no route is mounted).

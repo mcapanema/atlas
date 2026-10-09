@@ -22,7 +22,10 @@ def test_defaults_reproduce_the_built_in_behavior() -> None:
     assert rules.restart_clock_after_move_back is False
     assert (rules.reopen_completion, rules.done_then_canceled) == ("last", "delivered")
     assert (rules.healthy_min, rules.warning_min) == (70, 40)
-    assert rules.predictability_worst_ratio == 4.0
+    # Calibrated on live data (review 2026-10-09): teams run 2x-19x.
+    assert rules.predictability_worst_ratio == 20.0
+    # Efficiency reads 92-100% everywhere until queue-state waits exist.
+    assert rules.weight_efficiency == 0.0
     assert (rules.stability_best_weeks, rules.stability_worst_weeks) == (1.0, 5.0)
     assert rules.aging_percentile == 85
     assert rules.timezone == "UTC"

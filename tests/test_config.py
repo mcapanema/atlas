@@ -4,10 +4,18 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
+from app.infrastructure.ai.advisor import DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT_SECONDS
 
 # Scrubbed from the real environment so a developer's shell or CI can't
 # leak into assertions.
-_VARS = ("ATLAS_DATABASE_URL", "ATLAS_DB_ECHO", "ATLAS_ADVISOR_MODEL", "ATLAS_MCP_TOKEN")
+_VARS = (
+    "ATLAS_DATABASE_URL",
+    "ATLAS_DB_ECHO",
+    "ATLAS_ADVISOR_MODEL",
+    "ATLAS_MCP_TOKEN",
+    "ATLAS_ADVISOR_MAX_TOKENS",
+    "ATLAS_ADVISOR_TIMEOUT_SECONDS",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -98,3 +106,17 @@ def test_a_rejected_mcp_token_is_not_echoed_in_the_error(monkeypatch: pytest.Mon
         Settings(_env_file=None)
 
     assert secret not in str(excinfo.value)
+
+
+def test_advisor_bounds_default_to_the_adapters() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.advisor_max_tokens == DEFAULT_MAX_TOKENS
+    assert settings.advisor_timeout_seconds == DEFAULT_TIMEOUT_SECONDS
+
+
+def test_advisor_max_tokens_rejects_a_tiny_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_ADVISOR_MAX_TOKENS", "10")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

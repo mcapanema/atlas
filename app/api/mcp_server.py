@@ -20,6 +20,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app.domain.advisor.render import quote_title
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 _INSTRUCTIONS = (
     "Atlas is a delivery-intelligence platform for Engineering Managers: "
@@ -137,7 +138,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
     async def meeting_brief(
         team_id: str | None = None,
         project_id: str | None = None,
-        window_days: int = 30,
+        window_days: int = STATS_WINDOW_DAYS,
     ) -> str:
         """One-call delivery brief for a team or project — flow metrics,
         lead-time distribution, Monte Carlo forecast, delivery health, and

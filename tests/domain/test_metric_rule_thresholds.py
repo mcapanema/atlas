@@ -22,12 +22,13 @@ def _stream(*steps: tuple[EventType, int]) -> list[Event]:
     ]
 
 
-# Two completions in the 30-day window (lead 1d and 3d) and two items in progress.
+# Two completions in the 30-day window (lead 1d and 3d), two items in progress and a backlog item.
 SCOPE = [
     _stream((EventType.CREATED, 10), (EventType.STARTED, 10), (EventType.COMPLETED, 9)),
     _stream((EventType.CREATED, 10), (EventType.STARTED, 10), (EventType.COMPLETED, 7)),
     _stream((EventType.CREATED, 4), (EventType.STARTED, 3)),
     _stream((EventType.CREATED, 4), (EventType.STARTED, 3)),
+    _stream((EventType.CREATED, 40)),  # backlog: history covers the window
 ]
 
 
@@ -45,7 +46,8 @@ def test_zero_weights_drop_components_from_the_score() -> None:
 
 
 def test_predictability_scale_follows_the_worst_ratio() -> None:
-    # lead times 1d and 3d: p50 2d, p95 2.9d -> ratio 1.45
+    # lead times 1d and 3d: p50 2d, p95 2.9d -> ratio 1.45, on a log scale:
+    # 100 * (1 - ln 1.45 / ln worst)
     rules = _only("predictability")
 
     default = compute_delivery_health(SCOPE, now=NOW, rules=rules)
@@ -53,7 +55,15 @@ def test_predictability_scale_follows_the_worst_ratio() -> None:
         SCOPE, now=NOW, rules=replace(rules, predictability_worst_ratio=2.0)
     )
 
-    assert (default.score, tighter.score) == (85, 55)
+    assert (default.score, tighter.score) == (88, 46)
+
+
+def test_predictability_halves_at_the_square_root_of_the_worst_ratio() -> None:
+    # Log scale: every doubling of the spread costs the same points, so a
+    # spread of sqrt(worst) scores exactly half.
+    rules = replace(_only("predictability"), predictability_worst_ratio=1.45**2)
+
+    assert compute_delivery_health(SCOPE, now=NOW, rules=rules).score == 50
 
 
 def test_stability_scale_follows_the_best_and_worst_weeks() -> None:

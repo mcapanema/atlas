@@ -21,6 +21,7 @@ from app.api.scope import ItemFilters, ItemFiltersDep, Scope, ScopeDep
 from app.application.metrics.service import MetricsService
 from app.application.scope import ScopeSamples
 from app.domain.metrics.summary import DurationStats, FlowMetrics
+from app.domain.metrics.windows import CHART_WINDOW_DAYS, STATS_WINDOW_DAYS
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
@@ -130,7 +131,7 @@ async def get_flow_metrics(
     scope: ScopeDep,
     filters: ItemFiltersDep,
     period: PeriodDep,
-    window_days: int = Query(default=30, ge=1, le=365),
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=1, le=365),
 ) -> FlowMetricsRead:
     samples, now, period_days = await _period_samples(service, scope, filters, period)
     metrics = await service.get_flow_metrics(
@@ -147,10 +148,12 @@ async def get_flow_history(
     scope: ScopeDep,
     filters: ItemFiltersDep,
     period: PeriodDep,
-    window_days: int = Query(default=90, ge=7, le=365),
+    window_days: int = Query(default=CHART_WINDOW_DAYS, ge=7, le=365),
 ) -> FlowHistoryRead:
     samples, now, period_days = await _period_samples(service, scope, filters, period)
     history = await service.get_flow_history(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
         scope=samples,
         window_days=period_days or window_days,
         now=now,
@@ -164,7 +167,7 @@ async def get_lead_time_distribution(
     scope: ScopeDep,
     filters: ItemFiltersDep,
     period: PeriodDep,
-    window_days: int = Query(default=90, ge=7, le=365),
+    window_days: int = Query(default=CHART_WINDOW_DAYS, ge=7, le=365),
 ) -> LeadTimeDistributionRead:
     samples, now, period_days = await _period_samples(service, scope, filters, period)
     distribution = await service.get_lead_time_distribution(
@@ -190,7 +193,7 @@ async def get_scope_overview(
     scope: ScopeDep,
     filters: ItemFiltersDep,
     period: PeriodDep,
-    window_days: int = Query(default=30, ge=7, le=365),
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=7, le=365),
 ) -> ScopeOverviewRead:
     """Flow metrics, health, forecast accuracy and snapshot history from one scope load.
 
@@ -239,6 +242,7 @@ async def get_aging_wip(
             else None
         ),
         percentile=aging.percentile,
+        history_days=aging.history_days,
         items=[
             AgingItemRead(
                 work_item_id=item.work_item_id,
@@ -258,7 +262,7 @@ async def get_delivery_health(
     scope: ScopeDep,
     filters: ItemFiltersDep,
     period: PeriodDep,
-    window_days: int = Query(default=30, ge=7, le=365),
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=7, le=365),
 ) -> DeliveryHealthRead:
     samples, now, period_days = await _period_samples(service, scope, filters, period)
     health = await service.get_delivery_health(

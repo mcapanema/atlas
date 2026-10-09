@@ -12,6 +12,7 @@ from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cfd import DailyFlowCount, daily_flow_counts
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from app.domain.metrics.throughput import ThroughputBucket, bucketed_throughput
+from app.domain.metrics.windows import CHART_WINDOW_DAYS
 
 
 @dataclass(frozen=True)
@@ -42,10 +43,11 @@ def compute_flow_history(
     event_streams: list[list[Event]],
     *,
     now: datetime,
-    window_days: int = 90,
+    window_days: int = CHART_WINDOW_DAYS,
     samples: Sequence[FlowSample] | None = None,
     stream_rules: Sequence[MetricRules] | None = None,
     rules: MetricRules = DEFAULT_RULES,
+    synced_at: datetime | None = None,
 ) -> FlowHistory:
     """Compute chart series for the window (now - window_days, now].
 
@@ -53,6 +55,8 @@ def compute_flow_history(
     per-item rules (aligned by index) when the caller folded them per team;
     omitted, the built-in rules apply. `rules` (the scope's) set the day
     boundaries' timezone and the daily/weekly bucketing cut-over.
+    `synced_at` is the scope's team's last sync; it dates the data when that
+    sync brought no newer event.
     """
     window_start = now - timedelta(days=window_days)
     derived = (
@@ -60,10 +64,12 @@ def compute_flow_history(
         if samples is not None
         else [s for stream in event_streams if (s := derive_flow_sample(stream)) is not None]
     )
-    # The freshest thing we know about this scope. Events are append-only and
-    # recorded_at is stamped on ingest, so the newest one dates the last sync
-    # that touched this scope — no sync-log table needed.
+    # The freshest thing we know about this scope: the newest ingested event
+    # (recorded_at is stamped on ingest) or the team's last sync, whichever
+    # is later — a sync that found nothing new still dates the data.
     recorded = [event.recorded_at for stream in event_streams for event in stream]
+    if synced_at is not None:
+        recorded.append(synced_at)
     count, bucket_days = _bucketing(window_days, rules.daily_bucket_max_days)
     return FlowHistory(
         window_start=window_start,

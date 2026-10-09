@@ -213,7 +213,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "predictability_worst_ratio",
         label: "Predictability: worst lead-time spread",
-        help: "Lead-time p95 equal to p50 scores 100; at this multiple of p50 it scores 0.",
+        help: "Lead-time p95 equal to p50 scores 100; at this multiple of p50 it scores 0. Log scale: every doubling of the spread costs the same points.",
         control: { kind: "number", min: 1.1, max: 20, step: 0.1, suffix: "× p50" },
       },
       {
@@ -233,6 +233,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         label: "Aging flag percentile",
         help: "In-progress items older than this percentile of completed cycle times are flagged as aging; it also feeds the health risk score.",
         control: { kind: "number", min: 50, max: 99, step: 1 },
+      },
+      {
+        name: "aging_history_days",
+        label: "Aging reference history",
+        help: "The aging line is the aging percentile of cycle times for items completed in this many recent days. It also feeds the health risk score.",
+        control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
       },
       {
         name: "health_min_sample",

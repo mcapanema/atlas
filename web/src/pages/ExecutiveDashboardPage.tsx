@@ -18,6 +18,7 @@ import {
   windowLabel,
 } from "../lib/metricsFilters";
 import { buildTeamRows, type TeamRow } from "../lib/teamRows";
+import { STATS_WINDOW_DAYS } from "../lib/windows";
 
 function Headline({ rows }: { rows: TeamRow[] }) {
   const scored = rows.filter((row) => row.health?.band != null && row.health.score != null);
@@ -149,7 +150,7 @@ export function ExecutiveDashboardPage() {
       <FailedTeamsAlert teams={teamList} overviews={overviews} />
       <TeamMetricsTable
         rows={rows}
-        periodLabel={windowLabel(filters, 30)}
+        periodLabel={windowLabel(filters, STATS_WINDOW_DAYS)}
         ranged={isRanged(filters)}
         loading={teams.isLoading}
       />

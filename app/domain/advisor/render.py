@@ -104,7 +104,10 @@ def render_meeting_context(context: MeetingContext) -> str:
     else:
         header = "Aging WIP"
         if aging.cycle_time_percentile is not None:
-            header += f" (cycle-time p{aging.percentile} = {_days(aging.cycle_time_percentile)})"
+            header += (
+                f" (cycle-time p{aging.percentile} over the last {aging.history_days} days"
+                f" = {_days(aging.cycle_time_percentile)})"
+            )
         lines = [header + ":"]
         for item in aging.items[:_AGING_LIMIT]:
             flag = f" [over p{aging.percentile}]" if item.over_percentile else ""

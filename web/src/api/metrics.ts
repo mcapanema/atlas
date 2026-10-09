@@ -116,6 +116,7 @@ export interface AgingWip {
   cycle_time_percentile_seconds: number | null;
   items: AgingItem[];
   percentile: number;
+  history_days: number;
 }
 
 export function useAgingWip(scope: MetricsScope, filters: MetricsFilters = {}) {

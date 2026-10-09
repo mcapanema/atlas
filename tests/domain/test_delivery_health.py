@@ -28,7 +28,7 @@ def test_empty_scope_has_no_score() -> None:
     assert health.components == ()
 
 
-def test_healthy_scope_scores_high_with_all_five_components() -> None:
+def test_healthy_scope_scores_high_with_the_default_components() -> None:
     streams = [
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, 7)),
@@ -36,6 +36,7 @@ def test_healthy_scope_scores_high_with_all_five_components() -> None:
         _stream((EventType.CREATED, 8), (EventType.STARTED, 7), (EventType.COMPLETED, 5)),
         _stream((EventType.CREATED, 14), (EventType.STARTED, 13), (EventType.COMPLETED, 11)),
         *[_stream((EventType.CREATED, 4), (EventType.STARTED, 1)) for _ in range(5)],  # fresh WIP
+        _stream((EventType.CREATED, 40)),  # backlog: history covers the window
     ]
 
     health = compute_delivery_health(streams, now=NOW)
@@ -45,11 +46,23 @@ def test_healthy_scope_scores_high_with_all_five_components() -> None:
     assert health.score >= 70
     assert {c.name for c in health.components} == {
         "predictability",
-        "efficiency",
         "flow",
         "stability",
         "risk",
     }
+
+
+def test_efficiency_scores_when_its_weight_is_set() -> None:
+    streams = [
+        _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
+        _stream((EventType.CREATED, 15), (EventType.STARTED, 14), (EventType.BLOCKED, 13)),
+    ]
+
+    health = compute_delivery_health(
+        streams, now=NOW, rules=MetricRules(health_min_sample=1, weight_efficiency=1.0)
+    )
+
+    assert "efficiency" in {c.name for c in health.components}
 
 
 def test_open_blocked_wip_drags_risk_to_zero() -> None:
@@ -93,3 +106,35 @@ def test_canceled_blocked_item_is_not_in_progress_risk() -> None:
     risk = next(c for c in health.components if c.name == "risk")
     assert risk.score == 100
     assert "0 of 1" in risk.reason
+
+
+def test_a_scope_tracked_for_part_of_the_window_has_no_flow_trend() -> None:
+    # The live Forward Deployment Squad case (2026-10-09): first synced 11
+    # days into a 30-day window, it read "throughput grew from 0 to 95" -> 100.
+    streams = [
+        _stream((EventType.CREATED, 11), (EventType.STARTED, 10), (EventType.COMPLETED, days))
+        for days in (9, 7, 5, 3, 1)
+    ]
+
+    health = compute_delivery_health(streams, now=NOW)
+
+    assert "flow" not in {c.name for c in health.components}
+
+
+def test_stability_reads_weeks_of_throughput_over_the_tracked_history() -> None:
+    # Tracked 11 days (first event 10 days ago, partial day counts): 5
+    # completions = 3.18/week, WIP 5 = 1.57 weeks -> 86. Over the full 30
+    # days it read 4.29 weeks -> 18.
+    streams = [
+        *[
+            _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, d))
+            for d in (8, 6, 4, 3, 2)
+        ],
+        *[_stream((EventType.CREATED, 4), (EventType.STARTED, 1)) for _ in range(5)],
+    ]
+
+    health = compute_delivery_health(streams, now=NOW)
+
+    stability = next(c for c in health.components if c.name == "stability")
+    assert stability.score == 86
+    assert stability.reason == "WIP equals 1.6 weeks of throughput"

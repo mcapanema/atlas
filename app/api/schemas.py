@@ -291,6 +291,7 @@ class ForecastRead(BaseModel):
     remaining: int
     completion: CompletionForecastRead | None
     confidence: float | None
+    last_completed_at: datetime | None
 
 
 class RecommendationRead(BaseModel):
@@ -374,6 +375,7 @@ class AgingWipRead(BaseModel):
     cycle_time_percentile_seconds: float | None
     items: list[AgingItemRead]
     percentile: int
+    history_days: int
 
 
 class HealthComponentRead(BaseModel):
@@ -453,6 +455,7 @@ class MetricRulesRead(BaseModel):
     stability_best_weeks: float
     stability_worst_weeks: float
     aging_percentile: int
+    aging_history_days: int
     health_min_sample: int
     weight_predictability: float
     weight_efficiency: float
@@ -503,6 +506,7 @@ class MetricRulesOverridesWrite(BaseModel):
     stability_best_weeks: float | None = None
     stability_worst_weeks: float | None = None
     aging_percentile: int | None = None
+    aging_history_days: int | None = None
     health_min_sample: int | None = None
     weight_predictability: float | None = None
     weight_efficiency: float | None = None

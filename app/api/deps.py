@@ -111,6 +111,8 @@ def get_metrics_service(session: SessionDep) -> MetricsService:
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
         rules_resolver_for(session),
+        teams=SqlAlchemyTeamRepository(session),
+        projects=SqlAlchemyProjectRepository(session),
     )
 
 
@@ -139,6 +141,8 @@ def get_advisor_port() -> AdvisorPort:
         api_key=settings.openrouter_api_key,
         model=settings.advisor_model,
         self_critique=settings.advisor_self_critique,
+        max_tokens=settings.advisor_max_tokens,
+        timeout_seconds=settings.advisor_timeout_seconds,
     )
 
 

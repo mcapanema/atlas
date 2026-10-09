@@ -6,11 +6,10 @@ from app.domain.forecasting.monte_carlo import (
     OutcomeBucket,
     daily_throughput_samples,
     delivery_confidence,
-    observed_history_days,
     simulate_days_to_complete,
     summarize_completion,
 )
-from app.domain.metrics.samples import FlowSample
+from app.domain.metrics.samples import FlowSample, observed_history_days
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 

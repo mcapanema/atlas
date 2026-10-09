@@ -23,6 +23,9 @@ def _stream(*steps: tuple[EventType, int]) -> list[Event]:
 OLD_DONE = _stream((EventType.CREATED, 70), (EventType.STARTED, 69), (EventType.COMPLETED, 68))
 
 
+BACKLOG = _stream((EventType.CREATED, 40))  # history covers the 30-day window
+
+
 def _stuck(count: int) -> list[list[Event]]:
     return [_stream((EventType.CREATED, 40), (EventType.STARTED, 30)) for _ in range(count)]
 
@@ -69,11 +72,10 @@ def test_four_completions_are_not_enough_for_the_completion_components() -> None
 
 
 def test_five_completions_score_the_completion_components() -> None:
-    health = compute_delivery_health(_done(9, 8, 6, 5, 3), now=NOW)
+    health = compute_delivery_health([BACKLOG, *_done(9, 8, 6, 5, 3)], now=NOW)
 
     assert {c.name for c in health.components} == {
         "predictability",
-        "efficiency",
         "flow",
         "stability",
     }
@@ -84,7 +86,9 @@ def test_a_zero_length_cycle_does_not_count_toward_the_efficiency_floor() -> Non
     # can't measure it, so it can't help efficiency reach the floor.
     instant = _stream((EventType.CREATED, 12), (EventType.STARTED, 5), (EventType.COMPLETED, 5))
 
-    health = compute_delivery_health([*_done(9, 8, 6, 3), instant], now=NOW)
+    health = compute_delivery_health(
+        [*_done(9, 8, 6, 3), instant], now=NOW, rules=MetricRules(weight_efficiency=1.0)
+    )
 
     names = {c.name for c in health.components}
     assert "efficiency" not in names

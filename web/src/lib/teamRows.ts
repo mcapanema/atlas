@@ -11,6 +11,7 @@ import type { ScopeOverview } from "../api/overview";
 import type { ForecastAccuracy, MetricSnapshot } from "../api/snapshots";
 import type { Team } from "../api/teams";
 import { computeDelta, leadTimePulse, pickBaseline, type Delta, type Pulse } from "./deltas";
+import { STATS_WINDOW_DAYS } from "./windows";
 
 /**
  * Three honest cell states: a skeleton means "still asking", "unavailable"
@@ -41,7 +42,7 @@ function queryState(
   return "ready";
 }
 
-/** Throughput/lead-time deltas vs ~30 days ago, plus the lead-time pulse. */
+/** Throughput/lead-time deltas vs ~STATS_WINDOW_DAYS days ago, plus the lead-time pulse. */
 function trends(
   metrics: FlowMetrics | undefined,
   snapshots: MetricSnapshot[],
@@ -49,7 +50,7 @@ function trends(
 ): Pick<TeamRow, "throughputDelta" | "leadDelta" | "pulse"> {
   if (!metrics) return { throughputDelta: null, leadDelta: null, pulse: null };
   const asOf = metrics.window_end;
-  const baseline = deltasEnabled ? pickBaseline(snapshots, asOf, 30) : null;
+  const baseline = deltasEnabled ? pickBaseline(snapshots, asOf, STATS_WINDOW_DAYS) : null;
   return {
     throughputDelta: baseline
       ? computeDelta(metrics.completed, baseline.completed, false, baseline.captured_on)

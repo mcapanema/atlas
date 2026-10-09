@@ -1,5 +1,6 @@
 import type { MetricsFilters } from "../api/metrics";
 import { formatDay } from "./dates";
+import { STATS_WINDOW_DAYS } from "./windows";
 
 /** URL keys: window, start, end, types (comma-joined), xstates (comma-joined). */
 const KEYS = ["window", "start", "end", "types", "xstates"] as const;
@@ -44,7 +45,7 @@ export function windowLabel(filters: MetricsFilters, defaultDays: number): strin
 export function isDefaultFilters(filters: MetricsFilters): boolean {
   return (
     !filters.start &&
-    (filters.windowDays === undefined || filters.windowDays === 30) &&
+    (filters.windowDays === undefined || filters.windowDays === STATS_WINDOW_DAYS) &&
     !filters.types?.length &&
     !filters.excludeStates?.length
   );
@@ -63,7 +64,7 @@ export function periodText(
     return `${formatDay(filters.start)} – ${formatDay(filters.end)}`;
   }
   if (!window) return null;
-  return `Last ${filters.windowDays ?? 30} days · ${formatDay(window.window_start)} – ${formatDay(window.window_end)}`;
+  return `Last ${filters.windowDays ?? STATS_WINDOW_DAYS} days · ${formatDay(window.window_start)} – ${formatDay(window.window_end)}`;
 }
 
 /** True when an explicit start/end range (not a rolling window) is set. */

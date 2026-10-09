@@ -17,6 +17,7 @@ from app.domain.metrics.queue_touch import queue_times, touch_times
 from app.domain.metrics.samples import FlowSample
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.throughput import throughput
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
 from app.domain.metrics.wip import wip
 
 
@@ -61,7 +62,7 @@ def _duration_stats(durations: list[timedelta]) -> DurationStats | None:
 
 
 def compute_flow_metrics(
-    samples: list[FlowSample], *, now: datetime, window_days: int = 30
+    samples: list[FlowSample], *, now: datetime, window_days: int = STATS_WINDOW_DAYS
 ) -> FlowMetrics:
     """Aggregate samples into FlowMetrics for the window (now - window_days, now]."""
     window_start = now - timedelta(days=window_days)

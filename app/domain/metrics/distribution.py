@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.samples import FlowSample
 from app.domain.metrics.stats import percentile
+from app.domain.metrics.windows import CHART_WINDOW_DAYS
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,7 @@ def duration_bins(durations: list[timedelta]) -> list[DurationBin]:
 
 
 def compute_lead_time_distribution(
-    samples: list[FlowSample], *, now: datetime, window_days: int = 90
+    samples: list[FlowSample], *, now: datetime, window_days: int = CHART_WINDOW_DAYS
 ) -> LeadTimeDistribution:
     """Histogram of lead times of samples completed in (now - window_days, now]."""
     window_start = now - timedelta(days=window_days)

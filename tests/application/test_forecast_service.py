@@ -4,7 +4,8 @@ from uuid import UUID, uuid4
 from app.application.forecasting.service import ForecastService
 from app.application.scope import ScopeSamples
 from app.domain.events.entities import Event, EventType
-from app.domain.metrics.samples import derive_flow_sample
+from app.domain.metric_rules.entities import MetricRules
+from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from app.domain.work_items.entities import WorkItem
 from tests.fakes import InMemoryEventRepository, InMemoryWorkItemRepository
 
@@ -174,3 +175,47 @@ async def test_forecast_remaining_excludes_canceled_items() -> None:
     forecast = await service.get_forecast(team_id=team_id, now=NOW)
 
     assert forecast.remaining == 1  # only `doing`; canceled is closed, not open work
+
+
+def _daily_completions(now: datetime) -> ScopeSamples:
+    """One completion on each of the last 10 days: every trial finishes 1 item in 1 day."""
+    samples = [
+        FlowSample(
+            created_at=now - timedelta(days=9, hours=2),
+            started_at=None,
+            completed_at=now - timedelta(days=d, hours=1),
+            blocked_time=timedelta(0),
+        )
+        for d in range(10)
+    ]
+    return ScopeSamples(
+        streams=[],
+        samples=samples,
+        item_count=len(samples),
+        rules=MetricRules(timezone="America/Sao_Paulo"),
+        remaining_count=1,
+    )
+
+
+async def test_target_date_confidence_counts_days_on_the_teams_calendar() -> None:
+    # 01:00 UTC on 10 Jul is still 9 Jul in São Paulo: a 10 Jul target is a
+    # day out there (UTC counting said 0 days -> 0% confidence).
+    now = datetime(2026, 7, 10, 1, 0, tzinfo=UTC)
+    service = ForecastService(InMemoryWorkItemRepository(), InMemoryEventRepository())
+
+    forecast = await service.get_forecast(
+        scope=_daily_completions(now), target_date=date(2026, 7, 10), now=now
+    )
+
+    assert forecast.confidence == 1.0
+
+
+async def test_forecast_reports_the_latest_completion() -> None:
+    # The live SRE & Data case: nothing completed for 70 days, yet the dates
+    # read as current. The card shows this fact next to them.
+    now = datetime(2026, 7, 10, 1, 0, tzinfo=UTC)
+    service = ForecastService(InMemoryWorkItemRepository(), InMemoryEventRepository())
+
+    forecast = await service.get_forecast(scope=_daily_completions(now), now=now)
+
+    assert forecast.last_completed_at == now - timedelta(hours=1)

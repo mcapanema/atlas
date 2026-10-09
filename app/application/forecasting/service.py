@@ -11,10 +11,10 @@ from app.domain.forecasting.monte_carlo import (
     DeliveryForecast,
     daily_throughput_samples,
     delivery_confidence,
-    observed_history_days,
     simulate_days_to_complete,
     summarize_completion,
 )
+from app.domain.metrics.samples import observed_history_days
 from app.domain.work_items.entities import WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
@@ -87,14 +87,19 @@ class ForecastService:
         if trial_days is not None:
             completion = summarize_completion(trial_days, remaining=scope_remaining)
             if target_date is not None:
-                within = (target_date - window_end.date()).days
-                confidence = delivery_confidence(trial_days, within_days=within)
+                # Days on the team's calendar: a UTC date is a day ahead of
+                # São Paulo from 21:00 local.
+                today = window_end.astimezone(scope.rules.tz).date()
+                confidence = delivery_confidence(trial_days, within_days=(target_date - today).days)
+        completions = [s.completed_at for s in scope.samples if s.completed_at is not None]
+        last_completed_at = max((at for at in completions if at <= window_end), default=None)
         return DeliveryForecast(
             window_start=window_end - timedelta(days=history_days),
             window_end=window_end,
             remaining=scope_remaining,
             completion=completion,
             confidence=confidence,
+            last_completed_at=last_completed_at,
         )
 
 
