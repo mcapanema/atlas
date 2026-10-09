@@ -212,24 +212,52 @@ function barSeries(name: string, data: number[]): EChartsOption["series"] {
   ];
 }
 
+/** A dashed, labeled reference line on a category axis — histograms' percentile vocabulary. */
+function referenceLine(xAxis: string, name: string, n: Neutrals) {
+  return {
+    xAxis,
+    label: { formatter: name, color: n.inkSecondary },
+    lineStyle: { color: n.inkSecondary, type: "dashed" as const },
+  };
+}
+
+/** Index of the first bin whose cumulative count reaches fraction q of all items. */
+function binPercentileIndex(bins: DurationBin[], q: number): number {
+  const target = q * bins.reduce((sum, bin) => sum + bin.count, 0);
+  let cumulative = 0;
+  const reached = bins.map((bin) => {
+    cumulative += bin.count;
+    return cumulative >= target;
+  });
+  return reached.indexOf(true);
+}
+
+function percentileLines(bins: DurationBin[], labels: string[], n: Neutrals) {
+  if (!bins.some((bin) => bin.count > 0)) return [];
+  return [
+    referenceLine(labels[binPercentileIndex(bins, 0.5)], "P50", n),
+    referenceLine(labels[binPercentileIndex(bins, 0.85)], "P85", n),
+  ];
+}
+
 export function buildLeadTimeDistributionOption(
   bins: DurationBin[],
   mode: ThemeMode = "light",
 ): EChartsOption {
   const n = neutrals(mode);
+  const labels = bins.map((b) => `${b.start_days}d`);
+  const series = barSeries(
+    "Completed items",
+    bins.map((b) => b.count),
+  ) as [Record<string, unknown>];
+  series[0].markLine = { silent: true, symbol: "none", data: percentileLines(bins, labels, n) };
   return {
     tooltip: { trigger: "item" },
-    grid: { left: 64, right: 16, top: 24, bottom: 48 },
-    xAxis: dayAxis(
-      bins.map((b) => `${b.start_days}d`),
-      n,
-      "Lead time",
-    ),
+    // top 32, not 24: room for the P50/P85 labels above the plot.
+    grid: { left: 64, right: 16, top: 32, bottom: 48 },
+    xAxis: dayAxis(labels, n, "Lead time"),
     yAxis: valueAxis(n, "Items completed"),
-    series: barSeries(
-      "Completed items",
-      bins.map((b) => b.count),
-    ),
+    series,
   };
 }
 
@@ -303,11 +331,7 @@ export function buildForecastOption(
   const markAt = (iso: string, name: string) => {
     const days = Math.round((new Date(iso).getTime() - origin) / 86_400_000);
     const index = outcomes.findIndex((o) => o.days >= days);
-    return {
-      xAxis: labels[index === -1 ? labels.length - 1 : index],
-      label: { formatter: name, color: n.inkSecondary },
-      lineStyle: { color: n.inkSecondary, type: "dashed" as const },
-    };
+    return referenceLine(labels[index === -1 ? labels.length - 1 : index], name, n);
   };
 
   const series = barSeries(

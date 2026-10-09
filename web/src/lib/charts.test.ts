@@ -134,6 +134,31 @@ describe("buildLeadTimeDistributionOption", () => {
     expect((option.xAxis as { name: string }).name).toBe("Lead time");
     expect((option.yAxis as { name: string }).name).toBe("Items completed");
   });
+
+  it("marks the window's P50 and P85 bins so the spikes read against them", () => {
+    // 3 items: cumulative 0, 2, 3 — half (1.5) is reached in the 1d bin,
+    // 85% (2.55) only in the 2d bin.
+    const option = buildLeadTimeDistributionOption([
+      { start_days: 0, end_days: 1, count: 0 },
+      { start_days: 1, end_days: 2, count: 2 },
+      { start_days: 2, end_days: 3, count: 1 },
+    ]);
+    const marks = (option.series as Series[])[0].markLine?.data as {
+      xAxis: string;
+      label: { formatter: string };
+    }[];
+
+    expect(marks.map((m) => [m.label.formatter, m.xAxis])).toEqual([
+      ["P50", "1d"],
+      ["P85", "2d"],
+    ]);
+  });
+
+  it("draws no reference lines when no bin holds an item", () => {
+    const option = buildLeadTimeDistributionOption([{ start_days: 0, end_days: 1, count: 0 }]);
+
+    expect((option.series as Series[])[0].markLine?.data).toEqual([]);
+  });
 });
 
 describe("buildForecastOption", () => {
