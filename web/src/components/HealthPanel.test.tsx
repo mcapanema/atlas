@@ -112,6 +112,7 @@ describe("HealthPanel", () => {
 
     const tile = tileFor("cadence");
     expect(tile).toHaveTextContent("50/100");
+    expect(tile).toHaveTextContent("warning");
     expect(tile).toHaveTextContent("new signal");
     expect(tile.querySelector(".th-help")).toBeNull(); // plain label, no tooltip
   });

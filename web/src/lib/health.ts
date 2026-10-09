@@ -36,7 +36,7 @@ const COMPONENT_HELP = new Map<string, string>([
   ],
   [
     "risk",
-    "Share of in-progress items that are blocked or have aged past the team's aging percentile. None at risk scores 100.",
+    "Share of in-progress items that are blocked, or in progress longer than the team's aging percentile of cycle times over its aging history (longer than the whole history, when nothing completed in it). None at risk scores 100.",
   ],
 ]);
 

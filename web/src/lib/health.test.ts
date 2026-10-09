@@ -47,6 +47,13 @@ describe("componentHelp", () => {
     }
   });
 
+  it("names risk's fallback limit when nothing completed in the aging history", () => {
+    // app/domain/metrics/health.py `_aging_limit`: no completions in the
+    // history means the history itself is the aging limit.
+    expect(componentHelp("risk")).toMatch(/aging percentile/);
+    expect(componentHelp("risk")).toMatch(/nothing completed/);
+  });
+
   it("has no definition for a name it doesn't know", () => {
     expect(componentHelp("cadence")).toBeUndefined();
   });
