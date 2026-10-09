@@ -23,7 +23,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-atlas.db*
+data/*
+!data/.gitkeep
 .coverage
 coverage.xml
 htmlcov/

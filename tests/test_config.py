@@ -27,7 +27,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_defaults_apply_without_env() -> None:
     settings = Settings(_env_file=None)
 
-    assert settings.database_url == "sqlite+aiosqlite:///./atlas.db"
+    assert settings.database_url == "sqlite+aiosqlite:///./data/atlas.db"
     assert settings.db_echo is False
     assert settings.advisor_model == "anthropic/claude-sonnet-5"
 
