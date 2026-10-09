@@ -119,6 +119,33 @@ async def test_timeline_derives_periods_from_events(client: AsyncClient) -> None
     ]
 
 
+async def test_timeline_of_an_item_created_in_a_blocked_state_is_blocked(
+    client: AsyncClient,
+) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post(
+            "/api/work-items", json={"team_id": team_id, "title": "Stuck", "state": "Blocked"}
+        )
+    ).json()
+    for type_ in ("created", "started"):
+        created = await client.post(
+            "/api/events",
+            json={
+                "work_item_id": item["id"],
+                "type": type_,
+                "occurred_at": "2026-01-01T00:00:00Z",
+            },
+        )
+        assert created.status_code == 201
+
+    response = await client.get(f"/api/work-items/{item['id']}/timeline")
+
+    assert response.json()["blocked_periods"] == [
+        {"started_at": "2026-01-01T00:00:00Z", "ended_at": None}
+    ]
+
+
 async def test_timeline_404_for_unknown_work_item(client: AsyncClient) -> None:
     response = await client.get(f"/api/work-items/{uuid4()}/timeline")
 

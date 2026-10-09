@@ -2,9 +2,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.domain.events.entities import Event, EventType
+from app.domain.metric_rules.entities import MetricRules
 from app.domain.metrics.health import compute_delivery_health
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
+
+# These tests pin component mechanics on tiny scopes, not the evidence floor
+# (tests/domain/test_health_min_sample.py covers that).
+ANY_SAMPLE = MetricRules(health_min_sample=1)
 
 
 def _stream(*steps: tuple[EventType, int]) -> list[Event]:
@@ -28,7 +33,7 @@ def test_healthy_scope_scores_high_with_all_five_components() -> None:
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, 7)),
         _stream((EventType.CREATED, 6), (EventType.STARTED, 5), (EventType.COMPLETED, 3)),
-        _stream((EventType.CREATED, 4), (EventType.STARTED, 2)),  # fresh WIP
+        *[_stream((EventType.CREATED, 4), (EventType.STARTED, 1)) for _ in range(3)],  # fresh WIP
     ]
 
     health = compute_delivery_health(streams, now=NOW)
@@ -51,7 +56,7 @@ def test_open_blocked_wip_drags_risk_to_zero() -> None:
         _stream((EventType.CREATED, 15), (EventType.STARTED, 14), (EventType.BLOCKED, 13)),
     ]
 
-    health = compute_delivery_health(streams, now=NOW)
+    health = compute_delivery_health(streams, now=NOW, rules=ANY_SAMPLE)
 
     risk = next(c for c in health.components if c.name == "risk")
     assert risk.score == 0
@@ -61,7 +66,7 @@ def test_open_blocked_wip_drags_risk_to_zero() -> None:
 def test_components_without_data_are_omitted() -> None:
     streams = [_stream((EventType.CREATED, 5), (EventType.STARTED, 4))]
 
-    health = compute_delivery_health(streams, now=NOW)
+    health = compute_delivery_health(streams, now=NOW, rules=ANY_SAMPLE)
 
     names = {c.name for c in health.components}
     assert "predictability" not in names  # nothing completed in window
@@ -81,7 +86,7 @@ def test_canceled_blocked_item_is_not_in_progress_risk() -> None:
         _stream((EventType.CREATED, 4), (EventType.STARTED, 1)),  # fresh WIP, age 1d < p85 2d
     ]
 
-    health = compute_delivery_health(streams, now=NOW)
+    health = compute_delivery_health(streams, now=NOW, rules=ANY_SAMPLE)
 
     risk = next(c for c in health.components if c.name == "risk")
     assert risk.score == 100

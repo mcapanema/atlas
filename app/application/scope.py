@@ -18,6 +18,7 @@ from uuid import UUID
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
 from app.domain.events.entities import Event
 from app.domain.events.repository import EventRepository
+from app.domain.events.timeline import creation_state
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.samples import FlowSample, derive_flow_sample, state_type_at
 from app.domain.work_items.entities import OPEN_STATE_TYPES, WorkItem, WorkItemType
@@ -147,7 +148,10 @@ class ScopeData:
         # Upgrade path: IssueHistory fromParent/toParent for historical parents.
         if item.id in self.parent_ids and not rules.count_parent_issues:
             return None
-        sample = derive_flow_sample(stream, rules)
+        # The full history, not the as-of slice: a cut before the item's first
+        # transition must still know which state it was created in.
+        born_in = creation_state(self.events.get(item.id, []), item.state)
+        sample = derive_flow_sample(stream, rules, born_in=born_in)
         if sample is not None and sample.born_done and rules.exclude_born_done:
             return None
         return stream, sample

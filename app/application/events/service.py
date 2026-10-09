@@ -3,7 +3,7 @@ from uuid import UUID
 
 from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
-from app.domain.events.timeline import WorkItemTimeline, derive_timeline
+from app.domain.events.timeline import WorkItemTimeline, creation_state, derive_timeline
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 
 
@@ -37,8 +37,15 @@ class EventService:
         return await self._repository.list_for_work_item(work_item_id)
 
     async def get_timeline(
-        self, work_item_id: UUID, rules: MetricRules = DEFAULT_RULES
+        self,
+        work_item_id: UUID,
+        rules: MetricRules = DEFAULT_RULES,
+        current_state: str | None = None,
     ) -> WorkItemTimeline:
-        """The item's state and blocked periods; blocked under its team's `rules`."""
+        """The item's state and blocked periods; blocked under its team's `rules`.
+
+        `current_state` (the item's stored state) is its creation state when no
+        event names one.
+        """
         events = await self._repository.list_for_work_item(work_item_id)
-        return derive_timeline(events, rules)
+        return derive_timeline(events, rules, born_in=creation_state(events, current_state))

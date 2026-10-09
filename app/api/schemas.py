@@ -451,6 +451,7 @@ class MetricRulesRead(BaseModel):
     stability_best_weeks: float
     stability_worst_weeks: float
     aging_percentile: int
+    health_min_sample: int
     weight_predictability: float
     weight_efficiency: float
     weight_flow: float
@@ -466,6 +467,8 @@ class MetricRulesRead(BaseModel):
     blocked_label_pattern: bool
     blocked_label_names: list[str]
     blocked_by_relations: bool
+    blocked_state_pattern: bool
+    blocked_state_names: list[str]
     remaining_state_types: list[OpenStateType]
     type_labels: list[TypeLabelRead]
 
@@ -498,6 +501,7 @@ class MetricRulesOverridesWrite(BaseModel):
     stability_best_weeks: float | None = None
     stability_worst_weeks: float | None = None
     aging_percentile: int | None = None
+    health_min_sample: int | None = None
     weight_predictability: float | None = None
     weight_efficiency: float | None = None
     weight_flow: float | None = None
@@ -513,6 +517,8 @@ class MetricRulesOverridesWrite(BaseModel):
     blocked_label_pattern: bool | None = None
     blocked_label_names: list[str] | None = None
     blocked_by_relations: bool | None = None
+    blocked_state_pattern: bool | None = None
+    blocked_state_names: list[str] | None = None
     remaining_state_types: list[OpenStateType] | None = None
     type_labels: list[TypeLabelRead] | None = None
 

@@ -62,8 +62,9 @@ class Event:
 # Same-instant events replay in lifecycle order — a start precedes the
 # finish it led to. Linear automations can write several transitions with
 # one timestamp, and storage order must not decide whether an item is done.
-# ponytail: a genuine same-instant finish-then-reopen would read done; order
-# by the from/to state chain if that ever shows up in real data.
+# ponytail: a genuine same-instant finish-then-reopen would read done. State
+# and blocked periods already follow the from/to chain (timeline.chain_order);
+# move the lifecycle onto it too if that ever shows up in real data.
 _SAME_INSTANT_RANK = {EventType.CREATED: 0, EventType.STARTED: 1}
 
 
