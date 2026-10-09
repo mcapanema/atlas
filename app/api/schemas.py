@@ -476,6 +476,7 @@ class MetricRulesRead(BaseModel):
     blocked_state_names: list[str]
     remaining_state_types: list[OpenStateType]
     type_labels: list[TypeLabelRead]
+    sprint_length_days: int
 
     @field_validator("type_labels", mode="before")
     @classmethod
@@ -527,6 +528,7 @@ class MetricRulesOverridesWrite(BaseModel):
     blocked_state_names: list[str] | None = None
     remaining_state_types: list[OpenStateType] | None = None
     type_labels: list[TypeLabelRead] | None = None
+    sprint_length_days: int | None = None
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, mode="json")

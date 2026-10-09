@@ -73,6 +73,7 @@ _INTEGERS = (
     "health_min_sample",
     "daily_bucket_max_days",
     "forecast_history_days",
+    "sprint_length_days",
 )
 _RANGES: dict[str, tuple[float, float]] = {
     "healthy_min": (1, 100),
@@ -86,12 +87,13 @@ _RANGES: dict[str, tuple[float, float]] = {
     **{f"weight_{name}": (0, 10) for name in HEALTH_COMPONENTS},
     "daily_bucket_max_days": (1, 90),
     "forecast_history_days": (7, 365),
+    "sprint_length_days": (7, 365),
 }
 
 
 @dataclass(frozen=True)
 class MetricRules:
-    """Every rule that changes how a metric is computed; defaults = built-in behavior."""
+    """Every per-team rule: how metrics are computed, plus meeting defaults; defaults = built-in."""
 
     # Lifecycle: how one item's events fold into its flow sample.
     exclude_born_done: bool = True
@@ -143,6 +145,9 @@ class MetricRules:
     remaining_state_types: tuple[StateType, ...] = OPEN_STATE_TYPES
     # Label -> work-item type, first match wins (Linear has no type field).
     type_labels: tuple[tuple[str, WorkItemType], ...] = ()
+    # Meetings: a retrospective covers the team's last sprint unless a
+    # window is asked for. Changes no metric (MEETING_RULES).
+    sprint_length_days: int = 14
 
     def __post_init__(self) -> None:
         _normalize_collections(self)

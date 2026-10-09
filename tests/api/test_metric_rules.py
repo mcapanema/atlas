@@ -257,3 +257,21 @@ async def test_collection_rules_round_trip_normalized(
     assert effective["type_labels"] == [{"label": "Bug", "type": "bug"}]
     assert rejected.status_code == 422
     assert "remaining_state_types" in rejected.text
+
+
+async def test_sprint_length_is_a_patchable_team_rule(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    ok = await rules_client.patch(f"/api/teams/{team}/metric-rules", json={"sprint_length_days": 7})
+    await settle(rules_app)
+    too_short = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"sprint_length_days": 6}
+    )
+
+    assert ok.status_code == 200
+    assert ok.json()["effective"]["sprint_length_days"] == 7
+    assert ok.json()["built_in"]["sprint_length_days"] == 14
+    assert too_short.status_code == 422
+    assert "sprint_length_days" in too_short.text
