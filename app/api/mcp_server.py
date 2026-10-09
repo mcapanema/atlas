@@ -92,7 +92,7 @@ async def _api(
     return response.json()
 
 
-def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 trivial nested tool closures
+def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901, PLR0915 — sum of ~10 trivial nested tool closures
     """The MCP server, its tools closing over the FastAPI app they front."""
     # mcp 2.x: FastMCP was renamed to MCPServer, and the transport-mode
     # kwargs (stateless_http, json_response, streamable_http_path,
@@ -127,7 +127,9 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
         lines = ["Organizations:"]
         lines += [f"- {o['id']}  {o['name']}" for o in orgs] or ["- (none)"]
         lines.append("Teams:")
-        lines += [f"- {t['id']}  {t['name']}" for t in teams] or ["- (none)"]
+        lines += [
+            f"- {t['id']}  {t['name']} (sprint {t['sprint_length_days']}d)" for t in teams
+        ] or ["- (none)"]
         lines.append("Projects:")
         lines += [f"- {p['id']}  {p['name']} (team {p['team_id']})" for p in projects] or [
             "- (none)"
@@ -274,12 +276,14 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
    Flag anything the data can't answer instead of guessing."""
 
     @mcp.prompt()
-    def retrospective(team: str = "", sprint_days: str = "14") -> str:
-        """Prepare a data-grounded retrospective."""
+    def retrospective(team: str = "", sprint_days: str = "") -> str:
+        """Prepare a data-grounded retrospective over the team's last sprint."""
         scope = _scope_clause(team)
-        return f"""Help me prepare a retrospective{scope} covering the last {sprint_days} days.
+        span = f"last {sprint_days} days" if sprint_days else "last sprint"
+        window = sprint_days or "the team's sprint length (list_scopes shows it)"
+        return f"""Help me prepare a retrospective{scope} covering the {span}.
 
-1. Call list_scopes to resolve the team, then meeting_brief with window_days={sprint_days}.
+1. Call list_scopes to resolve the team, then meeting_brief with window_days={window}.
 2. Contrast this window against the trailing defaults: lead time, flow efficiency,
    blocked time, and the delivery-health components with the weakest scores.
 3. Propose 2-3 discussion topics, each grounded in a number from the brief

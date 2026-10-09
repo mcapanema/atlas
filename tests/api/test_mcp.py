@@ -152,6 +152,7 @@ async def test_list_scopes_tool(
             text = tool_text(result)
             assert "Acme" in text  # organization from create_team
             assert "Platform" in text  # team from create_team
+            assert "(sprint 14d)" in text  # the team's sprint_length_days rule
 
 
 async def test_meeting_brief_composes_digest(
@@ -257,6 +258,28 @@ async def test_meeting_prompts(
         assert isinstance(content, TextContent)
         assert "Platform" in content.text
         assert "meeting_brief" in content.text
+
+
+async def test_retrospective_prompt_defaults_to_the_teams_sprint(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with (
+        running_app(sessionmaker, settings_env) as app,
+        mcp_session(app) as session,
+    ):
+        default = await session.get_prompt("retrospective", {"team": "Platform"})
+        asked = await session.get_prompt("retrospective", {"team": "Platform", "sprint_days": "21"})
+
+        default_text = default.messages[0].content
+        asked_text = asked.messages[0].content
+        assert isinstance(default_text, TextContent)
+        assert isinstance(asked_text, TextContent)
+        assert "last sprint" in default_text.text
+        assert "sprint length" in default_text.text
+        assert "14" not in default_text.text  # no hardcoded length left
+        assert "last 21 days" in asked_text.text
+        assert "window_days=21" in asked_text.text
 
 
 def test_aging_copy_names_the_configured_percentile() -> None:
