@@ -25,7 +25,7 @@ describe("ForecastCard", () => {
       Promise.resolve(jsonResponse(forecastFixture)),
     );
 
-    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    const { container } = renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
 
     await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
     expect(screen.getByText("12")).toBeInTheDocument();
@@ -34,6 +34,8 @@ describe("ForecastCard", () => {
     expect(screen.getByTestId("echart")).toBeInTheDocument();
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain("/api/forecasts?team_id=team-1");
+    // First grid = the finish dates; accuracy tiles get their own grid.
+    expect(container.querySelector(".stat-grid")!.querySelectorAll(".stat")).toHaveLength(4);
   });
 
   it("explains when there is no history to forecast from", async () => {

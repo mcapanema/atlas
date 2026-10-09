@@ -1,4 +1,4 @@
-import { Alert, Button, Card, DatePicker, InputNumber, Row, Space, Statistic } from "antd";
+import { Alert, Button, Card, DatePicker, InputNumber, Space, Statistic } from "antd";
 import { useMemo, useState } from "react";
 
 import { useForecast, type CompletionForecast } from "../api/forecasts";
@@ -37,7 +37,7 @@ function FinishDates({
   completion: CompletionForecast;
 }) {
   return (
-    <Row gutter={[16, 16]}>
+    <div className="stat-grid">
       <StatCard
         title={assumed ? "Remaining items (assumed)" : "Remaining items"}
         value={remaining}
@@ -62,7 +62,7 @@ function FinishDates({
         value={formatDay(completion.p95_date)}
         help="95% of simulations finished by then. Only the worst 1 in 20 runs went past it."
       />
-    </Row>
+    </div>
   );
 }
 
@@ -111,7 +111,7 @@ function AssumedRemainingInput({
 
 function AccuracyStats({ accuracy }: { accuracy: ForecastAccuracy }) {
   return (
-    <Row gutter={[16, 16]}>
+    <div className="stat-grid">
       <StatCard
         title="Past forecasts within P85"
         value={percent(accuracy.p85_hit_rate)}
@@ -122,7 +122,7 @@ function AccuracyStats({ accuracy }: { accuracy: ForecastAccuracy }) {
         value={accuracy.evaluated}
         help="How many past forecasts have a known outcome to score against. A small number means the hit rate is still noisy."
       />
-    </Row>
+    </div>
   );
 }
 

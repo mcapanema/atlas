@@ -292,6 +292,25 @@ h5 {
   font-size: 20px;
   line-height: 1.4;
 }
+/* Stat tiles: 2 columns on narrow screens, 4 on wide (AntD's lg = 992px).
+   The paired variant (scope dashboards) is 5 columns × 2 rows filled
+   column-first, so each P50 sits above its P85; its DOM order is the
+   pairs, so the narrow 2-column flow keeps them side by side too. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (min-width: 992px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .stat-grid--paired {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(2, auto);
+    grid-auto-flow: column;
+  }
+}
 
 /* App shell (used by AppLayout) */
 .app-sider-inner {

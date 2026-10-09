@@ -145,6 +145,31 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Touch time P50")).toBeInTheDocument();
   });
 
+  it("pairs each P50 tile with its P85 in a column-first stat grid", async () => {
+    mockMetricsFetch();
+
+    const { container } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Throughput (30d)");
+    const grid = container.querySelector(".stat-grid--paired");
+    expect(grid).not.toBeNull();
+    // DOM order is the pairs: the wide grid flows column-first (P50 above
+    // P85), the narrow 2-column grid flows row-first (P50 beside P85).
+    const labels = [...grid!.querySelectorAll(".stat__label")].map((el) => el.textContent);
+    expect(labels).toEqual([
+      "Throughput (30d)",
+      "WIP (now)",
+      "Lead time P50",
+      "Lead time P85",
+      "Cycle time P50",
+      "Cycle time P85",
+      "Queue time P50",
+      "Touch time P50",
+      "Blocked time (30d)",
+      "Flow efficiency",
+    ]);
+  });
+
   it("renders the aging WIP table", async () => {
     mockMetricsFetch();
 

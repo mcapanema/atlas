@@ -121,8 +121,10 @@ function FlowStats({
   statLabel: string;
   ranged: boolean;
 }) {
+  // Five columns of pairs — volume, lead time, cycle time, time split,
+  // waste — so each P50 reads directly against its P85.
   return (
-    <Row gutter={[16, 16]}>
+    <div className="stat-grid stat-grid--paired">
       <StatCard
         title={`Throughput (${statLabel})`}
         value={data.completed}
@@ -158,16 +160,6 @@ function FlowStats({
         help="85% of items went from started to completed in this time or less."
       />
       <StatCard
-        title={`Blocked time (${statLabel})`}
-        value={formatSeconds(data.blocked_seconds)}
-        help={`Time the items completed in the last ${statLabel} spent blocked while in progress (start to done), summed across items.`}
-      />
-      <StatCard
-        title="Flow efficiency"
-        value={data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"}
-        help="Touch time divided by lead time. The share of an item's life that was active work rather than waiting."
-      />
-      <StatCard
         title="Queue time P50"
         value={duration(data.queue_time, "p50_seconds")}
         help="Median time an item waited between being created and work starting."
@@ -177,7 +169,17 @@ function FlowStats({
         value={duration(data.touch_time, "p50_seconds")}
         help="Median time an item spent actively worked on, excluding queued and blocked time."
       />
-    </Row>
+      <StatCard
+        title={`Blocked time (${statLabel})`}
+        value={formatSeconds(data.blocked_seconds)}
+        help={`Time the items completed in the last ${statLabel} spent blocked while in progress (start to done), summed across items.`}
+      />
+      <StatCard
+        title="Flow efficiency"
+        value={data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"}
+        help="Touch time divided by lead time. The share of an item's life that was active work rather than waiting."
+      />
+    </div>
   );
 }
 
