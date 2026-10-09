@@ -334,6 +334,7 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 state="In Progress",
                 age=timedelta(days=6, hours=3),
                 over_percentile=reference is not None,
+                assignee="Ada Lovelace",
             ),
             AgingItem(
                 work_item_id=uuid4(),
@@ -360,6 +361,7 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 state=item.state,
                 age_seconds=item.age.total_seconds(),
                 over_percentile=item.over_percentile,
+                assignee=item.assignee,
             )
             for item in domain.items
         ],
