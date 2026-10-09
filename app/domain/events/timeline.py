@@ -60,28 +60,28 @@ def _blocked_source(event: Event, rules: MetricRules) -> tuple[str, bool] | None
     return None
 
 
-def _born_blocked(ordered: list[Event], rules: MetricRules) -> bool:
-    """The item sat in a blocked state from its first event to its first transition.
+def creation_state(events: list[Event], current_state: str | None = None) -> str | None:
+    """The state the item was created in; None when unknown.
 
     History has no creation entry, so the first transition's from_state is
-    the state the item was created in (as in derive_timeline's initial period).
-
-    ponytail: an item created in a blocked state that never moved has no
-    state name on any event, so it reads unblocked. Upgrade path: stamp the
-    initial state name on the Linear mapping's creation events (needs a
-    rebuild sync, ADR-0013).
+    the creation state (as in derive_timeline's initial period). With no
+    transition the item never left it: it is the stored current state.
+    Callers pass the item's full history, so an as-of slice still knows it.
     """
+    first = next((e for e in sorted(events, key=event_order) if e.to_state is not None), None)
+    return current_state if first is None else first.from_state
+
+
+def _born_blocked(ordered: list[Event], rules: MetricRules, born_in: str | None) -> bool:
+    """The item sat in a blocked state from its first event to its first transition."""
+    if not ordered or born_in is None or not rules.is_blocked_state(born_in):
+        return False
     first = next((e for e in ordered if e.to_state is not None), None)
-    return (
-        first is not None
-        and first.from_state is not None
-        and ordered[0].occurred_at < first.occurred_at
-        and rules.is_blocked_state(first.from_state)
-    )
+    return first is None or ordered[0].occurred_at < first.occurred_at
 
 
 def blocked_periods(
-    events: list[Event], rules: MetricRules = DEFAULT_RULES
+    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
 ) -> tuple[BlockedPeriod, ...]:
     """Blocked intervals under `rules`: blocked while any source is open.
 
@@ -92,11 +92,15 @@ def blocked_periods(
     by" relations (each blocker its own source). Overlapping sources form one
     period, never a double count; a close for a source that isn't open is
     ignored (truncated history).
+
+    `born_in` is the item's creation_state when the caller knows more than
+    `events` show (the stored state, or the history after an as-of cut);
+    omitted, it is read from `events`.
     """
     ordered = sorted(events, key=event_order)
     periods: list[BlockedPeriod] = []
     open_sources: set[str] = set()
-    if _born_blocked(ordered, rules):
+    if _born_blocked(ordered, rules, born_in or creation_state(ordered)):
         open_sources.add("state")
         periods.append(BlockedPeriod(started_at=ordered[0].occurred_at))
     for event in ordered:
@@ -118,14 +122,16 @@ def blocked_periods(
     return tuple(periods)
 
 
-def derive_timeline(events: list[Event], rules: MetricRules = DEFAULT_RULES) -> WorkItemTimeline:
+def derive_timeline(
+    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
+) -> WorkItemTimeline:
     """Fold a Work Item's events into state periods and blocked periods.
 
     Events are sorted by `event_order` defensively. State periods come from
     events carrying to_state; if the first such event also names a from_state
     and an earlier event exists (usually CREATED), the gap becomes the initial
     period — the time the item waited in its starting state. Blocked periods
-    come from `blocked_periods` under the rules.
+    come from `blocked_periods` under the rules (`born_in` as there).
     """
     ordered = sorted(events, key=event_order)
 
@@ -152,5 +158,5 @@ def derive_timeline(events: list[Event], rules: MetricRules = DEFAULT_RULES) -> 
 
     return WorkItemTimeline(
         state_periods=tuple(state_periods),
-        blocked_periods=blocked_periods(ordered, rules),
+        blocked_periods=blocked_periods(ordered, rules, born_in=born_in),
     )

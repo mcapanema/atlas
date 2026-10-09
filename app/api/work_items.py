@@ -95,4 +95,5 @@ async def get_work_item_timeline(
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work item not found")
     rules = await work_items.team_rules(item.team_id)
-    return WorkItemTimelineRead.model_validate(await events.get_timeline(work_item_id, rules))
+    timeline = await events.get_timeline(work_item_id, rules, current_state=item.state)
+    return WorkItemTimelineRead.model_validate(timeline)

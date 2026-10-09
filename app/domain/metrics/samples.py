@@ -187,7 +187,7 @@ def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
 
 
 def derive_flow_sample(
-    events: list[Event], rules: MetricRules = DEFAULT_RULES
+    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
 ) -> FlowSample | None:
     """Fold one work item's events into a FlowSample; None if it has no events.
 
@@ -208,7 +208,8 @@ def derive_flow_sample(
     Blocked time sums the rules' blocked periods (labels, workflow states,
     relations, explicit events) clipped to the cycle — from started_at
     (or the first event, if never started) to completed_at; a still-open
-    period on an uncompleted item is not counted (unmeasurable).
+    period on an uncompleted item is not counted (unmeasurable). `born_in`
+    is the item's creation state, as blocked_periods takes it.
 
     With done_then_reopened / canceled_then_reopened = "reopened", a typed
     move from Done / Canceled to a not-started state reopens the item (open,
@@ -225,7 +226,7 @@ def derive_flow_sample(
     # Done isn't blocked work, and pre-start blocking is already queue time.
     cycle_start = started_at if started_at is not None else ordered[0].occurred_at
     blocked_time = timedelta(0)
-    periods = blocked_periods(ordered, rules)
+    periods = blocked_periods(ordered, rules, born_in=born_in)
     for period in periods:
         ended_at = period.ended_at
         if completed_at is not None:

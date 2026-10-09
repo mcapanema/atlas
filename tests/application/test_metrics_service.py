@@ -242,3 +242,21 @@ async def test_delivery_health_for_team() -> None:
     assert health.score is not None
     assert health.band in ("healthy", "warning", "critical")
     assert any(c.name == "risk" for c in health.components)
+
+
+async def test_items_created_in_a_blocked_state_that_never_moved_count_as_blocked() -> None:
+    # Linear stamps CREATED+STARTED at creation with no state names; only the
+    # stored state says these items have sat in "Blocked" all along.
+    team_id = uuid4()
+    stuck = [WorkItem(team_id=team_id, title="Item", state="Blocked") for _ in range(3)]
+    events = [
+        event
+        for item in stuck
+        for event in (_event(item, EventType.CREATED, 1), _event(item, EventType.STARTED, 1))
+    ]
+    service = MetricsService(InMemoryWorkItemRepository(stuck), InMemoryEventRepository(events))
+
+    health = await service.get_delivery_health(team_id=team_id, now=NOW)
+
+    risk = next(c for c in health.components if c.name == "risk")
+    assert risk.reason.startswith("3 of 3")

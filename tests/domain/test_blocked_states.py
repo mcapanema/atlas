@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from app.domain.events.entities import Event, EventType
-from app.domain.events.timeline import BlockedPeriod, blocked_periods
+from app.domain.events.timeline import BlockedPeriod, blocked_periods, creation_state
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules, resolve_rules
 from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.samples import derive_flow_sample
@@ -116,6 +116,34 @@ def test_an_item_created_in_a_blocked_state_is_blocked_from_creation() -> None:
     ]
 
     assert blocked_periods(events) == (BlockedPeriod(_day(1), _day(4)),)
+
+
+def test_an_item_created_in_a_blocked_state_that_never_moved_is_blocked_from_creation() -> None:
+    # No transition carries a state name: only the stored current state knows.
+    events = [_at(EventType.CREATED, 1), _at(EventType.STARTED, 1)]
+    born_in = creation_state(events, current_state="Blocked")
+
+    sample = derive_flow_sample(events, born_in=born_in)
+
+    assert born_in == "Blocked"
+    assert blocked_periods(events) == ()  # the events alone can't tell
+    assert blocked_periods(events, born_in=born_in) == (BlockedPeriod(_day(1), None),)
+    assert sample is not None
+    assert sample.blocked_now is True
+
+
+def test_an_as_of_slice_keeps_the_creation_state_of_the_full_history() -> None:
+    full = [
+        _at(EventType.CREATED, 1),
+        _at(EventType.STARTED, 1),
+        _move(EventType.STATE_CHANGED, 6, "Blocked", "In Progress"),
+    ]
+    as_of_day_5 = full[:2]  # the transition out of Blocked hasn't happened yet
+
+    born_in = creation_state(full, current_state="In Progress")
+
+    assert born_in == "Blocked"  # transitions outrank the current state
+    assert blocked_periods(as_of_day_5, born_in=born_in) == (BlockedPeriod(_day(1), None),)
 
 
 def test_blocked_state_time_lowers_flow_efficiency_and_sets_blocked_now() -> None:
