@@ -311,6 +311,16 @@ h5 {
     grid-auto-flow: column;
   }
 }
+/* A chart card with nothing to plot: one quiet line at EChart's default
+   height, so a paired card beside it stays level. */
+.chart-empty {
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
 
 /* App shell (used by AppLayout) */
 .app-sider-inner {

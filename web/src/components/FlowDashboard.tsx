@@ -1,6 +1,6 @@
-import { Alert, Card, Col, Row, Skeleton, Space, Table, Tag } from "antd";
+import { Alert, Col, Row, Skeleton, Space, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -21,8 +21,6 @@ import {
 import { useMetricSnapshots, type MetricSnapshot } from "../api/snapshots";
 import {
   buildCfdOption,
-  buildLeadTimeDistributionOption,
-  buildLeadTimeTrendOption,
   buildThroughputOption,
   buildWipOption,
   throughputTitle,
@@ -33,10 +31,11 @@ import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
 import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
+import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { HealthBadge } from "./HealthBadge";
-import { HelpLabel } from "./HelpLabel";
+import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 
 function agingColumns(percentile: number): ColumnsType<AgingItem> {
@@ -185,18 +184,6 @@ function FlowStats({
   );
 }
 
-function ChartCard({
-  label,
-  help,
-  children,
-}: {
-  label: string;
-  help: string;
-  children: ReactNode;
-}) {
-  return <Card title={<HelpLabel label={label} help={help} />}>{children}</Card>;
-}
-
 function FlowCharts({
   history,
   distribution,
@@ -220,14 +207,6 @@ function FlowCharts({
         ? buildThroughputOption(history.buckets, history.bucket_days, mode)
         : null,
     [history, mode],
-  );
-  const distributionOption = useMemo(
-    () => (distribution ? buildLeadTimeDistributionOption(distribution.bins, mode) : null),
-    [distribution, mode],
-  );
-  const trendOption = useMemo(
-    () => (snapshots && snapshots.length > 0 ? buildLeadTimeTrendOption(snapshots, mode) : null),
-    [snapshots, mode],
   );
 
   return (
@@ -262,26 +241,7 @@ function FlowCharts({
           <EChart option={wipOption} />
         </ChartCard>
       </Col>
-      {distributionOption && (
-        <Col xs={24} lg={12}>
-          <ChartCard
-            label={`Lead time distribution (${chartLabel})`}
-            help="How many completed items fell into each lead-time bucket. A long right tail means a few items took far longer than typical."
-          >
-            <EChart option={distributionOption} />
-          </ChartCard>
-        </Col>
-      )}
-      {trendOption && (
-        <Col xs={24} lg={12}>
-          <ChartCard
-            label="Lead time trend"
-            help="Daily snapshots of lead time P50 and P85. Always the unfiltered 30-day baseline, so it does not follow the filters above."
-          >
-            <EChart option={trendOption} />
-          </ChartCard>
-        </Col>
-      )}
+      <LeadTimeCharts distribution={distribution} snapshots={snapshots} chartLabel={chartLabel} />
     </Row>
   );
 }

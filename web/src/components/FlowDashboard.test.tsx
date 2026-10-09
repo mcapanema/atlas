@@ -11,12 +11,14 @@ vi.mock("./EChart", () => ({
 
 import {
   agingWipFixture,
+  distributionFixture,
   healthFixture,
   historyFixture,
   jsonResponse,
   metricsFixture,
   mockMetricsFetch,
   requestUrl,
+  snapshotsFixture,
 } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
@@ -194,6 +196,38 @@ describe("FlowDashboard", () => {
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(aging, forecast)).toBe(true);
     expect(follows(forecast, cfd)).toBe(true);
+  });
+
+  it("says so instead of drawing empty axes when nothing completed in the window", async () => {
+    mockMetricsFetch({
+      "/api/metrics/lead-time-distribution": {
+        ...distributionFixture,
+        bins: [{ start_days: 0, end_days: 1, count: 0 }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("No items completed in this window.")).toBeInTheDocument();
+    expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
+    // CFD, throughput, WIP, trend, forecast — no distribution chart.
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5), {
+      timeout: 5000,
+    });
+  });
+
+  it("waits for two snapshots with a lead time before drawing the trend", async () => {
+    mockMetricsFetch({
+      "/api/metrics/snapshots": [
+        { ...snapshotsFixture[0], lead_time_p50_seconds: null, lead_time_p85_seconds: null },
+        snapshotsFixture[1],
+      ],
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText(/trend starts once two daily snapshots/i)).toBeInTheDocument();
+    expect(screen.getByText("Lead time trend")).toBeInTheDocument();
   });
 
   it("omits the aging WIP card when nothing is in progress", async () => {
