@@ -1127,6 +1127,9 @@ async def test_team_sync_stamps_only_that_team() -> None:
     other = await harness.teams.get_by_external_id("lt2")
     assert other is not None
     other_stamp = other.last_synced_at
+    # Age lt1's org-sync stamp so only a restamp by sync_team can pass.
+    old_stamp = datetime(2020, 1, 1, tzinfo=UTC)
+    await harness.teams.mark_synced([lt1_id], old_stamp)
 
     await harness.service.sync_team(lt1_id)
 
@@ -1136,5 +1139,5 @@ async def test_team_sync_stamps_only_that_team() -> None:
     assert theirs is not None
     assert other_stamp is not None
     assert mine.last_synced_at is not None
-    assert mine.last_synced_at >= other_stamp
+    assert mine.last_synced_at > old_stamp
     assert theirs.last_synced_at == other_stamp
