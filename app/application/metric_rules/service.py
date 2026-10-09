@@ -15,7 +15,7 @@ from app.application.metric_rules.resolver import resolve_layers
 from app.domain._time import utcnow
 from app.domain.metric_rules.entities import (
     DEFAULT_RULES,
-    RULE_NAMES,
+    METRIC_RULE_NAMES,
     MetricRules,
     RecomputeStatus,
     RuleOverrides,
@@ -59,6 +59,14 @@ class RulesChange:
     scopes: tuple[ScopeRef, ...]
 
 
+@dataclass(frozen=True)
+class TeamRulesSummary:
+    """A team's effective rules, and whether a metric rule differs from its workspace default."""
+
+    effective: MetricRules
+    custom: bool
+
+
 def _layer(row: RuleOverrides | None) -> dict[str, object]:
     return dict(row.overrides) if row is not None else {}
 
@@ -79,7 +87,8 @@ def _apply(layer: Mapping[str, object], changes: Mapping[str, object | None]) ->
 
 
 def _changed(before: MetricRules, after: MetricRules) -> set[str]:
-    return {name for name in RULE_NAMES if getattr(before, name) != getattr(after, name)}
+    """The metric rules that differ; a meeting rule (MEETING_RULES) changes no metric."""
+    return {name for name in METRIC_RULE_NAMES if getattr(before, name) != getattr(after, name)}
 
 
 def _reject_unknown(changes: Mapping[str, object | None]) -> None:
@@ -227,20 +236,24 @@ class MetricRulesService:
             [t.id for t in await self._organization_teams(organization_id)]
         )
 
-    async def custom_team_ids(self, teams: list[Team]) -> set[UUID]:
-        """Teams whose effective rules differ from their workspace default."""
-        custom: set[UUID] = set()
+    async def team_summaries(self, teams: list[Team]) -> dict[UUID, TeamRulesSummary]:
+        """Each team's effective rules and custom flag; one overrides read per organization."""
+        summaries: dict[UUID, TeamRulesSummary] = {}
         for organization_id in {team.organization_id for team in teams}:
             rows = await self._overrides.list_for_organization(organization_id)
             workspace = next((dict(r.overrides) for r in rows if r.team_id is None), {})
+            own = {r.team_id: dict(r.overrides) for r in rows if r.team_id is not None}
             default = resolve_layers(workspace, subject=f"organization {organization_id}")
-            for row in rows:
-                if row.team_id is None:
-                    continue
-                own = resolve_layers(workspace, row.overrides, subject=f"team {row.team_id}")
-                if own != default:
-                    custom.add(row.team_id)
-        return custom
+            for team in (t for t in teams if t.organization_id == organization_id):
+                effective = (
+                    resolve_layers(workspace, own[team.id], subject=f"team {team.id}")
+                    if team.id in own
+                    else default
+                )
+                summaries[team.id] = TeamRulesSummary(
+                    effective=effective, custom=bool(_changed(default, effective))
+                )
+        return summaries
 
     async def start_recompute(self, organization_id: UUID) -> None:
         await self._mark_running(organization_id)

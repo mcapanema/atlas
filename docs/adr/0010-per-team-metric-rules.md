@@ -43,6 +43,9 @@ default) and one per team. Effective rules = built-in ⊕ workspace ⊕ team.
   resumes an interrupted rewrite.
 - Rules that need facts sync didn't store (blocked relations, parent issues,
   state types, labels) were added by ADR-0011.
+- Meeting rules (`MEETING_RULES`: `sprint_length_days`, the retrospective's
+  default window) change no metric, so they rewrite no history and don't
+  make a team's rules custom; see `docs/architecture/overview.md`.
 
 ## Consequences
 

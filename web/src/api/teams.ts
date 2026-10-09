@@ -9,6 +9,8 @@ export interface Team {
   external_id: string | null;
   created_at: string;
   has_custom_rules: boolean;
+  /** The team's effective sprint_length_days rule: a retrospective's default window. */
+  sprint_length_days: number;
 }
 
 export function useTeams() {

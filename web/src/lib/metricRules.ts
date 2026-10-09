@@ -293,6 +293,17 @@ export const RULE_GROUPS: RuleGroup[] = [
       },
     ],
   },
+  {
+    title: "Meetings",
+    rules: [
+      {
+        name: "sprint_length_days",
+        label: "Sprint length",
+        help: "A retrospective covers this many recent days unless you pick another window. It changes no metric, so saving it doesn't recompute history.",
+        control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
+      },
+    ],
+  },
 ];
 
 let zones: { value: string; label: string }[] | undefined;

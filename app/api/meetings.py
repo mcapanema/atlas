@@ -6,7 +6,6 @@ from app.api.deps import AdvisorPortDep, AdvisorServiceDep, PersonaServiceDep, S
 from app.api.schemas import MeetingPrepRead
 from app.api.scope import ScopeDep
 from app.domain.advisor.entities import MeetingType, meeting_persona
-from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -24,14 +23,16 @@ async def get_meeting_prep(
     personas: PersonaServiceDep,
     scope: ScopeDep,
     meeting: MeetingType,
-    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=7, le=365),
+    window_days: int | None = Query(default=None, ge=7, le=365),
     remaining: int | None = Query(default=None, ge=0),
     target_date: date | None = None,
 ) -> MeetingPrepRead:
     """Generate meeting prep with the internal advisor (the stand-alone
     sibling of the MCP daily_standup/retrospective/planning prompts).
+    Without `window_days`, a retrospective covers the team's sprint length.
     `remaining`/`target_date` are the planning what-ifs."""
     context = await service.build_meeting_context(
+        meeting=meeting,
         team_id=scope.team_id,
         project_id=scope.project_id,
         window_days=window_days,

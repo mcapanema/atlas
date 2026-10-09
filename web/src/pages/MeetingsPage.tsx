@@ -22,7 +22,7 @@ import {
   type TalkingPoint,
 } from "../api/meetings";
 import { useSendFeedback } from "../api/personas";
-import { useTeams } from "../api/teams";
+import { useTeams, type Team } from "../api/teams";
 import { AdvisorStatusAlerts } from "../components/AdvisorStatusAlerts";
 import { EvidenceList } from "../components/EvidenceList";
 import { FeedbackCard } from "../components/FeedbackCard";
@@ -35,14 +35,35 @@ const MEETING_OPTIONS: { value: MeetingType; label: string }[] = [
 ];
 
 interface MeetingInputs {
-  sprintDays: number;
+  /** A sprint length edited for one team; null (or another team) reads the team's rule. */
+  sprintEdit: { teamId: string | undefined; days: number } | null;
   remaining: number | null;
   targetDate: string;
 }
 
+/** The selected team's sprint length rule, once the team list has loaded. */
+function teamSprintDays(teams: Team[] | undefined, teamId: string | undefined) {
+  return teams?.find((team) => team.id === teamId)?.sprint_length_days;
+}
+
+/** The edit applies only to the team it was made for, however the team changed. */
+function sprintDays(
+  inputs: MeetingInputs,
+  teamId: string | undefined,
+  sprintDefault: number | undefined,
+) {
+  const edit = inputs.sprintEdit;
+  return edit && edit.teamId === teamId ? edit.days : sprintDefault;
+}
+
 /** Only the inputs the selected meeting type uses reach the request. */
-function prepParams(meeting: MeetingType, inputs: MeetingInputs): MeetingPrepParams {
-  if (meeting === "retrospective") return { windowDays: inputs.sprintDays };
+function prepParams(
+  meeting: MeetingType,
+  inputs: MeetingInputs,
+  teamId: string | undefined,
+  sprintDefault: number | undefined,
+): MeetingPrepParams {
+  if (meeting === "retrospective") return { windowDays: sprintDays(inputs, teamId, sprintDefault) };
   if (meeting === "planning") {
     return {
       remaining: inputs.remaining ?? undefined,
@@ -55,10 +76,14 @@ function prepParams(meeting: MeetingType, inputs: MeetingInputs): MeetingPrepPar
 function MeetingInputFields({
   meeting,
   inputs,
+  teamId,
+  sprintDefault,
   onChange,
 }: {
   meeting: MeetingType;
   inputs: MeetingInputs;
+  teamId: string | undefined;
+  sprintDefault: number | undefined;
   onChange: (inputs: MeetingInputs) => void;
 }) {
   if (meeting === "retrospective") {
@@ -66,8 +91,10 @@ function MeetingInputFields({
       <InputNumber
         min={7}
         max={365}
-        value={inputs.sprintDays}
-        onChange={(value) => onChange({ ...inputs, sprintDays: value ?? 14 })}
+        value={sprintDays(inputs, teamId, sprintDefault)}
+        onChange={(value) =>
+          onChange({ ...inputs, sprintEdit: value === null ? null : { teamId, days: value } })
+        }
         addonAfter="days"
         aria-label="Sprint length (days)"
       />
@@ -155,12 +182,17 @@ export function MeetingsPage() {
   const teams = useTeams();
   const status = useAdvisorStatus(); // same OpenRouter key gates advisor and meeting prep
   const [inputs, setInputs] = useState<MeetingInputs>({
-    sprintDays: 14,
+    sprintEdit: null,
     remaining: null,
     targetDate: "",
   });
   const [comment, setComment] = useState("");
-  const prep = useMeetingPrep({ teamId }, meeting, prepParams(meeting, inputs));
+  const sprintDefault = teamSprintDays(teams.data, teamId);
+  const prep = useMeetingPrep(
+    { teamId },
+    meeting,
+    prepParams(meeting, inputs, teamId, sprintDefault),
+  );
   const feedback = useSendFeedback(meeting);
 
   const setParam = (key: string, value: string) => {
@@ -196,7 +228,13 @@ export function MeetingsPage() {
             onChange={(value) => setParam("meeting", value)}
             options={MEETING_OPTIONS}
           />
-          <MeetingInputFields meeting={meeting} inputs={inputs} onChange={setInputs} />
+          <MeetingInputFields
+            meeting={meeting}
+            inputs={inputs}
+            teamId={teamId}
+            sprintDefault={sprintDefault}
+            onChange={setInputs}
+          />
           <Button
             type="primary"
             disabled={!teamId || !configured}

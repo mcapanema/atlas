@@ -14,7 +14,8 @@ from app.domain.advisor.entities import (
     TalkingPoint,
 )
 from app.domain.advisor.port import AdvisorError, MeetingContext
-from tests.api.helpers import create_team
+from app.domain.metrics.windows import STATS_WINDOW_DAYS
+from tests.api.helpers import create_org_and_team, create_team, settle
 
 
 class FakeMeetingAdvisor:
@@ -154,3 +155,27 @@ async def test_prep_502_when_advisor_fails(client: AsyncClient, test_app: FastAP
 
     assert response.status_code == 502
     assert "OpenRouter request failed" in response.json()["detail"]
+
+
+async def test_prep_window_defaults_to_the_teams_sprint_for_a_retro(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    fake = FakeMeetingAdvisor()
+    rules_app.dependency_overrides[get_advisor_port] = lambda: fake
+    _, team = await create_org_and_team(rules_client)
+    await rules_client.patch(f"/api/teams/{team}/metric-rules", json={"sprint_length_days": 10})
+    await settle(rules_app)
+
+    all_params: list[dict[str, str | int]] = [
+        {"meeting": "retrospective"},
+        {"meeting": "retrospective", "window_days": 21},
+        {"meeting": "daily_standup"},
+    ]
+    for params in all_params:
+        response = await rules_client.get("/api/meetings/prep", params={"team_id": team, **params})
+        assert response.status_code == 200
+
+    spans = [
+        (c.delivery.flow.window_end - c.delivery.flow.window_start).days for c in fake.contexts
+    ]
+    assert spans == [10, 21, STATS_WINDOW_DAYS]
