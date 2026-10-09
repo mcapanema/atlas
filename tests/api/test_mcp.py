@@ -277,7 +277,7 @@ async def test_retrospective_prompt_defaults_to_the_teams_sprint(
         assert isinstance(asked_text, TextContent)
         assert "last sprint" in default_text.text
         assert "sprint length" in default_text.text
-        assert "14" not in default_text.text  # no hardcoded length left
+        assert "window_days=the team's sprint length" in default_text.text
         assert "last 21 days" in asked_text.text
         assert "window_days=21" in asked_text.text
 

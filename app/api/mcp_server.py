@@ -192,7 +192,8 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         lead-time distribution, Monte Carlo forecast, delivery health, and
         aging WIP. Provide exactly one of team_id/project_id (from
         list_scopes). Use this for daily standups, retros, reviews, and
-        planning before reaching for any drill-down tool.
+        planning before reaching for any drill-down tool. For a retrospective,
+        pass the team's sprint length (shown by list_scopes) as window_days.
         """
         scope = _params(team_id=team_id, project_id=project_id)
         context = await _api(

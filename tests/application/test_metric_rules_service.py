@@ -151,6 +151,19 @@ async def test_a_sprint_length_change_rewrites_no_history_and_is_not_custom() ->
     assert not summaries[alpha.id].custom
 
 
+async def test_a_metric_rule_override_next_to_a_sprint_length_still_queues_and_is_custom() -> None:
+    service, _org, alpha, _beta, *_ = _world()
+
+    change = await service.update_team(alpha.id, {"aging_percentile": 75, "sprint_length_days": 7})
+    summaries = await service.team_summaries([alpha])
+
+    assert change is not None
+    assert change.scopes  # the metric rule still rewrites history
+    assert summaries[alpha.id].custom
+    assert summaries[alpha.id].effective.sprint_length_days == 7
+    assert summaries[alpha.id].effective.aging_percentile == 75
+
+
 async def test_recompute_status_lifecycle() -> None:
     service, org, *_ = _world()
 
