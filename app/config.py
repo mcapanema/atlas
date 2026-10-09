@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
-    database_url: str = "sqlite+aiosqlite:///./atlas.db"
+    database_url: str = "sqlite+aiosqlite:///./data/atlas.db"
     db_echo: bool = False
 
     # Linear personal API key; None/empty disables the Linear connector.

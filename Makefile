@@ -4,7 +4,7 @@
 .NOTPARALLEL:
 
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
-	deps fetch-base pre-push docker-build docker-up docker-down docker-logs
+	deps fetch-base pre-push docker-build docker-up docker-down docker-logs local-db-free
 
 # Base for diff coverage; CI passes the PR's base branch instead.
 DIFF_COVER_BASE ?= origin/main
@@ -21,10 +21,10 @@ hooks: ## Install git hooks: pre-commit (ruff, eslint, prettier) + pre-push (mak
 	uv run pre-commit install
 	git config blame.ignoreRevsFile .git-blame-ignore-revs
 
-migrate: ## Apply database migrations
+migrate: local-db-free ## Apply database migrations
 	uv run alembic upgrade head
 
-dev: ## Run backend + frontend dev servers together (Ctrl+C stops both)
+dev: local-db-free ## Run backend + frontend dev servers together (Ctrl+C stops both)
 	@trap 'kill 0' EXIT; \
 	uv run uvicorn app.main:app --reload --port 8000 & \
 	(cd web && npm run dev) & \
@@ -91,11 +91,11 @@ pre-push: ## Full CI gate on exactly the commit being pushed (run by the pre-pus
 build: ## Build the frontend for production (single-service mode)
 	cd web && npm run build
 
-run: build migrate ## Build the frontend and run the single-service production server
+run: local-db-free build migrate ## Build the frontend and run the single-service production server
 	uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-clean: ## Remove build artifacts and caches
-	rm -rf web/dist .pytest_cache .mypy_cache .ruff_cache atlas.db
+clean: ## Remove build artifacts and caches (never the database in data/)
+	rm -rf web/dist .pytest_cache .mypy_cache .ruff_cache
 
 docker-build: ## Build the Docker image
 	docker compose build
@@ -108,3 +108,12 @@ docker-down: ## Stop and remove Docker containers
 
 docker-logs: ## Tail Docker container logs
 	docker compose logs -f
+
+# data/atlas.db is shared with the Compose app, and SQLite's WAL locks don't
+# cross Docker's VM: two processes on it can corrupt it. `docker-up` needs
+# no guard here, because port 8000 is already taken by a local server.
+local-db-free:
+	@if [ -n "$$(docker compose ps --status running --quiet app 2>/dev/null)" ]; then \
+		echo "Atlas is running in Docker and uses the same data/atlas.db; stop it first: make docker-down"; \
+		exit 1; \
+	fi

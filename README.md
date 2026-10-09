@@ -104,7 +104,9 @@ Copy `.env.example` to `.env` and adjust as needed — every variable is
 documented there (`make install` does this automatically if `.env` doesn't
 exist yet). Defaults work out of the box for local development; real
 environment variables (Docker Compose, your platform, etc.) always take
-precedence over `.env`.
+precedence over `.env`. A `.env` copied before the database moved to `data/`
+pins `ATLAS_DATABASE_URL` to `./atlas.db`: change it to `./data/atlas.db` (as
+in `.env.example`), or local runs and Docker will use different databases.
 
 ## Option 1: Docker (recommended — zero local setup)
 
@@ -115,8 +117,11 @@ make docker-up
 ```
 
 Builds the frontend and backend into a single image, runs database migrations
-on startup, and serves Atlas at http://localhost:8000. Data persists across
-restarts in the `atlas-data` Docker volume. Stop with `make docker-down`.
+on startup, and serves Atlas at http://localhost:8000. Data lives in
+`data/atlas.db`, the same file the native setup below uses, so you can switch
+between the two and keep your data. Run one at a time: `make dev`, `make run`
+and `make migrate` refuse to start while the Docker app is up. Stop with
+`make docker-down`.
 Atlas is served to this machine only — opening it from another device on the
 LAN is refused (ADR-0012).
 
@@ -145,6 +150,9 @@ Run `make help` for the full list of shortcuts, including `make test`,
 
 <details>
 <summary>Equivalent commands without <code>make</code></summary>
+
+These skip the Docker check `make` performs: stop the Docker app
+(`docker compose down`) before running them, since both use `data/atlas.db`.
 
 ```bash
 # Install
