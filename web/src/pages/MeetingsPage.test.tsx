@@ -19,10 +19,10 @@ const prep = {
   ],
 };
 
-function mockFetch({ configured = true } = {}) {
+function mockFetch({ configured = true, teams = [teamFixture] } = {}) {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = requestUrl(input);
-    if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+    if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
     if (url.startsWith("/api/recommendations/status")) {
       return Promise.resolve(jsonResponse({ configured }));
     }
@@ -52,6 +52,21 @@ function mockFetch({ configured = true } = {}) {
 function renderPage(initialEntry = "/meetings") {
   return renderWithClient(<MeetingsPage />, [initialEntry]);
 }
+
+function requestedUrls(): string[] {
+  return vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
+}
+
+function sprintInput(): HTMLInputElement {
+  return screen.getByLabelText<HTMLInputElement>("Sprint length (days)");
+}
+
+const otherTeam = {
+  ...teamFixture,
+  id: "44444444-4444-4444-4444-444444444444",
+  name: "Data",
+  sprint_length_days: 21,
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -321,5 +336,63 @@ describe("MeetingsPage", () => {
 
     await waitFor(() => expect(screen.getByPlaceholderText("Optional comment")).toHaveValue(""));
     expect(screen.queryByText(/Thanks for the feedback/)).not.toBeInTheDocument();
+  });
+
+  it("starts a retro at the selected team's sprint length", async () => {
+    mockFetch({ teams: [{ ...teamFixture, sprint_length_days: 10 }] });
+
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=retrospective`);
+
+    await waitFor(() => expect(sprintInput().value).toBe("10"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(requestedUrls()).toContain(
+        `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=10`,
+      ),
+    );
+  });
+
+  it("resets an edited sprint length when another team is picked", async () => {
+    mockFetch({ teams: [teamFixture, otherTeam] });
+
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=retrospective`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.change(sprintInput(), { target: { value: "30" } });
+    fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByTitle("Data"));
+    await waitFor(() => expect(sprintInput().value).toBe("21"));
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(requestedUrls()).toContain(
+        `/api/meetings/prep?team_id=${otherTeam.id}&meeting=retrospective&window_days=21`,
+      ),
+    );
+  });
+
+  it("falls back to the team's sprint length when the field is cleared", async () => {
+    mockFetch({ teams: [{ ...teamFixture, sprint_length_days: 10 }] });
+
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=retrospective`);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.change(sprintInput(), { target: { value: "21" } });
+    fireEvent.change(sprintInput(), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(requestedUrls()).toContain(
+        `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=10`,
+      ),
+    );
   });
 });

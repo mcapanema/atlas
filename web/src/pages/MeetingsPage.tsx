@@ -22,7 +22,7 @@ import {
   type TalkingPoint,
 } from "../api/meetings";
 import { useSendFeedback } from "../api/personas";
-import { useTeams } from "../api/teams";
+import { useTeams, type Team } from "../api/teams";
 import { AdvisorStatusAlerts } from "../components/AdvisorStatusAlerts";
 import { EvidenceList } from "../components/EvidenceList";
 import { FeedbackCard } from "../components/FeedbackCard";
@@ -35,14 +35,24 @@ const MEETING_OPTIONS: { value: MeetingType; label: string }[] = [
 ];
 
 interface MeetingInputs {
-  sprintDays: number;
+  /** An edited sprint length; null reads the selected team's rule. */
+  sprintDays: number | null;
   remaining: number | null;
   targetDate: string;
 }
 
+/** The selected team's sprint length rule, once the team list has loaded. */
+function teamSprintDays(teams: Team[] | undefined, teamId: string | undefined) {
+  return teams?.find((team) => team.id === teamId)?.sprint_length_days;
+}
+
 /** Only the inputs the selected meeting type uses reach the request. */
-function prepParams(meeting: MeetingType, inputs: MeetingInputs): MeetingPrepParams {
-  if (meeting === "retrospective") return { windowDays: inputs.sprintDays };
+function prepParams(
+  meeting: MeetingType,
+  inputs: MeetingInputs,
+  sprintDefault: number | undefined,
+): MeetingPrepParams {
+  if (meeting === "retrospective") return { windowDays: inputs.sprintDays ?? sprintDefault };
   if (meeting === "planning") {
     return {
       remaining: inputs.remaining ?? undefined,
@@ -55,10 +65,12 @@ function prepParams(meeting: MeetingType, inputs: MeetingInputs): MeetingPrepPar
 function MeetingInputFields({
   meeting,
   inputs,
+  sprintDefault,
   onChange,
 }: {
   meeting: MeetingType;
   inputs: MeetingInputs;
+  sprintDefault: number | undefined;
   onChange: (inputs: MeetingInputs) => void;
 }) {
   if (meeting === "retrospective") {
@@ -66,8 +78,8 @@ function MeetingInputFields({
       <InputNumber
         min={7}
         max={365}
-        value={inputs.sprintDays}
-        onChange={(value) => onChange({ ...inputs, sprintDays: value ?? 14 })}
+        value={inputs.sprintDays ?? sprintDefault}
+        onChange={(value) => onChange({ ...inputs, sprintDays: value })}
         addonAfter="days"
         aria-label="Sprint length (days)"
       />
@@ -155,12 +167,13 @@ export function MeetingsPage() {
   const teams = useTeams();
   const status = useAdvisorStatus(); // same OpenRouter key gates advisor and meeting prep
   const [inputs, setInputs] = useState<MeetingInputs>({
-    sprintDays: 14,
+    sprintDays: null,
     remaining: null,
     targetDate: "",
   });
   const [comment, setComment] = useState("");
-  const prep = useMeetingPrep({ teamId }, meeting, prepParams(meeting, inputs));
+  const sprintDefault = teamSprintDays(teams.data, teamId);
+  const prep = useMeetingPrep({ teamId }, meeting, prepParams(meeting, inputs, sprintDefault));
   const feedback = useSendFeedback(meeting);
 
   const setParam = (key: string, value: string) => {
@@ -186,7 +199,10 @@ export function MeetingsPage() {
             style={{ width: 260 }}
             placeholder="Select a team"
             value={teamId}
-            onChange={(value) => setParam("team", value)}
+            onChange={(value) => {
+              setInputs((current) => ({ ...current, sprintDays: null }));
+              setParam("team", value);
+            }}
             loading={teams.isLoading}
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
@@ -196,7 +212,12 @@ export function MeetingsPage() {
             onChange={(value) => setParam("meeting", value)}
             options={MEETING_OPTIONS}
           />
-          <MeetingInputFields meeting={meeting} inputs={inputs} onChange={setInputs} />
+          <MeetingInputFields
+            meeting={meeting}
+            inputs={inputs}
+            sprintDefault={sprintDefault}
+            onChange={setInputs}
+          />
           <Button
             type="primary"
             disabled={!teamId || !configured}

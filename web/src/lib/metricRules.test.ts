@@ -99,6 +99,7 @@ describe("list-valued rules", () => {
       formatRuleValue(ruleSpec("blocked_state_names"), ["Blocked", "Aguardando cliente"]),
     ).toBe("Blocked, Aguardando cliente");
     expect(formatRuleValue(ruleSpec("health_min_sample"), 3)).toBe("3 items");
+    expect(formatRuleValue(ruleSpec("sprint_length_days"), 14)).toBe("14 days");
     expect(formatRuleValue(ruleSpec("blocked_label_names"), [])).toBe("None");
     expect(formatRuleValue(ruleSpec("blocked_label_names"), ["Blocked", "On hold"])).toBe(
       "Blocked, On hold",
