@@ -6,14 +6,15 @@ and band; efficiency carries no weight by default. Pure arithmetic over
 already-derived samples and timelines: the AI layer explains these
 numbers, it never produces them (VISION: "AI Explains, Statistics
 Predict"). Scales, the aging percentile and history, component weights and
-band cutoffs come from the scope's MetricRules. A component backed by
-fewer than the rules' health_min_sample items is left out; with none left
-the scope is unscored, not critical.
+band cutoffs come from the scope's MetricRules; the cutoffs band each
+component as well as the overall score. A component backed by fewer than
+the rules' health_min_sample items is left out; with none left the scope
+is unscored, not critical.
 """
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event
@@ -35,11 +36,17 @@ from app.domain.metrics.wip import wip
 
 @dataclass(frozen=True)
 class HealthComponent:
-    """One scored dimension of delivery health, with its evidence."""
+    """One scored dimension of delivery health, with its evidence.
+
+    `band` reads the score against the scope's cutoffs, the same rule as
+    the overall band, so a weak component shows on a healthy team. Scoring
+    sets it; it is None only on a component that hasn't been scored yet.
+    """
 
     name: str
     score: int
     reason: str
+    band: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,22 +208,26 @@ def _item_states(
     return [(sample, sample.blocked_now) for sample in derived if sample is not None]
 
 
+def _band(score: int, rules: MetricRules) -> str:
+    if score >= rules.healthy_min:
+        return "healthy"
+    if score >= rules.warning_min:
+        return "warning"
+    return "critical"
+
+
 def _score(
     components: tuple[HealthComponent, ...], rules: MetricRules
 ) -> tuple[tuple[HealthComponent, ...], int | None, str | None]:
-    """Weighted overall score and band; zero-weight components drop out."""
-    weighted = tuple(c for c in components if rules.weight(c.name) > 0)
+    """Weighted overall score and band; kept components banded, zero-weight ones dropped."""
+    weighted = tuple(
+        replace(c, band=_band(c.score, rules)) for c in components if rules.weight(c.name) > 0
+    )
     if not weighted:
         return (), None, None
     total = sum(rules.weight(c.name) for c in weighted)
     score = round(sum(c.score * rules.weight(c.name) for c in weighted) / total)
-    if score >= rules.healthy_min:
-        band = "healthy"
-    elif score >= rules.warning_min:
-        band = "warning"
-    else:
-        band = "critical"
-    return weighted, score, band
+    return weighted, score, _band(score, rules)
 
 
 def compute_delivery_health(
