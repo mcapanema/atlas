@@ -96,8 +96,10 @@ _NAME_MAX = 255
 # after the issue syncs again. Upgrade path: sync Linear users into a
 # Person aggregate and store the id if per-person analytics are ever needed.
 def _assignee(node: dict[str, Any]) -> str | None:
-    assignee = node.get("assignee")
-    return str(assignee["name"])[:_NAME_MAX] if assignee else None
+    # .get: a nameless assignee reads as unassigned — a KeyError would drop
+    # (and prune) the whole issue.
+    name = (node.get("assignee") or {}).get("name")
+    return str(name)[:_NAME_MAX] if name else None
 
 
 def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None) -> SourceWorkItem:

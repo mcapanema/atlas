@@ -139,6 +139,11 @@ def test_map_issue_unassigned_has_none() -> None:
     assert map_issue(ISSUE_NODE).assignee is None  # key absent
 
 
+@pytest.mark.parametrize("assignee", [{}, {"id": "u1"}, {"name": None}, {"name": ""}])
+def test_map_issue_assignee_without_a_name_is_unassigned(assignee: dict[str, Any]) -> None:
+    assert map_issue({**ISSUE_NODE, "assignee": assignee}).assignee is None
+
+
 def test_map_issue_truncates_long_assignee_name() -> None:
     node = {**ISSUE_NODE, "assignee": {"name": "x" * 300}}
 
