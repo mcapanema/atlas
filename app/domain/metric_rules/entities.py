@@ -306,6 +306,12 @@ def _check_timezone(name: object) -> None:
 
 DEFAULT_RULES = MetricRules()
 RULE_NAMES = frozenset(f.name for f in fields(MetricRules))
+
+# Rules that only set a meeting's default window. They change no metric, so
+# changing one rewrites no snapshot history and doesn't make a team's rules
+# custom.
+MEETING_RULES = frozenset({"sprint_length_days"})
+METRIC_RULE_NAMES = RULE_NAMES - MEETING_RULES
 _FLOAT_RULES = frozenset(f.name for f in fields(MetricRules) if f.type is float)
 
 

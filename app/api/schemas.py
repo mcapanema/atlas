@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
+from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
 
 
@@ -36,6 +37,8 @@ class TeamRead(BaseModel):
     external_id: str | None
     created_at: datetime
     has_custom_rules: bool = False
+    # The team's effective rule; both team routes fill it in from the rules.
+    sprint_length_days: int = DEFAULT_RULES.sprint_length_days
 
 
 class ProjectCreate(BaseModel):

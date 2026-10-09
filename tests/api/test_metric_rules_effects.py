@@ -76,3 +76,20 @@ async def test_period_follows_dst_in_the_teams_timezone(
     # EST local midnight at the start, EDT local midnight after the end date.
     assert datetime.fromisoformat(body["window_start"]) == datetime(2026, 3, 1, 5, tzinfo=UTC)
     assert datetime.fromisoformat(body["window_end"]) == datetime(2026, 4, 1, 4, tzinfo=UTC)
+
+
+async def test_teams_list_carries_the_effective_sprint_length(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    team = await create_team(rules_client)
+    before = (await rules_client.get("/api/teams")).json()
+
+    patched = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"sprint_length_days": 10}
+    )
+    await settle(rules_app)
+    after = (await rules_client.get("/api/teams")).json()
+
+    assert [t["sprint_length_days"] for t in before] == [14]
+    assert patched.json()["recompute"]["state"] == "idle"  # no history rewrite
+    assert [(t["sprint_length_days"], t["has_custom_rules"]) for t in after] == [(10, False)]
