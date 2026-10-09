@@ -22,6 +22,7 @@ export interface MetricRules {
   stability_best_weeks: number;
   stability_worst_weeks: number;
   aging_percentile: number;
+  health_min_sample: number;
   weight_predictability: number;
   weight_efficiency: number;
   weight_flow: number;
@@ -37,6 +38,8 @@ export interface MetricRules {
   blocked_label_pattern: boolean;
   blocked_label_names: string[];
   blocked_by_relations: boolean;
+  blocked_state_pattern: boolean;
+  blocked_state_names: string[];
   remaining_state_types: OpenStateType[];
   type_labels: TypeLabel[];
 }

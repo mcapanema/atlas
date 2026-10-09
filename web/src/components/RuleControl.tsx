@@ -49,6 +49,16 @@ export function RuleControl({
           onChange={onChange}
         />
       );
+    case "names":
+      // Free text: workflow state names, so no label suggestions.
+      return (
+        <LabelsControl
+          label={label}
+          value={value as string[]}
+          labelOptions={[]}
+          onChange={onChange}
+        />
+      );
     case "states":
       return <StatesControl label={label} value={value as OpenStateType[]} onChange={onChange} />;
     case "typeLabels":
