@@ -184,18 +184,43 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("over P85")).toBeInTheDocument();
   });
 
-  it("puts aging WIP, then the forecast, before the diagnostic charts", async () => {
+  const inDocumentOrder = (nodes: Node[]) =>
+    nodes.every(
+      (node, i) =>
+        i === 0 ||
+        Boolean(nodes[i - 1].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING),
+    );
+
+  it("reads metrics, then the charts, then aging WIP, then the forecast", async () => {
     mockMetricsFetch();
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const forecast = await screen.findByText("Completion forecast", {}, { timeout: 5000 });
-    const aging = screen.getByText("Aging WIP");
-    const cfd = screen.getByText("Cumulative flow (90d)");
-    const follows = (a: Node, b: Node) =>
-      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(follows(aging, forecast)).toBe(true);
-    expect(follows(forecast, cfd)).toBe(true);
+    expect(
+      inDocumentOrder([
+        screen.getByText("Flow efficiency"),
+        screen.getByText("Cumulative flow (90d)"),
+        screen.getByText(/throughput \(/),
+        screen.getByText("WIP over time (90d)"),
+        screen.getByText("Lead time distribution (90d)"),
+        screen.getByText("Lead time trend"),
+        screen.getByText("Aging WIP"),
+        forecast,
+      ]),
+    ).toBe(true);
+  });
+
+  it("puts the forecast right after the charts when nothing is in progress", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": { ...agingWipFixture, items: [] },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const forecast = await screen.findByText("Completion forecast", {}, { timeout: 5000 });
+    expect(screen.queryByText("Aging WIP")).not.toBeInTheDocument();
+    expect(inDocumentOrder([screen.getByText("Lead time trend"), forecast])).toBe(true);
   });
 
   it("says so instead of drawing empty axes when nothing completed in the window", async () => {

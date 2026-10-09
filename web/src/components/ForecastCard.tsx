@@ -171,8 +171,8 @@ export function ForecastCard({
     return <Alert type="error" title="Failed to load forecast" />;
   }
   if (!data) {
-    // Holds the card's place while the 2,000-trial simulation runs, so the
-    // charts below it don't jump down when it lands.
+    // Holds the card's place (and title) while the 2,000-trial simulation
+    // runs, so the page doesn't grow abruptly when it lands.
     return (
       <Card title="Completion forecast">
         <Skeleton active />
