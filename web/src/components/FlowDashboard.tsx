@@ -102,12 +102,14 @@ function StaleDataAlert({ history }: { history: FlowHistory }) {
     return null;
   }
   const staleDays = Math.floor(staleHours / 24);
+  const tail =
+    staleDays === 1 ? "last day of this window is" : `last ${staleDays} days of this window are`;
+  // One line: the warning qualifies the charts below, it isn't the page's news.
   return (
     <Alert
       type="warning"
       showIcon
-      title={`Data last synced ${formatDateTime(history.data_as_of)}`}
-      description={`The last ${staleDays} day${staleDays === 1 ? "" : "s"} of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
+      title={`Data last synced ${formatDateTime(history.data_as_of)} — the ${tail} not ingested yet, so its zeros don't mean nothing was delivered.`}
     />
   );
 }

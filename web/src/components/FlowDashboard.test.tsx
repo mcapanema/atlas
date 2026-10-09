@@ -261,10 +261,12 @@ describe("FlowDashboard", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/last synced/i);
     expect(alert).toHaveTextContent("07-07-2026");
-    expect(alert).toHaveTextContent(/3 days/i);
+    expect(alert).toHaveTextContent(/the last 3 days of this window are not ingested yet/i);
+    // One line: the explanation is the title itself, not a second paragraph.
+    expect(alert.querySelector(".ant-alert-description")).toBeNull();
   });
 
-  it("uses the singular day when the data is only one day stale", async () => {
+  it("uses the singular when the data is only one day stale", async () => {
     mockMetricsFetch({
       "/api/metrics/history": {
         ...historyFixture,
@@ -275,7 +277,8 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/1 day of this window/i);
+    expect(alert).toHaveTextContent(/the last day of this window is not ingested yet/i);
+    expect(alert).not.toHaveTextContent(/1 day/);
   });
 
   it("tolerates exactly the staleness threshold without warning", async () => {
