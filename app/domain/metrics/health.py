@@ -5,7 +5,9 @@ scored 0-100 with a human-readable reason, weighted into an overall score
 and band. Pure arithmetic over already-derived samples and timelines: the
 AI layer explains these numbers, it never produces them (VISION:
 "AI Explains, Statistics Predict"). Scales, the aging percentile, component
-weights and band cutoffs come from the scope's MetricRules.
+weights and band cutoffs come from the scope's MetricRules. A component
+backed by fewer than the rules' health_min_sample items is left out; with
+none left the scope is unscored, not critical.
 """
 
 from collections.abc import Sequence
@@ -34,7 +36,7 @@ class HealthComponent:
 
 @dataclass(frozen=True)
 class DeliveryHealth:
-    """Composite health for a scope; score/band are None when no component has data."""
+    """Composite health for a scope; score/band are None when no component has enough data."""
 
     window_start: datetime
     window_end: datetime
@@ -47,9 +49,11 @@ def _clamp(value: float) -> int:
     return max(0, min(100, round(value)))
 
 
-def _predictability(lead: list[timedelta], *, worst_ratio: float) -> HealthComponent | None:
+def _predictability(
+    lead: list[timedelta], *, worst_ratio: float, min_sample: int
+) -> HealthComponent | None:
     """Lead-time spread: p95 at p50 scores 100, p95 at `worst_ratio` x p50 scores 0."""
-    if not lead:
+    if len(lead) < min_sample:
         return None
     seconds = [d.total_seconds() for d in lead]
     p50 = percentile(seconds, 50)
@@ -63,8 +67,11 @@ def _predictability(lead: list[timedelta], *, worst_ratio: float) -> HealthCompo
     )
 
 
-def _efficiency(in_window: list[FlowSample]) -> HealthComponent | None:
-    eff = flow_efficiency(in_window)
+def _efficiency(in_window: list[FlowSample], *, min_sample: int) -> HealthComponent | None:
+    started = [s for s in in_window if s.started_at is not None]
+    if len(started) < min_sample:
+        return None
+    eff = flow_efficiency(started)
     if eff is None:
         return None
     return HealthComponent(
@@ -73,12 +80,17 @@ def _efficiency(in_window: list[FlowSample]) -> HealthComponent | None:
 
 
 def _flow(
-    samples: list[FlowSample], *, window_start: datetime, mid: datetime, now: datetime
+    samples: list[FlowSample],
+    *,
+    window_start: datetime,
+    mid: datetime,
+    now: datetime,
+    min_sample: int,
 ) -> HealthComponent | None:
     """Throughput trend: recent half-window vs the half before it."""
     earlier = throughput(samples, start=window_start, end=mid)
     recent = throughput(samples, start=mid, end=now)
-    if earlier == 0 and recent == 0:
+    if earlier + recent < min_sample:
         return None
     if earlier == 0:
         return HealthComponent(
@@ -94,10 +106,16 @@ def _flow(
 
 
 def _stability(
-    *, wip_now: int, completed: int, window_days: int, best_weeks: float, worst_weeks: float
+    *,
+    wip_now: int,
+    completed: int,
+    window_days: int,
+    best_weeks: float,
+    worst_weeks: float,
+    min_sample: int,
 ) -> HealthComponent | None:
     """WIP inventory in weeks of throughput (Little's law): <= best 100, >= worst 0."""
-    if completed == 0:
+    if completed < min_sample:
         return None
     weekly = completed / (window_days / 7)
     weeks_of_wip = wip_now / weekly
@@ -114,10 +132,11 @@ def _risk(
     now: datetime,
     cycle_limit: timedelta | None,
     aging_percentile: int,
+    min_sample: int,
 ) -> HealthComponent | None:
     """Share of in-progress items currently blocked or aging past the cycle percentile."""
     open_items = [(sample, blocked) for sample, blocked in item_states if in_progress(sample, now)]
-    if not open_items:
+    if len(open_items) < min_sample:
         return None
     at_risk = sum(
         1
@@ -195,22 +214,27 @@ def compute_delivery_health(
         for s in all_samples
         if s.completed_at is not None and window_start < s.completed_at <= now
     ]
+    floor = rules.health_min_sample
     candidates = (
-        _predictability(lead_times(in_window), worst_ratio=rules.predictability_worst_ratio),
-        _efficiency(in_window),
-        _flow(all_samples, window_start=window_start, mid=mid, now=now),
+        _predictability(
+            lead_times(in_window), worst_ratio=rules.predictability_worst_ratio, min_sample=floor
+        ),
+        _efficiency(in_window, min_sample=floor),
+        _flow(all_samples, window_start=window_start, mid=mid, now=now, min_sample=floor),
         _stability(
             wip_now=wip(all_samples, at=now),
             completed=len(in_window),
             window_days=window_days,
             best_weeks=rules.stability_best_weeks,
             worst_weeks=rules.stability_worst_weeks,
+            min_sample=floor,
         ),
         _risk(
             item_states,
             now=now,
             cycle_limit=_cycle_percentile(all_samples, rules.aging_percentile),
             aging_percentile=rules.aging_percentile,
+            min_sample=floor,
         ),
     )
     components, score, band = _score(tuple(c for c in candidates if c is not None), rules)

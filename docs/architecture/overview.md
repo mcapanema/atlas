@@ -53,7 +53,9 @@ persisted events; these slices have no tables and no migrations.
   daily/weekly throughput buckets (`history.py`), and a lead-time histogram
   (`distribution.py`). The metrics slice also computes Queue Time, Touch
   Time, Aging WIP, and a Delivery Health composite (predictability /
-  efficiency / flow / stability / risk, each 0–100 with a reason string).
+  efficiency / flow / stability / risk, each 0–100 with a reason string;
+  a component backed by fewer than `health_min_sample` items is left out,
+  and with none left the scope is unscored).
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
@@ -105,7 +107,7 @@ and Executive Dashboard).
 
 Every rule that changes how a metric is computed — lifecycle
 interpretation (incl. reopens, parent issues, lead-time start), the blocked
-signal, health scales and weights, timezone, chart bucketing, forecast
+signal, health scales, weights and evidence floor, timezone, chart bucketing, forecast
 history and remaining, label → type mapping — is a field of `MetricRules`
 (`app/domain/metric_rules/entities.py`, defaults = the previous built-in behavior).
 `metric_rule_overrides` stores sparse override layers per organization

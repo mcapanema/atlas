@@ -215,18 +215,26 @@ async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
 
 async def test_delivery_health_for_team() -> None:
     team_id = uuid4()
-    done, doing = _item(team_id), _item(team_id)
-    service = MetricsService(
-        InMemoryWorkItemRepository([done, doing]),
-        InMemoryEventRepository(
-            [
-                _event(done, EventType.CREATED, 10),
-                _event(done, EventType.STARTED, 8),
-                _event(done, EventType.COMPLETED, 2),
-                _event(doing, EventType.CREATED, 5),
-                _event(doing, EventType.STARTED, 4),
-            ]
+    done = [_item(team_id) for _ in range(3)]
+    doing = [_item(team_id) for _ in range(3)]
+    events = [
+        *(
+            event
+            for item in done
+            for event in (
+                _event(item, EventType.CREATED, 10),
+                _event(item, EventType.STARTED, 8),
+                _event(item, EventType.COMPLETED, 2),
+            )
         ),
+        *(
+            event
+            for item in doing
+            for event in (_event(item, EventType.CREATED, 5), _event(item, EventType.STARTED, 4))
+        ),
+    ]
+    service = MetricsService(
+        InMemoryWorkItemRepository([*done, *doing]), InMemoryEventRepository(events)
     )
 
     health = await service.get_delivery_health(team_id=team_id, now=NOW)

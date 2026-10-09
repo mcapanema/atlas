@@ -101,9 +101,11 @@ def test_health_risk_reads_blocked_now_from_the_rules() -> None:
         _on(EventType.BLOCKER_ADDED, 3, "DEP-1"),
     ]
 
-    default = compute_delivery_health([stream], now=now)
+    any_sample = MetricRules(health_min_sample=1)  # one item: pin the mechanic, not the floor
+
+    default = compute_delivery_health([stream], now=now, rules=any_sample)
     relations = compute_delivery_health(
-        [stream], now=now, samples=[derive_flow_sample(stream, RELATIONS)]
+        [stream], now=now, samples=[derive_flow_sample(stream, RELATIONS)], rules=any_sample
     )
 
     def risk(health: DeliveryHealth) -> str:

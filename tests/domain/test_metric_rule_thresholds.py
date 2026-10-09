@@ -32,8 +32,9 @@ SCOPE = [
 
 
 def _only(component: str) -> MetricRules:
-    """Every health weight 0 except `component`'s."""
-    return resolve_rules({f"weight_{name}": 0.0 for name in HEALTH_COMPONENTS if name != component})
+    """Every health weight 0 except `component`'s; any sample scores (SCOPE is tiny)."""
+    weights = {f"weight_{name}": 0.0 for name in HEALTH_COMPONENTS if name != component}
+    return resolve_rules({"health_min_sample": 1, **weights})
 
 
 def test_zero_weights_drop_components_from_the_score() -> None:

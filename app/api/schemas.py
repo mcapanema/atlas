@@ -451,6 +451,7 @@ class MetricRulesRead(BaseModel):
     stability_best_weeks: float
     stability_worst_weeks: float
     aging_percentile: int
+    health_min_sample: int
     weight_predictability: float
     weight_efficiency: float
     weight_flow: float
@@ -500,6 +501,7 @@ class MetricRulesOverridesWrite(BaseModel):
     stability_best_weeks: float | None = None
     stability_worst_weeks: float | None = None
     aging_percentile: int | None = None
+    health_min_sample: int | None = None
     weight_predictability: float | None = None
     weight_efficiency: float | None = None
     weight_flow: float | None = None
