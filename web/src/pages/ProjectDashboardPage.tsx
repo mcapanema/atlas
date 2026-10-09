@@ -1,4 +1,4 @@
-import { Alert, Select, Space, Typography } from "antd";
+import { Alert, Flex, Select, Space, Typography } from "antd";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -31,8 +31,9 @@ export function ProjectDashboardPage() {
     <>
       <Typography.Title level={3}>Project Dashboard</Typography.Title>
       <Space direction="vertical" style={{ width: "100%" }} size="large">
-        <Space wrap>
+        <Flex wrap gap="small" align="center">
           <Select
+            aria-label="Project"
             style={{ width: 260 }}
             placeholder="Select a project"
             value={projectId}
@@ -48,7 +49,7 @@ export function ProjectDashboardPage() {
           {projectId && (
             <MetricsFilterBar filters={filters} scope={{ projectId }} onChange={setFilters} />
           )}
-        </Space>
+        </Flex>
         {!projectId && <Alert type="info" message="Select a project to see its dashboard." />}
         {projectId && <FlowDashboard scope={{ projectId }} filters={filters} />}
       </Space>

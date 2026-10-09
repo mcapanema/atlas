@@ -23,6 +23,22 @@ afterEach(() => {
 });
 
 describe("TeamDashboardPage", () => {
+  it("wraps the team selector and each filter in one row, control by control", async () => {
+    mockFetch();
+
+    renderPage(`/teams?team=${teamFixture.id}`);
+
+    await screen.findByRole("combobox", { name: "Analysis period" });
+    const row = screen.getByRole("combobox", { name: "Team" }).closest(".ant-flex");
+    expect(row).toHaveClass("ant-flex-wrap-wrap");
+    for (const name of ["Team", "Analysis period", "Work item types", "Excluded states"]) {
+      const control = screen.getByRole("combobox", { name });
+      expect(control.closest(".ant-flex")).toBe(row);
+      // No box between a control and the row: a nested Space wraps as one block.
+      const space = control.closest(".ant-space");
+      expect(space === null || space.contains(row)).toBe(true);
+    }
+  });
   it("shows the dashboard after selecting a team", async () => {
     mockFetch();
 

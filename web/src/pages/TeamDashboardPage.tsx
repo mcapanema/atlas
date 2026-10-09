@@ -1,4 +1,4 @@
-import { Alert, Select, Space, Typography, theme } from "antd";
+import { Alert, Flex, Select, Space, Typography, theme } from "antd";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -39,8 +39,9 @@ export function TeamDashboardPage() {
         </div>
       )}
       <Space direction="vertical" style={{ width: "100%" }} size="large">
-        <Space wrap>
+        <Flex wrap gap="small" align="center">
           <Select
+            aria-label="Team"
             style={{ width: 260 }}
             placeholder="Select a team"
             value={teamId}
@@ -56,7 +57,7 @@ export function TeamDashboardPage() {
           {teamId && (
             <MetricsFilterBar filters={filters} scope={{ teamId }} onChange={setFilters} />
           )}
-        </Space>
+        </Flex>
         {!teamId && <Alert type="info" message="Select a team to see its dashboard." />}
         {teamId && <FlowDashboard scope={{ teamId }} filters={filters} />}
       </Space>
