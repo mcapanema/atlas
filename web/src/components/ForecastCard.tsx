@@ -25,13 +25,18 @@ function methodHelp(historyDays: number, trials: number | undefined): string {
   );
 }
 
+function daysAgo(days: number): string {
+  if (days === 0) return "today";
+  return days === 1 ? "1 day ago" : `${days} days ago`;
+}
+
 /** The forecast replays past throughput; a long gap since the last completion makes it optimistic. */
 function LastCompletion({ at, origin }: { at: string | null; origin: string }) {
   if (!at) return null;
   const days = Math.floor((Date.parse(origin) - Date.parse(at)) / DAY_MS);
   return (
     <span className="page-asof">
-      Last completion {formatDay(at)} · {days === 0 ? "today" : `${days} days ago`}
+      Last completion {formatDay(at)} · {daysAgo(days)}
     </span>
   );
 }

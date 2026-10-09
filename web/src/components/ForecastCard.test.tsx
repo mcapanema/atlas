@@ -66,7 +66,8 @@ describe("ForecastCard", () => {
 
     renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
 
-    expect(await screen.findByText(/Last completion/)).toBeInTheDocument();
+    // window_end 2026-07-10T00:00Z, last completion 2026-07-08T12:00Z: one whole day.
+    expect(await screen.findByText(/Last completion/)).toHaveTextContent(/· 1 day ago$/);
   });
 
   it("names the simulation count the API ran", async () => {
