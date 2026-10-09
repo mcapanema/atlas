@@ -18,7 +18,7 @@ export interface MetricRules {
   done_then_canceled: "delivered" | "canceled";
   healthy_min: number;
   warning_min: number;
-  predictability_worst_ratio: number;
+  predictability_floor: number;
   stability_best_weeks: number;
   stability_worst_weeks: number;
   aging_percentile: number;

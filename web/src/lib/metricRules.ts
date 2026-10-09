@@ -211,10 +211,10 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "number", min: 0, max: 99, step: 1 },
       },
       {
-        name: "predictability_worst_ratio",
-        label: "Predictability: worst lead-time spread",
-        help: "Lead-time p95 equal to p50 scores 100; at this multiple of p50 it scores 0. Log scale: every doubling of the spread costs the same points.",
-        control: { kind: "number", min: 1.1, max: 20, step: 0.1, suffix: "× p50" },
+        name: "predictability_floor",
+        label: "Predictability: floor hit rate",
+        help: "Predictability is the share of recently completed items that finished within the service level: the aging percentile of cycle times over the aging history before the window. Meeting it at that percentile's own rate scores 100; at this share it scores 0.",
+        control: { kind: "number", min: 0, max: 98, step: 1, suffix: "%" },
       },
       {
         name: "stability_best_weeks",
