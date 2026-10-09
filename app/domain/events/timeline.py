@@ -37,9 +37,16 @@ class WorkItemTimeline:
 
 
 def _blocked_source(event: Event, rules: MetricRules) -> tuple[str, bool] | None:
-    """(source key, opens?) for an event that opens or closes a blocked source, else None."""
+    """(source key, opens?) for an event that opens or closes a blocked source, else None.
+
+    Every state transition is the "state" source: it opens entering a state
+    the rules call blocked and closes entering any other (closing a source
+    that isn't open is a no-op).
+    """
     if event.type in (EventType.BLOCKED, EventType.UNBLOCKED):
         return "explicit", event.type is EventType.BLOCKED
+    if event.to_state is not None:
+        return "state", rules.is_blocked_state(event.to_state)
     if event.detail is None:
         return None
     if event.type in (EventType.LABEL_ADDED, EventType.LABEL_REMOVED):
@@ -53,20 +60,46 @@ def _blocked_source(event: Event, rules: MetricRules) -> tuple[str, bool] | None
     return None
 
 
+def _born_blocked(ordered: list[Event], rules: MetricRules) -> bool:
+    """The item sat in a blocked state from its first event to its first transition.
+
+    History has no creation entry, so the first transition's from_state is
+    the state the item was created in (as in derive_timeline's initial period).
+
+    ponytail: an item created in a blocked state that never moved has no
+    state name on any event, so it reads unblocked. Upgrade path: stamp the
+    initial state name on the Linear mapping's creation events (needs a
+    rebuild sync, ADR-0013).
+    """
+    first = next((e for e in ordered if e.to_state is not None), None)
+    return (
+        first is not None
+        and first.from_state is not None
+        and ordered[0].occurred_at < first.occurred_at
+        and rules.is_blocked_state(first.from_state)
+    )
+
+
 def blocked_periods(
     events: list[Event], rules: MetricRules = DEFAULT_RULES
 ) -> tuple[BlockedPeriod, ...]:
     """Blocked intervals under `rules`: blocked while any source is open.
 
-    Sources: explicit BLOCKED/UNBLOCKED events (always), label events whose
-    label the rules call blocked (each label its own source), and — with
-    blocked_by_relations — "blocked by" relations (each blocker its own
-    source). Overlapping sources form one period, never a double count; a
-    close for a source that isn't open is ignored (truncated history).
+    Sources: explicit BLOCKED/UNBLOCKED events (always), stays in workflow
+    states the rules call blocked (one source, so moving between two blocked
+    states keeps it open), label events whose label the rules call blocked
+    (each label its own source), and — with blocked_by_relations — "blocked
+    by" relations (each blocker its own source). Overlapping sources form one
+    period, never a double count; a close for a source that isn't open is
+    ignored (truncated history).
     """
+    ordered = sorted(events, key=event_order)
     periods: list[BlockedPeriod] = []
     open_sources: set[str] = set()
-    for event in sorted(events, key=event_order):
+    if _born_blocked(ordered, rules):
+        open_sources.add("state")
+        periods.append(BlockedPeriod(started_at=ordered[0].occurred_at))
+    for event in ordered:
         source = _blocked_source(event, rules)
         if source is None:
             continue

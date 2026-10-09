@@ -205,8 +205,8 @@ def derive_flow_sample(
     (the cancel un-delivered the item). With move_back_ends_wip off, a STOPPED
     never counts, so the clock restarts only after a CANCELED. born_done marks an
     item created already completed and never started (see _born_done).
-    Blocked time sums the rules' blocked periods (labels, relations,
-    explicit events) clipped to the cycle — from started_at
+    Blocked time sums the rules' blocked periods (labels, workflow states,
+    relations, explicit events) clipped to the cycle — from started_at
     (or the first event, if never started) to completed_at; a still-open
     period on an uncompleted item is not counted (unmeasurable).
 

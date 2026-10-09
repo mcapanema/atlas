@@ -466,6 +466,8 @@ class MetricRulesRead(BaseModel):
     blocked_label_pattern: bool
     blocked_label_names: list[str]
     blocked_by_relations: bool
+    blocked_state_pattern: bool
+    blocked_state_names: list[str]
     remaining_state_types: list[OpenStateType]
     type_labels: list[TypeLabelRead]
 
@@ -513,6 +515,8 @@ class MetricRulesOverridesWrite(BaseModel):
     blocked_label_pattern: bool | None = None
     blocked_label_names: list[str] | None = None
     blocked_by_relations: bool | None = None
+    blocked_state_pattern: bool | None = None
+    blocked_state_names: list[str] | None = None
     remaining_state_types: list[OpenStateType] | None = None
     type_labels: list[TypeLabelRead] | None = None
 

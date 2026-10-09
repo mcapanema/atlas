@@ -34,6 +34,7 @@ _FLAGS = (
     "count_parent_issues",
     "blocked_label_pattern",
     "blocked_by_relations",
+    "blocked_state_pattern",
 )
 _CHOICES: dict[str, tuple[str, ...]] = {
     "reopen_completion": ("last", "first"),
@@ -44,11 +45,22 @@ _CHOICES: dict[str, tuple[str, ...]] = {
 }
 MAX_LIST_RULE_ENTRIES = 50
 
-# Built-in blocked-label match: whole words, where "_" separates words too.
-# "Blocked", "Blockers", "blocker: external", "Blocking", "blocked_by" match;
-# "regras-blockly" (a Blockly label), "blocks" and "unblocked" don't — the
-# 2026-10-03 audit found a "block" substring match flagging "regras-blockly".
-_BLOCKED_LABEL = re.compile(r"(?<![a-z0-9])block(?:ed|ers?|ing)?(?![a-z0-9])", re.IGNORECASE)
+# Built-in blocked-name match for labels and workflow states: whole words,
+# where "_" separates words too. "Blocked", "Blockers", "blocker: external",
+# "Blocking", "blocked_by" match; "regras-blockly" (a Blockly label),
+# "blocks" and "unblocked" don't — the 2026-10-03 audit found a "block"
+# substring match flagging "regras-blockly".
+_BLOCKED_NAME = re.compile(r"(?<![a-z0-9])block(?:ed|ers?|ing)?(?![a-z0-9])", re.IGNORECASE)
+
+
+def _named_blocked(name: str, *, pattern: bool, listed: tuple[str, ...]) -> bool:
+    """`name` matches the built-in pattern (when on) or a listed name (any case)."""
+    if pattern and _BLOCKED_NAME.search(name):
+        return True
+    folded = name.strip().casefold()
+    return any(folded == entry.strip().casefold() for entry in listed)
+
+
 _INTEGERS = (
     "healthy_min",
     "warning_min",
@@ -83,11 +95,14 @@ class MetricRules:
     lead_time_start: LeadTimeStart = "created"
     done_then_reopened: DoneThenReopened = "delivered"
     canceled_then_reopened: CanceledThenReopened = "canceled"
-    # Blocked signal: label names (the built-in pattern and/or a list) and
-    # Linear "blocked by" relations (history only — ADR-0011).
+    # Blocked signal: label names and workflow-state names (each by the
+    # built-in pattern and/or a list), and Linear "blocked by" relations
+    # (history only — ADR-0011).
     blocked_label_pattern: bool = True
     blocked_label_names: tuple[str, ...] = ()
     blocked_by_relations: bool = False
+    blocked_state_pattern: bool = True
+    blocked_state_names: tuple[str, ...] = ()
     # Delivery-health scoring.
     healthy_min: int = 70
     warning_min: int = 40
@@ -127,10 +142,15 @@ class MetricRules:
 
     def is_blocked_label(self, name: str) -> bool:
         """Whether a label named `name` marks blocked work under these rules."""
-        if self.blocked_label_pattern and _BLOCKED_LABEL.search(name):
-            return True
-        folded = name.strip().casefold()
-        return any(folded == listed.strip().casefold() for listed in self.blocked_label_names)
+        return _named_blocked(
+            name, pattern=self.blocked_label_pattern, listed=self.blocked_label_names
+        )
+
+    def is_blocked_state(self, name: str) -> bool:
+        """Whether a workflow state named `name` holds blocked work under these rules."""
+        return _named_blocked(
+            name, pattern=self.blocked_state_pattern, listed=self.blocked_state_names
+        )
 
     def type_of(self, item: WorkItem) -> WorkItemType:
         """The item's type: its first type_labels hit among its labels, else its stored type.
@@ -156,7 +176,12 @@ def _normalize_collections(rules: MetricRules) -> None:
     object.__setattr__. Every malformed shape raises ValueError naming the
     rule: the resolver falls back to built-ins on ValueError only.
     """
-    object.__setattr__(rules, "blocked_label_names", _label_names(rules.blocked_label_names))
+    object.__setattr__(
+        rules, "blocked_label_names", _names("blocked_label_names", rules.blocked_label_names)
+    )
+    object.__setattr__(
+        rules, "blocked_state_names", _names("blocked_state_names", rules.blocked_state_names)
+    )
     object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
     object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))
 
@@ -172,14 +197,12 @@ def _entries(name: str, value: object) -> list[object]:
 
 def _label(name: str, value: object) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{name} entries must be non-empty label names")
+        raise ValueError(f"{name} entries must be non-empty names")
     return value.strip()
 
 
-def _label_names(value: object) -> tuple[str, ...]:
-    return tuple(
-        _label("blocked_label_names", entry) for entry in _entries("blocked_label_names", value)
-    )
+def _names(rule: str, value: object) -> tuple[str, ...]:
+    return tuple(_label(rule, entry) for entry in _entries(rule, value))
 
 
 def _state_types(value: object) -> tuple[StateType, ...]:

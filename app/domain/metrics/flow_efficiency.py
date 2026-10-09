@@ -6,10 +6,10 @@ from app.domain.metrics.samples import FlowSample
 def flow_efficiency(samples: list[FlowSample]) -> float | None:
     """Mean of (cycle - blocked) / cycle over completed samples; None without data.
 
-    ponytail: blocked periods are the only wait signal today, so data without
-    BLOCKED events reads 100%. Count queue-state waiting (e.g. time in Review
-    without a reviewer) once workflow states carry a type/category the domain
-    can tell apart.
+    ponytail: blocked periods are the only wait signal, so a team that marks
+    blocked work by none of the blocked rules (labels, workflow states,
+    relations) reads 100%. Count queue-state waiting (e.g. time in Review
+    without a reviewer) as wait too if blocked periods prove too coarse.
     """
     ratios: list[float] = []
     for sample in samples:
