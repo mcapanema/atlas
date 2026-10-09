@@ -50,8 +50,8 @@ async def reflect(
     # two and be silently skipped forever).
     high_water_mark = max(f.created_at for f in pending)
     # Release the read transaction before the LLM call — holding it open
-    # would block every SQLite writer for up to 120 seconds. add_guidance
-    # below runs in a fresh transaction committed by get_session.
+    # would block every SQLite writer for up to ATLAS_ADVISOR_TIMEOUT_SECONDS.
+    # add_guidance below runs in a fresh transaction committed by get_session.
     await session.commit()
     text = await advisor.reflect(
         persona=persona,

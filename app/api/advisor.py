@@ -55,7 +55,7 @@ async def get_recommendations(
     )
     active = await personas.active_guidance(persona)
     # Release the read transaction before the LLM call — holding it open
-    # would block every SQLite writer for up to 120 seconds.
+    # would block every SQLite writer for up to ATLAS_ADVISOR_TIMEOUT_SECONDS.
     await session.commit()
     advice = await advisor.advise(
         context, persona=persona, guidance=active.guidance if active else None

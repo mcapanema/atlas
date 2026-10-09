@@ -13,8 +13,8 @@ class AdvisorService:
     Composes MetricsService and ForecastService (Application-layer reuse of the
     metric derivations) — the AI itself never computes anything. The port call
     happens in Presentation so the DB transaction can be released before the
-    (up to 120s) LLM request; an open SQLite transaction there blocks every
-    other writer for the duration.
+    LLM request (up to ATLAS_ADVISOR_TIMEOUT_SECONDS); an open SQLite
+    transaction there blocks every other writer for the duration.
     """
 
     def __init__(self, metrics: MetricsService, forecasts: ForecastService) -> None:

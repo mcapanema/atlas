@@ -10,7 +10,12 @@ def test_default_windows() -> None:
 
 def test_the_frontend_mirrors_the_backend_windows() -> None:
     # The SPA can't import Python; this pins its one copy to the source.
-    source = Path("web/src/lib/windows.ts").read_text()
+    windows_ts = Path(__file__).resolve().parents[2] / "web" / "src" / "lib" / "windows.ts"
+    source = windows_ts.read_text()
 
-    assert re.search(rf"STATS_WINDOW_DAYS = {STATS_WINDOW_DAYS};", source)
-    assert re.search(rf"CHART_WINDOW_DAYS = {CHART_WINDOW_DAYS};", source)
+    assert re.search(
+        rf"^export const STATS_WINDOW_DAYS = {STATS_WINDOW_DAYS};$", source, re.MULTILINE
+    )
+    assert re.search(
+        rf"^export const CHART_WINDOW_DAYS = {CHART_WINDOW_DAYS};$", source, re.MULTILINE
+    )

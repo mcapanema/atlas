@@ -40,7 +40,7 @@ async def get_meeting_prep(
     )
     active = await personas.active_guidance(meeting_persona(meeting))
     # Release the read transaction before the LLM call — holding it open
-    # would block every SQLite writer for up to 120 seconds.
+    # would block every SQLite writer for up to ATLAS_ADVISOR_TIMEOUT_SECONDS.
     await session.commit()
     prep = await advisor.prepare_meeting(
         context, meeting=meeting, guidance=active.guidance if active else None
