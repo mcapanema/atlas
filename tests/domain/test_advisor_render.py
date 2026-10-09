@@ -138,7 +138,9 @@ def test_render_meeting_context_includes_health_and_aging() -> None:
             score=61,
             band="warning",
             components=(
-                HealthComponent(name="efficiency", score=42, reason="flow efficiency 42%"),
+                HealthComponent(
+                    name="efficiency", score=42, reason="flow efficiency 42%", band="warning"
+                ),
             ),
         ),
         aging=AgingWip(

@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import MetricRules
-from app.domain.metrics.health import compute_delivery_health
+from app.domain.metrics.health import HealthComponent, compute_delivery_health
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -99,6 +101,13 @@ def test_each_component_is_banded_by_the_scopes_cutoffs() -> None:
         streams, now=NOW, rules=MetricRules(health_min_sample=1, healthy_min=1, warning_min=0)
     )
     assert next(c for c in lenient.components if c.name == "risk").band == "warning"
+
+
+def test_a_component_cannot_exist_without_its_band() -> None:
+    # The API's band is a required Literal: a component built anywhere but
+    # scoring must not type-check, then 500 at the DTO, for lack of one.
+    with pytest.raises(TypeError):
+        HealthComponent(name="risk", score=50, reason="2 of 4 blocked")  # type: ignore[call-arg]
 
 
 def test_components_without_data_are_omitted() -> None:

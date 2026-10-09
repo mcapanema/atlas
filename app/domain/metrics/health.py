@@ -14,7 +14,7 @@ is unscored, not critical.
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event
@@ -39,14 +39,22 @@ class HealthComponent:
     """One scored dimension of delivery health, with its evidence.
 
     `band` reads the score against the scope's cutoffs, the same rule as
-    the overall band, so a weak component shows on a healthy team. Scoring
-    sets it; it is None only on a component that hasn't been scored yet.
+    the overall band, so a weak component shows on a healthy team.
     """
 
     name: str
     score: int
     reason: str
-    band: str | None = None
+    band: str
+
+
+@dataclass(frozen=True)
+class _Reading:
+    """A component's score and evidence before the scope's cutoffs band it."""
+
+    name: str
+    score: int
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -66,7 +74,7 @@ def _clamp(value: float) -> int:
 
 def _predictability(
     lead: list[timedelta], *, worst_ratio: float, min_sample: int
-) -> HealthComponent | None:
+) -> _Reading | None:
     """Lead-time spread on a log scale: p95 at p50 scores 100, at `worst_ratio` x p50 scores 0.
 
     Log, because the spread is a ratio: each doubling of p95/p50 costs the
@@ -80,22 +88,20 @@ def _predictability(
     if p50 <= 0:
         return None
     ratio = percentile(seconds, 95) / p50
-    return HealthComponent(
+    return _Reading(
         name="predictability",
         score=_clamp(100 * (1 - math.log(ratio) / math.log(worst_ratio))),
         reason=f"lead time p95 is {ratio:.1f}x p50",
     )
 
 
-def _efficiency(in_window: list[FlowSample], *, min_sample: int) -> HealthComponent | None:
+def _efficiency(in_window: list[FlowSample], *, min_sample: int) -> _Reading | None:
     if len(measured_cycles(in_window)) < min_sample:
         return None
     eff = flow_efficiency(in_window)
     if eff is None:
         return None
-    return HealthComponent(
-        name="efficiency", score=_clamp(100 * eff), reason=f"flow efficiency {eff:.0%}"
-    )
+    return _Reading(name="efficiency", score=_clamp(100 * eff), reason=f"flow efficiency {eff:.0%}")
 
 
 def _flow(
@@ -105,7 +111,7 @@ def _flow(
     mid: datetime,
     now: datetime,
     min_sample: int,
-) -> HealthComponent | None:
+) -> _Reading | None:
     """Throughput trend: recent half-window vs the half before it.
 
     The caller leaves it out when the tracked history doesn't cover the whole window.
@@ -115,12 +121,12 @@ def _flow(
     if earlier + recent < min_sample:
         return None
     if earlier == 0:
-        return HealthComponent(
+        return _Reading(
             name="flow",
             score=100,
             reason=f"throughput grew from 0 to {recent} in the recent half-window",
         )
-    return HealthComponent(
+    return _Reading(
         name="flow",
         score=_clamp(100 * recent / earlier),
         reason=f"completed {recent} recently vs {earlier} in the prior half-window",
@@ -135,7 +141,7 @@ def _stability(
     best_weeks: float,
     worst_weeks: float,
     min_sample: int,
-) -> HealthComponent | None:
+) -> _Reading | None:
     """WIP inventory in weeks of throughput (Little's law): <= best 100, >= worst 0.
 
     Throughput is per *tracked* week: a scope first synced mid-window
@@ -145,7 +151,7 @@ def _stability(
         return None
     weekly = completed / (tracked_days / 7)
     weeks_of_wip = wip_now / weekly
-    return HealthComponent(
+    return _Reading(
         name="stability",
         score=_clamp(100 * (worst_weeks - weeks_of_wip) / (worst_weeks - best_weeks)),
         reason=f"WIP equals {weeks_of_wip:.1f} weeks of throughput",
@@ -158,7 +164,7 @@ def _risk(
     now: datetime,
     aging_limit: tuple[timedelta, str],
     min_sample: int,
-) -> HealthComponent | None:
+) -> _Reading | None:
     """Share of in-progress items currently blocked or in progress past `aging_limit`.
 
     `aging_limit` is (limit, how the reason names it) — see `_aging_limit`.
@@ -172,7 +178,7 @@ def _risk(
         for sample, blocked in open_items
         if blocked or (sample.started_at is not None and now - sample.started_at > cycle_limit)
     )
-    return HealthComponent(
+    return _Reading(
         name="risk",
         score=_clamp(100 * (1 - at_risk / len(open_items))),
         reason=f"{at_risk} of {len(open_items)} in-progress items blocked or {limit_label}",
@@ -217,11 +223,13 @@ def _band(score: int, rules: MetricRules) -> str:
 
 
 def _score(
-    components: tuple[HealthComponent, ...], rules: MetricRules
+    readings: tuple[_Reading, ...], rules: MetricRules
 ) -> tuple[tuple[HealthComponent, ...], int | None, str | None]:
     """Weighted overall score and band; kept components banded, zero-weight ones dropped."""
     weighted = tuple(
-        replace(c, band=_band(c.score, rules)) for c in components if rules.weight(c.name) > 0
+        HealthComponent(name=r.name, score=r.score, reason=r.reason, band=_band(r.score, rules))
+        for r in readings
+        if rules.weight(r.name) > 0
     )
     if not weighted:
         return (), None, None
