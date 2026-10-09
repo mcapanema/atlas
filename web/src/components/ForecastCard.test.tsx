@@ -38,6 +38,15 @@ describe("ForecastCard", () => {
     expect(container.querySelector(".stat-grid")!.querySelectorAll(".stat")).toHaveLength(4);
   });
 
+  it("holds its place with a skeleton while the simulation runs", () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise(() => {}));
+
+    const { container } = renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    expect(screen.getByText("Completion forecast")).toBeInTheDocument();
+    expect(container.querySelector(".ant-skeleton")).not.toBeNull();
+  });
+
   it("explains when there is no history to forecast from", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(jsonResponse({ ...forecastFixture, completion: null })),
@@ -109,7 +118,9 @@ describe("ForecastCard", () => {
 
     renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getByText("Completion forecast")).toBeInTheDocument());
+    // Not "Completion forecast": the loading skeleton already shows that title,
+    // without the method definition behind it.
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
     fireEvent.focus(screen.getByText("Completion forecast"));
     expect(await screen.findByText(/2,000 simulations of the remaining work/)).toBeInTheDocument();
 

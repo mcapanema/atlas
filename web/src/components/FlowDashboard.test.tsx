@@ -133,7 +133,9 @@ describe("FlowDashboard", () => {
     rerender(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     expect(captured.options).toHaveLength(6);
-    captured.options.forEach((option, i) => expect(option).toBe(firstRender[i]));
+    // By identity, not position: firstRender accumulates every render while
+    // the queries settle, so its order is load order, not page order.
+    captured.options.forEach((option) => expect(firstRender).toContain(option));
   });
 
   it("renders queue and touch time tiles", async () => {
@@ -178,6 +180,20 @@ describe("FlowDashboard", () => {
     await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
     expect(screen.getByText("Stuck item")).toBeInTheDocument();
     expect(screen.getByText("over P85")).toBeInTheDocument();
+  });
+
+  it("puts aging WIP, then the forecast, before the diagnostic charts", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const forecast = await screen.findByText("Completion forecast", {}, { timeout: 5000 });
+    const aging = screen.getByText("Aging WIP");
+    const cfd = screen.getByText("Cumulative flow (90d)");
+    const follows = (a: Node, b: Node) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(aging, forecast)).toBe(true);
+    expect(follows(forecast, cfd)).toBe(true);
   });
 
   it("omits the aging WIP card when nothing is in progress", async () => {

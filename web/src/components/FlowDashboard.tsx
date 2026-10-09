@@ -324,6 +324,8 @@ export function FlowDashboard({
     return <Skeleton active />;
   }
 
+  // Answers before diagnostics: what's stuck (the health strip's usual top
+  // reason) and when it lands, then the charts that explain why.
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
       <StaleDataAlert history={history.data} />
@@ -335,16 +337,16 @@ export function FlowDashboard({
         statLabel={windowLabel(filters, 30)}
         ranged={isRanged(filters)}
       />
+      {aging.data && aging.data.items.length > 0 && (
+        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
+      )}
+      <ForecastCard scope={scope} filters={filters} />
       <FlowCharts
         history={history.data}
         distribution={distribution.data}
         snapshots={snapshots.data}
         chartLabel={windowLabel(filters, 90)}
       />
-      {aging.data && aging.data.items.length > 0 && (
-        <AgingWipCard items={aging.data.items} percentile={aging.data.percentile} />
-      )}
-      <ForecastCard scope={scope} filters={filters} />
     </Space>
   );
 }

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, DatePicker, InputNumber, Space, Statistic } from "antd";
+import { Alert, Button, Card, DatePicker, InputNumber, Skeleton, Space, Statistic } from "antd";
 import { useMemo, useState } from "react";
 
 import { useForecast, type CompletionForecast } from "../api/forecasts";
@@ -160,7 +160,15 @@ export function ForecastCard({
   if (forecast.isError) {
     return <Alert type="error" message="Failed to load forecast" />;
   }
-  if (!data) return null;
+  if (!data) {
+    // Holds the card's place while the 2,000-trial simulation runs, so the
+    // charts below it don't jump down when it lands.
+    return (
+      <Card title="Completion forecast">
+        <Skeleton active />
+      </Card>
+    );
+  }
 
   const historyDays = Math.round(
     (Date.parse(data.window_end) - Date.parse(data.window_start)) / DAY_MS,
