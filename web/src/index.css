@@ -301,22 +301,25 @@ h5 {
 .health-tile__band {
   font-weight: 600;
 }
+/* Band words sit on their own tint, where the raw *-text tokens miss AA
+   (light warning 2.96:1, dark critical 4.07:1 at 12px). Mixing 45%
+   toward the body text clears 4.5:1 in both modes and keeps the hue. */
 .health-tile--warning {
   background: color-mix(in srgb, var(--ant-color-warning) 8%, transparent);
   border-color: color-mix(in srgb, var(--ant-color-warning) 40%, transparent);
 }
 .health-tile--warning .health-tile__band {
-  color: var(--ant-color-warning-text);
+  color: color-mix(in srgb, var(--ant-color-warning-text) 55%, var(--ant-color-text));
 }
 .health-tile--critical {
   background: color-mix(in srgb, var(--ant-color-error) 9%, transparent);
   border-color: color-mix(in srgb, var(--ant-color-error) 40%, transparent);
 }
 .health-tile--critical .health-tile__band {
-  color: var(--ant-color-error-text);
+  color: color-mix(in srgb, var(--ant-color-error-text) 55%, var(--ant-color-text));
 }
 .health-tile--healthy .health-tile__band {
-  color: var(--ant-color-success-text);
+  color: color-mix(in srgb, var(--ant-color-success-text) 55%, var(--ant-color-text));
 }
 /* Stat tiles: 2 columns on narrow screens, 4 on wide (AntD's lg = 992px).
    The paired variant (scope dashboards) is 5 columns × 2 rows filled
