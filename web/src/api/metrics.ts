@@ -109,6 +109,8 @@ export interface AgingItem {
   state: string;
   age_seconds: number;
   over_percentile: boolean;
+  /** Who the item is assigned to as of the last sync; null when unassigned. */
+  assignee: string | null;
 }
 
 export interface AgingWip {
