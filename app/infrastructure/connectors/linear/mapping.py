@@ -5,6 +5,7 @@ nothing outside this package sees a Linear payload.
 """
 
 import logging
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
@@ -91,15 +92,31 @@ def _initial_events(node: dict[str, Any], created_at: datetime) -> list[SourceEv
 _NAME_MAX = 255
 
 
+# A handle's word separators. Hyphens are left alone: "Ana-Maria" is a real name.
+_HANDLE_SEPARATORS = re.compile(r"[._]+")
+
+
+def _readable_name(name: str) -> str:
+    # Linear's name is the user's email until they set a full name (or a
+    # handle someone typed in). A name with a space is already real — leave it.
+    if " " in name.strip():
+        return name
+    words = _HANDLE_SEPARATORS.split(name.split("@", 1)[0])
+    readable = " ".join(w[:1].upper() + w[1:] for w in words if w)
+    return readable or name
+
+
 # ponytail: the assignee is stored as a display name, not a user identity —
 # enough to show who owns an item. A renamed user shows the new name only
-# after the issue syncs again. Upgrade path: sync Linear users into a
-# Person aggregate and store the id if per-person analytics are ever needed.
+# after the issue syncs again, and a name derived from an email has no
+# accents ("joao.barbosa" -> "Joao Barbosa"). Upgrade path: sync Linear
+# users into a Person aggregate (with an editable display name) and store
+# the id if per-person analytics are ever needed.
 def _assignee(node: dict[str, Any]) -> str | None:
     # .get: a nameless assignee reads as unassigned — a KeyError would drop
     # (and prune) the whole issue.
     name = (node.get("assignee") or {}).get("name")
-    return str(name)[:_NAME_MAX] if name else None
+    return _readable_name(str(name))[:_NAME_MAX] if name else None
 
 
 def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None) -> SourceWorkItem:
