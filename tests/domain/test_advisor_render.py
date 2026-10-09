@@ -2,7 +2,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.domain.advisor.port import DeliveryContext, MeetingContext
-from app.domain.advisor.render import quote_title, render_context, render_meeting_context
+from app.domain.advisor.render import (
+    quote_title,
+    render_aging,
+    render_context,
+    render_meeting_context,
+)
 from app.domain.forecasting.monte_carlo import (
     CompletionForecast,
     DeliveryForecast,
@@ -203,6 +208,49 @@ def test_render_meeting_context_names_the_configured_aging_percentile_and_histor
 
     assert "Aging WIP (cycle-time p70 over the last 30 days = 4.0d):" in text
     assert '- "Fix login" — In Progress, 6.0d [over p70]' in text
+
+
+def test_render_aging_names_the_percentile_and_history() -> None:
+    aging = AgingWip(
+        now=_NOW,
+        cycle_time_percentile=timedelta(days=4),
+        items=(_aging_item("Fix login", 6, True),),
+        percentile=70,
+        history_days=30,
+    )
+
+    assert render_aging(aging) == (
+        "Aging WIP (cycle-time p70 over the last 30 days = 4.0d):\n"
+        '- "Fix login" — In Progress, 6.0d [over p70]'
+    )
+
+
+def test_render_aging_makes_no_history_claim_without_a_reference() -> None:
+    # Review focus 2: nothing completed in the aging history -> no line to name.
+    aging = AgingWip(
+        now=_NOW, cycle_time_percentile=None, items=(_aging_item("Fix login", 6, False),)
+    )
+
+    assert render_aging(aging).splitlines() == [
+        "Aging WIP:",
+        '- "Fix login" — In Progress, 6.0d',
+    ]
+
+
+def test_render_aging_caps_rows_and_appends_the_hint() -> None:
+    items = tuple(_aging_item(f"Item {i}", 12 - i, False) for i in range(5))
+    aging = AgingWip(now=_NOW, cycle_time_percentile=None, items=items)
+
+    lines = render_aging(aging, limit=3, more_hint=" (ask for the rest)").splitlines()
+
+    assert len([line for line in lines if line.startswith("- ")]) == 3
+    assert lines[-1] == "... and 2 more (ask for the rest)"
+
+
+def test_render_aging_reports_nothing_in_progress() -> None:
+    aging = AgingWip(now=_NOW, cycle_time_percentile=timedelta(days=4), items=())
+
+    assert render_aging(aging) == "Aging WIP: nothing in progress."
 
 
 def test_titles_render_quoted_on_one_line_and_bounded() -> None:

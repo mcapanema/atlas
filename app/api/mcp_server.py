@@ -12,6 +12,7 @@ authentication (claude.ai and ChatGPT connector UIs cannot send custom
 headers — the secret has to live in the URL).
 """
 
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -19,7 +20,9 @@ from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app.domain.advisor.render import quote_title
+from app.api.schemas import AgingWipRead
+from app.domain.advisor.render import quote_title, render_aging
+from app.domain.metrics.aging import AgingItem, AgingWip
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 _INSTRUCTIONS = (
@@ -35,9 +38,6 @@ def _params(**kwargs: Any) -> dict[str, Any]:
     return {key: value for key, value in kwargs.items() if value is not None}
 
 
-_DAY_SECONDS = 86400
-
-
 def _render_health(health: dict[str, Any]) -> str:
     if health["score"] is None:
         return "Delivery health: not enough data to score."
@@ -46,23 +46,26 @@ def _render_health(health: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _render_aging(aging: dict[str, Any], limit: int = 10) -> str:
-    items = aging["items"]
-    if not items:
-        return "Aging WIP: nothing in progress."
-    threshold = aging["cycle_time_percentile_seconds"]
-    pct = aging["percentile"]
-    header = "Aging WIP"
-    if threshold is not None:
-        header += f" (cycle-time p{pct} = {threshold / _DAY_SECONDS:.1f}d)"
-    lines = [header + ":"]
-    for item in items[:limit]:
-        age = item["age_seconds"] / _DAY_SECONDS
-        flag = f" [over p{pct}]" if item["over_percentile"] else ""
-        lines.append(f"- {quote_title(item['title'])} — {item['state']}, {age:.1f}d{flag}")
-    if len(items) > limit:
-        lines.append(f"... and {len(items) - limit} more (use aging_wip for the full list)")
-    return "\n".join(lines)
+def _aging_from_json(data: dict[str, Any]) -> AgingWip:
+    """GET /api/metrics/aging-wip's JSON back as the domain value, for render_aging."""
+    dto = AgingWipRead.model_validate(data)
+    seconds = dto.cycle_time_percentile_seconds
+    return AgingWip(
+        now=dto.now,
+        cycle_time_percentile=timedelta(seconds=seconds) if seconds is not None else None,
+        items=tuple(
+            AgingItem(
+                work_item_id=item.work_item_id,
+                title=item.title,
+                state=item.state,
+                age=timedelta(seconds=item.age_seconds),
+                over_percentile=item.over_percentile,
+            )
+            for item in dto.items
+        ),
+        percentile=dto.percentile,
+        history_days=dto.history_days,
+    )
 
 
 async def _api(
@@ -157,7 +160,15 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
             app, "GET", "/api/metrics/health", params={**scope, "window_days": window_days}
         )
         aging = await _api(app, "GET", "/api/metrics/aging-wip", params=scope)
-        return "\n\n".join([context["context"], _render_health(health), _render_aging(aging)])
+        return "\n\n".join(
+            [
+                context["context"],
+                _render_health(health),
+                render_aging(
+                    _aging_from_json(aging), more_hint=" (use aging_wip for the full list)"
+                ),
+            ]
+        )
 
     @mcp.tool()
     async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
@@ -171,7 +182,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:  # noqa: C901 — sum of ~10 tr
             "/api/metrics/aging-wip",
             params=_params(team_id=team_id, project_id=project_id),
         )
-        return _render_aging(aging, limit=50)
+        return render_aging(_aging_from_json(aging), limit=50)
 
     @mcp.tool()
     async def list_work_items(
