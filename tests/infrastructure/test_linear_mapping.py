@@ -144,10 +144,35 @@ def test_map_issue_assignee_without_a_name_is_unassigned(assignee: dict[str, Any
     assert map_issue({**ISSUE_NODE, "assignee": assignee}).assignee is None
 
 
-def test_map_issue_truncates_long_assignee_name() -> None:
-    node = {**ISSUE_NODE, "assignee": {"name": "x" * 300}}
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        # Linear uses the email as the name when a user never set one.
+        ("rafael.yoshida@rivio.com.br", "Rafael Yoshida"),
+        ("mauro_falc@rivio.com.br", "Mauro Falc"),
+        ("atendimento@rivio.com.br", "Atendimento"),
+        # ...or a handle someone typed into the name field.
+        ("milena.prokopowitsch", "Milena Prokopowitsch"),
+        # Real names pass through untouched.
+        ("Ada Lovelace", "Ada Lovelace"),
+        ("Klayvem Guimarães Leal da Silva", "Klayvem Guimarães Leal da Silva"),
+        ("Cher", "Cher"),
+        ("Ana-Maria", "Ana-Maria"),
+        # Nothing readable to derive: keep what Linear sent.
+        ("@rivio.com.br", "@rivio.com.br"),
+    ],
+)
+def test_map_issue_assignee_email_or_handle_reads_as_a_name(name: str, expected: str) -> None:
+    node = {**ISSUE_NODE, "assignee": {"name": name}}
 
-    assert map_issue(node).assignee == "x" * 255
+    assert map_issue(node).assignee == expected
+
+
+def test_map_issue_truncates_long_assignee_name() -> None:
+    name = "Ada " + "x" * 300
+    node = {**ISSUE_NODE, "assignee": {"name": name}}
+
+    assert map_issue(node).assignee == name[:255]
 
 
 def test_map_issue_synthesizes_created_event_and_maps_history() -> None:
