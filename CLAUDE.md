@@ -86,6 +86,7 @@ and Dependabot are summarized in `README.md`.
 | `app/config.py` | all runtime config (`ATLAS_`-prefixed `Settings`) |
 | `web/` | React frontend (design brief: `PRODUCT.md`) |
 | `migrations/` | Alembic migrations |
+| `data/` | the SQLite database (gitignored), shared by local runs and Docker |
 | `tests/` | mirrors `app/`, one subtree per layer |
 | `docs/architecture/`, `docs/adr/` | architecture overview + ADRs |
 

@@ -218,6 +218,11 @@ Async SQLAlchemy 2.0 over SQLite (aiosqlite) today; portable to PostgreSQL becau
 database-specific code is confined to Infrastructure and types (e.g. `Uuid`) render
 per-dialect. Alembic manages schema migrations.
 
+The database file is `data/atlas.db`, used by local runs and bind-mounted into
+the Compose container, so both see the same data. SQLite's WAL locks don't
+cross Docker Desktop's VM, so only one of them may run at a time; the
+Makefile's `local-db-free` guard enforces this.
+
 ## Chat access (MCP)
 
 `app/api/mcp_server.py` mounts an MCP (Model Context Protocol) server inside

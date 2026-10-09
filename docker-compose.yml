@@ -7,10 +7,12 @@ services:
       - path: .env
         required: false
     environment:
-      # Forced regardless of .env, so the named volume below always works.
+      # Forced regardless of .env: the container always opens the bind mount
+      # below, which is the same data/atlas.db a local `make dev` uses.
       ATLAS_DATABASE_URL: sqlite+aiosqlite:////app/data/atlas.db
     volumes:
-      - atlas-data:/app/data
-
-volumes:
-  atlas-data:
+      # ponytail: one database shared with local runs, so one side at a time
+      # (SQLite's WAL locks don't cross Docker's VM; the Makefile guards it).
+      # On a Linux host the container writes data/ as root; upgrade path is
+      # `user: "<host uid>:<host gid>"` here if that bites.
+      - ./data:/app/data

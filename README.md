@@ -115,8 +115,11 @@ make docker-up
 ```
 
 Builds the frontend and backend into a single image, runs database migrations
-on startup, and serves Atlas at http://localhost:8000. Data persists across
-restarts in the `atlas-data` Docker volume. Stop with `make docker-down`.
+on startup, and serves Atlas at http://localhost:8000. Data lives in
+`data/atlas.db`, the same file the native setup below uses, so you can switch
+between the two and keep your data. Run one at a time: `make dev`, `make run`
+and `make migrate` refuse to start while the Docker app is up. Stop with
+`make docker-down`.
 Atlas is served to this machine only — opening it from another device on the
 LAN is refused (ADR-0012).
 
