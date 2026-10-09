@@ -201,8 +201,11 @@ describe("FlowDashboard", () => {
   it("says so instead of drawing empty axes when nothing completed in the window", async () => {
     mockMetricsFetch({
       "/api/metrics/lead-time-distribution": {
+        // What the API sends when nothing completed: no bins, no percentiles.
         ...distributionFixture,
-        bins: [{ start_days: 0, end_days: 1, count: 0 }],
+        bins: [],
+        p50_seconds: null,
+        p85_seconds: null,
       },
     });
 
