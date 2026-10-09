@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 import pytest
 
+import app.infrastructure.ai.advisor as advisor_module
 from app.domain.advisor.entities import AdviceFeedback, MeetingType, Persona
 from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
 from app.domain.advisor.render import render_context
@@ -653,3 +654,27 @@ async def test_feedback_cannot_close_its_own_fence() -> None:
 
     user = json.loads(captured[0].content)["messages"][1]["content"]
     assert user.lower().count("</feedback>") == 1
+
+
+async def test_advise_sends_the_configured_max_tokens() -> None:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": _advice_out().model_dump_json()}}]
+    }
+    captured: list[httpx.Request] = []
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="some/reasoning-model",
+        client_factory=lambda: _mock_client(httpx.Response(200, json=payload), captured),
+        max_tokens=16_000,
+    )
+
+    await advisor.advise(_context())
+
+    (request,) = captured
+    assert json.loads(request.content)["max_tokens"] == 16_000
+
+
+def test_the_standup_prompt_states_the_talking_point_cap() -> None:
+    standup = advisor_module._MEETING_INSTRUCTIONS[MeetingType.DAILY_STANDUP]
+
+    assert f"At most {advisor_module._MAX_TALKING_POINTS} points" in standup

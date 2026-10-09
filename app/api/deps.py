@@ -141,6 +141,8 @@ def get_advisor_port() -> AdvisorPort:
         api_key=settings.openrouter_api_key,
         model=settings.advisor_model,
         self_critique=settings.advisor_self_critique,
+        max_tokens=settings.advisor_max_tokens,
+        timeout_seconds=settings.advisor_timeout_seconds,
     )
 
 
