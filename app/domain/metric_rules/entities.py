@@ -109,10 +109,14 @@ class MetricRules:
     blocked_by_relations: bool = True
     blocked_state_pattern: bool = True
     blocked_state_names: tuple[str, ...] = ()
-    # Delivery-health scoring.
+    # Delivery-health scoring. Calibrated on live data (review 2026-10-09):
+    # lead-time spread runs 2x-19x across teams, and flow efficiency reads
+    # 92-100% everywhere because blocked periods are its only wait signal,
+    # so efficiency stays out of the built-in score until queue-state waits
+    # are measured (see flow_efficiency.py).
     healthy_min: int = 70
     warning_min: int = 40
-    predictability_worst_ratio: float = 4.0
+    predictability_worst_ratio: float = 20.0
     stability_best_weeks: float = 1.0
     stability_worst_weeks: float = 5.0
     aging_percentile: int = 85
@@ -121,7 +125,7 @@ class MetricRules:
     # team's health.
     health_min_sample: int = 5
     weight_predictability: float = 1.0
-    weight_efficiency: float = 1.0
+    weight_efficiency: float = 0.0
     weight_flow: float = 1.0
     weight_stability: float = 1.0
     weight_risk: float = 1.0

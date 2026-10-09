@@ -28,7 +28,7 @@ def test_empty_scope_has_no_score() -> None:
     assert health.components == ()
 
 
-def test_healthy_scope_scores_high_with_all_five_components() -> None:
+def test_healthy_scope_scores_high_with_the_default_components() -> None:
     streams = [
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, 7)),
@@ -45,11 +45,23 @@ def test_healthy_scope_scores_high_with_all_five_components() -> None:
     assert health.score >= 70
     assert {c.name for c in health.components} == {
         "predictability",
-        "efficiency",
         "flow",
         "stability",
         "risk",
     }
+
+
+def test_efficiency_scores_when_its_weight_is_set() -> None:
+    streams = [
+        _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
+        _stream((EventType.CREATED, 15), (EventType.STARTED, 14), (EventType.BLOCKED, 13)),
+    ]
+
+    health = compute_delivery_health(
+        streams, now=NOW, rules=MetricRules(health_min_sample=1, weight_efficiency=1.0)
+    )
+
+    assert "efficiency" in {c.name for c in health.components}
 
 
 def test_open_blocked_wip_drags_risk_to_zero() -> None:

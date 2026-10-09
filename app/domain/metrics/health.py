@@ -1,6 +1,7 @@
 """Delivery Health: one explainable 0-100 composite per scope.
 
-Five components — predictability, efficiency, flow, stability, risk — each
+Five components — predictability, efficiency (weight 0 by default), flow,
+stability, risk — each
 scored 0-100 with a human-readable reason, weighted into an overall score
 and band. Pure arithmetic over already-derived samples and timelines: the
 AI layer explains these numbers, it never produces them (VISION:
@@ -10,6 +11,7 @@ backed by fewer than the rules' health_min_sample items is left out; with
 none left the scope is unscored, not critical.
 """
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -52,7 +54,12 @@ def _clamp(value: float) -> int:
 def _predictability(
     lead: list[timedelta], *, worst_ratio: float, min_sample: int
 ) -> HealthComponent | None:
-    """Lead-time spread: p95 at p50 scores 100, p95 at `worst_ratio` x p50 scores 0."""
+    """Lead-time spread on a log scale: p95 at p50 scores 100, at `worst_ratio` x p50 scores 0.
+
+    Log, because the spread is a ratio: each doubling of p95/p50 costs the
+    same points, so a team going from 16x to 8x gains as much as one going
+    from 2x to 1x. A linear 4x scale pinned 7 of 9 live teams at 0.
+    """
     if len(lead) < min_sample:
         return None
     seconds = [d.total_seconds() for d in lead]
@@ -62,7 +69,7 @@ def _predictability(
     ratio = percentile(seconds, 95) / p50
     return HealthComponent(
         name="predictability",
-        score=_clamp(100 * (worst_ratio - ratio) / (worst_ratio - 1)),
+        score=_clamp(100 * (1 - math.log(ratio) / math.log(worst_ratio))),
         reason=f"lead time p95 is {ratio:.1f}x p50",
     )
 

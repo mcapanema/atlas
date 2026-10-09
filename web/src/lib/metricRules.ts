@@ -213,7 +213,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "predictability_worst_ratio",
         label: "Predictability: worst lead-time spread",
-        help: "Lead-time p95 equal to p50 scores 100; at this multiple of p50 it scores 0.",
+        help: "Lead-time p95 equal to p50 scores 100; at this multiple of p50 it scores 0. Log scale: every doubling of the spread costs the same points.",
         control: { kind: "number", min: 1.1, max: 20, step: 0.1, suffix: "× p50" },
       },
       {
