@@ -112,3 +112,12 @@ describe("list-valued rules", () => {
     );
   });
 });
+
+describe("rules that feed predictability", () => {
+  it.each(["aging_percentile", "aging_history_days", "health_min_sample"])(
+    "%s says it shapes the predictability service level",
+    (name) => {
+      expect(ruleSpec(name).help).toMatch(/predictability/i);
+    },
+  );
+});

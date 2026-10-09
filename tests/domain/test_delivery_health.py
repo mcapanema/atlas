@@ -263,3 +263,25 @@ def test_a_sub_day_service_level_reads_in_hours() -> None:
 
     assert component is not None
     assert "within 6h" in component.reason
+
+
+def test_a_sub_hour_service_level_reads_in_minutes() -> None:
+    # 20-minute cycles (automation) must not read "within 0h".
+    prior = [_hours(40 * 24 + 1 / 3, 40 * 24) for _ in range(5)]
+    window = [_hours(2 * 24 + 1 / 3, 2 * 24) for _ in range(5)]
+
+    component = _predictability([*prior, *window])
+
+    assert component is not None
+    assert "within 20m" in component.reason
+
+
+def test_a_service_level_that_rounds_to_a_day_reads_in_days() -> None:
+    # 23.75 hours reads "1d", never "24h".
+    prior = [_hours(40 * 24 + 23.75, 40 * 24) for _ in range(5)]
+    window = [_hours(2 * 24 + 23.75, 2 * 24) for _ in range(5)]
+
+    component = _predictability([*prior, *window])
+
+    assert component is not None
+    assert "within 1d" in component.reason

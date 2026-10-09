@@ -231,19 +231,19 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "aging_percentile",
         label: "Aging flag percentile",
-        help: "In-progress items older than this percentile of completed cycle times are flagged as aging; it also feeds the health risk score.",
+        help: "In-progress items older than this percentile of completed cycle times are flagged as aging. It also feeds the health risk score, and sets the predictability service level and its target hit rate (the predictability floor must stay below it).",
         control: { kind: "number", min: 50, max: 99, step: 1 },
       },
       {
         name: "aging_history_days",
         label: "Aging reference history",
-        help: "The aging line is the aging percentile of cycle times for items completed in this many recent days. It also feeds the health risk score.",
+        help: "The aging line is the aging percentile of cycle times for items completed in this many recent days. It also feeds the health risk score, and predictability reads the same span just before its window as its service level.",
         control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
       },
       {
         name: "health_min_sample",
         label: "Minimum items per component",
-        help: "A health component scores only with at least this many items behind it: completions in the window, or items in progress for risk. With fewer it's left out, and a team with no component left reads not scored yet.",
+        help: "A health component scores only with at least this many items behind it: completions in the window (for predictability, also completions in the aging history before it), or items in progress for risk. With fewer it's left out, and a team with no component left reads not scored yet.",
         control: { kind: "number", min: 1, max: 50, step: 1, suffix: "items" },
       },
       weight("weight_predictability", "predictability"),

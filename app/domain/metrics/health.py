@@ -73,9 +73,12 @@ def _clamp(value: float) -> int:
 
 
 def _short_duration(duration: timedelta) -> str:
-    """'36d', or '6h' under a day: a sub-day service level must not read '0d'."""
-    hours = duration.total_seconds() / 3600
-    return f"{hours / 24:.0f}d" if hours >= 24 else f"{hours:.0f}h"
+    """'36d', '6h' or '20m': a short service level must never read '0d' or '0h'."""
+    minutes = duration.total_seconds() / 60
+    if round(minutes) < 60:
+        return f"{minutes:.0f}m"
+    hours = minutes / 60
+    return f"{hours:.0f}h" if round(hours) < 24 else f"{hours / 24:.0f}d"
 
 
 def _predictability(

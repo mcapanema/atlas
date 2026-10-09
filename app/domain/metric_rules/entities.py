@@ -130,8 +130,11 @@ class MetricRules:
     aging_percentile: int = 85
     # Completed cycles the aging line (and health risk) read: the trailing
     # days, so a team's 2025 pace doesn't set its 2026 aging flags.
+    # Predictability's service level reads the same span, ending where its
+    # window starts (ADR-0016).
     aging_history_days: int = 90
-    # A component backed by fewer items (window completions; in-progress
+    # A component backed by fewer items (window completions, and for
+    # predictability also the completions before the window; in-progress
     # items for risk) is left out: one stuck item is an anecdote, not a
     # team's health.
     health_min_sample: int = 5
