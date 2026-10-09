@@ -89,6 +89,9 @@ export interface LeadTimeDistribution {
   window_start: string;
   window_end: string;
   bins: DurationBin[];
+  /** Exact lead-time percentiles over the window; null when nothing completed. */
+  p50_seconds: number | null;
+  p85_seconds: number | null;
 }
 
 export function useLeadTimeDistribution(scope: MetricsScope, filters: MetricsFilters = {}) {

@@ -267,6 +267,8 @@ class LeadTimeDistributionRead(BaseModel):
     window_start: datetime
     window_end: datetime
     bins: list[DurationBinRead]
+    p50_seconds: float | None
+    p85_seconds: float | None
 
 
 class OutcomeBucketRead(BaseModel):

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.samples import FlowSample
+from app.domain.metrics.stats import percentile
 
 
 @dataclass(frozen=True)
@@ -19,11 +20,17 @@ class DurationBin:
 
 @dataclass(frozen=True)
 class LeadTimeDistribution:
-    """Histogram of lead times for items completed in the trailing window."""
+    """Histogram of lead times for items completed in the trailing window.
+
+    p50/p85 are the window's exact lead-time percentiles (the stat tiles'
+    method), so the chart's reference lines needn't approximate from bins.
+    """
 
     window_start: datetime
     window_end: datetime
     bins: tuple[DurationBin, ...]
+    p50_seconds: float | None = None
+    p85_seconds: float | None = None
 
 
 def duration_bins(durations: list[timedelta]) -> list[DurationBin]:
@@ -50,8 +57,12 @@ def compute_lead_time_distribution(
     in_window = [
         s for s in samples if s.completed_at is not None and window_start < s.completed_at <= now
     ]
+    durations = lead_times(in_window)
+    seconds = [d.total_seconds() for d in durations]
     return LeadTimeDistribution(
         window_start=window_start,
         window_end=now,
-        bins=tuple(duration_bins(lead_times(in_window))),
+        bins=tuple(duration_bins(durations)),
+        p50_seconds=percentile(seconds, 50) if seconds else None,
+        p85_seconds=percentile(seconds, 85) if seconds else None,
     )

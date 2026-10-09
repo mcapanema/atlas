@@ -33,7 +33,7 @@ export function LeadTimeCharts({
   const distributionOption = useMemo(
     () =>
       distribution && hasCompletions(distribution)
-        ? buildLeadTimeDistributionOption(distribution.bins, mode)
+        ? buildLeadTimeDistributionOption(distribution, mode)
         : null,
     [distribution, mode],
   );
@@ -51,7 +51,7 @@ export function LeadTimeCharts({
         <Col xs={24} lg={12}>
           <ChartCard
             label={`Lead time distribution (${chartLabel})`}
-            help="How many completed items fell into each lead-time bucket. A long right tail means a few items took far longer than typical. The dashed lines mark P50 and P85 over this chart's window, so they can differ from the stat tiles above."
+            help="How many completed items fell into each lead-time bucket. A long right tail means a few items took far longer than typical. The dashed lines mark the exact P50 and P85 over this chart's window, so they can differ from the stat tiles above."
           >
             {distributionOption ? (
               <EChart option={distributionOption} />

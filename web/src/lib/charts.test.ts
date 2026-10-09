@@ -115,12 +115,15 @@ describe("buildWipOption", () => {
 });
 
 describe("buildLeadTimeDistributionOption", () => {
+  const DAY = 86_400;
+  const histogram = (counts: number[], p50Days: number | null, p85Days: number | null) => ({
+    bins: counts.map((count, day) => ({ start_days: day, end_days: day + 1, count })),
+    p50_seconds: p50Days == null ? null : p50Days * DAY,
+    p85_seconds: p85Days == null ? null : p85Days * DAY,
+  });
+
   it("plots one bar per day bin, keeping empty bins", () => {
-    const option = buildLeadTimeDistributionOption([
-      { start_days: 0, end_days: 1, count: 3 },
-      { start_days: 1, end_days: 2, count: 0 },
-      { start_days: 2, end_days: 3, count: 1 },
-    ]);
+    const option = buildLeadTimeDistributionOption(histogram([3, 0, 1], 0.5, 2.2));
     const series = option.series as Series[];
 
     expect(series).toHaveLength(1);
@@ -129,20 +132,16 @@ describe("buildLeadTimeDistributionOption", () => {
   });
 
   it("labels the lead time distribution axes", () => {
-    const option = buildLeadTimeDistributionOption([{ start_days: 0, end_days: 1, count: 2 }]);
+    const option = buildLeadTimeDistributionOption(histogram([2], 0.5, 0.5));
 
     expect((option.xAxis as { name: string }).name).toBe("Lead time");
     expect((option.yAxis as { name: string }).name).toBe("Items completed");
   });
 
-  it("marks the window's P50 and P85 bins so the spikes read against them", () => {
-    // 3 items: cumulative 0, 2, 3 — half (1.5) is reached in the 1d bin,
-    // 85% (2.55) only in the 2d bin.
-    const option = buildLeadTimeDistributionOption([
-      { start_days: 0, end_days: 1, count: 0 },
-      { start_days: 1, end_days: 2, count: 2 },
-      { start_days: 2, end_days: 3, count: 1 },
-    ]);
+  it("marks the bins holding the window's exact P50 and P85", () => {
+    // Exact (interpolated) percentiles, as the stat tiles compute them: P50
+    // 1.4d sits in the 1d bin, P85 2.9d in the 2d bin.
+    const option = buildLeadTimeDistributionOption(histogram([0, 2, 1], 1.4, 2.9));
     const marks = (option.series as Series[])[0].markLine?.data as {
       xAxis: string;
       label: { formatter: string };
@@ -154,8 +153,8 @@ describe("buildLeadTimeDistributionOption", () => {
     ]);
   });
 
-  it("draws no reference lines when no bin holds an item", () => {
-    const option = buildLeadTimeDistributionOption([{ start_days: 0, end_days: 1, count: 0 }]);
+  it("draws no reference lines when the window has no percentiles", () => {
+    const option = buildLeadTimeDistributionOption(histogram([], null, null));
 
     expect((option.series as Series[])[0].markLine?.data).toEqual([]);
   });

@@ -221,36 +221,41 @@ function referenceLine(xAxis: string, name: string, n: Neutrals) {
   };
 }
 
-/** Index of the first bin whose cumulative count reaches fraction q of all items. */
-function binPercentileIndex(bins: DurationBin[], q: number): number {
-  const target = q * bins.reduce((sum, bin) => sum + bin.count, 0);
-  let cumulative = 0;
-  const reached = bins.map((bin) => {
-    cumulative += bin.count;
-    return cumulative >= target;
-  });
-  return reached.indexOf(true);
+/** A lead-time histogram plus its window's exact percentiles (null when empty). */
+export interface LeadTimeHistogram {
+  bins: DurationBin[];
+  p50_seconds: number | null;
+  p85_seconds: number | null;
 }
 
-function percentileLines(bins: DurationBin[], labels: string[], n: Neutrals) {
-  if (!bins.some((bin) => bin.count > 0)) return [];
-  return [
-    referenceLine(labels[binPercentileIndex(bins, 0.5)], "P50", n),
-    referenceLine(labels[binPercentileIndex(bins, 0.85)], "P85", n),
+/** The P50/P85 lines, each on the day bin holding its exact percentile. */
+function percentileLines(histogram: LeadTimeHistogram, labels: string[], n: Neutrals) {
+  const lines = [
+    { name: "P50", seconds: histogram.p50_seconds },
+    { name: "P85", seconds: histogram.p85_seconds },
   ];
+  return lines.flatMap(({ name, seconds }) => {
+    const label = seconds == null ? undefined : labels[Math.floor(seconds / 86_400)];
+    return label === undefined ? [] : [referenceLine(label, name, n)];
+  });
 }
 
 export function buildLeadTimeDistributionOption(
-  bins: DurationBin[],
+  histogram: LeadTimeHistogram,
   mode: ThemeMode = "light",
 ): EChartsOption {
   const n = neutrals(mode);
+  const { bins } = histogram;
   const labels = bins.map((b) => `${b.start_days}d`);
   const series = barSeries(
     "Completed items",
     bins.map((b) => b.count),
   ) as [Record<string, unknown>];
-  series[0].markLine = { silent: true, symbol: "none", data: percentileLines(bins, labels, n) };
+  series[0].markLine = {
+    silent: true,
+    symbol: "none",
+    data: percentileLines(histogram, labels, n),
+  };
   return {
     tooltip: { trigger: "item" },
     // top 32, not 24: room for the P50/P85 labels above the plot.
