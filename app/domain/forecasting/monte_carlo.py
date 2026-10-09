@@ -35,19 +35,6 @@ def daily_throughput_samples(samples: list[FlowSample], *, end: datetime, days: 
     return counts
 
 
-def observed_history_days(samples: list[FlowSample], *, end: datetime, days: int) -> int:
-    """`days`, shortened to the whole days since the scope's first event.
-
-    Days before a scope's first event aren't zero-throughput days — nothing
-    was tracked yet. Sampling them drags a young scope's forecast toward zero
-    throughput. The partial first day counts; never less than one day.
-    """
-    if not samples:
-        return days
-    first = min(sample.created_at for sample in samples)
-    return max(1, min(days, (end - first) // timedelta(days=1) + 1))
-
-
 def simulate_days_to_complete(
     daily_samples: list[int], *, remaining: int, trials: int = TRIALS, seed: int = 0
 ) -> list[int] | None:

@@ -21,7 +21,12 @@ from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.flow_efficiency import flow_efficiency, measured_cycles
 from app.domain.metrics.lead_time import lead_times
-from app.domain.metrics.samples import FlowSample, derive_flow_sample, in_progress
+from app.domain.metrics.samples import (
+    FlowSample,
+    derive_flow_sample,
+    in_progress,
+    observed_history_days,
+)
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.throughput import throughput
 from app.domain.metrics.wip import wip
@@ -93,7 +98,10 @@ def _flow(
     now: datetime,
     min_sample: int,
 ) -> HealthComponent | None:
-    """Throughput trend: recent half-window vs the half before it."""
+    """Throughput trend: recent half-window vs the half before it.
+
+    The caller leaves it out when the tracked history doesn't cover the whole window.
+    """
     earlier = throughput(samples, start=window_start, end=mid)
     recent = throughput(samples, start=mid, end=now)
     if earlier + recent < min_sample:
@@ -115,15 +123,19 @@ def _stability(
     *,
     wip_now: int,
     completed: int,
-    window_days: int,
+    tracked_days: int,
     best_weeks: float,
     worst_weeks: float,
     min_sample: int,
 ) -> HealthComponent | None:
-    """WIP inventory in weeks of throughput (Little's law): <= best 100, >= worst 0."""
+    """WIP inventory in weeks of throughput (Little's law): <= best 100, >= worst 0.
+
+    Throughput is per *tracked* week: a scope first synced mid-window
+    completed its items in fewer days than the window spans.
+    """
     if completed < min_sample:
         return None
-    weekly = completed / (window_days / 7)
+    weekly = completed / (tracked_days / 7)
     weeks_of_wip = wip_now / weekly
     return HealthComponent(
         name="stability",
@@ -220,17 +232,24 @@ def compute_delivery_health(
         for s in all_samples
         if s.completed_at is not None and window_start < s.completed_at <= now
     ]
+    # A scope first synced mid-window has no earlier half to compare
+    # (it read "grew from 0"), and fewer days of throughput than the window.
+    tracked_days = observed_history_days(all_samples, end=now, days=window_days)
     floor = rules.health_min_sample
     candidates = (
         _predictability(
             lead_times(in_window), worst_ratio=rules.predictability_worst_ratio, min_sample=floor
         ),
         _efficiency(in_window, min_sample=floor),
-        _flow(all_samples, window_start=window_start, mid=mid, now=now, min_sample=floor),
+        (
+            _flow(all_samples, window_start=window_start, mid=mid, now=now, min_sample=floor)
+            if tracked_days >= window_days
+            else None
+        ),
         _stability(
             wip_now=wip(all_samples, at=now),
             completed=len(in_window),
-            window_days=window_days,
+            tracked_days=tracked_days,
             best_weeks=rules.stability_best_weeks,
             worst_weeks=rules.stability_worst_weeks,
             min_sample=floor,

@@ -11,10 +11,10 @@ from app.domain.forecasting.monte_carlo import (
     DeliveryForecast,
     daily_throughput_samples,
     delivery_confidence,
-    observed_history_days,
     simulate_days_to_complete,
     summarize_completion,
 )
+from app.domain.metrics.samples import observed_history_days
 from app.domain.work_items.entities import WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
