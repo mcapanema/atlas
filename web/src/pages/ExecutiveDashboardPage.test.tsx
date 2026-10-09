@@ -27,7 +27,11 @@ const criticalHealth = {
   components: [
     { name: "risk", score: 5, reason: "4 of 6 in-progress items blocked or aging past cycle p85" },
     { name: "flow", score: 30, reason: "completed 1 recently vs 5 in the prior half-window" },
-    { name: "predictability", score: 60, reason: "lead time p95 is 2.9x p50" },
+    {
+      name: "predictability",
+      score: 60,
+      reason: "61% of 12 items finished within 9d (cycle p85 of the 90 days before)",
+    },
   ],
 };
 
@@ -150,7 +154,11 @@ describe("ExecutiveDashboardPage", () => {
       within(detail).getByText("completed 1 recently vs 5 in the prior half-window"),
     ).toBeInTheDocument();
     // …not the third-weakest…
-    expect(within(detail).queryByText("lead time p95 is 2.9x p50")).not.toBeInTheDocument();
+    expect(
+      within(detail).queryByText(
+        "61% of 12 items finished within 9d (cycle p85 of the 90 days before)",
+      ),
+    ).not.toBeInTheDocument();
     // …and the 7-day lead-time pulse (snapshotsFixture: 345600 → 432000, +25%).
     expect(within(detail).getByText("lead time P85 worsening this week")).toBeInTheDocument();
     // No separate card stack restating the table.

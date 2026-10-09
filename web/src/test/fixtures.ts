@@ -163,7 +163,12 @@ export const healthFixture = {
   score: 82,
   band: "healthy",
   components: [
-    { name: "predictability", score: 74, band: "healthy", reason: "lead time p95 is 1.8x p50" },
+    {
+      name: "predictability",
+      score: 74,
+      band: "healthy",
+      reason: "69% of 40 items finished within 6d (cycle p85 of the 90 days before)",
+    },
     { name: "efficiency", score: 78, band: "healthy", reason: "flow efficiency 78%" },
     {
       name: "flow",

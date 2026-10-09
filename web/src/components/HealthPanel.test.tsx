@@ -21,7 +21,9 @@ describe("HealthPanel", () => {
     expect(tileFor("Health")).toHaveTextContent("82/100");
     expect(tileFor("Health")).toHaveTextContent("healthy");
     expect(tileFor("predictability")).toHaveTextContent("74/100");
-    expect(tileFor("predictability")).toHaveTextContent("lead time p95 is 1.8x p50");
+    expect(tileFor("predictability")).toHaveTextContent(
+      "69% of 40 items finished within 6d (cycle p85 of the 90 days before)",
+    );
   });
 
   it("names a weak component's band in words on a healthy team", () => {
@@ -37,7 +39,7 @@ describe("HealthPanel", () => {
               name: "predictability",
               score: 33,
               band: "critical",
-              reason: "lead time p95 is 7.5x p50",
+              reason: "45% of 91 items finished within 36d (cycle p85 of the 90 days before)",
             },
             {
               name: "flow",
