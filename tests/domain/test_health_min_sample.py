@@ -79,6 +79,18 @@ def test_three_completions_score_the_completion_components() -> None:
     }
 
 
+def test_a_zero_length_cycle_does_not_count_toward_the_efficiency_floor() -> None:
+    # Started and completed in one instant (an automation): flow efficiency
+    # can't measure it, so it can't help efficiency reach the floor.
+    instant = _stream((EventType.CREATED, 12), (EventType.STARTED, 5), (EventType.COMPLETED, 5))
+
+    health = compute_delivery_health([*_done(8, 3), instant], now=NOW)
+
+    names = {c.name for c in health.components}
+    assert "efficiency" not in names
+    assert "predictability" in names  # still 3 completions in the window
+
+
 @pytest.mark.parametrize("value", [0, 51, 2.5])
 def test_health_min_sample_is_a_whole_number_from_1_to_50(value: object) -> None:
     with pytest.raises(ValueError, match="health_min_sample"):

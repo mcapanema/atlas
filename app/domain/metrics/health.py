@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cycle_time import cycle_times
-from app.domain.metrics.flow_efficiency import flow_efficiency
+from app.domain.metrics.flow_efficiency import flow_efficiency, measured_cycles
 from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.samples import FlowSample, derive_flow_sample, in_progress
 from app.domain.metrics.stats import percentile
@@ -68,10 +68,9 @@ def _predictability(
 
 
 def _efficiency(in_window: list[FlowSample], *, min_sample: int) -> HealthComponent | None:
-    started = [s for s in in_window if s.started_at is not None]
-    if len(started) < min_sample:
+    if len(measured_cycles(in_window)) < min_sample:
         return None
-    eff = flow_efficiency(started)
+    eff = flow_efficiency(in_window)
     if eff is None:
         return None
     return HealthComponent(
