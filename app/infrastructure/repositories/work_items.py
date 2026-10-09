@@ -35,6 +35,7 @@ class WorkItemModel(Base):
     parent_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("work_items.id", name="fk_work_items_parent_id"), nullable=True, index=True
     )
+    assignee: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     def to_domain(self) -> WorkItem:
         return WorkItem(
@@ -50,6 +51,7 @@ class WorkItemModel(Base):
             state_type=StateType(self.state_type) if self.state_type else None,
             labels=tuple(self.labels),
             parent_id=self.parent_id,
+            assignee=self.assignee,
         )
 
     @classmethod
@@ -67,6 +69,7 @@ class WorkItemModel(Base):
             state_type=work_item.state_type.value if work_item.state_type else None,
             labels=list(work_item.labels),
             parent_id=work_item.parent_id,
+            assignee=work_item.assignee,
         )
 
 
