@@ -21,6 +21,11 @@ not adding people.
   average.
 - A widening p85 over time is an early predictability warning even when the
   median looks stable.
+- Delivery health's predictability is a service-level hit rate: the share of
+  recent items that finished within the team's own cycle-time P85 from the
+  months before. A low score means the team's track record stopped
+  predicting its work (usually a slowdown or a batch of oversized items),
+  not that its distribution is wide.
 
 ## Flow efficiency and blocked time
 - Flow efficiency = active time / total time. Values well below ~40% mean

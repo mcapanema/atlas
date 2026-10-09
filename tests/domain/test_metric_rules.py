@@ -22,8 +22,8 @@ def test_defaults_reproduce_the_built_in_behavior() -> None:
     assert rules.restart_clock_after_move_back is False
     assert (rules.reopen_completion, rules.done_then_canceled) == ("last", "delivered")
     assert (rules.healthy_min, rules.warning_min) == (70, 40)
-    # Calibrated on live data (review 2026-10-09): teams run 2x-19x.
-    assert rules.predictability_worst_ratio == 20.0
+    # Calibrated on live data (2026-10-09): service-level hit rates ran 42%-100%.
+    assert rules.predictability_floor == 25
     # Efficiency reads 92-100% everywhere until queue-state waits exist.
     assert rules.weight_efficiency == 0.0
     assert (rules.stability_best_weeks, rules.stability_worst_weeks) == (1.0, 5.0)
@@ -50,10 +50,18 @@ def test_layers_validate_together_not_one_by_one() -> None:
 
 
 def test_json_integers_land_as_floats_in_float_rules() -> None:
-    rules = apply_overrides(DEFAULT_RULES, {"predictability_worst_ratio": 3})
+    rules = apply_overrides(DEFAULT_RULES, {"stability_best_weeks": 2})
 
-    assert rules.predictability_worst_ratio == 3.0
-    assert isinstance(rules.predictability_worst_ratio, float)
+    assert rules.stability_best_weeks == 2.0
+    assert isinstance(rules.stability_best_weeks, float)
+
+
+def test_the_retired_worst_ratio_override_is_ignored() -> None:
+    # Review focus 5: an install that tuned the old spread scale keeps working.
+    overrides = {"predictability_worst_ratio": 3}
+
+    assert apply_overrides(DEFAULT_RULES, overrides) == DEFAULT_RULES
+    assert unknown_rule_names(overrides) == ["predictability_worst_ratio"]
 
 
 def test_unknown_keys_are_ignored_and_reported() -> None:
@@ -69,7 +77,8 @@ def test_unknown_keys_are_ignored_and_reported() -> None:
         ({"healthy_min": 0}, "healthy_min"),
         ({"warning_min": 70}, "warning_min must be below healthy_min"),
         ({"stability_worst_weeks": 1.0}, "stability_worst_weeks"),
-        ({"predictability_worst_ratio": 1.0}, "predictability_worst_ratio"),
+        ({"predictability_floor": 99}, "predictability_floor"),
+        ({"predictability_floor": 85}, "predictability_floor must be below aging_percentile"),
         ({"aging_percentile": 40}, "aging_percentile"),
         ({"daily_bucket_max_days": 0}, "daily_bucket_max_days"),
         ({"forecast_history_days": 3}, "forecast_history_days"),

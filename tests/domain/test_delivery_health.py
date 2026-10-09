@@ -32,6 +32,7 @@ def test_empty_scope_has_no_score() -> None:
 
 def test_healthy_scope_scores_high_with_the_default_components() -> None:
     streams = [
+        *_prior(2),  # a 2-day service level the window's 2-day cycles meet
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, 7)),
         _stream((EventType.CREATED, 6), (EventType.STARTED, 5), (EventType.COMPLETED, 3)),
@@ -81,9 +82,10 @@ def test_open_blocked_wip_drags_risk_to_zero() -> None:
 
 
 def test_each_component_is_banded_by_the_scopes_cutoffs() -> None:
-    # One clean completed item (predictability: p95 == p50 -> 100) and one
-    # open blocked item (risk: 1 of 1 at risk -> 0).
+    # One prior 2-day cycle sets the service level; the window's 2-day cycle
+    # meets it (predictability 100). One open blocked item: risk 1 of 1 -> 0.
     streams = [
+        *_prior(2, count=1),
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 15), (EventType.STARTED, 14), (EventType.BLOCKED, 13)),
     ]
@@ -170,3 +172,94 @@ def test_stability_reads_weeks_of_throughput_over_the_tracked_history() -> None:
     stability = next(c for c in health.components if c.name == "stability")
     assert stability.score == 86
     assert stability.reason == "WIP equals 1.6 weeks of throughput"
+
+
+def _hours(started_h: float, completed_h: float) -> list[Event]:
+    item_id = uuid4()
+    return [
+        Event(work_item_id=item_id, type=EventType.CREATED, occurred_at=NOW - timedelta(days=150)),
+        Event(
+            work_item_id=item_id,
+            type=EventType.STARTED,
+            occurred_at=NOW - timedelta(hours=started_h),
+        ),
+        Event(
+            work_item_id=item_id,
+            type=EventType.COMPLETED,
+            occurred_at=NOW - timedelta(hours=completed_h),
+        ),
+    ]
+
+
+def _prior(cycle_days: int, count: int = 5) -> list[list[Event]]:
+    """`count` items completed 40 days ago (inside the 90 days before the window)."""
+    return [
+        _stream(
+            (EventType.CREATED, 150),
+            (EventType.STARTED, 40 + cycle_days),
+            (EventType.COMPLETED, 40),
+        )
+        for _ in range(count)
+    ]
+
+
+def _window(cycle_days: int, count: int = 5) -> list[list[Event]]:
+    """`count` items completed 2 days ago, inside the 30-day window."""
+    return [
+        _stream(
+            (EventType.CREATED, 20),
+            (EventType.STARTED, 2 + cycle_days),
+            (EventType.COMPLETED, 2),
+        )
+        for _ in range(count)
+    ]
+
+
+def _predictability(streams: list[list[Event]]) -> HealthComponent | None:
+    health = compute_delivery_health(streams, now=NOW)
+    return next((c for c in health.components if c.name == "predictability"), None)
+
+
+def test_a_slow_window_cannot_raise_its_own_service_level() -> None:
+    # Prior 1-day cycles set the SLE; the window's 10-day cycles all miss it.
+    # Were the window part of the reference, its P85 would be 10d and all hit.
+    component = _predictability([*_prior(1), *_window(10)])
+
+    assert component is not None
+    assert component.score == 0
+    assert component.reason.startswith("0% of 5 items finished within 1d")
+
+
+def test_meeting_the_service_level_more_often_than_the_target_scores_100() -> None:
+    component = _predictability([*_prior(3), *_window(1)])
+
+    assert component is not None
+    assert component.score == 100
+
+
+def test_a_scope_without_prior_history_has_no_predictability() -> None:
+    # Review focus 1: Forward Deployment's case. History starts inside the
+    # window, so no commitment existed to meet: omitted, not 0 or 100.
+    assert _predictability(_window(1, count=10)) is None
+
+
+def test_completions_without_a_start_are_left_out_of_the_hit_rate() -> None:
+    # Review focus 2: 5 started items all hit; 3 closed without starting have
+    # no cycle time, so the rate is 5/5, not 5/8.
+    never_started = [_stream((EventType.CREATED, 20), (EventType.COMPLETED, 2)) for _ in range(3)]
+
+    component = _predictability([*_prior(3), *_window(1), *never_started])
+
+    assert component is not None
+    assert component.reason.startswith("100% of 5 items")
+
+
+def test_a_sub_day_service_level_reads_in_hours() -> None:
+    # Review focus 3: 6-hour prior cycles must not read "within 0d".
+    prior = [_hours(40 * 24 + 6, 40 * 24) for _ in range(5)]
+    window = [_hours(2 * 24 + 6, 2 * 24) for _ in range(5)]
+
+    component = _predictability([*prior, *window])
+
+    assert component is not None
+    assert "within 6h" in component.reason

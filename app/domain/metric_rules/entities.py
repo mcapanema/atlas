@@ -68,6 +68,7 @@ def _named_blocked(name: str, *, pattern: bool, listed: tuple[str, ...]) -> bool
 _INTEGERS = (
     "healthy_min",
     "warning_min",
+    "predictability_floor",
     "aging_percentile",
     "aging_history_days",
     "health_min_sample",
@@ -78,7 +79,7 @@ _INTEGERS = (
 _RANGES: dict[str, tuple[float, float]] = {
     "healthy_min": (1, 100),
     "warning_min": (0, 99),
-    "predictability_worst_ratio": (1.1, 20),
+    "predictability_floor": (0, 98),
     "stability_best_weeks": (0, 52),
     "stability_worst_weeks": (0.1, 52),
     "aging_percentile": (50, 99),
@@ -114,13 +115,16 @@ class MetricRules:
     blocked_state_pattern: bool = True
     blocked_state_names: tuple[str, ...] = ()
     # Delivery-health scoring. Calibrated on live data (review 2026-10-09):
-    # lead-time spread runs 2x-19x across teams, and flow efficiency reads
-    # 92-100% everywhere because blocked periods are its only wait signal,
-    # so efficiency stays out of the built-in score until queue-state waits
-    # are measured (see flow_efficiency.py).
+    # flow efficiency reads 92-100% everywhere because blocked periods are
+    # its only wait signal, so efficiency stays out of the built-in score
+    # until queue-state waits are measured (see flow_efficiency.py).
     healthy_min: int = 70
     warning_min: int = 40
-    predictability_worst_ratio: float = 20.0
+    # Predictability is the share of window completions within the service
+    # level (the aging percentile of cycle times over the aging history
+    # before the window, ADR-0016): at that percentile's own rate it scores
+    # 100, at this share 0. Live hit rates ran 42%-100% (2026-10-09).
+    predictability_floor: int = 25
     stability_best_weeks: float = 1.0
     stability_worst_weeks: float = 5.0
     aging_percentile: int = 85
@@ -289,6 +293,8 @@ def _check_ranges(rules: MetricRules) -> None:
 def _check_order(rules: MetricRules) -> None:
     if rules.warning_min >= rules.healthy_min:
         raise ValueError("warning_min must be below healthy_min")
+    if rules.predictability_floor >= rules.aging_percentile:
+        raise ValueError("predictability_floor must be below aging_percentile")
     if rules.stability_worst_weeks <= rules.stability_best_weeks:
         raise ValueError("stability_worst_weeks must be above stability_best_weeks")
     if not any(rules.weight(name) > 0 for name in HEALTH_COMPONENTS):

@@ -456,7 +456,7 @@ class MetricRulesRead(BaseModel):
     done_then_canceled: Literal["delivered", "canceled"]
     healthy_min: int
     warning_min: int
-    predictability_worst_ratio: float
+    predictability_floor: int
     stability_best_weeks: float
     stability_worst_weeks: float
     aging_percentile: int
@@ -508,7 +508,7 @@ class MetricRulesOverridesWrite(BaseModel):
     done_then_canceled: Literal["delivered", "canceled"] | None = None
     healthy_min: int | None = None
     warning_min: int | None = None
-    predictability_worst_ratio: float | None = None
+    predictability_floor: int | None = None
     stability_best_weeks: float | None = None
     stability_worst_weeks: float | None = None
     aging_percentile: int | None = None
