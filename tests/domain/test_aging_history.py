@@ -79,7 +79,26 @@ def test_health_risk_reads_the_aging_line_from_the_aging_history() -> None:
     )
 
     assert next(c for c in default.components if c.name == "risk").reason.startswith("5 of 5")
+    # Nothing completed in the 30-day history, so the limit falls back to the
+    # history itself: 30 days in progress is not *over* 30 days.
     assert next(c for c in short.components if c.name == "risk").reason.startswith("0 of 5")
+
+
+def test_a_team_stalled_past_the_aging_history_still_reads_critical() -> None:
+    # Nothing completed in the 90-day history, so there's no p85 line; work in
+    # progress longer than the whole history is aging by any measure.
+    done_long_ago = [
+        _stream((EventType.CREATED, 125), (EventType.STARTED, 122), (EventType.COMPLETED, 120))
+        for _ in range(10)
+    ]
+    stalled = [_stream((EventType.CREATED, 151), (EventType.STARTED, 150)) for _ in range(6)]
+
+    health = compute_delivery_health([*done_long_ago, *stalled], now=NOW)
+
+    risk = next(c for c in health.components if c.name == "risk")
+    assert health.band == "critical"
+    assert risk.reason.startswith("6 of 6")
+    assert "over 90 days" in risk.reason
 
 
 @pytest.mark.parametrize("value", [6, 366, 30.5])

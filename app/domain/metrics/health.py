@@ -1,14 +1,14 @@
 """Delivery Health: one explainable 0-100 composite per scope.
 
-Five components — predictability, efficiency (weight 0 by default), flow,
-stability, risk — each
+Five components — predictability, efficiency, flow, stability, risk — each
 scored 0-100 with a human-readable reason, weighted into an overall score
-and band. Pure arithmetic over already-derived samples and timelines: the
-AI layer explains these numbers, it never produces them (VISION:
-"AI Explains, Statistics Predict"). Scales, the aging percentile, component
-weights and band cutoffs come from the scope's MetricRules. A component
-backed by fewer than the rules' health_min_sample items is left out; with
-none left the scope is unscored, not critical.
+and band; efficiency carries no weight by default. Pure arithmetic over
+already-derived samples and timelines: the AI layer explains these
+numbers, it never produces them (VISION: "AI Explains, Statistics
+Predict"). Scales, the aging percentile and history, component weights and
+band cutoffs come from the scope's MetricRules. A component backed by
+fewer than the rules' health_min_sample items is left out; with none left
+the scope is unscored, not critical.
 """
 
 import math
@@ -149,31 +149,47 @@ def _risk(
     item_states: list[tuple[FlowSample, bool]],
     *,
     now: datetime,
-    cycle_limit: timedelta | None,
-    aging_percentile: int,
+    aging_limit: tuple[timedelta, str],
     min_sample: int,
 ) -> HealthComponent | None:
-    """Share of in-progress items currently blocked or aging past the cycle percentile."""
+    """Share of in-progress items currently blocked or in progress past `aging_limit`.
+
+    `aging_limit` is (limit, how the reason names it) — see `_aging_limit`.
+    """
+    cycle_limit, limit_label = aging_limit
     open_items = [(sample, blocked) for sample, blocked in item_states if in_progress(sample, now)]
     if len(open_items) < min_sample:
         return None
     at_risk = sum(
         1
         for sample, blocked in open_items
-        if blocked
-        or (
-            cycle_limit is not None
-            and sample.started_at is not None
-            and now - sample.started_at > cycle_limit
-        )
+        if blocked or (sample.started_at is not None and now - sample.started_at > cycle_limit)
     )
     return HealthComponent(
         name="risk",
         score=_clamp(100 * (1 - at_risk / len(open_items))),
-        reason=(
-            f"{at_risk} of {len(open_items)} in-progress items blocked or aging past"
-            f" cycle p{aging_percentile}"
-        ),
+        reason=f"{at_risk} of {len(open_items)} in-progress items blocked or {limit_label}",
+    )
+
+
+def _aging_limit(
+    samples: list[FlowSample], *, now: datetime, rules: MetricRules
+) -> tuple[timedelta, str]:
+    """The risk component's aging limit and how its reason names it.
+
+    The cycle-time percentile over the aging history; with nothing completed
+    in that history, the history itself — an item in progress longer than
+    the whole history, with nothing finished in it, is aging by any measure.
+    The Aging WIP card keeps no flags in that case (its line is the percentile).
+    """
+    reference = aging_reference(
+        samples, now=now, pct=rules.aging_percentile, history_days=rules.aging_history_days
+    )
+    if reference is not None:
+        return reference, f"aging past cycle p{rules.aging_percentile}"
+    return (
+        timedelta(days=rules.aging_history_days),
+        f"in progress over {rules.aging_history_days} days with nothing completed in them",
     )
 
 
@@ -251,13 +267,7 @@ def compute_delivery_health(
         _risk(
             item_states,
             now=now,
-            cycle_limit=aging_reference(
-                all_samples,
-                now=now,
-                pct=rules.aging_percentile,
-                history_days=rules.aging_history_days,
-            ),
-            aging_percentile=rules.aging_percentile,
+            aging_limit=_aging_limit(all_samples, now=now, rules=rules),
             min_sample=floor,
         ),
     )
