@@ -148,7 +148,7 @@ def test_render_meeting_context_includes_health_and_aging() -> None:
     assert render_context(_delivery()) in text  # the advisor digest is embedded whole
     assert "Delivery health: 61/100 (warning)" in text
     assert "- efficiency 42: flow efficiency 42%" in text
-    assert "Aging WIP (cycle-time p85 = 4.0d):" in text
+    assert "Aging WIP (cycle-time p85 over the last 90 days = 4.0d):" in text
     assert '- "Fix login" — In Progress, 6.0d [over p85]' in text
 
 
@@ -184,7 +184,7 @@ def test_render_meeting_context_caps_aging_at_ten_items() -> None:
     assert "... and 2 more" in text
 
 
-def test_render_meeting_context_names_the_configured_aging_percentile() -> None:
+def test_render_meeting_context_names_the_configured_aging_percentile_and_history() -> None:
     context = MeetingContext(
         delivery=_delivery(),
         health=DeliveryHealth(
@@ -195,12 +195,13 @@ def test_render_meeting_context_names_the_configured_aging_percentile() -> None:
             cycle_time_percentile=timedelta(days=4),
             items=(_aging_item("Fix login", 6, True),),
             percentile=70,
+            history_days=30,
         ),
     )
 
     text = render_meeting_context(context)
 
-    assert "Aging WIP (cycle-time p70 = 4.0d):" in text
+    assert "Aging WIP (cycle-time p70 over the last 30 days = 4.0d):" in text
     assert '- "Fix login" — In Progress, 6.0d [over p70]' in text
 
 
