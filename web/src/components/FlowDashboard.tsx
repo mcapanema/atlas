@@ -10,7 +10,6 @@ import {
   useFlowMetrics,
   useLeadTimeDistribution,
   type AgingItem,
-  type DeliveryHealth,
   type DurationStats,
   type FlowHistory,
   type FlowMetrics,
@@ -28,14 +27,13 @@ import {
 import { formatDateTime } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
 import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
-import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { CHART_WINDOW_DAYS, STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
 import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
-import { HealthBadge } from "./HealthBadge";
+import { HealthPanel } from "./HealthPanel";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 
@@ -64,58 +62,6 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
 
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
-}
-
-/**
- * An unscored scope says so instead of leaving a hole: the health floor
- * (health_min_sample) leaves small or idle teams without a score.
- */
-function UnscoredHealth({ periodText }: { periodText: string | null }) {
-  return (
-    <section aria-label="Delivery health" className="health-strip">
-      <div className="health-strip__row">
-        <span className="page-asof">
-          Health not scored yet: too few items completed or in progress to score it.
-        </span>
-        {periodText && <span className="page-asof">{periodText}</span>}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Health leads the page — same vocabulary as the executive dashboard:
- * quiet badge + window when healthy; the two weakest component reasons,
- * tinted by band, when at risk.
- */
-function HealthStrip({
-  health,
-  periodText,
-}: {
-  health: DeliveryHealth;
-  periodText: string | null;
-}) {
-  const atRisk = isAtRisk(health);
-  const reasons = atRisk ? weakestComponents(health, 2) : [];
-  return (
-    <section aria-label="Delivery health" className="health-strip">
-      <div className="health-strip__row">
-        <HealthBadge health={health} />
-        {periodText && <span className="page-asof">{periodText}</span>}
-      </div>
-      {atRisk && (
-        <div className={`attention-card attention-card--${health.band}`}>
-          <ul className="attention-card__reasons">
-            {reasons.map((component) => (
-              <li key={component.name}>
-                <strong>{component.name}</strong> {component.reason}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </section>
-  );
 }
 
 /** Warns when the window's tail has no synced data, so zeros aren't misread. */
@@ -321,12 +267,9 @@ export function FlowDashboard({
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
       <StaleDataAlert history={history.data} />
-      {health.data &&
-        (health.data.score != null && health.data.band != null ? (
-          <HealthStrip health={health.data} periodText={periodText(filters, metrics.data)} />
-        ) : (
-          <UnscoredHealth periodText={periodText(filters, metrics.data)} />
-        ))}
+      {health.data && (
+        <HealthPanel health={health.data} periodText={periodText(filters, metrics.data)} />
+      )}
       <FlowStats
         data={metrics.data}
         statLabel={windowLabel(filters, STATS_WINDOW_DAYS)}

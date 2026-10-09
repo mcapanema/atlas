@@ -264,6 +264,7 @@ async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
     assert 0 <= body["score"] <= 100
     assert body["band"] in ("healthy", "warning", "critical")
     assert "predictability" in [c["name"] for c in body["components"]]
+    assert all(c["band"] in ("healthy", "warning", "critical") for c in body["components"])
 
 
 async def test_delivery_health_for_unknown_team_is_404(client: AsyncClient) -> None:

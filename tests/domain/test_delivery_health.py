@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import MetricRules
-from app.domain.metrics.health import compute_delivery_health
+from app.domain.metrics.health import HealthComponent, compute_delivery_health
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -76,6 +78,36 @@ def test_open_blocked_wip_drags_risk_to_zero() -> None:
     risk = next(c for c in health.components if c.name == "risk")
     assert risk.score == 0
     assert "1 of 1" in risk.reason
+
+
+def test_each_component_is_banded_by_the_scopes_cutoffs() -> None:
+    # One clean completed item (predictability: p95 == p50 -> 100) and one
+    # open blocked item (risk: 1 of 1 at risk -> 0).
+    streams = [
+        _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
+        _stream((EventType.CREATED, 15), (EventType.STARTED, 14), (EventType.BLOCKED, 13)),
+    ]
+
+    health = compute_delivery_health(streams, now=NOW, rules=ANY_SAMPLE)
+    bands = {c.name: c.band for c in health.components}
+
+    assert bands["predictability"] == "healthy"
+    assert bands["risk"] == "critical"
+    assert all(c.band in ("healthy", "warning", "critical") for c in health.components)
+
+    # The scope's own cutoffs decide, not built-in ones: with warning_min 0,
+    # a 0 is a warning, not critical.
+    lenient = compute_delivery_health(
+        streams, now=NOW, rules=MetricRules(health_min_sample=1, healthy_min=1, warning_min=0)
+    )
+    assert next(c for c in lenient.components if c.name == "risk").band == "warning"
+
+
+def test_a_component_cannot_exist_without_its_band() -> None:
+    # The API's band is a required Literal: a component built anywhere but
+    # scoring must not type-check, then 500 at the DTO, for lack of one.
+    with pytest.raises(TypeError):
+        HealthComponent(name="risk", score=50, reason="2 of 4 blocked")  # type: ignore[call-arg]
 
 
 def test_components_without_data_are_omitted() -> None:

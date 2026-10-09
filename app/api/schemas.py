@@ -387,6 +387,7 @@ class HealthComponentRead(BaseModel):
 
     name: str
     score: int
+    band: Literal["healthy", "warning", "critical"]
     reason: str
 
 

@@ -12,7 +12,6 @@ vi.mock("./EChart", () => ({
 import {
   agingWipFixture,
   distributionFixture,
-  healthFixture,
   historyFixture,
   jsonResponse,
   metricsFixture,
@@ -282,65 +281,19 @@ describe("FlowDashboard", () => {
     expect(screen.queryByText("Aging WIP")).toBeNull();
   });
 
-  it("leads with a quiet health strip and the metrics window when healthy", async () => {
+  it("leads with the health tiles, every component visible, above the stat tiles", async () => {
     mockMetricsFetch();
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const strip = await screen.findByRole("region", { name: "Delivery health" });
+    const panel = await screen.findByRole("region", { name: "Delivery health" });
+    expect(within(panel).getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
+    // Healthy still shows the components: no click needed to read them.
+    expect(within(panel).getByText("lead time p95 is 1.8x p50")).toBeInTheDocument();
     expect(
-      within(strip).getByRole("button", {
-        name: "Health 82 of 100 — healthy. Show component reasons",
-      }),
-    ).toBeInTheDocument();
-    expect(within(strip).getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
-    // Healthy stays quiet — reasons live in the badge popover, not inline.
-    expect(screen.queryByText(/lead time p95 is 1.8x p50/)).toBeNull();
-  });
-
-  it("raises an attention card with the two weakest reasons when at risk", async () => {
-    mockMetricsFetch({
-      "/api/metrics/health": {
-        ...healthFixture,
-        score: 24,
-        band: "critical",
-        components: [
-          {
-            name: "risk",
-            score: 5,
-            reason: "4 of 6 in-progress items blocked or aging past cycle p85",
-          },
-          { name: "flow", score: 30, reason: "completed 1 recently vs 5 in the prior half-window" },
-          { name: "predictability", score: 60, reason: "lead time p95 is 2.9x p50" },
-        ],
-      },
-    });
-
-    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-
-    expect(
-      await screen.findByText("4 of 6 in-progress items blocked or aging past cycle p85"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("completed 1 recently vs 5 in the prior half-window"),
-    ).toBeInTheDocument();
-    // ...but not the third-weakest.
-    expect(screen.queryByText("lead time p95 is 2.9x p50")).toBeNull();
-  });
-
-  it("says health isn't scored yet when too few items back it", async () => {
-    // Since health_min_sample, a small or idle team is unscored: the strip
-    // says so (the Executive page's words) instead of silently vanishing.
-    mockMetricsFetch({
-      "/api/metrics/health": { ...healthFixture, score: null, band: null, components: [] },
-    });
-
-    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-
-    const strip = await screen.findByRole("region", { name: "Delivery health" });
-    expect(strip).toHaveTextContent(/Health not scored yet/);
-    expect(strip).toHaveTextContent(/too few items/);
-    expect(strip.querySelector(".health-badge")).toBeNull();
+      panel.compareDocumentPosition(screen.getByText("Throughput (30d)")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("warns when the data is older than the window it is charting", async () => {

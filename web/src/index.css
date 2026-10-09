@@ -96,26 +96,6 @@ h5 {
   font-size: 12px;
   margin: 0 0 16px;
 }
-.attention-card {
-  border-radius: 4px;
-  padding: 10px 14px;
-}
-.attention-card--critical {
-  background: color-mix(in srgb, var(--ant-color-error) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ant-color-error) 40%, transparent);
-}
-.attention-card--warning {
-  background: color-mix(in srgb, var(--ant-color-warning) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ant-color-warning) 40%, transparent);
-}
-.attention-card__reasons {
-  margin: 6px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-}
-.attention-card__reasons strong {
-  font-weight: 600;
-}
 /* An at-risk row's reasons, opened beneath it. The band rule ties it to the
    row's badge; the band word stays in that badge, so color is never the
    only cue. */
@@ -289,6 +269,57 @@ h5 {
 .stat__value {
   font-size: 20px;
   line-height: 1.4;
+}
+/* Health tiles: overall + one per scored component. One row at lg — the
+   default overall + 4 components line up with the 5-column stat grid —
+   two columns on narrow screens. Only warning/critical tint: a healthy
+   screen stays quiet, and the band word is always there for those that do.
+   After .stat, so the band border/background win the cascade. */
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (min-width: 992px) {
+  .health-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+}
+.health-tile__label {
+  text-transform: capitalize;
+}
+.health-tile__scale {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+.health-tile__detail {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+.health-tile__band {
+  font-weight: 600;
+}
+/* Band words sit on their own tint, where the raw *-text tokens miss AA
+   (light warning 2.96:1, dark critical 4.07:1 at 12px). Mixing 45%
+   toward the body text clears 4.5:1 in both modes and keeps the hue. */
+.health-tile--warning {
+  background: color-mix(in srgb, var(--ant-color-warning) 8%, transparent);
+  border-color: color-mix(in srgb, var(--ant-color-warning) 40%, transparent);
+}
+.health-tile--warning .health-tile__band {
+  color: color-mix(in srgb, var(--ant-color-warning-text) 55%, var(--ant-color-text));
+}
+.health-tile--critical {
+  background: color-mix(in srgb, var(--ant-color-error) 9%, transparent);
+  border-color: color-mix(in srgb, var(--ant-color-error) 40%, transparent);
+}
+.health-tile--critical .health-tile__band {
+  color: color-mix(in srgb, var(--ant-color-error-text) 55%, var(--ant-color-text));
+}
+.health-tile--healthy .health-tile__band {
+  color: color-mix(in srgb, var(--ant-color-success-text) 55%, var(--ant-color-text));
 }
 /* Stat tiles: 2 columns on narrow screens, 4 on wide (AntD's lg = 992px).
    The paired variant (scope dashboards) is 5 columns × 2 rows filled
