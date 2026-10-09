@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { jsonResponse, teamFixture, requestUrl } from "../test/fixtures";
@@ -51,6 +52,12 @@ function mockFetch({ configured = true, teams = [teamFixture] } = {}) {
 
 function renderPage(initialEntry = "/meetings") {
   return renderWithClient(<MeetingsPage />, [initialEntry]);
+}
+
+/** Moves the router to `to` without touching the page's own controls. */
+function GoTo({ to }: { to: string }) {
+  const navigate = useNavigate();
+  return <button onClick={() => void navigate(to)}>go</button>;
 }
 
 function requestedUrls(): string[] {
@@ -367,6 +374,32 @@ describe("MeetingsPage", () => {
     fireEvent.change(sprintInput(), { target: { value: "30" } });
     fireEvent.mouseDown(screen.getAllByRole("combobox")[0]);
     fireEvent.click(await screen.findByTitle("Data"));
+    await waitFor(() => expect(sprintInput().value).toBe("21"));
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() =>
+      expect(requestedUrls()).toContain(
+        `/api/meetings/prep?team_id=${otherTeam.id}&meeting=retrospective&window_days=21`,
+      ),
+    );
+  });
+
+  it("drops an edited sprint length when the URL moves to another team", async () => {
+    mockFetch({ teams: [teamFixture, otherTeam] });
+
+    renderWithClient(
+      <>
+        <MeetingsPage />
+        <GoTo to={`/meetings?team=${otherTeam.id}&meeting=retrospective`} />
+      </>,
+      [`/meetings?team=${teamFixture.id}&meeting=retrospective`],
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
+    );
+    fireEvent.change(sprintInput(), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("button", { name: "go" }));
     await waitFor(() => expect(sprintInput().value).toBe("21"));
     fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
 

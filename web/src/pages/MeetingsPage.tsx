@@ -35,8 +35,8 @@ const MEETING_OPTIONS: { value: MeetingType; label: string }[] = [
 ];
 
 interface MeetingInputs {
-  /** An edited sprint length; null reads the selected team's rule. */
-  sprintDays: number | null;
+  /** A sprint length edited for one team; null (or another team) reads the team's rule. */
+  sprintEdit: { teamId: string | undefined; days: number } | null;
   remaining: number | null;
   targetDate: string;
 }
@@ -46,13 +46,24 @@ function teamSprintDays(teams: Team[] | undefined, teamId: string | undefined) {
   return teams?.find((team) => team.id === teamId)?.sprint_length_days;
 }
 
+/** The edit applies only to the team it was made for, however the team changed. */
+function sprintDays(
+  inputs: MeetingInputs,
+  teamId: string | undefined,
+  sprintDefault: number | undefined,
+) {
+  const edit = inputs.sprintEdit;
+  return edit && edit.teamId === teamId ? edit.days : sprintDefault;
+}
+
 /** Only the inputs the selected meeting type uses reach the request. */
 function prepParams(
   meeting: MeetingType,
   inputs: MeetingInputs,
+  teamId: string | undefined,
   sprintDefault: number | undefined,
 ): MeetingPrepParams {
-  if (meeting === "retrospective") return { windowDays: inputs.sprintDays ?? sprintDefault };
+  if (meeting === "retrospective") return { windowDays: sprintDays(inputs, teamId, sprintDefault) };
   if (meeting === "planning") {
     return {
       remaining: inputs.remaining ?? undefined,
@@ -65,11 +76,13 @@ function prepParams(
 function MeetingInputFields({
   meeting,
   inputs,
+  teamId,
   sprintDefault,
   onChange,
 }: {
   meeting: MeetingType;
   inputs: MeetingInputs;
+  teamId: string | undefined;
   sprintDefault: number | undefined;
   onChange: (inputs: MeetingInputs) => void;
 }) {
@@ -78,8 +91,10 @@ function MeetingInputFields({
       <InputNumber
         min={7}
         max={365}
-        value={inputs.sprintDays ?? sprintDefault}
-        onChange={(value) => onChange({ ...inputs, sprintDays: value })}
+        value={sprintDays(inputs, teamId, sprintDefault)}
+        onChange={(value) =>
+          onChange({ ...inputs, sprintEdit: value === null ? null : { teamId, days: value } })
+        }
         addonAfter="days"
         aria-label="Sprint length (days)"
       />
@@ -167,13 +182,17 @@ export function MeetingsPage() {
   const teams = useTeams();
   const status = useAdvisorStatus(); // same OpenRouter key gates advisor and meeting prep
   const [inputs, setInputs] = useState<MeetingInputs>({
-    sprintDays: null,
+    sprintEdit: null,
     remaining: null,
     targetDate: "",
   });
   const [comment, setComment] = useState("");
   const sprintDefault = teamSprintDays(teams.data, teamId);
-  const prep = useMeetingPrep({ teamId }, meeting, prepParams(meeting, inputs, sprintDefault));
+  const prep = useMeetingPrep(
+    { teamId },
+    meeting,
+    prepParams(meeting, inputs, teamId, sprintDefault),
+  );
   const feedback = useSendFeedback(meeting);
 
   const setParam = (key: string, value: string) => {
@@ -199,10 +218,7 @@ export function MeetingsPage() {
             style={{ width: 260 }}
             placeholder="Select a team"
             value={teamId}
-            onChange={(value) => {
-              setInputs((current) => ({ ...current, sprintDays: null }));
-              setParam("team", value);
-            }}
+            onChange={(value) => setParam("team", value)}
             loading={teams.isLoading}
             options={(teams.data ?? []).map((team) => ({ value: team.id, label: team.name }))}
           />
@@ -215,6 +231,7 @@ export function MeetingsPage() {
           <MeetingInputFields
             meeting={meeting}
             inputs={inputs}
+            teamId={teamId}
             sprintDefault={sprintDefault}
             onChange={setInputs}
           />
