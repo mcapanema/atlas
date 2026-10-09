@@ -30,6 +30,7 @@ import {
 import { formatDateTime } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
 import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
+import { isAtRisk, weakestComponents } from "../lib/health";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { useThemeMode } from "../theme/context";
 import { EChart } from "./EChart";
@@ -61,8 +62,8 @@ function duration(stats: DurationStats | null, key: keyof DurationStats): string
 
 /**
  * Health leads the page — same vocabulary as the executive dashboard:
- * quiet badge + window when healthy, tinted attention card with the two
- * weakest component reasons when at risk.
+ * quiet badge + window when healthy; the two weakest component reasons,
+ * tinted by band, when at risk.
  */
 function HealthStrip({
   health,
@@ -71,10 +72,8 @@ function HealthStrip({
   health: DeliveryHealth;
   periodText: string | null;
 }) {
-  const atRisk = health.band === "critical" || health.band === "warning";
-  const reasons = atRisk
-    ? [...health.components].sort((a, b) => a.score - b.score).slice(0, 2)
-    : [];
+  const atRisk = isAtRisk(health);
+  const reasons = atRisk ? weakestComponents(health, 2) : [];
   return (
     <section aria-label="Delivery health" className="health-strip">
       <div className="health-strip__row">
@@ -107,7 +106,7 @@ function StaleDataAlert({ history }: { history: FlowHistory }) {
     <Alert
       type="warning"
       showIcon
-      message={`Data last synced ${formatDateTime(history.data_as_of)}`}
+      title={`Data last synced ${formatDateTime(history.data_as_of)}`}
       description={`The last ${staleDays} day${staleDays === 1 ? "" : "s"} of this window have no synced data. Charts show zero for that period because nothing has been ingested, not because nothing was delivered.`}
     />
   );
@@ -315,7 +314,7 @@ export function FlowDashboard({
   const health = useDeliveryHealth(scope, filters);
 
   if (metrics.isError || history.isError || distribution.isError) {
-    return <Alert type="error" message="Failed to load metrics" />;
+    return <Alert type="error" title="Failed to load metrics" />;
   }
   if (metrics.isPending || history.isPending) {
     return <Skeleton active />;

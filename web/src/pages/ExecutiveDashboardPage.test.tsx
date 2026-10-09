@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -118,11 +119,14 @@ describe("ExecutiveDashboardPage", () => {
 
     expect(await screen.findByText("All 2 teams healthy")).toBeInTheDocument();
     expect(screen.getByText("Last 30 days · 10-06-2026 – 10-07-2026")).toBeInTheDocument();
-    // Healthy portfolio renders no attention section.
-    expect(screen.queryByLabelText("Teams needing attention")).not.toBeInTheDocument();
+    // A healthy portfolio is quiet: no risk rows to open…
+    expect(screen.queryByRole("button", { name: /risk reasons/i })).not.toBeInTheDocument();
+    // …and no blank, unnamed toggle column waiting for one.
+    await screen.findByText("Platform");
+    expect(screen.getAllByRole("columnheader").filter((th) => th.textContent === "")).toEqual([]);
   });
 
-  it("headlines the worst team and raises an attention card when a team is at risk", async () => {
+  it("shows an at-risk team's reasons under its own row, open by default", async () => {
     mockMetricsFetch({
       "/api/teams": teams,
       [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
@@ -134,16 +138,99 @@ describe("ExecutiveDashboardPage", () => {
       screen.getByText(/Growth: 4 of 6 in-progress items blocked or aging past cycle p85/),
     ).toBeInTheDocument();
 
-    const attention = await screen.findByLabelText("Teams needing attention");
-    // Two weakest component reasons, verbatim.
+    // Health arrives after the row renders — it must still open by default.
+    const toggle = await screen.findByRole("button", { name: "Risk reasons for Growth" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const detail = toggle.closest("tr")?.nextElementSibling as HTMLElement;
+    // Two weakest component reasons, verbatim…
     expect(
-      within(attention).getByText("4 of 6 in-progress items blocked or aging past cycle p85"),
+      within(detail).getByText("4 of 6 in-progress items blocked or aging past cycle p85"),
     ).toBeInTheDocument();
     expect(
-      within(attention).getByText("completed 1 recently vs 5 in the prior half-window"),
+      within(detail).getByText("completed 1 recently vs 5 in the prior half-window"),
     ).toBeInTheDocument();
-    // ...but not the third-weakest.
-    expect(within(attention).queryByText("lead time p95 is 2.9x p50")).not.toBeInTheDocument();
+    // …not the third-weakest…
+    expect(within(detail).queryByText("lead time p95 is 2.9x p50")).not.toBeInTheDocument();
+    // …and the 7-day lead-time pulse (snapshotsFixture: 345600 → 432000, +25%).
+    expect(within(detail).getByText("lead time P85 worsening this week")).toBeInTheDocument();
+    // No separate card stack restating the table.
+    expect(screen.queryByLabelText("Teams needing attention")).not.toBeInTheDocument();
+  });
+
+  it("lets the EM fold an at-risk team's reasons away", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Risk reasons for Growth" }));
+
+    const toggle = await screen.findByRole("button", { name: "Risk reasons for Growth" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // rc-table keeps a collapsed row's DOM and hides it with display:none.
+    expect(
+      screen.getByText("completed 1 recently vs 5 in the prior half-window"),
+    ).not.toBeVisible();
+  });
+
+  it("gives healthy teams no risk toggle", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await screen.findByRole("button", { name: "Risk reasons for Growth" });
+    expect(screen.queryByRole("button", { name: /risk reasons for Platform/i })).toBeNull();
+  });
+
+  it("gives unscored and failed teams no risk toggle", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
+      if (url.startsWith("/api/work-items/states")) {
+        return Promise.resolve(jsonResponse(statesFixture));
+      }
+      // Growth's overview fails; Platform answers but health can't score it.
+      if (url.includes(teams[1].id)) return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+      return Promise.resolve(
+        jsonResponse(
+          overviewFixture({
+            health: { ...healthFixture, score: null, band: null, components: [] },
+          }),
+        ),
+      );
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(
+      () => expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+    expect(screen.queryByRole("button", { name: /risk reasons/i })).toBeNull();
+  });
+
+  it("opens a team from its row but not from its risk toggle", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(
+      <Routes>
+        <Route path="/" element={<ExecutiveDashboardPage />} />
+        <Route path="/teams" element={<p>Team page</p>} />
+      </Routes>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Risk reasons for Growth" }));
+    expect(screen.queryByText("Team page")).toBeNull();
+
+    // The row itself remains the shortcut to the team.
+    const growthRow = screen.getByText("Growth").closest("tr");
+    if (!growthRow) throw new Error("Expected Growth row to render");
+    fireEvent.click(within(growthRow).getAllByRole("cell")[3]);
+    expect(await screen.findByText("Team page")).toBeInTheDocument();
   });
 
   it("sorts the table worst-health-first by default", async () => {
@@ -160,6 +247,21 @@ describe("ExecutiveDashboardPage", () => {
         .filter((text) => text.includes("Platform") || text.includes("Growth"));
       expect(rows[0]).toContain("Growth"); // score 24 before score 82
     });
+  });
+
+  it("marks Health, not Team, as the sorted column", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({ health: criticalHealth }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+    await screen.findByRole("button", { name: "Risk reasons for Growth" });
+
+    // The expand column must not shift the sort indicator onto its neighbor.
+    const header = (label: string) =>
+      screen.getAllByRole("columnheader").find((th) => th.textContent === label);
+    expect(header("Health")).toHaveAttribute("aria-sort", "ascending");
+    expect(header("Team")).not.toHaveAttribute("aria-sort");
   });
 
   it("annotates throughput and lead time with deltas vs the prior window", async () => {
@@ -359,8 +461,68 @@ describe("ExecutiveDashboardPage", () => {
     }
     // After sorting by team name ascending then others, the table still lists both teams.
     expect(screen.getByText("Platform")).toBeInTheDocument();
-    // Growth renders twice: attention card + table row.
-    expect(screen.getAllByText("Growth").length).toBeGreaterThanOrEqual(2);
+    // Growth renders once — its table row; no card restates it.
+    expect(screen.getAllByText("Growth")).toHaveLength(1);
+  });
+
+  it("right-aligns figures so magnitudes compare down a column", async () => {
+    mockMetricsFetch({
+      "/api/teams": [teamFixture],
+      [`/api/metrics/overview?team_id=${teamFixture.id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 17 },
+      }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    const figure = await screen.findByText("17");
+    expect(figure.closest("td")).toHaveStyle({ textAlign: "right" });
+  });
+
+  it("keeps figures aligned when only some teams have a delta", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[0].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 17 },
+        snapshots: baselineSnapshots,
+      }),
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 23 },
+        snapshots: [],
+      }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    // Both rows reserve the delta slot, so 17 and 23 end on the same edge.
+    await waitFor(() =>
+      expect(screen.getByText("17").nextElementSibling).toHaveClass("delta-slot"),
+    );
+    expect(screen.getByText("23").nextElementSibling).toHaveClass("delta-slot");
+  });
+
+  it("keeps a missing figure's dash on the figures' edge", async () => {
+    mockMetricsFetch({
+      "/api/teams": teams,
+      [`/api/metrics/overview?team_id=${teams[0].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, completed: 17 },
+        snapshots: baselineSnapshots,
+      }),
+      [`/api/metrics/overview?team_id=${teams[1].id}`]: overviewFixture({
+        metrics: { ...metricsFixture, lead_time: null },
+        snapshots: [],
+      }),
+    });
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("17").nextElementSibling).toHaveClass("delta-slot"),
+    );
+    const growthRow = screen.getByText("Growth").closest("tr");
+    if (!growthRow) throw new Error("Expected Growth row to render");
+    // Growth has no lead time: its "—" reserves the same slot real figures do.
+    const slotted = within(growthRow)
+      .getAllByText("—")
+      .filter((dash) => dash.nextElementSibling?.classList.contains("delta-slot"));
+    expect(slotted).toHaveLength(1);
   });
 
   it("names a lone at-risk team instead of a one-of-one count", async () => {
