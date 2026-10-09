@@ -33,7 +33,9 @@ def test_healthy_scope_scores_high_with_all_five_components() -> None:
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, 7)),
         _stream((EventType.CREATED, 6), (EventType.STARTED, 5), (EventType.COMPLETED, 3)),
-        *[_stream((EventType.CREATED, 4), (EventType.STARTED, 1)) for _ in range(3)],  # fresh WIP
+        _stream((EventType.CREATED, 8), (EventType.STARTED, 7), (EventType.COMPLETED, 5)),
+        _stream((EventType.CREATED, 14), (EventType.STARTED, 13), (EventType.COMPLETED, 11)),
+        *[_stream((EventType.CREATED, 4), (EventType.STARTED, 1)) for _ in range(5)],  # fresh WIP
     ]
 
     health = compute_delivery_health(streams, now=NOW)

@@ -21,7 +21,8 @@ def test_new_rule_defaults_reproduce_todays_behavior() -> None:
     assert DEFAULT_RULES.canceled_then_reopened == "canceled"
     assert DEFAULT_RULES.blocked_label_pattern is True
     assert DEFAULT_RULES.blocked_label_names == ()
-    assert DEFAULT_RULES.blocked_by_relations is False
+    # ADR-0015: relations count by default (all three blocked sources on).
+    assert DEFAULT_RULES.blocked_by_relations is True
     assert DEFAULT_RULES.remaining_state_types == OPEN_STATE_TYPES
     assert DEFAULT_RULES.type_labels == ()
 
@@ -89,6 +90,20 @@ def test_builtin_pattern_matches_whole_words_only() -> None:
 
     assert all(DEFAULT_RULES.is_blocked_label(name) for name in blocked)
     assert not any(DEFAULT_RULES.is_blocked_label(name) for name in not_blocked)
+
+
+def test_builtin_pattern_matches_portuguese_blocked_words() -> None:
+    # A PT-BR workspace marks blocked work "Bloqueante" (59 labels on the
+    # 2026-10-08 data) or a "Bloqueado" column; "Desbloqueado" is the opposite.
+    blocked = ["Bloqueante", "bloqueado", "BLOQUEADA", "Bloqueados", "Bloqueio", "Bloqueado:"]
+    not_blocked = ["Desbloqueado", "desbloqueio", "bloquear", "Bloqueador-x"]
+
+    for name in blocked:
+        assert DEFAULT_RULES.is_blocked_label(name), name
+        assert DEFAULT_RULES.is_blocked_state(name), name
+    for name in not_blocked:
+        assert not DEFAULT_RULES.is_blocked_label(name), name
+        assert not DEFAULT_RULES.is_blocked_state(name), name
 
 
 def test_listed_names_count_and_pattern_can_be_turned_off() -> None:

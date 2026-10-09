@@ -46,11 +46,15 @@ _CHOICES: dict[str, tuple[str, ...]] = {
 MAX_LIST_RULE_ENTRIES = 50
 
 # Built-in blocked-name match for labels and workflow states: whole words,
-# where "_" separates words too. "Blocked", "Blockers", "blocker: external",
-# "Blocking", "blocked_by" match; "regras-blockly" (a Blockly label),
-# "blocks" and "unblocked" don't — the 2026-10-03 audit found a "block"
-# substring match flagging "regras-blockly".
-_BLOCKED_NAME = re.compile(r"(?<![a-z0-9])block(?:ed|ers?|ing)?(?![a-z0-9])", re.IGNORECASE)
+# where "_" separates words too. English "Blocked", "Blockers", "blocker:
+# external", "Blocking", "blocked_by" and Portuguese "Bloqueado(s)/a(s)",
+# "Bloqueante(s)", "Bloqueio(s)" match; "regras-blockly" (a Blockly label),
+# "blocks", "unblocked" and "Desbloqueado" don't — the 2026-10-03 audit
+# found a "block" substring match flagging "regras-blockly".
+_BLOCKED_NAME = re.compile(
+    r"(?<![a-z0-9])(?:block(?:ed|ers?|ing)?|bloque(?:ad[ao]s?|antes?|ios?))(?![a-z0-9])",
+    re.IGNORECASE,
+)
 
 
 def _named_blocked(name: str, *, pattern: bool, listed: tuple[str, ...]) -> bool:
@@ -99,10 +103,10 @@ class MetricRules:
     canceled_then_reopened: CanceledThenReopened = "canceled"
     # Blocked signal: label names and workflow-state names (each by the
     # built-in pattern and/or a list), and Linear "blocked by" relations
-    # (history only — ADR-0011).
+    # (history only — ADR-0011). Every source is on by default (ADR-0015).
     blocked_label_pattern: bool = True
     blocked_label_names: tuple[str, ...] = ()
-    blocked_by_relations: bool = False
+    blocked_by_relations: bool = True
     blocked_state_pattern: bool = True
     blocked_state_names: tuple[str, ...] = ()
     # Delivery-health scoring.
@@ -115,7 +119,7 @@ class MetricRules:
     # A component backed by fewer items (window completions; in-progress
     # items for risk) is left out: one stuck item is an anecdote, not a
     # team's health.
-    health_min_sample: int = 3
+    health_min_sample: int = 5
     weight_predictability: float = 1.0
     weight_efficiency: float = 1.0
     weight_flow: float = 1.0

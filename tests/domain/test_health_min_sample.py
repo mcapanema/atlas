@@ -34,8 +34,8 @@ def _done(*completed_days_ago: int) -> list[list[Event]]:
     ]
 
 
-def test_the_floor_defaults_to_three_items() -> None:
-    assert DEFAULT_RULES.health_min_sample == 3
+def test_the_floor_defaults_to_five_items() -> None:
+    assert DEFAULT_RULES.health_min_sample == 5
 
 
 def test_one_stuck_item_no_longer_scores_the_team() -> None:
@@ -55,21 +55,21 @@ def test_a_floor_of_one_scores_the_same_item() -> None:
 
 def test_a_stalled_team_with_enough_stuck_work_still_reads_critical() -> None:
     # Review focus 5: the floor hides anecdotes, not a stalled team.
-    health = compute_delivery_health([OLD_DONE, *_stuck(3)], now=NOW)
+    health = compute_delivery_health([OLD_DONE, *_stuck(5)], now=NOW)
 
     assert [c.name for c in health.components] == ["risk"]
-    assert health.components[0].reason.startswith("3 of 3")
+    assert health.components[0].reason.startswith("5 of 5")
     assert (health.score, health.band) == (0, "critical")
 
 
-def test_two_completions_are_not_enough_for_the_completion_components() -> None:
-    health = compute_delivery_health(_done(8, 3), now=NOW)
+def test_four_completions_are_not_enough_for_the_completion_components() -> None:
+    health = compute_delivery_health(_done(9, 8, 6, 3), now=NOW)
 
     assert health.components == ()
 
 
-def test_three_completions_score_the_completion_components() -> None:
-    health = compute_delivery_health(_done(8, 5, 3), now=NOW)
+def test_five_completions_score_the_completion_components() -> None:
+    health = compute_delivery_health(_done(9, 8, 6, 5, 3), now=NOW)
 
     assert {c.name for c in health.components} == {
         "predictability",
@@ -84,11 +84,11 @@ def test_a_zero_length_cycle_does_not_count_toward_the_efficiency_floor() -> Non
     # can't measure it, so it can't help efficiency reach the floor.
     instant = _stream((EventType.CREATED, 12), (EventType.STARTED, 5), (EventType.COMPLETED, 5))
 
-    health = compute_delivery_health([*_done(8, 3), instant], now=NOW)
+    health = compute_delivery_health([*_done(9, 8, 6, 3), instant], now=NOW)
 
     names = {c.name for c in health.components}
     assert "efficiency" not in names
-    assert "predictability" in names  # still 3 completions in the window
+    assert "predictability" in names  # still 5 completions in the window
 
 
 @pytest.mark.parametrize("value", [0, 51, 2.5])

@@ -215,8 +215,9 @@ async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
 
 async def test_delivery_health_for_team() -> None:
     team_id = uuid4()
-    done = [_item(team_id) for _ in range(3)]
-    doing = [_item(team_id) for _ in range(3)]
+    # Five of each: the built-in health_min_sample floor.
+    done = [_item(team_id) for _ in range(5)]
+    doing = [_item(team_id) for _ in range(5)]
     events = [
         *(
             event
@@ -248,7 +249,7 @@ async def test_items_created_in_a_blocked_state_that_never_moved_count_as_blocke
     # Linear stamps CREATED+STARTED at creation with no state names; only the
     # stored state says these items have sat in "Blocked" all along.
     team_id = uuid4()
-    stuck = [WorkItem(team_id=team_id, title="Item", state="Blocked") for _ in range(3)]
+    stuck = [WorkItem(team_id=team_id, title="Item", state="Blocked") for _ in range(5)]
     events = [
         event
         for item in stuck
@@ -259,4 +260,4 @@ async def test_items_created_in_a_blocked_state_that_never_moved_count_as_blocke
     health = await service.get_delivery_health(team_id=team_id, now=NOW)
 
     risk = next(c for c in health.components if c.name == "risk")
-    assert risk.reason.startswith("3 of 3")
+    assert risk.reason.startswith("5 of 5")
