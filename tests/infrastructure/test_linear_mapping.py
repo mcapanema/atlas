@@ -128,6 +128,23 @@ def test_map_issue_without_url_key_has_none() -> None:
     assert map_issue(ISSUE_NODE).url is None
 
 
+def test_map_issue_carries_assignee_name() -> None:
+    node = {**ISSUE_NODE, "assignee": {"name": "Ada Lovelace"}}
+
+    assert map_issue(node).assignee == "Ada Lovelace"
+
+
+def test_map_issue_unassigned_has_none() -> None:
+    assert map_issue({**ISSUE_NODE, "assignee": None}).assignee is None
+    assert map_issue(ISSUE_NODE).assignee is None  # key absent
+
+
+def test_map_issue_truncates_long_assignee_name() -> None:
+    node = {**ISSUE_NODE, "assignee": {"name": "x" * 300}}
+
+    assert map_issue(node).assignee == "x" * 255
+
+
 def test_map_issue_synthesizes_created_event_and_maps_history() -> None:
     item = map_issue(ISSUE_NODE)
 
