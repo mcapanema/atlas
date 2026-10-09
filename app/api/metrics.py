@@ -151,6 +151,8 @@ async def get_flow_history(
 ) -> FlowHistoryRead:
     samples, now, period_days = await _period_samples(service, scope, filters, period)
     history = await service.get_flow_history(
+        team_id=scope.team_id,
+        project_id=scope.project_id,
         scope=samples,
         window_days=period_days or window_days,
         now=now,

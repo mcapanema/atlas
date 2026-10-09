@@ -13,6 +13,8 @@ from app.domain.metrics.distribution import (
 from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.history import FlowHistory, compute_flow_history
 from app.domain.metrics.summary import FlowMetrics, compute_flow_metrics
+from app.domain.projects.repository import ProjectRepository
+from app.domain.teams.repository import TeamRepository
 from app.domain.work_items.entities import WorkItemType
 from app.domain.work_items.repository import WorkItemRepository
 
@@ -25,8 +27,13 @@ class MetricsService:
         work_items: WorkItemRepository,
         events: EventRepository,
         rules: MetricRulesResolver | None = None,
+        *,
+        teams: TeamRepository | None = None,
+        projects: ProjectRepository | None = None,
     ) -> None:
         self._scope = ScopeSampleLoader(work_items, events, rules)
+        self._teams = teams
+        self._projects = projects
 
     async def load_scope_data(
         self,
@@ -92,7 +99,18 @@ class MetricsService:
             rules=scope.rules,
             now=window_end,
             window_days=window_days,
+            synced_at=await self._synced_at(team_id, project_id),
         )
+
+    async def _synced_at(self, team_id: UUID | None, project_id: UUID | None) -> datetime | None:
+        """The scope's team's last sync (a project's owning team); None if unknown."""
+        if project_id is not None and self._projects is not None:
+            project = await self._projects.get(project_id)
+            team_id = project.team_id if project is not None else None
+        if team_id is None or self._teams is None:
+            return None
+        team = await self._teams.get(team_id)
+        return team.last_synced_at if team is not None else None
 
     async def get_lead_time_distribution(
         self,

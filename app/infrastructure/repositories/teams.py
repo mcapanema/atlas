@@ -1,7 +1,8 @@
+from collections.abc import Collection
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import String, select
+from sqlalchemy import String, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -22,6 +23,7 @@ class TeamModel(Base):
         String(255), nullable=True, unique=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     def to_domain(self) -> Team:
         return Team(
@@ -30,6 +32,7 @@ class TeamModel(Base):
             name=self.name,
             external_id=self.external_id,
             created_at=self.created_at,
+            last_synced_at=self.last_synced_at,
         )
 
     @classmethod
@@ -40,6 +43,7 @@ class TeamModel(Base):
             name=team.name,
             external_id=team.external_id,
             created_at=team.created_at,
+            last_synced_at=team.last_synced_at,
         )
 
 
@@ -71,3 +75,11 @@ class SqlAlchemyTeamRepository:
         )
         model = result.scalars().one_or_none()
         return model.to_domain() if model is not None else None
+
+    async def mark_synced(self, team_ids: Collection[UUID], at: datetime) -> None:
+        if not team_ids:
+            return
+        await self._session.execute(
+            update(TeamModel).where(TeamModel.id.in_(list(team_ids))).values(last_synced_at=at)
+        )
+        await self._session.flush()

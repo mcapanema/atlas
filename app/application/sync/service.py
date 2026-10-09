@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass, replace
 from uuid import UUID
 
+from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.organizations.entities import Organization
@@ -129,6 +130,7 @@ class SyncService:
         # their types, so only stored events left untyped are filled — exact in both
         # modes, including items a rebuild skips (team unresolved).
         filled = await self._fill_state_types(sources)
+        await self._stamp_synced(organization_id, team_external_id)
         summary = SyncSummary(
             organization_id=organization_id,
             teams=teams,
@@ -192,16 +194,21 @@ class SyncService:
                 await self._teams.add(team)
                 written += 1
             elif existing.name != source.name:
-                updated = Team(
-                    organization_id=existing.organization_id,
-                    name=source.name,
-                    external_id=existing.external_id,
-                    id=existing.id,
-                    created_at=existing.created_at,
-                )
+                updated = replace(existing, name=source.name)
                 await self._teams.update(updated)
                 written += 1
         return written
+
+    async def _stamp_synced(self, organization_id: UUID, team_external_id: str | None) -> None:
+        """Date the synced teams' data: every source team of the org, or the one team."""
+        synced = [
+            team.id
+            for team in await self._teams.list()
+            if team.organization_id == organization_id
+            and team.external_id is not None
+            and team_external_id in (None, team.external_id)
+        ]
+        await self._teams.mark_synced(synced, utcnow())
 
     async def _sync_projects(self) -> int:
         written = 0

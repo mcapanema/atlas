@@ -111,6 +111,8 @@ def get_metrics_service(session: SessionDep) -> MetricsService:
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
         rules_resolver_for(session),
+        teams=SqlAlchemyTeamRepository(session),
+        projects=SqlAlchemyProjectRepository(session),
     )
 
 

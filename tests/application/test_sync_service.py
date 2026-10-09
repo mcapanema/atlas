@@ -1105,3 +1105,36 @@ async def test_sync_team_without_external_id_is_a_value_error() -> None:
 
     with pytest.raises(ValueError, match="not synced from a source"):
         await harness.service.sync_team(manual.id)
+
+
+async def test_org_sync_stamps_every_synced_team() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    before = datetime.now(UTC)
+
+    await harness.service.sync(org_id)
+
+    team = await harness.teams.get_by_external_id("lt1")
+    assert team is not None
+    assert team.last_synced_at is not None
+    assert team.last_synced_at >= before
+
+
+async def test_team_sync_stamps_only_that_team() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    other = await harness.teams.get_by_external_id("lt2")
+    assert other is not None
+    other_stamp = other.last_synced_at
+
+    await harness.service.sync_team(lt1_id)
+
+    mine = await harness.teams.get(lt1_id)
+    theirs = await harness.teams.get_by_external_id("lt2")
+    assert mine is not None
+    assert theirs is not None
+    assert other_stamp is not None
+    assert mine.last_synced_at is not None
+    assert mine.last_synced_at >= other_stamp
+    assert theirs.last_synced_at == other_stamp

@@ -143,6 +143,9 @@ resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
   snapshots only that team and its projects, and never prunes — a
   filtered fetch can't tell deleted from moved — so deletions wait for the
   next organization sync.
+  Each sync stamps `teams.last_synced_at` for the teams it pulled; the flow
+  history's `data_as_of` is the later of that stamp and the newest event's
+  `recorded_at`.
   Auto sync (ADR-0014): an organization's `SyncSchedule`
   (`app/domain/sync_schedules/`: weekdays, a local time window, an interval,
   an IANA zone; slot math in `slots.py`) is served by

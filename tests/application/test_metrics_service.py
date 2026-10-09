@@ -5,8 +5,15 @@ from app.application.metrics.service import MetricsService
 from app.application.scope import ScopeSamples
 from app.domain.events.entities import Event, EventType
 from app.domain.metrics.samples import derive_flow_sample
+from app.domain.projects.entities import Project
+from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem
-from tests.fakes import InMemoryEventRepository, InMemoryWorkItemRepository
+from tests.fakes import (
+    InMemoryEventRepository,
+    InMemoryProjectRepository,
+    InMemoryTeamRepository,
+    InMemoryWorkItemRepository,
+)
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -261,3 +268,22 @@ async def test_items_created_in_a_blocked_state_that_never_moved_count_as_blocke
 
     risk = next(c for c in health.components if c.name == "risk")
     assert risk.reason.startswith("5 of 5")
+
+
+async def test_history_is_dated_by_the_scope_teams_last_sync() -> None:
+    # An eventless scope isolates the stamp: Event.recorded_at defaults to
+    # the real clock, which would win the max() against a NOW-relative stamp.
+    synced = NOW - timedelta(hours=1)
+    team = Team(organization_id=uuid4(), name="Platform", last_synced_at=synced)
+    project = Project(team_id=team.id, name="Launch")
+    service = MetricsService(
+        InMemoryWorkItemRepository([]),
+        InMemoryEventRepository([]),
+        teams=InMemoryTeamRepository([team]),
+        projects=InMemoryProjectRepository([project]),
+    )
+
+    by_team = await service.get_flow_history(team_id=team.id, now=NOW)
+    by_project = await service.get_flow_history(project_id=project.id, now=NOW)
+
+    assert (by_team.data_as_of, by_project.data_as_of) == (synced, synced)

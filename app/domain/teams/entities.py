@@ -12,6 +12,9 @@ class Team:
     organization_id: UUID
     name: str
     external_id: str | None = None
+    # When a sync last pulled this team's work items from the source; None
+    # if never. Dates the team's data even when the sync brought no events.
+    last_synced_at: datetime | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)
 

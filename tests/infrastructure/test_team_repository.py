@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,3 +59,20 @@ async def test_update_persists_changed_fields(session: AsyncSession) -> None:
     fetched = await repo.get(team.id)
     assert fetched is not None
     assert fetched.name == "Platform Engineering"
+
+
+async def test_mark_synced_stamps_only_the_given_teams(session: AsyncSession) -> None:
+    repo = SqlAlchemyTeamRepository(session)
+    synced = Team(organization_id=uuid4(), name="Platform")
+    other = Team(organization_id=synced.organization_id, name="Mobile")
+    await repo.add(synced)
+    await repo.add(other)
+    at = datetime(2026, 10, 9, 14, 30, tzinfo=UTC)
+
+    await repo.mark_synced([synced.id], at)
+
+    fetched, untouched = await repo.get(synced.id), await repo.get(other.id)
+    assert fetched is not None
+    assert untouched is not None
+    assert fetched.last_synced_at == at
+    assert untouched.last_synced_at is None
