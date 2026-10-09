@@ -65,3 +65,15 @@ def test_moved_back_and_canceled_items_are_excluded() -> None:
     aging = compute_aging_wip([moved_back, canceled, doing], now=NOW)
 
     assert [a.title for a in aging.items] == ["Doing"]
+
+
+def test_items_carry_the_current_assignee() -> None:
+    item, sample = _pair("Owned", started_days=3, completed_days=None)
+    unowned = _pair("Unowned", started_days=1, completed_days=None)
+
+    aging = compute_aging_wip([(replace(item, assignee="Ada Lovelace"), sample), unowned], now=NOW)
+
+    assert [(a.title, a.assignee) for a in aging.items] == [
+        ("Owned", "Ada Lovelace"),
+        ("Unowned", None),
+    ]

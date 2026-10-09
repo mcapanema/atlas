@@ -206,6 +206,7 @@ async def test_aging_wip_end_to_end(client: AsyncClient) -> None:
     assert body["cycle_time_percentile_seconds"] is None
     (aging_item,) = body["items"]
     assert aging_item["title"] == "Stuck"
+    assert aging_item["assignee"] is None  # created via REST: no source assignee
     assert aging_item["over_percentile"] is False
     assert aging_item["age_seconds"] > 5 * 86400
 
