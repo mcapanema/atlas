@@ -164,16 +164,20 @@ async def test_as_of_replays_the_scope_at_a_past_instant() -> None:
 async def test_forecast_history_window_defaults_to_the_teams_rule() -> None:
     team = Team(organization_id=ORG, name="Short history")
     item = WorkItem(team_id=team.id, title="Old")
+    first = WorkItem(team_id=team.id, title="First done")
     events = [
         _at(item, EventType.CREATED, 200),
         _at(item, EventType.STARTED, 100),
         _at(item, EventType.COMPLETED, 10),
+        # Delivering since 150 days ago: the rule, not the history, shortens the window.
+        _at(first, EventType.CREATED, 160),
+        _at(first, EventType.COMPLETED, 150),
     ]
     rows = [
         RuleOverrides(organization_id=ORG, team_id=team.id, overrides={"forecast_history_days": 30})
     ]
     service = ForecastService(
-        InMemoryWorkItemRepository([item]),
+        InMemoryWorkItemRepository([item, first]),
         InMemoryEventRepository(events),
         _resolver([team], rows=rows),
     )

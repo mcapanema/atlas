@@ -101,18 +101,26 @@ def _created(days_ago: float) -> FlowSample:
     )
 
 
-def test_observed_history_is_shortened_to_the_scopes_first_event() -> None:
-    # First seen 9.5 days ago: 10 observable days (the partial first day counts).
-    assert observed_history_days([_created(9.5), _created(3)], end=NOW, days=90) == 10
+def test_observed_history_starts_at_the_scopes_first_completion() -> None:
+    # First completion 9.5 days ago: 10 observable days (the partial first day counts).
+    assert observed_history_days([_completed(9.5), _completed(3)], end=NOW, days=90) == 10
+
+
+def test_an_old_moved_in_item_does_not_stretch_the_observed_history() -> None:
+    # Audit 2026-10-13 (FNG): an issue created 15 months before the team, moved
+    # in and still open, made 41 pre-team days count as zero-throughput days.
+    assert observed_history_days([_created(470), _completed(48.5)], end=NOW, days=90) == 49
 
 
 def test_observed_history_is_capped_at_the_requested_window() -> None:
-    assert observed_history_days([_created(200)], end=NOW, days=90) == 90
+    assert observed_history_days([_completed(200)], end=NOW, days=90) == 90
 
 
-def test_observed_history_without_samples_keeps_the_window() -> None:
+def test_observed_history_without_completions_keeps_the_window() -> None:
+    # Nothing delivered yet: no anchor. The forecast has no throughput anyway.
+    assert observed_history_days([_created(5)], end=NOW, days=90) == 90
     assert observed_history_days([], end=NOW, days=90) == 90
 
 
 def test_observed_history_is_at_least_one_day() -> None:
-    assert observed_history_days([_created(-2)], end=NOW, days=90) == 1
+    assert observed_history_days([_completed(-2)], end=NOW, days=90) == 1

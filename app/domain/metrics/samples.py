@@ -256,14 +256,24 @@ def in_progress(sample: FlowSample, at: datetime) -> bool:
 
 
 def observed_history_days(samples: Sequence[FlowSample], *, end: datetime, days: int) -> int:
-    """`days`, shortened to the whole days since the scope's first event.
+    """`days`, shortened to the whole days since the scope's first completion.
 
-    Days before a scope's first event aren't zero-throughput days — nothing
-    was tracked yet. Sampling them drags a young scope's forecast toward zero
-    throughput, and reads its health trend as growth from nothing. The
+    Days before a scope first delivered aren't zero-throughput days: it
+    wasn't delivering through this tracker yet. Sampling them drags a young
+    scope's forecast toward zero throughput, and reads its health trend as
+    growth from nothing. The first *created* item is no anchor: an issue
+    moved in from another team keeps its original creation date (audit
+    2026-10-13: one 2025 issue put 41 phantom zero days in FNG's 90-day
+    forecast). With nothing completed there is no anchor, so `days`. The
     partial first day counts; never less than one day.
+
+    ponytail: a new scope's genuine zero days before its first finish are
+    dropped (slightly optimistic), and an item moved in already done
+    anchors at its old completion. Upgrade path: sync the source team's
+    creation date and anchor at the later of the two.
     """
-    if not samples:
+    completions = [sample.completed_at for sample in samples if sample.completed_at is not None]
+    if not completions:
         return days
-    first = min(sample.created_at for sample in samples)
+    first = min(completions)
     return max(1, min(days, (end - first) // timedelta(days=1) + 1))

@@ -19,9 +19,9 @@ function methodHelp(historyDays: number, trials: number | undefined): string {
   return (
     `Runs ${runs} of the remaining work. Each simulated day draws a completion ` +
     `count from this scope's actual daily throughput over its last ${historyDays} days of ` +
-    "history (the team's forecast history, set in Metric rules; shorter for a young scope), " +
-    "zero-throughput days included. Each bar is how many simulations finished on that date; " +
-    "the dashed lines mark P50 and P85."
+    "history (the team's forecast history, set in Metric rules; counted from the scope's " +
+    "first completion when that is more recent), zero-throughput days included. Each bar is " +
+    "how many simulations finished on that date; the dashed lines mark P50 and P85."
   );
 }
 

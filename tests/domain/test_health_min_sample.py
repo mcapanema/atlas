@@ -23,7 +23,7 @@ def _stream(*steps: tuple[EventType, int]) -> list[Event]:
 OLD_DONE = _stream((EventType.CREATED, 70), (EventType.STARTED, 69), (EventType.COMPLETED, 68))
 
 
-BACKLOG = _stream((EventType.CREATED, 40))  # history covers the 30-day window
+BACKLOG = _stream((EventType.CREATED, 40))  # open backlog: no component counts it
 
 
 def _stuck(count: int) -> list[list[Event]]:
