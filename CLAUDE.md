@@ -23,8 +23,8 @@ Infrastructure (app/infrastructure) — SQLAlchemy adapters, connectors, SPA ser
 
 Layer import rules are enforced by `tests/test_architecture.py`. Each domain
 concept is a vertical slice across all four layers; the slice kinds are
-described in `docs/architecture/overview.md`, and each layer's CLAUDE.md
-names the exemplar to copy for its shape.
+described in `docs/architecture/overview.md`, and `app/domain/CLAUDE.md`
+names the exemplar to copy for each kind.
 
 ## Tech stack
 

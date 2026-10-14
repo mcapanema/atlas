@@ -95,16 +95,19 @@ Atlas reads your Linear workspace and turns its history into these views
 (sidebar groups in the app):
 
 **Overview**
-- **Executive** (`/`) — one row per team: Delivery Health with the reasons a
-  team is at risk, flow metrics with trend sparklines, and how accurate past
-  forecasts turned out.
+- **Executive** (`/`) — one row per team: Delivery Health, flow metrics with
+  their change against the prior window, and how accurate past forecasts
+  turned out. An at-risk row expands to its weakest health components and a
+  7-day lead-time sparkline.
 
 **Delivery**
-- **Teams** (`/teams`) — a team's Delivery Health as one tile per component
-  (predictability, efficiency, flow, stability, risk), Lead/Cycle Time,
-  Throughput, WIP, Blocked Time and Flow Efficiency, flow charts, Aging WIP
-  with each item's owner, and a Monte Carlo completion forecast. **Sync
-  team** refreshes just that team from Linear.
+- **Teams** (`/teams`) — a team's Delivery Health: the overall score plus a
+  tile, with its reason, for each weighted component (predictability, flow,
+  stability, risk; efficiency is off by default — weights live in Metric
+  rules); Lead/Cycle Time, Throughput, WIP, Blocked Time and Flow
+  Efficiency; flow charts; Aging WIP with each item's owner; and a Monte
+  Carlo completion forecast. **Sync team** refreshes just that team from
+  Linear.
 - **Projects** (`/projects`) — the same analytics scoped to one project.
 - **Work Items** (`/work-items`) — every synced item, with its event
   timeline, time in each state, and blocked periods.
@@ -121,8 +124,8 @@ Atlas reads your Linear workspace and turns its history into these views
   schedule.
 - **Metric rules** — how metrics are computed (what counts as blocked,
   lifecycle, health scales and weights, sprint length…), set for the whole
-  workspace or overridden per team. Changing one recomputes history in the
-  background.
+  workspace or overridden per team. Changing a metric rule recomputes
+  history in the background; sprint length only sets the Meetings default.
 
 Every number is computed by Atlas from synced events. The AI explains
 numbers; it never produces them.
