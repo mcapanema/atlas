@@ -135,6 +135,7 @@ def test_open_blocked_period_without_completion_is_not_counted() -> None:
     sample = derive_flow_sample(
         [
             _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
             _event(EventType.BLOCKED, 3),
         ]
     )
