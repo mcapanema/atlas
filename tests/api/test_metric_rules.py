@@ -275,3 +275,25 @@ async def test_sprint_length_is_a_patchable_team_rule(
     assert ok.json()["built_in"]["sprint_length_days"] == 14
     assert too_short.status_code == 422
     assert "sprint_length_days" in too_short.text
+
+
+async def test_tracked_since_is_a_patchable_team_date(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    ok = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"tracked_since": "2026-08-20"}
+    )
+    await settle(rules_app)
+    stored = (await rules_client.get(f"/api/teams/{team}/metric-rules")).json()
+    malformed = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"tracked_since": "20-08-2026"}
+    )
+
+    assert ok.status_code == 200
+    assert ok.json()["built_in"]["tracked_since"] is None
+    assert stored["overrides"] == {"tracked_since": "2026-08-20"}
+    assert stored["effective"]["tracked_since"] == "2026-08-20"
+    assert malformed.status_code == 422
+    assert "tracked_since" in malformed.text

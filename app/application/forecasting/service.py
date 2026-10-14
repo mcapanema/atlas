@@ -74,7 +74,12 @@ class ForecastService:
 
         scope_remaining = remaining if remaining is not None else _open_count(scope)
 
-        history_days = observed_history_days(scope.samples, end=window_end, days=history_window)
+        history_days = observed_history_days(
+            scope.samples,
+            end=window_end,
+            days=history_window,
+            tracked_since=scope.rules.tracked_since_at,
+        )
         daily = daily_throughput_samples(scope.samples, end=window_end, days=history_days)
         # ponytail: the 2k-trial simulation is pure CPU (~0.9s worst case) —
         # run it in a worker thread so the event loop (incl. /health) stays

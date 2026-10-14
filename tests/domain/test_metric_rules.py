@@ -1,3 +1,4 @@
+from datetime import UTC, date, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -135,3 +136,23 @@ def test_overrides_row_defaults_to_an_idle_recompute() -> None:
     assert row.overrides == {}
     assert row.recompute == RecomputeStatus()
     assert row.recompute.state == "idle"
+
+
+def test_tracked_since_is_unset_by_default() -> None:
+    assert DEFAULT_RULES.tracked_since is None
+    assert DEFAULT_RULES.tracked_since_at is None
+
+
+def test_tracked_since_reads_a_stored_iso_date_as_midnight_on_the_teams_calendar() -> None:
+    rules = resolve_rules({"tracked_since": "2026-08-20", "timezone": "America/Sao_Paulo"})
+
+    assert rules.tracked_since == date(2026, 8, 20)
+    assert rules.tracked_since_at == datetime(2026, 8, 20, tzinfo=ZoneInfo("America/Sao_Paulo"))
+
+
+@pytest.mark.parametrize(
+    "value", ["20-08-2026", "soon", 20260820, datetime(2026, 8, 20, tzinfo=UTC)]
+)
+def test_tracked_since_must_be_a_calendar_date(value: object) -> None:
+    with pytest.raises(ValueError, match="tracked_since"):
+        resolve_rules({"tracked_since": value})

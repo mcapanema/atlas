@@ -10,7 +10,7 @@ only ever see one resolved MetricRules.
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
-from datetime import datetime, tzinfo
+from datetime import date, datetime, time, tzinfo
 from typing import Any, Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -148,6 +148,10 @@ class MetricRules:
     timezone: str = "UTC"
     daily_bucket_max_days: int = 21
     forecast_history_days: int = 90
+    # When this team began tracking its work here. Older items (moved in from
+    # another team) don't stretch its history; unset, the start is estimated
+    # (observed_history_days).
+    tracked_since: date | None = None
     # Open state types whose items count as forecast remaining.
     remaining_state_types: tuple[StateType, ...] = OPEN_STATE_TYPES
     # Label -> work-item type, first match wins (Linear has no type field).
@@ -158,6 +162,7 @@ class MetricRules:
 
     def __post_init__(self) -> None:
         _normalize_collections(self)
+        object.__setattr__(self, "tracked_since", _calendar_date(self.tracked_since))
         _check_types(self)
         _check_ranges(self)
         _check_order(self)
@@ -166,6 +171,13 @@ class MetricRules:
     @property
     def tz(self) -> tzinfo:
         return ZoneInfo(self.timezone)
+
+    @property
+    def tracked_since_at(self) -> datetime | None:
+        """The start of tracked_since on the team's calendar."""
+        if self.tracked_since is None:
+            return None
+        return datetime.combine(self.tracked_since, time(), tzinfo=self.tz)
 
     def weight(self, component: str) -> float:
         """The health weight of `component` (one of HEALTH_COMPONENTS)."""
@@ -267,6 +279,18 @@ def _type_labels(value: object) -> tuple[tuple[str, WorkItemType], ...]:
     if len(set(folded)) != len(folded):
         raise ValueError("type_labels must not map the same label twice")
     return pairs
+
+
+def _calendar_date(value: object) -> date | None:
+    """A date rule from the domain (a date) or stored JSON (an ISO string)."""
+    if value is None or (isinstance(value, date) and not isinstance(value, datetime)):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            pass
+    raise ValueError("tracked_since must be a date, e.g. 2026-08-20")
 
 
 def _check_types(rules: MetricRules) -> None:

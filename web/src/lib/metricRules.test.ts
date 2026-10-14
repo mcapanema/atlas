@@ -45,6 +45,11 @@ describe("formatRuleValue", () => {
     expect(formatRuleValue(ruleSpec("forecast_history_days"), 90)).toBe("90 days");
     expect(formatRuleValue(ruleSpec("timezone"), "UTC")).toBe("UTC");
   });
+
+  it("reads a date rule as a calendar day, or not set", () => {
+    expect(formatRuleValue(ruleSpec("tracked_since"), "2026-08-20")).toBe("20-08-2026");
+    expect(formatRuleValue(ruleSpec("tracked_since"), null)).toBe("Not set");
+  });
 });
 
 describe("scope helpers", () => {

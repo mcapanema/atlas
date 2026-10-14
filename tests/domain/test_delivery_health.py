@@ -32,14 +32,14 @@ def test_empty_scope_has_no_score() -> None:
 
 def test_healthy_scope_scores_high_with_the_default_components() -> None:
     streams = [
-        *_prior(2),  # a 2-day service level the window's 2-day cycles meet
+        *_prior(2),  # a 2-day service level, completed before the window: history covers it
         _stream((EventType.CREATED, 20), (EventType.STARTED, 19), (EventType.COMPLETED, 17)),
         _stream((EventType.CREATED, 10), (EventType.STARTED, 9), (EventType.COMPLETED, 7)),
         _stream((EventType.CREATED, 6), (EventType.STARTED, 5), (EventType.COMPLETED, 3)),
         _stream((EventType.CREATED, 8), (EventType.STARTED, 7), (EventType.COMPLETED, 5)),
         _stream((EventType.CREATED, 14), (EventType.STARTED, 13), (EventType.COMPLETED, 11)),
         *[_stream((EventType.CREATED, 4), (EventType.STARTED, 1)) for _ in range(5)],  # fresh WIP
-        _stream((EventType.CREATED, 40)),  # backlog: history covers the window
+        _stream((EventType.CREATED, 40)),  # backlog
     ]
 
     health = compute_delivery_health(streams, now=NOW)
@@ -155,9 +155,48 @@ def test_a_scope_tracked_for_part_of_the_window_has_no_flow_trend() -> None:
     assert "flow" not in {c.name for c in health.components}
 
 
+def test_an_old_moved_in_item_does_not_unlock_the_flow_trend() -> None:
+    # Audit 2026-10-13 (FNG): one issue created long before the team existed
+    # made a 49-day-old scope look tracked for a whole 90-day window, so flow
+    # read "215 recently vs 11" -> 100.
+    streams = [
+        _stream((EventType.CREATED, 470)),  # moved in from another team, still open
+        *[
+            _stream((EventType.CREATED, 11), (EventType.STARTED, 10), (EventType.COMPLETED, days))
+            for days in (9, 7, 5, 3, 1)
+        ],
+        *[_stream((EventType.CREATED, 11)) for _ in range(14)],  # the rest of the backlog
+    ]
+
+    health = compute_delivery_health(streams, now=NOW)
+
+    assert "flow" not in {c.name for c in health.components}
+
+
+def test_the_teams_tracked_since_keeps_a_small_scope_from_unlocking_the_flow_trend() -> None:
+    # Too few items for the estimate to discount the moved-in one; the rule
+    # says tracking began 20 days ago.
+    streams = [
+        _stream((EventType.CREATED, 470)),
+        *[
+            _stream((EventType.CREATED, 11), (EventType.STARTED, 10), (EventType.COMPLETED, days))
+            for days in (9, 7, 5, 3, 1)
+        ],
+    ]
+    since = (NOW - timedelta(days=20)).date()
+
+    estimated = compute_delivery_health(streams, now=NOW, rules=ANY_SAMPLE)
+    ruled = compute_delivery_health(
+        streams, now=NOW, rules=MetricRules(health_min_sample=1, tracked_since=since)
+    )
+
+    assert "flow" in {c.name for c in estimated.components}
+    assert "flow" not in {c.name for c in ruled.components}
+
+
 def test_stability_reads_weeks_of_throughput_over_the_tracked_history() -> None:
-    # Tracked 11 days (first event 10 days ago, partial day counts): 5
-    # completions = 3.18/week, WIP 5 = 1.57 weeks -> 86. Over the full 30
+    # Tracked 11 days (first items created 10 days ago, partial day counts):
+    # 5 completions = 3.18/week, WIP 5 = 1.57 weeks -> 86. Over the full 30
     # days it read 4.29 weeks -> 18.
     streams = [
         *[

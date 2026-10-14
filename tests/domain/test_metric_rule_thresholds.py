@@ -22,13 +22,15 @@ def _stream(*steps: tuple[EventType, int]) -> list[Event]:
     ]
 
 
-# Two completions in the 30-day window (lead 1d and 3d), two items in progress and a backlog item.
+# Two completions in the 30-day window (lead 1d and 3d), two items in progress and one
+# completed before the window.
 SCOPE = [
     _stream((EventType.CREATED, 10), (EventType.STARTED, 10), (EventType.COMPLETED, 9)),
     _stream((EventType.CREATED, 10), (EventType.STARTED, 10), (EventType.COMPLETED, 7)),
     _stream((EventType.CREATED, 4), (EventType.STARTED, 3)),
     _stream((EventType.CREATED, 4), (EventType.STARTED, 3)),
-    _stream((EventType.CREATED, 40)),  # backlog: history covers the window
+    # Completed before the window: tracked history covers all 30 days.
+    _stream((EventType.CREATED, 45), (EventType.STARTED, 43), (EventType.COMPLETED, 40)),
 ]
 
 

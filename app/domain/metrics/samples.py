@@ -6,11 +6,12 @@ FlowSamples instead of re-reading event streams.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
-from app.domain.events.timeline import blocked_periods
+from app.domain.events.timeline import BlockedPeriod, blocked_periods
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
+from app.domain.metrics.stats import percentile
 from app.domain.work_items.entities import NOT_STARTED_STATE_TYPES, StateType
 
 
@@ -186,6 +187,29 @@ def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
     return state
 
 
+def _blocked_in_cycle(
+    periods: Sequence[BlockedPeriod], started_at: datetime | None, completed_at: datetime | None
+) -> timedelta:
+    """Blocked time inside the cycle, started_at -> completed_at.
+
+    A label left on after Done isn't blocked work, pre-start blocking is
+    already queue time, and an item never started has no cycle, so none
+    (audit 2026-10-13). A still-open period on an uncompleted item is
+    unmeasurable and not counted.
+    """
+    if started_at is None:
+        return timedelta(0)
+    total = timedelta(0)
+    for period in periods:
+        ended_at = period.ended_at
+        if completed_at is not None:
+            ended_at = completed_at if ended_at is None else min(ended_at, completed_at)
+        begun = max(period.started_at, started_at)
+        if ended_at is not None and ended_at > begun:
+            total += ended_at - begun
+    return total
+
+
 def derive_flow_sample(
     events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
 ) -> FlowSample | None:
@@ -206,10 +230,9 @@ def derive_flow_sample(
     never counts, so the clock restarts only after a CANCELED. born_done marks an
     item created already completed and never started (see _born_done).
     Blocked time sums the rules' blocked periods (labels, workflow states,
-    relations, explicit events) clipped to the cycle — from started_at
-    (or the first event, if never started) to completed_at; a still-open
-    period on an uncompleted item is not counted (unmeasurable). `born_in`
-    is the item's creation state, as blocked_periods takes it.
+    relations, explicit events) clipped to the cycle, started_at to
+    completed_at (see _blocked_in_cycle); an item never started has none.
+    `born_in` is the item's creation state, as blocked_periods takes it.
 
     With done_then_reopened / canceled_then_reopened = "reopened", a typed
     move from Done / Canceled to a not-started state reopens the item (open,
@@ -222,24 +245,13 @@ def derive_flow_sample(
     state = _replay(ordered, rules)
     started_at, completed_at = state.started_at, state.completed_at
 
-    # Blocked time is measured inside the item's cycle: a label left on after
-    # Done isn't blocked work, and pre-start blocking is already queue time.
-    cycle_start = started_at if started_at is not None else ordered[0].occurred_at
-    blocked_time = timedelta(0)
     periods = blocked_periods(ordered, rules, born_in=born_in)
-    for period in periods:
-        ended_at = period.ended_at
-        if completed_at is not None:
-            ended_at = completed_at if ended_at is None else min(ended_at, completed_at)
-        begun = max(period.started_at, cycle_start)
-        if ended_at is not None and ended_at > begun:
-            blocked_time += ended_at - begun
 
     return FlowSample(
         created_at=ordered[0].occurred_at,
         started_at=started_at,
         completed_at=completed_at,
-        blocked_time=blocked_time,
+        blocked_time=_blocked_in_cycle(periods, started_at, completed_at),
         stopped_at=state.stopped_at,
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
@@ -255,15 +267,55 @@ def in_progress(sample: FlowSample, at: datetime) -> bool:
     return all(ended is None or ended > at for ended in (sample.completed_at, sample.stopped_at))
 
 
-def observed_history_days(samples: Sequence[FlowSample], *, end: datetime, days: int) -> int:
-    """`days`, shortened to the whole days since the scope's first event.
+# Where a scope's tracked history starts, as a percentile of its items'
+# creation: a few old issues moved in from another team can't pull it back.
+_HISTORY_START_PERCENTILE = 10
 
-    Days before a scope's first event aren't zero-throughput days — nothing
-    was tracked yet. Sampling them drags a young scope's forecast toward zero
-    throughput, and reads its health trend as growth from nothing. The
-    partial first day counts; never less than one day.
+
+def observed_history_days(
+    samples: Sequence[FlowSample],
+    *,
+    end: datetime,
+    days: int,
+    tracked_since: datetime | None = None,
+) -> int:
+    """`days`, shortened to the whole days the scope has been tracked.
+
+    Days before tracking began aren't zero-throughput days: nothing was
+    tracked yet. Sampling them drags a young scope's forecast toward zero
+    throughput, and reads its health trend as growth from nothing.
+
+    With `tracked_since` (the team's rule), tracking starts at the scope's
+    first creation or completion on or after it, or at it if none: older
+    items were moved in from elsewhere, and a project that began later
+    starts at its own items. Without it, the start is estimated: the earlier
+    of the first completion and the 10th percentile of item creation. Not
+    the oldest item: a moved-in issue keeps its original creation date
+    (audit 2026-10-13: one 2025 issue put 41 phantom zero days in FNG's
+    90-day forecast). Not the first completion alone: a team or project
+    fills up for weeks before anything finishes, and those are real zero
+    days. The partial first day counts; never less than one day.
+
+    ponytail: the estimate is a percentile. In a scope under ~20 items one
+    old item still pulls the start back, and many moved-in items do in any
+    scope; tracked_since is the fix for a team it misreads.
     """
-    if not samples:
+    if tracked_since is not None:
+        start = _first_activity_since(samples, tracked_since)
+    elif samples:
+        start = _estimated_start(samples)
+    else:
         return days
-    first = min(sample.created_at for sample in samples)
-    return max(1, min(days, (end - first) // timedelta(days=1) + 1))
+    return max(1, min(days, (end - start) // timedelta(days=1) + 1))
+
+
+def _first_activity_since(samples: Sequence[FlowSample], since: datetime) -> datetime:
+    moments = [m for s in samples for m in (s.created_at, s.completed_at) if m is not None]
+    return min((m for m in moments if m >= since), default=since)
+
+
+def _estimated_start(samples: Sequence[FlowSample]) -> datetime:
+    created = [sample.created_at.timestamp() for sample in samples]
+    start = datetime.fromtimestamp(percentile(created, _HISTORY_START_PERCENTILE), tz=UTC)
+    completions = [sample.completed_at for sample in samples if sample.completed_at is not None]
+    return min(start, *completions) if completions else start

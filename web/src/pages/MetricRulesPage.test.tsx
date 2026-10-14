@@ -30,6 +30,7 @@ const BUILT_IN: MetricRules = {
   timezone: "UTC",
   daily_bucket_max_days: 21,
   forecast_history_days: 90,
+  tracked_since: null,
   count_parent_issues: true,
   lead_time_start: "created",
   done_then_reopened: "delivered",

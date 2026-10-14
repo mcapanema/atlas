@@ -154,6 +154,52 @@ async def test_forecast_samples_only_the_scopes_observed_history() -> None:
     assert forecast.completion.p95_days == 5
 
 
+async def test_an_old_moved_in_item_does_not_stretch_the_forecast_history() -> None:
+    # Audit 2026-10-13 (FNG): a 400-day-old open issue made 85 pre-team days
+    # zero-throughput samples (FNG's P50 read 2026-12-31 instead of 2026-11-26).
+    team_id = uuid4()
+    old = _item(team_id)
+    items = [_item(team_id) for _ in range(5)]
+    backlog = [_item(team_id) for _ in range(14)]
+    events = (
+        [_event(old, EventType.CREATED, 400)]
+        + [_event(item, EventType.CREATED, 4) for item in [*items, *backlog]]
+        + [_event(item, EventType.STARTED, 4) for item in items]
+        + [_event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)]
+    )
+    service = ForecastService(
+        InMemoryWorkItemRepository([old, *items, *backlog]), InMemoryEventRepository(events)
+    )
+
+    forecast = await service.get_forecast(team_id=team_id, remaining=5, now=NOW)
+
+    assert forecast.window_start == NOW - timedelta(days=5)
+    assert forecast.completion is not None
+    assert forecast.completion.p50_days == 5
+
+
+async def test_the_teams_tracked_since_bounds_the_forecast_history() -> None:
+    # Two items: the moved-in one outweighs the estimate (90 days of zeros).
+    team_id = uuid4()
+    old, done = _item(team_id), _item(team_id)
+    streams = [
+        [_event(old, EventType.CREATED, 400)],
+        [
+            _event(done, EventType.CREATED, 4),
+            _event(done, EventType.STARTED, 4),
+            _event(done, EventType.COMPLETED, 1),
+        ],
+    ]
+    samples = [s for s in map(derive_flow_sample, streams) if s is not None]
+    rules = MetricRules(tracked_since=date(2026, 6, 30))
+    scope = ScopeSamples(streams=streams, samples=samples, item_count=2, rules=rules)
+    service = ForecastService(InMemoryWorkItemRepository(), InMemoryEventRepository())
+
+    forecast = await service.get_forecast(scope=scope, now=NOW)
+
+    assert forecast.window_start == NOW - timedelta(days=5)
+
+
 async def test_forecast_remaining_excludes_canceled_items() -> None:
     team_id = uuid4()
     done, canceled, doing = _item(team_id), _item(team_id), _item(team_id)

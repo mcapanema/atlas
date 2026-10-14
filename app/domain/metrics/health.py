@@ -165,7 +165,7 @@ def _stability(
 ) -> _Reading | None:
     """WIP inventory in weeks of throughput (Little's law): <= best 100, >= worst 0.
 
-    Throughput is per *tracked* week: a scope first synced mid-window
+    Throughput is per *tracked* week: a scope first tracked mid-window
     completed its items in fewer days than the window spans.
     """
     if completed < min_sample:
@@ -282,9 +282,11 @@ def compute_delivery_health(
         for s in all_samples
         if s.completed_at is not None and window_start < s.completed_at <= now
     ]
-    # A scope first synced mid-window has no earlier half to compare
+    # A scope first tracked mid-window has no earlier half to compare
     # (it read "grew from 0"), and fewer days of throughput than the window.
-    tracked_days = observed_history_days(all_samples, end=now, days=window_days)
+    tracked_days = observed_history_days(
+        all_samples, end=now, days=window_days, tracked_since=rules.tracked_since_at
+    )
     floor = rules.health_min_sample
     candidates = (
         _predictability(all_samples, in_window, window_start=window_start, rules=rules),
