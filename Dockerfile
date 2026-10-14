@@ -4,7 +4,7 @@
 # mirror: CI's anonymous Docker Hub pulls hit its rate limit (429 Too Many
 # Requests). Pinned so Dependabot's docker ecosystem can bump them (an
 # unpinned tag can't be bumped — or reproduced). Node major tracks web/.nvmrc.
-FROM ghcr.io/astral-sh/uv:0.12.23 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
 
 # --- Frontend build -----------------------------------------------------
 FROM mirror.gcr.io/library/node:24-alpine AS frontend-build

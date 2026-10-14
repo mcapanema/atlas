@@ -26,7 +26,7 @@ Each domain concept spans all four layers in the same shape:
 - `app/infrastructure/…` — the adapter side (ORM repository, connector, LLM client)
 - `app/api/<concept>.py` — router, with DTOs in `app/api/schemas.py`
 
-The slices come in four kinds.
+The slices come in the kinds below.
 
 ### Persisted aggregates — the system of record
 
@@ -92,8 +92,8 @@ is the Executive Dashboard's per-team row: flow metrics, health, forecast
 accuracy and snapshot history from one scope load, identical to the
 standalone endpoints for the same query. The frontend consumes them
 on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
-dashboards — charted with Apache ECharts (ADR-0007) — plus the Flow
-Metrics (`/metrics`) and Advisor (`/advisor`) pages.
+dashboards — charted with Apache ECharts (ADR-0007) — plus the Advisor
+(`/advisor`) page; the retired `/metrics` route redirects to `/teams`.
 
 ### Persisted analytics snapshots (ADR-0008)
 

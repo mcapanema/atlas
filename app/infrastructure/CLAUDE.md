@@ -23,6 +23,11 @@ connector SDKs. It never imports `app.application` or `app.api`
   Alembic autogenerate and for `tests/conftest.py`'s
   `Base.metadata.create_all`. Forgetting to add the import here means your
   new table silently doesn't exist in tests or migrations.
+- `repositories/batching.py` — `chunked()` splits an id list into bounded
+  `IN (...)` batches, under SQLite's bind-parameter ceiling (the size and
+  its reasoning are in the module's ponytail docstring). Any query whose id
+  list grows with the dataset goes through it; exemplar:
+  `repositories/events.py`.
 - `connectors/<vendor>/` — one package per external system (e.g.
   `linear/`), containing the vendor API client, pure payload→`Source*`
   mapping functions, and the `DeliveryDataSource` adapter. Vendor payloads
