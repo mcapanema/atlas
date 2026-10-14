@@ -96,6 +96,7 @@ def test_open_blocked_period_clamps_to_completion() -> None:
     sample = derive_flow_sample(
         [
             _event(EventType.CREATED, 1),
+            _event(EventType.STARTED, 2),
             _event(EventType.BLOCKED, 3),
             _event(EventType.COMPLETED, 6),
         ]
@@ -103,6 +104,31 @@ def test_open_blocked_period_clamps_to_completion() -> None:
 
     assert sample is not None
     assert sample.blocked_time == timedelta(days=3)
+
+
+def test_an_item_never_started_has_no_blocked_time() -> None:
+    # Audit 2026-10-13 (FNG): a backlog item closed while blocked added 4.7 days
+    # to the Blocked time tile, which counts blocking while in progress only.
+    sample = derive_flow_sample(
+        [
+            _event(EventType.CREATED, 1),
+            _event(EventType.BLOCKED, 3),
+            _event(EventType.UNBLOCKED, 5),
+            _event(EventType.COMPLETED, 6),
+        ]
+    )
+
+    assert sample is not None
+    assert sample.blocked_time == timedelta(0)
+
+
+def test_a_blocked_item_never_started_still_reads_blocked_now() -> None:
+    # blocked_now is a state fact (risk reads it), not cycle time.
+    sample = derive_flow_sample([_event(EventType.CREATED, 1), _event(EventType.BLOCKED, 3)])
+
+    assert sample is not None
+    assert sample.blocked_now is True
+    assert sample.blocked_time == timedelta(0)
 
 
 def test_open_blocked_period_without_completion_is_not_counted() -> None:

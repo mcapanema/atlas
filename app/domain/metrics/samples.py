@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
-from app.domain.events.timeline import blocked_periods
+from app.domain.events.timeline import BlockedPeriod, blocked_periods
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.work_items.entities import NOT_STARTED_STATE_TYPES, StateType
 
@@ -186,6 +186,29 @@ def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
     return state
 
 
+def _blocked_in_cycle(
+    periods: Sequence[BlockedPeriod], started_at: datetime | None, completed_at: datetime | None
+) -> timedelta:
+    """Blocked time inside the cycle, started_at -> completed_at.
+
+    A label left on after Done isn't blocked work, pre-start blocking is
+    already queue time, and an item never started has no cycle, so none
+    (audit 2026-10-13). A still-open period on an uncompleted item is
+    unmeasurable and not counted.
+    """
+    if started_at is None:
+        return timedelta(0)
+    total = timedelta(0)
+    for period in periods:
+        ended_at = period.ended_at
+        if completed_at is not None:
+            ended_at = completed_at if ended_at is None else min(ended_at, completed_at)
+        begun = max(period.started_at, started_at)
+        if ended_at is not None and ended_at > begun:
+            total += ended_at - begun
+    return total
+
+
 def derive_flow_sample(
     events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
 ) -> FlowSample | None:
@@ -206,10 +229,9 @@ def derive_flow_sample(
     never counts, so the clock restarts only after a CANCELED. born_done marks an
     item created already completed and never started (see _born_done).
     Blocked time sums the rules' blocked periods (labels, workflow states,
-    relations, explicit events) clipped to the cycle — from started_at
-    (or the first event, if never started) to completed_at; a still-open
-    period on an uncompleted item is not counted (unmeasurable). `born_in`
-    is the item's creation state, as blocked_periods takes it.
+    relations, explicit events) clipped to the cycle, started_at to
+    completed_at (see _blocked_in_cycle); an item never started has none.
+    `born_in` is the item's creation state, as blocked_periods takes it.
 
     With done_then_reopened / canceled_then_reopened = "reopened", a typed
     move from Done / Canceled to a not-started state reopens the item (open,
@@ -222,24 +244,13 @@ def derive_flow_sample(
     state = _replay(ordered, rules)
     started_at, completed_at = state.started_at, state.completed_at
 
-    # Blocked time is measured inside the item's cycle: a label left on after
-    # Done isn't blocked work, and pre-start blocking is already queue time.
-    cycle_start = started_at if started_at is not None else ordered[0].occurred_at
-    blocked_time = timedelta(0)
     periods = blocked_periods(ordered, rules, born_in=born_in)
-    for period in periods:
-        ended_at = period.ended_at
-        if completed_at is not None:
-            ended_at = completed_at if ended_at is None else min(ended_at, completed_at)
-        begun = max(period.started_at, cycle_start)
-        if ended_at is not None and ended_at > begun:
-            blocked_time += ended_at - begun
 
     return FlowSample(
         created_at=ordered[0].occurred_at,
         started_at=started_at,
         completed_at=completed_at,
-        blocked_time=blocked_time,
+        blocked_time=_blocked_in_cycle(periods, started_at, completed_at),
         stopped_at=state.stopped_at,
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
