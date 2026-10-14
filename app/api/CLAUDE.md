@@ -9,8 +9,11 @@ Presentation is allowed to know a concrete adapter exists).
 
 - Never return an ORM model or a Domain entity directly from a route
   handler — always `<Concept>Read.model_validate(...)`. DTOs live in
-  `schemas.py`, one `<Concept>Create` (input, validated) /
-  `<Concept>Read` (output, `from_attributes=True`) pair per concept.
+  `schemas.py`: `<Concept>Read` for output (`from_attributes=True` to
+  validate straight from an entity), and for validated input
+  `<Concept>Create` (a new resource), `<Concept>Write` (a replace/patch
+  of existing state, e.g. `SyncScheduleWrite`), or `<Action>Request` (the
+  options of an action endpoint, e.g. `SyncRequest`).
 - `deps.py` holds the FastAPI `Depends` chain: `get_session`
   (commit-on-success / rollback-on-error; `scope="function"`, so the
   commit lands before the response is sent — a 2xx means durable) →
@@ -53,9 +56,11 @@ Presentation is allowed to know a concrete adapter exists).
 - **Auto sync** (`auto_sync.py`, ADR-0014): the in-process
   `AutoSyncRunner` ticks every minute and syncs each organization whose
   schedule has a due slot (own session + commit inside
-  `recompute.paused()`, outcome recorded in a second session). Every sync entry point holds `runner.lock` and commits
-  inside it: `POST /api/connectors/linear/sync` does. A new one must too,
-  or two syncs race on the same external ids.
+  `recompute.paused()`, outcome recorded in a second session). Every sync
+  entry point holds `runner.lock` and commits inside it — the organization
+  sync (`POST /api/connectors/linear/sync`) and the team sync
+  (`POST /api/connectors/linear/teams/{team_id}/sync`) both do. A new one
+  must too, or two syncs race on the same external ids.
 - `mount_spa()` must be registered last in `create_app()` — the rule and
   its reason are owned by `app/infrastructure/CLAUDE.md`.
 - **MCP facade** (`mcp_server.py`): the MCP server's tools call Atlas's own
