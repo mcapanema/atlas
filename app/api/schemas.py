@@ -470,6 +470,7 @@ class MetricRulesRead(BaseModel):
     timezone: str
     daily_bucket_max_days: int
     forecast_history_days: int
+    tracked_since: date | None
     count_parent_issues: bool
     lead_time_start: Literal["created", "triage_exit"]
     done_then_reopened: Literal["delivered", "reopened"]
@@ -522,6 +523,7 @@ class MetricRulesOverridesWrite(BaseModel):
     timezone: str | None = None
     daily_bucket_max_days: int | None = None
     forecast_history_days: int | None = None
+    tracked_since: date | None = None
     count_parent_issues: bool | None = None
     lead_time_start: Literal["created", "triage_exit"] | None = None
     done_then_reopened: Literal["delivered", "reopened"] | None = None

@@ -1,6 +1,8 @@
-import { InputNumber, Select, Switch } from "antd";
+import { DatePicker, InputNumber, Select, Switch } from "antd";
+import dayjs from "dayjs";
 
 import type { OpenStateType, RuleValue, TypeLabel } from "../api/metricRules";
+import { DATE_FORMAT } from "../lib/dates";
 import { timeZoneOptions, type RuleSpec } from "../lib/metricRules";
 import { LabelsControl, StatesControl, TypeLabelsEditor } from "./ListRuleControls";
 
@@ -38,6 +40,15 @@ export function RuleControl({
           value={value as string}
           options={timeZoneOptions()}
           onChange={onChange}
+        />
+      );
+    case "date":
+      return (
+        <DatePicker
+          aria-label={label}
+          format={DATE_FORMAT}
+          value={value ? dayjs(value as string) : null}
+          onChange={(next) => onChange(next ? next.format("YYYY-MM-DD") : null)}
         />
       );
     case "labels":

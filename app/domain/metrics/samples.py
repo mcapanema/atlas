@@ -272,30 +272,50 @@ def in_progress(sample: FlowSample, at: datetime) -> bool:
 _HISTORY_START_PERCENTILE = 10
 
 
-def observed_history_days(samples: Sequence[FlowSample], *, end: datetime, days: int) -> int:
+def observed_history_days(
+    samples: Sequence[FlowSample],
+    *,
+    end: datetime,
+    days: int,
+    tracked_since: datetime | None = None,
+) -> int:
     """`days`, shortened to the whole days the scope has been tracked.
 
-    Tracking starts at the earlier of its first completion and the 10th
-    percentile of its items' creation. Days before it aren't zero-throughput
-    days: nothing was tracked yet. Sampling them drags a young scope's
-    forecast toward zero throughput, and reads its health trend as growth
-    from nothing. Not the oldest item: an issue moved in from another team
-    keeps its original creation date (audit 2026-10-13: one 2025 issue put
-    41 phantom zero days in FNG's 90-day forecast). Not the first completion
-    alone: a team or project fills up for weeks before anything finishes,
-    and those are real zero days. The partial first day counts; never less
-    than one day.
+    Days before tracking began aren't zero-throughput days: nothing was
+    tracked yet. Sampling them drags a young scope's forecast toward zero
+    throughput, and reads its health trend as growth from nothing.
 
-    ponytail: a percentile guesses when the scope began. In a scope under
-    ~20 items one old item still pulls the start back, and many moved-in
-    items do in any scope. Upgrade path: sync the source team's or
-    project's creation date and anchor at it.
+    With `tracked_since` (the team's rule), tracking starts at the scope's
+    first creation or completion on or after it, or at it if none: older
+    items were moved in from elsewhere, and a project that began later
+    starts at its own items. Without it, the start is estimated: the earlier
+    of the first completion and the 10th percentile of item creation. Not
+    the oldest item: a moved-in issue keeps its original creation date
+    (audit 2026-10-13: one 2025 issue put 41 phantom zero days in FNG's
+    90-day forecast). Not the first completion alone: a team or project
+    fills up for weeks before anything finishes, and those are real zero
+    days. The partial first day counts; never less than one day.
+
+    ponytail: the estimate is a percentile. In a scope under ~20 items one
+    old item still pulls the start back, and many moved-in items do in any
+    scope; tracked_since is the fix for a team it misreads.
     """
-    if not samples:
+    if tracked_since is not None:
+        start = _first_activity_since(samples, tracked_since)
+    elif samples:
+        start = _estimated_start(samples)
+    else:
         return days
+    return max(1, min(days, (end - start) // timedelta(days=1) + 1))
+
+
+def _first_activity_since(samples: Sequence[FlowSample], since: datetime) -> datetime:
+    moments = [m for s in samples for m in (s.created_at, s.completed_at) if m is not None]
+    return min((m for m in moments if m >= since), default=since)
+
+
+def _estimated_start(samples: Sequence[FlowSample]) -> datetime:
     created = [sample.created_at.timestamp() for sample in samples]
     start = datetime.fromtimestamp(percentile(created, _HISTORY_START_PERCENTILE), tz=UTC)
     completions = [sample.completed_at for sample in samples if sample.completed_at is not None]
-    if completions:
-        start = min(start, *completions)
-    return max(1, min(days, (end - start) // timedelta(days=1) + 1))
+    return min(start, *completions) if completions else start

@@ -178,6 +178,28 @@ async def test_an_old_moved_in_item_does_not_stretch_the_forecast_history() -> N
     assert forecast.completion.p50_days == 5
 
 
+async def test_the_teams_tracked_since_bounds_the_forecast_history() -> None:
+    # Two items: the moved-in one outweighs the estimate (90 days of zeros).
+    team_id = uuid4()
+    old, done = _item(team_id), _item(team_id)
+    streams = [
+        [_event(old, EventType.CREATED, 400)],
+        [
+            _event(done, EventType.CREATED, 4),
+            _event(done, EventType.STARTED, 4),
+            _event(done, EventType.COMPLETED, 1),
+        ],
+    ]
+    samples = [s for s in map(derive_flow_sample, streams) if s is not None]
+    rules = MetricRules(tracked_since=date(2026, 6, 30))
+    scope = ScopeSamples(streams=streams, samples=samples, item_count=2, rules=rules)
+    service = ForecastService(InMemoryWorkItemRepository(), InMemoryEventRepository())
+
+    forecast = await service.get_forecast(scope=scope, now=NOW)
+
+    assert forecast.window_start == NOW - timedelta(days=5)
+
+
 async def test_forecast_remaining_excludes_canceled_items() -> None:
     team_id = uuid4()
     done, canceled, doing = _item(team_id), _item(team_id), _item(team_id)

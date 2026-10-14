@@ -32,6 +32,8 @@ export interface MetricRules {
   timezone: string;
   daily_bucket_max_days: number;
   forecast_history_days: number;
+  /** ISO calendar date, or null when the start is estimated. */
+  tracked_since: string | null;
   count_parent_issues: boolean;
   lead_time_start: "created" | "triage_exit";
   done_then_reopened: "delivered" | "reopened";

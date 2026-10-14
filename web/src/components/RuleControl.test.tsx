@@ -42,4 +42,16 @@ describe("RuleControl", () => {
     expect(screen.getByTitle("First completion")).toBeInTheDocument();
     expect(screen.getByTitle("UTC")).toBeInTheDocument();
   });
+
+  it("shows a date rule in the display format and clears it to unset", () => {
+    const onChange = vi.fn();
+    render(<RuleControl spec={spec("tracked_since")} value="2026-08-20" onChange={onChange} />);
+
+    expect(screen.getByRole("textbox", { name: "Tracking started" })).toHaveValue("20-08-2026");
+
+    fireEvent.mouseDown(screen.getByLabelText("close-circle"));
+    fireEvent.mouseUp(screen.getByLabelText("close-circle"));
+    fireEvent.click(screen.getByLabelText("close-circle"));
+    expect(onChange).toHaveBeenLastCalledWith(null);
+  });
 });

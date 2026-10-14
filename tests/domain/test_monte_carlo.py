@@ -132,3 +132,30 @@ def test_observed_history_without_completions_starts_at_the_items() -> None:
 
 def test_observed_history_is_at_least_one_day() -> None:
     assert observed_history_days([_completed(-2)], end=NOW, days=90) == 1
+
+
+def test_tracked_since_drops_items_older_than_it() -> None:
+    # A 3-item scope: one moved-in item outweighs the percentile (it read 90
+    # days). The team's tracked-since date says when tracking began.
+    scope = [_created(470), _created(9.5), _completed(5)]
+    assert observed_history_days(scope, end=NOW, days=90) == 90
+    since = NOW - timedelta(days=30)
+    assert observed_history_days(scope, end=NOW, days=90, tracked_since=since) == 10
+
+
+def test_tracked_since_is_a_floor_a_later_project_starts_at_its_own_items() -> None:
+    # The team's date bounds a project's history; it doesn't set its start.
+    scope = [_created(20), _completed(3)]
+    since = NOW - timedelta(days=60)
+    assert observed_history_days(scope, end=NOW, days=90, tracked_since=since) == 21
+
+
+def test_tracked_since_with_nothing_after_it_starts_at_the_date() -> None:
+    since = NOW - timedelta(days=10)
+    assert observed_history_days([_created(470)], end=NOW, days=90, tracked_since=since) == 11
+    assert observed_history_days([], end=NOW, days=90, tracked_since=since) == 11
+
+
+def test_a_future_tracked_since_still_leaves_one_day() -> None:
+    since = NOW + timedelta(days=5)
+    assert observed_history_days([_completed(2)], end=NOW, days=90, tracked_since=since) == 1

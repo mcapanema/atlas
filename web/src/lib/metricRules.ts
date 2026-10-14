@@ -11,12 +11,14 @@ import type {
   WorkItemTypeName,
 } from "../api/metricRules";
 import type { Team } from "../api/teams";
+import { formatDay } from "./dates";
 
 type Control =
   | { kind: "switch" }
   | { kind: "select"; options: { value: string; label: string }[] }
   | { kind: "number"; min: number; max: number; step: number; suffix?: string }
   | { kind: "timezone" }
+  | { kind: "date" }
   | { kind: "labels" }
   | { kind: "names" }
   | { kind: "states" }
@@ -275,6 +277,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "number", min: 7, max: 365, step: 1, suffix: "days" },
       },
       {
+        name: "tracked_since",
+        label: "Tracking started",
+        help: "When this team began tracking its work in Linear. Forecast and health history start no earlier, so issues moved in from another team don't read as weeks of zero throughput. Unset, the start is estimated from when items were created and completed.",
+        control: { kind: "date" },
+      },
+      {
         name: "remaining_state_types",
         label: "Forecast counts as remaining",
         help: "Open items count toward the completion forecast only in these states. Items created outside Linear always count.",
@@ -337,6 +345,7 @@ export function formatRuleValue(spec: RuleSpec, value: RuleValue): string {
   const { control } = spec;
   const list = formatListValue(control.kind, value);
   if (list !== undefined) return list;
+  if (control.kind === "date") return value ? formatDay(value as string) : "Not set";
   const scalar = value as string | number | boolean;
   if (control.kind === "switch") return scalar ? "On" : "Off";
   if (control.kind === "select") {

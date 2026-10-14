@@ -284,7 +284,9 @@ def compute_delivery_health(
     ]
     # A scope first tracked mid-window has no earlier half to compare
     # (it read "grew from 0"), and fewer days of throughput than the window.
-    tracked_days = observed_history_days(all_samples, end=now, days=window_days)
+    tracked_days = observed_history_days(
+        all_samples, end=now, days=window_days, tracked_since=rules.tracked_since_at
+    )
     floor = rules.health_min_sample
     candidates = (
         _predictability(all_samples, in_window, window_start=window_start, rules=rules),
