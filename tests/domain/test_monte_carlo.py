@@ -101,24 +101,32 @@ def _created(days_ago: float) -> FlowSample:
     )
 
 
-def test_observed_history_starts_at_the_scopes_first_completion() -> None:
-    # First completion 9.5 days ago: 10 observable days (the partial first day counts).
-    assert observed_history_days([_completed(9.5), _completed(3)], end=NOW, days=90) == 10
+def test_observed_history_starts_at_the_scopes_first_item() -> None:
+    # First seen 9.5 days ago: 10 observable days (the partial first day counts).
+    assert observed_history_days([_created(9.5)], end=NOW, days=90) == 10
+
+
+def test_a_ramping_scope_keeps_its_build_up_before_the_first_completion() -> None:
+    # A project fills up for 40 days before anything finishes: those are real
+    # zero-throughput days, not untracked ones (anchoring at the first
+    # completion alone read 3 days and forecast optimistically).
+    scope = [*[_created(40) for _ in range(19)], _completed(2)]
+    assert observed_history_days(scope, end=NOW, days=90) == 41
 
 
 def test_an_old_moved_in_item_does_not_stretch_the_observed_history() -> None:
     # Audit 2026-10-13 (FNG): an issue created 15 months before the team, moved
     # in and still open, made 41 pre-team days count as zero-throughput days.
-    assert observed_history_days([_created(470), _completed(48.5)], end=NOW, days=90) == 49
+    scope = [_created(470), *[_completed(48.5 - i) for i in range(19)]]
+    assert observed_history_days(scope, end=NOW, days=90) == 49
 
 
 def test_observed_history_is_capped_at_the_requested_window() -> None:
     assert observed_history_days([_completed(200)], end=NOW, days=90) == 90
 
 
-def test_observed_history_without_completions_keeps_the_window() -> None:
-    # Nothing delivered yet: no anchor. The forecast has no throughput anyway.
-    assert observed_history_days([_created(5)], end=NOW, days=90) == 90
+def test_observed_history_without_completions_starts_at_the_items() -> None:
+    assert observed_history_days([_created(5)], end=NOW, days=90) == 6
     assert observed_history_days([], end=NOW, days=90) == 90
 
 

@@ -156,18 +156,19 @@ async def test_forecast_samples_only_the_scopes_observed_history() -> None:
 
 async def test_an_old_moved_in_item_does_not_stretch_the_forecast_history() -> None:
     # Audit 2026-10-13 (FNG): a 400-day-old open issue made 85 pre-team days
-    # zero-throughput samples (P50 2026-12-31 instead of 2026-11-26).
+    # zero-throughput samples (FNG's P50 read 2026-12-31 instead of 2026-11-26).
     team_id = uuid4()
     old = _item(team_id)
     items = [_item(team_id) for _ in range(5)]
+    backlog = [_item(team_id) for _ in range(14)]
     events = (
         [_event(old, EventType.CREATED, 400)]
-        + [_event(item, EventType.CREATED, 4) for item in items]
+        + [_event(item, EventType.CREATED, 4) for item in [*items, *backlog]]
         + [_event(item, EventType.STARTED, 4) for item in items]
         + [_event(item, EventType.COMPLETED, days_ago) for days_ago, item in enumerate(items)]
     )
     service = ForecastService(
-        InMemoryWorkItemRepository([old, *items]), InMemoryEventRepository(events)
+        InMemoryWorkItemRepository([old, *items, *backlog]), InMemoryEventRepository(events)
     )
 
     forecast = await service.get_forecast(team_id=team_id, remaining=5, now=NOW)

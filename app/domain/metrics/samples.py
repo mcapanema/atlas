@@ -6,11 +6,12 @@ FlowSamples instead of re-reading event streams.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
 from app.domain.events.timeline import BlockedPeriod, blocked_periods
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
+from app.domain.metrics.stats import percentile
 from app.domain.work_items.entities import NOT_STARTED_STATE_TYPES, StateType
 
 
@@ -266,25 +267,35 @@ def in_progress(sample: FlowSample, at: datetime) -> bool:
     return all(ended is None or ended > at for ended in (sample.completed_at, sample.stopped_at))
 
 
+# Where a scope's tracked history starts, as a percentile of its items'
+# creation: a few old issues moved in from another team can't pull it back.
+_HISTORY_START_PERCENTILE = 10
+
+
 def observed_history_days(samples: Sequence[FlowSample], *, end: datetime, days: int) -> int:
-    """`days`, shortened to the whole days since the scope's first completion.
+    """`days`, shortened to the whole days the scope has been tracked.
 
-    Days before a scope first delivered aren't zero-throughput days: it
-    wasn't delivering through this tracker yet. Sampling them drags a young
-    scope's forecast toward zero throughput, and reads its health trend as
-    growth from nothing. The first *created* item is no anchor: an issue
-    moved in from another team keeps its original creation date (audit
-    2026-10-13: one 2025 issue put 41 phantom zero days in FNG's 90-day
-    forecast). With nothing completed there is no anchor, so `days`. The
-    partial first day counts; never less than one day.
+    Tracking starts at the earlier of its first completion and the 10th
+    percentile of its items' creation. Days before it aren't zero-throughput
+    days: nothing was tracked yet. Sampling them drags a young scope's
+    forecast toward zero throughput, and reads its health trend as growth
+    from nothing. Not the oldest item: an issue moved in from another team
+    keeps its original creation date (audit 2026-10-13: one 2025 issue put
+    41 phantom zero days in FNG's 90-day forecast). Not the first completion
+    alone: a team or project fills up for weeks before anything finishes,
+    and those are real zero days. The partial first day counts; never less
+    than one day.
 
-    ponytail: a new scope's genuine zero days before its first finish are
-    dropped (slightly optimistic), and an item moved in already done
-    anchors at its old completion. Upgrade path: sync the source team's
-    creation date and anchor at the later of the two.
+    ponytail: a percentile guesses when the scope began. In a scope under
+    ~20 items one old item still pulls the start back, and many moved-in
+    items do in any scope. Upgrade path: sync the source team's or
+    project's creation date and anchor at it.
     """
-    completions = [sample.completed_at for sample in samples if sample.completed_at is not None]
-    if not completions:
+    if not samples:
         return days
-    first = min(completions)
-    return max(1, min(days, (end - first) // timedelta(days=1) + 1))
+    created = [sample.created_at.timestamp() for sample in samples]
+    start = datetime.fromtimestamp(percentile(created, _HISTORY_START_PERCENTILE), tz=UTC)
+    completions = [sample.completed_at for sample in samples if sample.completed_at is not None]
+    if completions:
+        start = min(start, *completions)
+    return max(1, min(days, (end - start) // timedelta(days=1) + 1))

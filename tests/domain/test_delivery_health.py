@@ -165,6 +165,7 @@ def test_an_old_moved_in_item_does_not_unlock_the_flow_trend() -> None:
             _stream((EventType.CREATED, 11), (EventType.STARTED, 10), (EventType.COMPLETED, days))
             for days in (9, 7, 5, 3, 1)
         ],
+        *[_stream((EventType.CREATED, 11)) for _ in range(14)],  # the rest of the backlog
     ]
 
     health = compute_delivery_health(streams, now=NOW)
@@ -173,8 +174,8 @@ def test_an_old_moved_in_item_does_not_unlock_the_flow_trend() -> None:
 
 
 def test_stability_reads_weeks_of_throughput_over_the_tracked_history() -> None:
-    # Tracked 9 days (first completion 8 days ago, partial day counts): 5
-    # completions = 3.89/week, WIP 5 = 1.29 weeks -> 93. Over the full 30
+    # Tracked 11 days (first items created 10 days ago, partial day counts):
+    # 5 completions = 3.18/week, WIP 5 = 1.57 weeks -> 86. Over the full 30
     # days it read 4.29 weeks -> 18.
     streams = [
         *[
@@ -187,8 +188,8 @@ def test_stability_reads_weeks_of_throughput_over_the_tracked_history() -> None:
     health = compute_delivery_health(streams, now=NOW)
 
     stability = next(c for c in health.components if c.name == "stability")
-    assert stability.score == 93
-    assert stability.reason == "WIP equals 1.3 weeks of throughput"
+    assert stability.score == 86
+    assert stability.reason == "WIP equals 1.6 weeks of throughput"
 
 
 def _hours(started_h: float, completed_h: float) -> list[Event]:
