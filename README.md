@@ -89,6 +89,46 @@ Measure the impact of every improvement and continuously evolve engineering deli
 
 ---
 
+# What's in Atlas
+
+Atlas reads your Linear workspace and turns its history into these views
+(sidebar groups in the app):
+
+**Overview**
+- **Executive** (`/`) — one row per team: Delivery Health with the reasons a
+  team is at risk, flow metrics with trend sparklines, and how accurate past
+  forecasts turned out.
+
+**Delivery**
+- **Teams** (`/teams`) — a team's Delivery Health as one tile per component
+  (predictability, efficiency, flow, stability, risk), Lead/Cycle Time,
+  Throughput, WIP, Blocked Time and Flow Efficiency, flow charts, Aging WIP
+  with each item's owner, and a Monte Carlo completion forecast. **Sync
+  team** refreshes just that team from Linear.
+- **Projects** (`/projects`) — the same analytics scoped to one project.
+- **Work Items** (`/work-items`) — every synced item, with its event
+  timeline, time in each state, and blocked periods.
+
+**Intelligence** (needs `ATLAS_OPENROUTER_API_KEY`)
+- **Advisor** (`/advisor`) — AI explanations and prioritized recommendations
+  grounded in the computed metrics; your feedback teaches it over time.
+- **Meetings** (`/meetings`) — prep for daily standups, retrospectives and
+  planning. A retro covers the team's sprint length by default.
+
+**Setup**
+- **Organizations** — the workspaces Atlas has synced.
+- **Connectors** — Linear status, **Sync now**, and the **Auto sync**
+  schedule.
+- **Metric rules** — how metrics are computed (what counts as blocked,
+  lifecycle, health scales and weights, sprint length…), set for the whole
+  workspace or overridden per team. Changing one recomputes history in the
+  background.
+
+Every number is computed by Atlas from synced events. The AI explains
+numbers; it never produces them.
+
+---
+
 # How do I run it?
 
 ## Clone the repository
@@ -104,9 +144,7 @@ Copy `.env.example` to `.env` and adjust as needed — every variable is
 documented there (`make install` does this automatically if `.env` doesn't
 exist yet). Defaults work out of the box for local development; real
 environment variables (Docker Compose, your platform, etc.) always take
-precedence over `.env`. A `.env` copied before the database moved to `data/`
-pins `ATLAS_DATABASE_URL` to `./atlas.db`: change it to `./data/atlas.db` (as
-in `.env.example`), or local runs and Docker will use different databases.
+precedence over `.env`.
 
 ## Option 1: Docker (recommended — zero local setup)
 
@@ -157,8 +195,8 @@ These skip the Docker check `make` performs: stop the Docker app
 ```bash
 # Install
 uv sync
-cd web && npm install && cd ..
-cp .env.example .env
+cd web && npm ci && cd ..
+test -f .env || cp .env.example .env   # keeps an existing .env
 
 # Migrate
 uv run alembic upgrade head
@@ -189,8 +227,10 @@ Docker image. `make check` runs all nine locally, after syncing
 dependencies to the lockfiles the way CI does (Docker must be running), or
 run them individually: `make test`, `make typecheck`, `make lint`,
 `make security`; `make format` fixes formatting.
-`make hooks` installs a pre-push hook that runs `make check` on the commit
-being pushed (`git push --no-verify` skips it). Expect side effects:
+`make hooks` installs two git hooks: pre-commit (ruff, eslint and prettier
+checks on staged files) and pre-push, which runs `make check` on the commit
+being pushed (`git push --no-verify` skips it). Expect side effects from
+pre-push:
 `uv sync --locked` removes packages added ad hoc with `uv pip install`;
 after a package-file change `npm ci` reinstalls `web/node_modules`, which
 breaks a running `make dev` until restarted; and during the hook's run
@@ -199,8 +239,9 @@ reverted — don't edit them until the push finishes.
 
 [Dependabot](https://docs.github.com/en/code-security/dependabot) opens
 weekly PRs for outdated backend (`uv`), frontend (`npm`), GitHub Actions,
-and Docker base-image dependencies — minor/patch bumps grouped per
-ecosystem — see `.github/dependabot.yml`.
+and Docker base-image dependencies. Minor/patch bumps are grouped into one
+PR per ecosystem, except Docker base images, which come one PR per image —
+see `.github/dependabot.yml`.
 
 ## Automatic sync
 
@@ -211,8 +252,13 @@ syncs at each slot; a slot missed while it was off syncs once at startup. The
 card shows the next run and the last run's result, in the schedule's
 timezone. **Sync now** still works any time, and it counts for a scheduled
 run due within the next 15 minutes, so that one is skipped (ADR-0014).
+To refresh one team without waiting, use **Sync team** on the Team
+Dashboard. It fetches only that team's issues and never deletes anything;
+items removed in Linear are pruned by the next organization sync.
 
-## After upgrading Atlas: rebuild synced events
+## After upgrading Atlas
+
+### Rebuild synced events
 
 Synced events are never rewritten by a normal sync, so a release that fixes
 how Linear history is mapped only reaches existing data through a rebuild:
@@ -224,6 +270,12 @@ curl -X POST http://localhost:8000/api/connectors/linear/sync \
 
 It re-derives every synced issue's events and rewrites snapshot history;
 feedback, learned guidance, and metric rules are kept (ADR-0013).
+
+### An older `.env` and the database path
+
+A `.env` created before the database moved to `data/` pins
+`ATLAS_DATABASE_URL` to `./atlas.db`. Change it to `./data/atlas.db` (as in
+`.env.example`), or local runs and Docker will use different databases.
 
 ## Chat access from Claude & ChatGPT (MCP)
 
@@ -283,4 +335,11 @@ numbers it wasn't given.
 
 ---
 
-For more information about the architecture, engineering principles, and domain model, see the documentation in the `docs/` directory.
+# Further reading
+
+- [`docs/VISION.md`](docs/VISION.md) — the full product vision.
+- [`docs/architecture/overview.md`](docs/architecture/overview.md) — how
+  the code is organized, slice by slice.
+- [`docs/adr/`](docs/adr/) — the architecture decisions and why they were
+  made.
+- [`PRODUCT.md`](PRODUCT.md) — the design brief for the UI.
