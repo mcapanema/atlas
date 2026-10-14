@@ -119,10 +119,10 @@ Atlas reads your Linear workspace and turns its history into these views
   planning. A retro covers the team's sprint length by default.
 
 **Setup**
-- **Organizations** — the workspaces Atlas has synced.
-- **Connectors** — Linear status, **Sync now**, and the **Auto sync**
-  schedule.
-- **Metric rules** — how metrics are computed (what counts as blocked,
+- **Organizations** (`/organizations`) — the workspaces Atlas has synced.
+- **Connectors** (`/connectors`) — Linear status, **Sync now**, and the
+  **Auto sync** schedule.
+- **Metric rules** (`/metric-rules`) — how metrics are computed (what counts as blocked,
   lifecycle, health scales and weights, sprint length…), set for the whole
   workspace or overridden per team. Changing a metric rule recomputes
   history in the background; sprint length only sets the Meetings default.
@@ -230,9 +230,10 @@ Docker image. `make check` runs all nine locally, after syncing
 dependencies to the lockfiles the way CI does (Docker must be running), or
 run them individually: `make test`, `make typecheck`, `make lint`,
 `make security`; `make format` fixes formatting.
-`make hooks` installs two git hooks: pre-commit (ruff, eslint and prettier
-checks on staged files) and pre-push, which runs `make check` on the commit
-being pushed (`git push --no-verify` skips it). Expect side effects from
+`make hooks` installs two git hooks: pre-commit (ruff and prettier checks on
+the staged files, plus the whole frontend eslint run whenever a `web/`
+TypeScript file is staged) and pre-push, which runs `make check` on the
+commit being pushed (`git push --no-verify` skips it). Expect side effects from
 pre-push:
 `uv sync --locked` removes packages added ad hoc with `uv pip install`;
 after a package-file change `npm ci` reinstalls `web/node_modules`, which

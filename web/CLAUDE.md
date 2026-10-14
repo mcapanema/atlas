@@ -27,7 +27,8 @@ Node's major version lives in `.nvmrc` (CI reads it); the root
 - `src/pages/<Name>Page.tsx` — one page per route in `App.tsx`
   (e.g. `TeamDashboardPage` at `/teams`).
 - `src/components/AppLayout.tsx` — the sidebar shell; a new page goes in
-  its grouped `NAV` items and in `App.tsx`'s `<Routes>`.
+  its grouped `NAV` items, its `TITLES` map (the browser tab title — a
+  missing entry falls back to plain "Atlas"), and `App.tsx`'s `<Routes>`.
 - `src/theme/` — the design system. `tokens.ts` is the single source of
   truth for both modes' palette and font stacks; `antdTheme.ts` maps it
   onto AntD; `src/index.css` uses AntD's `--ant-*` variables; mode comes

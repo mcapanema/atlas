@@ -11,8 +11,9 @@ Presentation is allowed to know a concrete adapter exists).
   handler — always `<Concept>Read.model_validate(...)`. DTOs live in
   `schemas.py`: `<Concept>Read` for output (`from_attributes=True` to
   validate straight from an entity), and for validated input
-  `<Concept>Create` (a new resource) or `<Concept>Write` (a replace/patch
-  of existing state, e.g. `SyncScheduleWrite`).
+  `<Concept>Create` (a new resource), `<Concept>Write` (a replace/patch
+  of existing state, e.g. `SyncScheduleWrite`), or `<Action>Request` (the
+  options of an action endpoint, e.g. `SyncRequest`).
 - `deps.py` holds the FastAPI `Depends` chain: `get_session`
   (commit-on-success / rollback-on-error; `scope="function"`, so the
   commit lands before the response is sent — a 2xx means durable) →
