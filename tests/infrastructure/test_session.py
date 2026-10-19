@@ -1,3 +1,4 @@
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -15,19 +16,26 @@ async def test_build_sessionmaker_enables_fk_enforcement_and_wal(tmp_path: Path)
 
 
 async def test_delete_mode_converts_an_existing_wal_database(tmp_path: Path) -> None:
-    db = tmp_path / "shared.db"
-    raw = sqlite3.connect(db)
+    # A WAL database whose rows still live only in its -wal file: copied while
+    # the writer is open, the way a crashed container or make dev leaves it.
+    live, db = tmp_path / "live.db", tmp_path / "shared.db"
+    raw = sqlite3.connect(live)
     raw.execute("PRAGMA journal_mode=WAL")
+    raw.execute("PRAGMA wal_autocheckpoint=0")
     raw.execute("CREATE TABLE t (x INTEGER)")
+    raw.executemany("INSERT INTO t VALUES (?)", [(1,), (2,), (3,)])
+    raw.commit()
+    for suffix in ("", "-wal", "-shm"):
+        shutil.copyfile(f"{live}{suffix}", f"{db}{suffix}")
     raw.close()
 
     sessionmaker = build_sessionmaker(f"sqlite+aiosqlite:///{db}", journal_mode="delete")
     async with sessionmaker() as session:
+        assert (await session.execute(text("SELECT count(*) FROM t"))).scalar() == 3
+        # A WAL connection keeps its -wal file while open; a converted one has none.
+        assert not (tmp_path / "shared.db-wal").exists()
         assert (await session.execute(text("PRAGMA journal_mode"))).scalar() == "delete"
-        assert (await session.execute(text("PRAGMA foreign_keys"))).scalar() == 1
     await sessionmaker.kw["bind"].dispose()
-
-    assert not (tmp_path / "shared.db-wal").exists()
 
 
 async def test_delete_mode_reader_is_not_blocked_by_an_open_writer(tmp_path: Path) -> None:
