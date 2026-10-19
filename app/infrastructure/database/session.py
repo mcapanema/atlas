@@ -28,6 +28,9 @@ def enable_sqlite_pragmas(engine: AsyncEngine, *, journal_mode: SqliteJournalMod
     def _set_pragmas(dbapi_connection: Any, _record: Any) -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        # Leaving WAL fails at once ("database is locked", no busy wait) while
+        # any other connection has the file open. Converting here works because
+        # the pool's first connection runs this alone; keep it on connect.
         cursor.execute(f"PRAGMA journal_mode={journal_mode}")
         if journal_mode == "delete":
             # A writer that spills dirty pages past the cache escalates to
