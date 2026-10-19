@@ -29,6 +29,11 @@ def enable_sqlite_pragmas(engine: AsyncEngine, *, journal_mode: SqliteJournalMod
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute(f"PRAGMA journal_mode={journal_mode}")
+        if journal_mode == "delete":
+            # A writer that spills dirty pages past the cache escalates to
+            # EXCLUSIVE and locks readers out until commit; keeping a big sync's
+            # pages in RAM instead keeps the dashboard readable meanwhile.
+            cursor.execute("PRAGMA cache_spill=OFF")
         cursor.close()
 
 
