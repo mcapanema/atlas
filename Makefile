@@ -109,7 +109,7 @@ docker-down: ## Stop and remove Docker containers
 docker-logs: ## Tail Docker container logs
 	docker compose logs -f
 
-# data/atlas.db is shared with the Compose app, and SQLite's WAL locks don't
+# data/atlas.db is shared with the Compose app, and SQLite's file locks don't
 # cross Docker's VM: two processes on it can corrupt it. `docker-up` needs
 # no guard here, because port 8000 is already taken by a local server.
 local-db-free:
