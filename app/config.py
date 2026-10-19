@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -7,6 +8,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # The MCP token is a URL path segment and the endpoint's only credential:
 # secrets.token_urlsafe(24) yields 32 of these characters.
 _MCP_TOKEN = re.compile(r"[A-Za-z0-9_-]{24,}")
+
+# The SQLite journal modes Atlas supports; interpolated into a PRAGMA, so
+# never widen this to a free string.
+SqliteJournalMode = Literal["wal", "delete"]
 
 
 class Settings(BaseSettings):
@@ -27,6 +32,9 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./data/atlas.db"
     db_echo: bool = False
+    # SQLite journal mode: WAL on a local disk; Compose forces "delete" on its
+    # bind mount, where WAL's memory-mapped -shm file isn't reliable.
+    sqlite_journal_mode: SqliteJournalMode = "wal"
 
     # Linear personal API key; None/empty disables the Linear connector.
     linear_api_key: str | None = None

@@ -9,7 +9,7 @@ connector SDKs. It never imports `app.application` or `app.api`
 
 - `database/base.py` — the single `DeclarativeBase` (`Base.metadata` is the
   one source of truth Alembic and tests build from).
-- `database/session.py` — `build_sessionmaker(database_url, echo)`, built
+- `database/session.py` — `build_sessionmaker(database_url, echo, journal_mode)`, built
   once per app lifecycle (in `app/main.py`'s lifespan), not per-request.
 - `database/types.py` — cross-dialect column types. `UTCDateTime` wraps
   `DateTime(timezone=True)` to reattach UTC after SQLite's naive read;

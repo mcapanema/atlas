@@ -65,7 +65,11 @@ def _mask_in_access_log(secret: str) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    sessionmaker = build_sessionmaker(settings.database_url, echo=settings.db_echo)
+    sessionmaker = build_sessionmaker(
+        settings.database_url,
+        echo=settings.db_echo,
+        journal_mode=settings.sqlite_journal_mode,
+    )
     app.state.sessionmaker = sessionmaker
     runner = RecomputeRunner(sessionmaker)
     app.state.recompute_runner = runner

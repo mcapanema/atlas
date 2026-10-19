@@ -11,6 +11,7 @@ from app.infrastructure.ai.advisor import DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT_SE
 _VARS = (
     "ATLAS_DATABASE_URL",
     "ATLAS_DB_ECHO",
+    "ATLAS_SQLITE_JOURNAL_MODE",
     "ATLAS_ADVISOR_MODEL",
     "ATLAS_MCP_TOKEN",
     "ATLAS_ADVISOR_MAX_TOKENS",
@@ -36,6 +37,26 @@ def test_prefixed_env_var_overrides_default(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("ATLAS_DB_ECHO", "true")
 
     assert Settings(_env_file=None).db_echo is True
+
+
+def test_sqlite_journal_mode_defaults_to_wal() -> None:
+    assert Settings(_env_file=None).sqlite_journal_mode == "wal"
+
+
+def test_sqlite_journal_mode_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ATLAS_SQLITE_JOURNAL_MODE", "delete")
+
+    assert Settings(_env_file=None).sqlite_journal_mode == "delete"
+
+
+@pytest.mark.parametrize("value", ["memory", "WAL", "delete; DROP TABLE teams"])
+def test_sqlite_journal_mode_rejects_unsupported_values(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("ATLAS_SQLITE_JOURNAL_MODE", value)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 def test_unprefixed_env_var_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
