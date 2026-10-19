@@ -10,9 +10,13 @@ services:
       # Forced regardless of .env: the container always opens the bind mount
       # below, which is the same data/atlas.db a local `make dev` uses.
       ATLAS_DATABASE_URL: sqlite+aiosqlite:////app/data/atlas.db
+      # WAL's memory-mapped -shm file isn't reliable over Docker Desktop's
+      # virtiofs bind mount (new connections intermittently failed with
+      # "disk I/O error"), so the container uses the rollback journal.
+      ATLAS_SQLITE_JOURNAL_MODE: delete
     volumes:
       # ponytail: one database shared with local runs, so one side at a time
-      # (SQLite's WAL locks don't cross Docker's VM; the Makefile guards it).
+      # (SQLite's file locks don't cross Docker's VM; the Makefile guards it).
       # On a Linux host the container writes data/ as root; upgrade path is
       # `user: "<host uid>:<host gid>"` here if that bites.
       - ./data:/app/data
