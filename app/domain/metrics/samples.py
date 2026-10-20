@@ -248,7 +248,7 @@ def derive_flow_sample(
     move from Done / Canceled to a not-started state reopens the item (open,
     not in progress); a later start after a Done reopen keeps the clock.
     arrived_at is the Triage exit under lead_time_start="triage_exit".
-    Durations (cycle, lead, queue, touch, age) are measured on the rules'
+    Durations (cycle, lead, queue, touch, blocked, age) are measured on the rules'
     working days, so a non-working day adds no time.
     """
     if not events:

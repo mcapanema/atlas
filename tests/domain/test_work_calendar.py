@@ -43,3 +43,22 @@ def test_weekend_follows_the_rules_timezone() -> None:
 def test_end_before_start_is_not_clamped() -> None:
     a, b = datetime(2026, 10, 19, tzinfo=UTC), datetime(2026, 10, 18, tzinfo=UTC)
     assert WEEKDAYS.elapsed(a, b) == b - a  # preserves today's behavior on bad data
+
+
+def test_a_span_across_two_weekends_counts_eight_days() -> None:
+    assert WEEKDAYS.elapsed(
+        datetime(2026, 10, 15, tzinfo=UTC), datetime(2026, 10, 27, tzinfo=UTC)
+    ) == timedelta(days=8)
+
+
+def test_a_span_starting_on_the_weekend_counts_from_monday() -> None:
+    assert WEEKDAYS.elapsed(
+        datetime(2026, 10, 17, 9, tzinfo=UTC), datetime(2026, 10, 19, 10, tzinfo=UTC)
+    ) == timedelta(hours=10)
+
+
+def test_a_span_crossing_midnight_into_the_local_weekend_stops_at_midnight() -> None:
+    sp = WorkCalendar(frozenset({1, 2, 3, 4, 5}), "America/Sao_Paulo")
+    # Fri 22:00 -> Sat 02:00 in São Paulo: only the Friday part counts.
+    a, b = datetime(2026, 10, 17, 1, tzinfo=UTC), datetime(2026, 10, 17, 5, tzinfo=UTC)
+    assert sp.elapsed(a, b) == timedelta(hours=2)

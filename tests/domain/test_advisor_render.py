@@ -68,7 +68,7 @@ def test_render_context_includes_key_figures() -> None:
     assert "completed=12" in text
     assert "wip=5" in text
     assert "remaining=14" in text
-    assert "3.0d" in text  # lead time p50 rendered in days
+    assert "3.0 working days" in text  # lead time p50, labelled as working days
     assert "0.42" in text  # flow efficiency
 
 
@@ -155,8 +155,8 @@ def test_render_meeting_context_includes_health_and_aging() -> None:
     assert render_context(_delivery()) in text  # the advisor digest is embedded whole
     assert "Delivery health: 61/100 (warning)" in text
     assert "- efficiency 42: flow efficiency 42%" in text
-    assert "Aging WIP (cycle-time p85 over the last 90 days = 4.0d):" in text
-    assert '- "Fix login" — In Progress, 6.0d [over p85]' in text
+    assert "Aging WIP (cycle-time p85 over the last 90 calendar days = 4.0 working days):" in text
+    assert '- "Fix login" — In Progress, 6.0 working days [over p85]' in text
 
 
 def test_render_meeting_context_handles_missing_health_and_empty_aging() -> None:
@@ -208,8 +208,8 @@ def test_render_meeting_context_names_the_configured_aging_percentile_and_histor
 
     text = render_meeting_context(context)
 
-    assert "Aging WIP (cycle-time p70 over the last 30 days = 4.0d):" in text
-    assert '- "Fix login" — In Progress, 6.0d [over p70]' in text
+    assert "Aging WIP (cycle-time p70 over the last 30 calendar days = 4.0 working days):" in text
+    assert '- "Fix login" — In Progress, 6.0 working days [over p70]' in text
 
 
 def test_render_aging_names_the_percentile_and_history() -> None:
@@ -222,8 +222,8 @@ def test_render_aging_names_the_percentile_and_history() -> None:
     )
 
     assert render_aging(aging) == (
-        "Aging WIP (cycle-time p70 over the last 30 days = 4.0d):\n"
-        '- "Fix login" — In Progress, 6.0d [over p70]'
+        "Aging WIP (cycle-time p70 over the last 30 calendar days = 4.0 working days):\n"
+        '- "Fix login" — In Progress, 6.0 working days [over p70]'
     )
 
 
@@ -235,7 +235,7 @@ def test_render_aging_makes_no_history_claim_without_a_reference() -> None:
 
     assert render_aging(aging).splitlines() == [
         "Aging WIP:",
-        '- "Fix login" — In Progress, 6.0d',
+        '- "Fix login" — In Progress, 6.0 working days',
     ]
 
 

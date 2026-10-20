@@ -16,7 +16,8 @@ type OrderedRule =
   | "weight_efficiency"
   | "weight_flow"
   | "weight_stability"
-  | "weight_risk";
+  | "weight_risk"
+  | "working_days";
 
 function ruleLabel(name: RuleName): string {
   return RULE_GROUPS.flatMap((group) => group.rules).find((rule) => rule.name === name)!.label;
@@ -46,6 +47,7 @@ export function orderProblems(rules: Pick<MetricRules, OrderedRule>): string[] {
   if (!weights.some((weight) => weight > 0)) {
     problems.push("At least one health weight must be above 0.");
   }
+  if (rules.working_days.length === 0) problems.push("Pick at least one working day.");
   return problems;
 }
 

@@ -263,7 +263,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "timezone",
         label: "Time zone",
-        help: "Day boundaries for date ranges and the cumulative flow chart.",
+        help: "Day boundaries for date ranges, working days and the cumulative flow chart.",
         control: { kind: "timezone" },
       },
       {

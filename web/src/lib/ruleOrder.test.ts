@@ -15,6 +15,7 @@ describe("orderProblems", () => {
     weight_flow: 1,
     weight_stability: 1,
     weight_risk: 1,
+    working_days: [1, 2, 3, 4, 5],
   };
 
   it("finds nothing wrong with the built-in rules", () => {
@@ -40,5 +41,11 @@ describe("orderProblems", () => {
         weight_risk: 0,
       }),
     ).toEqual(["At least one health weight must be above 0."]);
+  });
+
+  it("asks for at least one working day", () => {
+    expect(orderProblems({ ...ordered, working_days: [] })).toEqual([
+      "Pick at least one working day.",
+    ]);
   });
 });

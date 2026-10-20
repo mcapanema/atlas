@@ -100,7 +100,6 @@ export const teamFixture = {
   external_id: null,
   created_at: "2026-07-01T00:00:00Z",
   has_custom_rules: false,
-  working_days: [1, 2, 3, 4, 5],
   sprint_length_days: 14,
 };
 

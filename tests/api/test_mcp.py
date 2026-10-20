@@ -319,7 +319,10 @@ async def test_meeting_brief_names_the_aging_history(
             result = await session.call_tool("meeting_brief", {"team_id": team_id})
             assert not result.is_error
             text = tool_text(result)
-            assert "Aging WIP (cycle-time p85 over the last 90 days = 4.0d):" in text
+            assert (
+                "Aging WIP (cycle-time p85 over the last 90 calendar days = 4.0 working days):"
+                in text
+            )
             (stuck,) = [line for line in text.splitlines() if line.startswith('- "Stuck"')]
             assert stuck.endswith("[over p85]")
 

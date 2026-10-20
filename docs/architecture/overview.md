@@ -113,17 +113,18 @@ and Executive Dashboard).
 Every rule that changes how a metric is computed — lifecycle
 interpretation (incl. reopens, parent issues, lead-time start), the blocked
 signal, health scales, weights and evidence floor, timezone, working days,
-chart bucketing, forecast
-history and remaining, label → type mapping — is a field of `MetricRules`
-(`app/domain/metric_rules/entities.py`, defaults = the previous built-in
-behavior, except the blocked sources — all on — and the health floor —
-ADR-0015 — and durations counting Monday-to-Friday working days, ADR-0017).
+chart bucketing, forecast history and remaining, label → type mapping — is
+a field of `MetricRules` (`app/domain/metric_rules/entities.py`). Defaults
+are the previous built-in behavior, except the blocked sources (all on),
+the health floor (ADR-0015) and durations counting Monday-to-Friday working
+days (ADR-0017).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace
 ⊕ team, and `ScopeSampleLoader` (`app/application/scope.py`) folds each item
-with its team's rules while the scope's own rules drive health, calendar and
-windows. `MetricRulesService` serves `GET/PATCH /api/organizations/{id}/metric-rules`
+with its team's rules, so durations count each item's own team's working
+days, while the scope's own rules drive health, calendar and windows.
+`MetricRulesService` serves `GET/PATCH /api/organizations/{id}/metric-rules`
 and `/api/teams/{id}/metric-rules`; a change rewrites the affected scopes'
 snapshot history through the background `RecomputeRunner` in
 `app/api/recompute.py` (it cancels the running task before a save writes,

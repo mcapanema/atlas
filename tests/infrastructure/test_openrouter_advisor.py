@@ -256,8 +256,8 @@ def test_render_context_includes_queue_and_touch_time() -> None:
 
     text = render_context(context)
 
-    assert "queue time p50=2.0d" in text
-    assert "touch time p50=2.0d" in text
+    assert "queue time p50=2.0 working days" in text
+    assert "touch time p50=2.0 working days" in text
 
 
 def _feedback_entries() -> list[AdviceFeedback]:
