@@ -12,12 +12,14 @@ import type {
 } from "../api/metricRules";
 import type { Team } from "../api/teams";
 import { formatDay } from "./dates";
+import { formatWeekdays } from "./syncSchedule";
 
 type Control =
   | { kind: "switch" }
   | { kind: "select"; options: { value: string; label: string }[] }
   | { kind: "number"; min: number; max: number; step: number; suffix?: string }
   | { kind: "timezone" }
+  | { kind: "weekdays" }
   | { kind: "date" }
   | { kind: "labels" }
   | { kind: "names" }
@@ -265,6 +267,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "timezone" },
       },
       {
+        name: "working_days",
+        label: "Working days",
+        help: "Lead, cycle, blocked and aging times count only these days, in the team's time zone. Tick every day to measure calendar time. Changing it recomputes history.",
+        control: { kind: "weekdays" },
+      },
+      {
         name: "daily_bucket_max_days",
         label: "Daily throughput bars up to",
         help: "Windows up to this many days chart throughput per day; longer windows per week.",
@@ -334,6 +342,7 @@ function formatListValue(kind: Control["kind"], value: RuleValue): string | unde
       .map((o) => o.label)
       .join(", ");
   }
+  if (kind === "weekdays") return formatWeekdays(value as number[]);
   if (kind === "typeLabels") {
     const rows = value as TypeLabel[];
     return rows.length ? rows.map((row) => `${row.label} → ${row.type}`).join(", ") : "None";

@@ -11,6 +11,14 @@ export const WEEKDAY_OPTIONS = [
   { value: 7, label: "Sun" },
 ];
 
+/** "Mon, Tue, Wed", or "Every day" when all seven are ticked. */
+export function formatWeekdays(days: number[]): string {
+  if (days.length === WEEKDAY_OPTIONS.length) return "Every day";
+  return WEEKDAY_OPTIONS.filter((o) => days.includes(o.value))
+    .map((o) => o.label)
+    .join(", ");
+}
+
 const INTERVALS = [30, 60, 120, 180, 240, 360, 480, 720];
 
 function intervalLabel(minutes: number): string {

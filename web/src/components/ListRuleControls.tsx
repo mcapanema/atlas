@@ -1,7 +1,13 @@
-import { AutoComplete, Button, Select, Space } from "antd";
+import { AutoComplete, Button, Checkbox, Select, Space } from "antd";
 
-import type { OpenStateType, TypeLabel, WorkItemTypeName } from "../api/metricRules";
-import { STATE_TYPE_OPTIONS, WORK_ITEM_TYPE_OPTIONS, canonicalStates } from "../lib/metricRules";
+import type { OpenStateType, RuleValue, TypeLabel, WorkItemTypeName } from "../api/metricRules";
+import {
+  STATE_TYPE_OPTIONS,
+  WORK_ITEM_TYPE_OPTIONS,
+  canonicalStates,
+  type RuleSpec,
+} from "../lib/metricRules";
+import { WEEKDAY_OPTIONS } from "../lib/syncSchedule";
 
 function asOptions(labels: string[]) {
   return labels.map((label) => ({ value: label, label }));
@@ -110,4 +116,64 @@ export function TypeLabelsEditor({
       </Button>
     </Space>
   );
+}
+
+/** The list-valued rule controls: free-text tags, state types, weekdays, label-to-type rows. */
+export function ListRuleControl({
+  control,
+  label,
+  value,
+  labelOptions,
+  onChange,
+}: {
+  control: Extract<
+    RuleSpec["control"],
+    { kind: "labels" | "names" | "states" | "typeLabels" | "weekdays" }
+  >;
+  label: string;
+  value: RuleValue;
+  labelOptions: string[];
+  onChange: (value: RuleValue) => void;
+}) {
+  switch (control.kind) {
+    case "labels":
+      return (
+        <LabelsControl
+          label={label}
+          value={value as string[]}
+          labelOptions={labelOptions}
+          onChange={onChange}
+        />
+      );
+    case "names":
+      // Free text: workflow state names, so no label suggestions.
+      return (
+        <LabelsControl
+          label={label}
+          value={value as string[]}
+          labelOptions={[]}
+          onChange={onChange}
+        />
+      );
+    case "states":
+      return <StatesControl label={label} value={value as OpenStateType[]} onChange={onChange} />;
+    case "weekdays":
+      return (
+        <Checkbox.Group
+          aria-label={label}
+          options={WEEKDAY_OPTIONS}
+          value={value as number[]}
+          onChange={(next) => onChange([...next].sort((a, b) => a - b))}
+        />
+      );
+    case "typeLabels":
+      return (
+        <TypeLabelsEditor
+          label={label}
+          value={value as TypeLabel[]}
+          labelOptions={labelOptions}
+          onChange={onChange}
+        />
+      );
+  }
 }
