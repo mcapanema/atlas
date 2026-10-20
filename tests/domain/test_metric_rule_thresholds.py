@@ -77,7 +77,7 @@ def test_predictability_falls_from_the_target_to_the_floor() -> None:
 
     assert (default.score, no_floor.score) == (58, 71)
     assert default.components[0].reason == (
-        "60% of 5 items finished within 4d (cycle p85 of the 90 days before)"
+        "60% of 5 items finished within 4d of working time (cycle p85 of the 90 days before)"
     )
 
 

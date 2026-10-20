@@ -38,6 +38,11 @@ async def use_calendar_days(
     For tests that seed events relative to the wall clock and assert exact
     durations: the default Monday-Friday calendar would make them depend on
     the weekday the suite runs on.
+
+    Writes through the repository, not the rules endpoint: a PATCH starts the
+    recompute runner, which the `client` fixture's single in-memory connection
+    can't host (see `file_sessionmaker`). Call it before seeding events, so
+    there is no history the skipped recompute would have rebuilt.
     """
     async with sessionmaker() as session:
         await SqlAlchemyMetricRuleOverridesRepository(session).save(

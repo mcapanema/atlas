@@ -66,6 +66,7 @@ export function RuleControl({
         />
       );
     default:
+      // Every list-valued kind: ListRuleControl's switch is exhaustive over them.
       return (
         <ListRuleControl
           control={control}

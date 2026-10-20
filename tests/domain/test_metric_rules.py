@@ -153,7 +153,8 @@ def test_tracked_since_reads_a_stored_iso_date_as_midnight_on_the_teams_calendar
 
 
 @pytest.mark.parametrize(
-    "value", ["20-08-2026", "soon", 20260820, datetime(2026, 8, 20, tzinfo=UTC)]
+    "value",
+    ["20-08-2026", "soon", 20260820, "20260820", datetime(2026, 8, 20, tzinfo=UTC)],
 )
 def test_tracked_since_must_be_a_calendar_date(value: object) -> None:
     with pytest.raises(ValueError, match="tracked_since"):
@@ -197,6 +198,8 @@ def test_holidays_are_sorted_and_deduplicated() -> None:
     [
         "2026-12-25",
         ["25/12/2026"],
+        ["20261225"],
+        ["2026-W52-5"],
         [None],
         [datetime(2026, 12, 25, tzinfo=UTC)],
         [(date(2027, 1, 1) + timedelta(days=i)).isoformat() for i in range(501)],

@@ -291,7 +291,7 @@ describe("FlowDashboard", () => {
     // Healthy still shows the components: no click needed to read them.
     expect(
       within(panel).getByText(
-        "69% of 40 items finished within 6d (cycle p85 of the 90 days before)",
+        "69% of 40 items finished within 6d of working time (cycle p85 of the 90 days before)",
       ),
     ).toBeInTheDocument();
     expect(

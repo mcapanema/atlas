@@ -30,7 +30,8 @@ const criticalHealth = {
     {
       name: "predictability",
       score: 60,
-      reason: "61% of 12 items finished within 9d (cycle p85 of the 90 days before)",
+      reason:
+        "61% of 12 items finished within 9d of working time (cycle p85 of the 90 days before)",
     },
   ],
 };
@@ -156,7 +157,7 @@ describe("ExecutiveDashboardPage", () => {
     // …not the third-weakest…
     expect(
       within(detail).queryByText(
-        "61% of 12 items finished within 9d (cycle p85 of the 90 days before)",
+        "61% of 12 items finished within 9d of working time (cycle p85 of the 90 days before)",
       ),
     ).not.toBeInTheDocument();
     // …and the 7-day lead-time pulse (snapshotsFixture: 345600 → 432000, +25%).

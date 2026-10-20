@@ -348,11 +348,16 @@ async def test_holidays_round_trip_sorted(rules_client: AsyncClient) -> None:
     assert response.json()["effective"]["holidays"] == ["2026-01-01", "2026-12-25"]
 
 
-async def test_invalid_holiday_is_422(rules_client: AsyncClient) -> None:
+@pytest.mark.parametrize(
+    "holiday", ["25/12/2026", "20261225", "2026-12-25T00:00:00", 1798156800, "1798156800"]
+)
+async def test_a_holiday_must_be_a_yyyy_mm_dd_date(
+    rules_client: AsyncClient, holiday: object
+) -> None:
     _, team = await create_org_and_team(rules_client)
 
     response = await rules_client.patch(
-        f"/api/teams/{team}/metric-rules", json={"holidays": ["25/12/2026"]}
+        f"/api/teams/{team}/metric-rules", json={"holidays": [holiday]}
     )
 
     assert response.status_code == 422

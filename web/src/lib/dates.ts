@@ -22,9 +22,14 @@ export function formatDateTime(iso: string): string {
   return dayjs(iso).format(`${DATE_FORMAT} HH:mm`);
 }
 
-/** ISO dates as the page's day format, comma-joined; "None" when empty. */
+/** Past this many dates, a list reads as its count and range. */
+const LISTED_DATES = 6;
+
+/** Sorted ISO dates in the page's day format: listed, or "36 dates, first … last"; "None" when empty. */
 export function formatDates(isos: string[]): string {
-  return isos.length ? isos.map(formatDay).join(", ") : "None";
+  if (!isos.length) return "None";
+  if (isos.length <= LISTED_DATES) return isos.map(formatDay).join(", ");
+  return `${isos.length} dates, ${formatDay(isos[0])} … ${formatDay(isos[isos.length - 1])}`;
 }
 
 /** Picked days as sorted, deduped ISO dates (antd emits selection order); [] when cleared. */

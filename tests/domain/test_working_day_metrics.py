@@ -10,9 +10,9 @@ from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.queue_touch import queue_times, touch_times
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from app.domain.work_items.entities import WorkItem
+from tests.fakes import CALENDAR_DAYS
 
 ITEM = uuid4()
-SEVEN_DAYS = MetricRules(working_days=(1, 2, 3, 4, 5, 6, 7))
 
 # 2026-10-15 is a Thursday: 16 Fri, 17 Sat, 18 Sun, 19 Mon, 20 Tue.
 THU, FRI, SAT, SUN, MON, TUE = (
@@ -40,7 +40,7 @@ def test_cycle_time_skips_the_weekend() -> None:
 
 
 def test_seven_working_days_restore_calendar_time() -> None:
-    assert cycle_times([_fri_to_mon(SEVEN_DAYS)]) == [timedelta(days=3)]
+    assert cycle_times([_fri_to_mon(CALENDAR_DAYS)]) == [timedelta(days=3)]
 
 
 def test_lead_time_skips_the_weekend() -> None:
@@ -86,7 +86,7 @@ def test_aging_age_skips_the_weekend() -> None:
 
 
 def test_each_sample_measures_on_its_own_calendar() -> None:
-    assert cycle_times([_fri_to_mon(), _fri_to_mon(SEVEN_DAYS)]) == [
+    assert cycle_times([_fri_to_mon(), _fri_to_mon(CALENDAR_DAYS)]) == [
         timedelta(days=1),
         timedelta(days=3),
     ]
