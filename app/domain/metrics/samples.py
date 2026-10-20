@@ -257,19 +257,20 @@ def derive_flow_sample(
     state = _replay(ordered, rules)
     started_at, completed_at = state.started_at, state.completed_at
 
+    calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
 
     return FlowSample(
         created_at=ordered[0].occurred_at,
         started_at=started_at,
         completed_at=completed_at,
-        blocked_time=_blocked_in_cycle(periods, started_at, completed_at, rules.work_calendar),
+        blocked_time=_blocked_in_cycle(periods, started_at, completed_at, calendar),
         stopped_at=state.stopped_at,
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
         blocked_now=any(p.ended_at is None for p in periods),
         triage_exit_at=_triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None,
-        calendar=rules.work_calendar,
+        calendar=calendar,
     )
 
 

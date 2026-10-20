@@ -37,5 +37,11 @@ weekday an item happened to cross.
 
 ## Amendment (2026-10-19)
 
-Holidays are now modelled: the `holidays` rule lists whole local days off
+Holidays are modelled: the `holidays` rule lists whole local days off
 that durations skip like a non-working weekday.
+
+Decisions: `holidays` is a rule of dates; a team's list replaces the
+workspace list; capped at 500 dates; each is a whole local day in the team's
+time zone; a holiday on a non-working weekday is not subtracted twice. No
+history migration: the default is empty, and a saved change recomputes
+history.

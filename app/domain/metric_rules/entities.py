@@ -11,6 +11,7 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from datetime import date, datetime, time, tzinfo
+from functools import cached_property
 from typing import Any, Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -183,7 +184,7 @@ class MetricRules:
     def tz(self) -> tzinfo:
         return ZoneInfo(self.timezone)
 
-    @property
+    @cached_property
     def work_calendar(self) -> WorkCalendar:
         return WorkCalendar(frozenset(self.working_days), self.timezone, self.holidays)
 

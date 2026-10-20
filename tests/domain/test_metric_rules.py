@@ -211,3 +211,10 @@ def test_work_calendar_carries_the_holidays() -> None:
     rules = replace(DEFAULT_RULES, holidays=(date(2026, 12, 25),))
 
     assert rules.work_calendar.holidays == (date(2026, 12, 25),)
+
+
+def test_work_calendar_is_built_once_per_rules_and_keeps_equality() -> None:
+    rules = MetricRules()
+    assert rules.work_calendar is rules.work_calendar
+    assert rules == replace(rules, timezone=rules.timezone)
+    assert rules.work_calendar == MetricRules().work_calendar
