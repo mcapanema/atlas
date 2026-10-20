@@ -81,6 +81,36 @@ async def test_patch_rejects_an_invalid_value_naming_the_rule(rules_client: Asyn
     assert "healthy_min" in response.json()["detail"]
 
 
+async def test_working_days_default_is_weekdays(rules_client: AsyncClient) -> None:
+    org, _ = await create_org_and_team(rules_client)
+
+    body = (await rules_client.get(f"/api/organizations/{org}/metric-rules")).json()
+
+    assert body["effective"]["working_days"] == [1, 2, 3, 4, 5]
+
+
+async def test_working_days_round_trip_normalized(rules_client: AsyncClient) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"working_days": [5, 1, 3]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["effective"]["working_days"] == [1, 3, 5]
+
+
+async def test_empty_working_days_is_422(rules_client: AsyncClient) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"working_days": []}
+    )
+
+    assert response.status_code == 422
+    assert "working_days" in response.json()["detail"]
+
+
 async def test_a_workspace_change_conflicting_with_a_team_is_rejected(
     rules_app: FastAPI, rules_client: AsyncClient
 ) -> None:
