@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -180,3 +180,34 @@ def test_work_calendar_pairs_working_days_with_the_timezone() -> None:
     rules = replace(DEFAULT_RULES, timezone="America/Sao_Paulo")
 
     assert rules.work_calendar == WorkCalendar(frozenset({1, 2, 3, 4, 5}), "America/Sao_Paulo")
+
+
+def test_holidays_default_to_none() -> None:
+    assert DEFAULT_RULES.holidays == ()
+
+
+def test_holidays_are_sorted_and_deduplicated() -> None:
+    rules = apply_overrides(DEFAULT_RULES, {"holidays": ["2026-12-25", "2026-01-01", "2026-12-25"]})
+
+    assert rules.holidays == (date(2026, 1, 1), date(2026, 12, 25))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-12-25",
+        ["25/12/2026"],
+        [None],
+        [datetime(2026, 12, 25, tzinfo=UTC)],
+        [(date(2027, 1, 1) + timedelta(days=i)).isoformat() for i in range(501)],
+    ],
+)
+def test_holidays_reject_malformed_values(value: object) -> None:
+    with pytest.raises(ValueError, match="holidays"):
+        apply_overrides(DEFAULT_RULES, {"holidays": value})
+
+
+def test_work_calendar_carries_the_holidays() -> None:
+    rules = replace(DEFAULT_RULES, holidays=(date(2026, 12, 25),))
+
+    assert rules.work_calendar.holidays == (date(2026, 12, 25),)

@@ -113,7 +113,7 @@ and Executive Dashboard).
 Every rule that changes how a metric is computed — lifecycle
 interpretation (incl. reopens, parent issues, lead-time start), the blocked
 signal, health scales, weights and evidence floor, timezone, working days,
-chart bucketing, forecast history and remaining, label → type mapping — is
+holidays, chart bucketing, forecast history and remaining, label → type mapping — is
 a field of `MetricRules` (`app/domain/metric_rules/entities.py`). Defaults
 are the previous built-in behavior, except the blocked sources (all on),
 the health floor (ADR-0015) and durations counting Monday-to-Friday working

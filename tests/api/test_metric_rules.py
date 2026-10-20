@@ -327,3 +327,32 @@ async def test_tracked_since_is_a_patchable_team_date(
     assert stored["effective"]["tracked_since"] == "2026-08-20"
     assert malformed.status_code == 422
     assert "tracked_since" in malformed.text
+
+
+async def test_holidays_default_empty(rules_client: AsyncClient) -> None:
+    org, _ = await create_org_and_team(rules_client)
+
+    body = (await rules_client.get(f"/api/organizations/{org}/metric-rules")).json()
+
+    assert body["effective"]["holidays"] == []
+
+
+async def test_holidays_round_trip_sorted(rules_client: AsyncClient) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"holidays": ["2026-12-25", "2026-01-01"]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["effective"]["holidays"] == ["2026-01-01", "2026-12-25"]
+
+
+async def test_invalid_holiday_is_422(rules_client: AsyncClient) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"holidays": ["25/12/2026"]}
+    )
+
+    assert response.status_code == 422

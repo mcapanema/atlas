@@ -469,6 +469,7 @@ class MetricRulesRead(BaseModel):
     weight_risk: float
     timezone: str
     working_days: list[int]
+    holidays: list[date]
     daily_bucket_max_days: int
     forecast_history_days: int
     tracked_since: date | None
@@ -523,6 +524,7 @@ class MetricRulesOverridesWrite(BaseModel):
     weight_risk: float | None = None
     timezone: str | None = None
     working_days: list[int] | None = None
+    holidays: list[date] | None = None
     daily_bucket_max_days: int | None = None
     forecast_history_days: int | None = None
     tracked_since: date | None = None

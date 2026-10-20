@@ -45,6 +45,8 @@ _CHOICES: dict[str, tuple[str, ...]] = {
     "canceled_then_reopened": ("canceled", "reopened"),
 }
 MAX_LIST_RULE_ENTRIES = 50
+MAX_HOLIDAYS = 500
+_HOLIDAYS_MESSAGE = "holidays must be a list of dates, e.g. 2026-12-25"
 _WEEKDAYS_MESSAGE = (
     "working_days must be a non-empty list of ISO weekdays (1 = Monday … 7 = Sunday)"
 )
@@ -153,6 +155,8 @@ class MetricRules:
     # ISO weekdays (1 = Monday ... 7 = Sunday) that count as working time:
     # duration metrics skip the other days.
     working_days: tuple[int, ...] = (1, 2, 3, 4, 5)
+    # Whole local days off on top of the non-working weekdays.
+    holidays: tuple[date, ...] = ()
     daily_bucket_max_days: int = 21
     forecast_history_days: int = 90
     # When this team began tracking its work here. Older items (moved in from
@@ -181,7 +185,7 @@ class MetricRules:
 
     @property
     def work_calendar(self) -> WorkCalendar:
-        return WorkCalendar(frozenset(self.working_days), self.timezone)
+        return WorkCalendar(frozenset(self.working_days), self.timezone, self.holidays)
 
     @property
     def tracked_since_at(self) -> datetime | None:
@@ -239,6 +243,7 @@ def _normalize_collections(rules: MetricRules) -> None:
     object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
     object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))
     object.__setattr__(rules, "working_days", _weekdays(rules.working_days))
+    object.__setattr__(rules, "holidays", _holidays(rules.holidays))
 
 
 def _entries(name: str, value: object) -> list[object]:
@@ -271,6 +276,26 @@ def _weekdays(value: object) -> tuple[int, ...]:
     if not days:
         raise ValueError(_WEEKDAYS_MESSAGE)
     return tuple(sorted(days))
+
+
+def _holiday(value: object) -> date:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            pass
+    raise ValueError(_HOLIDAYS_MESSAGE)
+
+
+def _holidays(value: object) -> tuple[date, ...]:
+    if isinstance(value, str | bytes) or not isinstance(value, Iterable):
+        raise ValueError("holidays must be a list")
+    entries = list(value)
+    if len(entries) > MAX_HOLIDAYS:
+        raise ValueError(f"holidays must have at most {MAX_HOLIDAYS} entries")
+    return tuple(sorted({_holiday(entry) for entry in entries}))
 
 
 def _state_types(value: object) -> tuple[StateType, ...]:

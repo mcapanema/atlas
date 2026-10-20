@@ -32,5 +32,10 @@ weekday an item happened to cross.
 - Every duration drops for items that spanned a non-working day, including
   snapshot history once the recompute finishes.
 - Counts, windows and forecasts are unchanged: they stay calendar time.
-- Holidays and time off are not modelled; a team's rule covers only the
-  weekly pattern.
+- Time off beyond holidays is not modelled; a team's rule covers the
+  weekly pattern and its holidays.
+
+## Amendment (2026-10-19)
+
+Holidays are now modelled: the `holidays` rule lists whole local days off
+that durations skip like a non-working weekday.
