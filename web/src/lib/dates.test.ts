@@ -1,6 +1,7 @@
+import dayjs from "dayjs";
 import { describe, expect, it } from "vitest";
 
-import { DATE_FORMAT, formatDateTime, formatDay } from "./dates";
+import { DATE_FORMAT, formatDateTime, formatDay, toHolidayList } from "./dates";
 
 describe("formatDay", () => {
   it("renders a date-only ISO string as DD-MM-YYYY", () => {
@@ -34,5 +35,16 @@ describe("formatDateTime", () => {
 describe("DATE_FORMAT", () => {
   it("is the dayjs pattern the AntD pickers display", () => {
     expect(DATE_FORMAT).toBe("DD-MM-YYYY");
+  });
+});
+
+describe("toHolidayList", () => {
+  it("sorts and dedupes the picked days as ISO dates", () => {
+    const picked = [dayjs("2026-12-25"), dayjs("2026-01-01"), dayjs("2026-12-25")];
+    expect(toHolidayList(picked)).toEqual(["2026-01-01", "2026-12-25"]);
+  });
+
+  it("is an empty list when cleared", () => {
+    expect(toHolidayList(null)).toEqual([]);
   });
 });

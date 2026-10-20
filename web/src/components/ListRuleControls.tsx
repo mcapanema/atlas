@@ -8,7 +8,7 @@ import {
   canonicalStates,
   type RuleSpec,
 } from "../lib/metricRules";
-import { DATE_FORMAT } from "../lib/dates";
+import { DATE_FORMAT, toHolidayList } from "../lib/dates";
 import { WEEKDAY_OPTIONS } from "../lib/syncSchedule";
 
 function asOptions(labels: string[]) {
@@ -118,11 +118,6 @@ export function TypeLabelsEditor({
       </Button>
     </Space>
   );
-}
-
-/** Picked days as sorted, deduped ISO dates; [] when cleared. */
-function toHolidayList(days: Dayjs[] | null): string[] {
-  return [...new Set((days ?? []).map((d) => d.format("YYYY-MM-DD")))].sort();
 }
 
 /** The list-valued rule controls: free-text tags, state types, weekdays, dates, label-to-type rows. */

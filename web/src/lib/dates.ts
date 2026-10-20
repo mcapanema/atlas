@@ -1,4 +1,4 @@
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 
 /** The display format for every user-facing date. Also the AntD picker format. */
 export const DATE_FORMAT = "DD-MM-YYYY";
@@ -25,4 +25,9 @@ export function formatDateTime(iso: string): string {
 /** ISO dates as the page's day format, comma-joined; "None" when empty. */
 export function formatDates(isos: string[]): string {
   return isos.length ? isos.map(formatDay).join(", ") : "None";
+}
+
+/** Picked days as sorted, deduped ISO dates (antd emits selection order); [] when cleared. */
+export function toHolidayList(days: Dayjs[] | null): string[] {
+  return [...new Set((days ?? []).map((d) => d.format("YYYY-MM-DD")))].sort();
 }
