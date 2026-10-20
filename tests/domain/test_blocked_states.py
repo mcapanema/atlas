@@ -13,6 +13,7 @@ from app.domain.events.timeline import (
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules, resolve_rules
 from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.samples import derive_flow_sample
+from tests.fakes import CALENDAR_DAYS
 
 ITEM = uuid4()
 
@@ -212,8 +213,8 @@ def test_same_instant_moves_that_do_not_chain_keep_storage_order() -> None:
 
 
 def test_blocked_state_time_lowers_flow_efficiency_and_sets_blocked_now() -> None:
-    done = derive_flow_sample(BLOCKED_THEN_DONE)
-    still_blocked = derive_flow_sample(BLOCKED_THEN_DONE[:3])
+    done = derive_flow_sample(BLOCKED_THEN_DONE, CALENDAR_DAYS)
+    still_blocked = derive_flow_sample(BLOCKED_THEN_DONE[:3], CALENDAR_DAYS)
 
     assert done is not None
     assert still_blocked is not None

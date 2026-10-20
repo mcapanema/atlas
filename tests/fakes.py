@@ -13,7 +13,7 @@ from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.events.entities import Event
-from app.domain.metric_rules.entities import RecomputeStatus, RuleOverrides
+from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
@@ -21,6 +21,10 @@ from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem
+
+# The default rules measuring on all seven days: for tests that assert
+# durations across a weekend and aren't about the working calendar.
+CALENDAR_DAYS = replace(DEFAULT_RULES, working_days=(1, 2, 3, 4, 5, 6, 7))
 
 
 class InMemoryOrganizationRepository:

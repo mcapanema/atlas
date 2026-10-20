@@ -1,10 +1,10 @@
 import { DatePicker, InputNumber, Select, Switch } from "antd";
 import dayjs from "dayjs";
 
-import type { OpenStateType, RuleValue, TypeLabel } from "../api/metricRules";
+import type { RuleValue } from "../api/metricRules";
 import { DATE_FORMAT } from "../lib/dates";
 import { timeZoneOptions, type RuleSpec } from "../lib/metricRules";
-import { LabelsControl, StatesControl, TypeLabelsEditor } from "./ListRuleControls";
+import { ListRuleControl } from "./ListRuleControls";
 
 export function RuleControl({
   spec,
@@ -51,36 +51,6 @@ export function RuleControl({
           onChange={(next) => onChange(next ? next.format("YYYY-MM-DD") : null)}
         />
       );
-    case "labels":
-      return (
-        <LabelsControl
-          label={label}
-          value={value as string[]}
-          labelOptions={labelOptions}
-          onChange={onChange}
-        />
-      );
-    case "names":
-      // Free text: workflow state names, so no label suggestions.
-      return (
-        <LabelsControl
-          label={label}
-          value={value as string[]}
-          labelOptions={[]}
-          onChange={onChange}
-        />
-      );
-    case "states":
-      return <StatesControl label={label} value={value as OpenStateType[]} onChange={onChange} />;
-    case "typeLabels":
-      return (
-        <TypeLabelsEditor
-          label={label}
-          value={value as TypeLabel[]}
-          labelOptions={labelOptions}
-          onChange={onChange}
-        />
-      );
     case "number":
       return (
         <InputNumber
@@ -93,6 +63,17 @@ export function RuleControl({
           onChange={(next) => {
             if (next !== null) onChange(next);
           }}
+        />
+      );
+    default:
+      // Every list-valued kind: ListRuleControl's switch is exhaustive over them.
+      return (
+        <ListRuleControl
+          control={control}
+          label={label}
+          value={value}
+          labelOptions={labelOptions}
+          onChange={onChange}
         />
       );
   }

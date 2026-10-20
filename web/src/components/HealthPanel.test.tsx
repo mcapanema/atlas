@@ -22,7 +22,7 @@ describe("HealthPanel", () => {
     expect(tileFor("Health")).toHaveTextContent("healthy");
     expect(tileFor("predictability")).toHaveTextContent("74/100");
     expect(tileFor("predictability")).toHaveTextContent(
-      "69% of 40 items finished within 6d (cycle p85 of the 90 days before)",
+      "69% of 40 items finished within 6d of working time (cycle p85 of the 90 days before)",
     );
   });
 
@@ -39,7 +39,8 @@ describe("HealthPanel", () => {
               name: "predictability",
               score: 33,
               band: "critical",
-              reason: "45% of 91 items finished within 36d (cycle p85 of the 90 days before)",
+              reason:
+                "45% of 91 items finished within 36d of working time (cycle p85 of the 90 days before)",
             },
             {
               name: "flow",

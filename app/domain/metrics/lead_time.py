@@ -7,4 +7,4 @@ from app.domain.metrics.samples import FlowSample
 
 def lead_times(samples: list[FlowSample]) -> list[timedelta]:
     """Lead time per completed sample, from its arrived_at; others contribute nothing."""
-    return [s.completed_at - s.arrived_at for s in samples if s.completed_at is not None]
+    return [s.elapsed(s.arrived_at, s.completed_at) for s in samples if s.completed_at is not None]

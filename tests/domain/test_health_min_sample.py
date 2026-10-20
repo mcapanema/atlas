@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -6,6 +7,8 @@ import pytest
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules, resolve_rules
 from app.domain.metrics.health import compute_delivery_health
+from app.domain.metrics.samples import derive_flow_sample
+from tests.fakes import CALENDAR_DAYS
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -115,3 +118,47 @@ def test_a_zero_length_cycle_does_not_count_toward_the_efficiency_floor() -> Non
 def test_health_min_sample_is_a_whole_number_from_1_to_50(value: object) -> None:
     with pytest.raises(ValueError, match="health_min_sample"):
         resolve_rules({"health_min_sample": value})
+
+
+def _risk_reason(rules: MetricRules) -> str:
+    """Health for one item started Fri 12:00 and open at Mon 12:00, past a 2-day cycle line."""
+    now = datetime(2026, 10, 19, 12, tzinfo=UTC)  # Monday
+    item = uuid4()
+
+    def event(type_: EventType, at: datetime) -> Event:
+        return Event(work_item_id=item, type=type_, occurred_at=at)
+
+    done = uuid4()
+    reference = [  # a 2-day cycle on weekdays sets the aging line
+        Event(
+            work_item_id=done, type=EventType.CREATED, occurred_at=datetime(2026, 9, 1, tzinfo=UTC)
+        ),
+        Event(
+            work_item_id=done, type=EventType.STARTED, occurred_at=datetime(2026, 9, 1, tzinfo=UTC)
+        ),
+        Event(
+            work_item_id=done,
+            type=EventType.COMPLETED,
+            occurred_at=datetime(2026, 9, 3, tzinfo=UTC),
+        ),
+    ]
+    open_item = [
+        event(EventType.CREATED, datetime(2026, 10, 16, 9, tzinfo=UTC)),
+        event(EventType.STARTED, datetime(2026, 10, 16, 12, tzinfo=UTC)),  # Friday
+    ]
+    rules = replace(rules, health_min_sample=1)
+    streams = [reference, open_item]
+    health = compute_delivery_health(
+        streams, now=now, rules=rules, samples=[derive_flow_sample(s, rules) for s in streams]
+    )
+    return next(c.reason for c in health.components if c.name == "risk")
+
+
+def test_risk_ages_in_progress_items_on_working_days() -> None:
+    # Fri 12:00 -> Mon 12:00 is 1 working day: inside the 2-day line.
+    assert _risk_reason(DEFAULT_RULES).startswith("0 of 1")
+
+
+def test_risk_on_a_seven_day_calendar_counts_the_weekend() -> None:
+    # The same item is 3 calendar days old: past the 2-day line.
+    assert _risk_reason(CALENDAR_DAYS).startswith("1 of 1")

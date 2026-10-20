@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, time
 from typing import Any, Literal
 from uuid import UUID
@@ -8,6 +9,12 @@ from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
+
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _is_iso_day(value: object) -> bool:
+    return isinstance(value, date) or (isinstance(value, str) and bool(_ISO_DAY.fullmatch(value)))
 
 
 class OrganizationCreate(BaseModel):
@@ -468,6 +475,8 @@ class MetricRulesRead(BaseModel):
     weight_stability: float
     weight_risk: float
     timezone: str
+    working_days: list[int]
+    holidays: list[date]
     daily_bucket_max_days: int
     forecast_history_days: int
     tracked_since: date | None
@@ -521,6 +530,8 @@ class MetricRulesOverridesWrite(BaseModel):
     weight_stability: float | None = None
     weight_risk: float | None = None
     timezone: str | None = None
+    working_days: list[int] | None = None
+    holidays: list[date] | None = None
     daily_bucket_max_days: int | None = None
     forecast_history_days: int | None = None
     tracked_since: date | None = None
@@ -539,6 +550,15 @@ class MetricRulesOverridesWrite(BaseModel):
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True, mode="json")
+
+    @field_validator("holidays", mode="before")
+    @classmethod
+    def _yyyy_mm_dd(cls, value: object) -> object:
+        # Pydantic's date also takes Unix timestamps and midnight datetimes;
+        # a holiday is a calendar day, written one way.
+        if isinstance(value, list) and not all(_is_iso_day(day) for day in value):
+            raise ValueError("holidays must be a list of dates, e.g. 2026-12-25")
+        return value
 
 
 class RecomputeStatusRead(BaseModel):

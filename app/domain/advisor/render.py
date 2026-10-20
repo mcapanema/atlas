@@ -13,14 +13,15 @@ from app.domain.metrics.aging import AgingWip
 
 
 def _days(delta: timedelta) -> str:
-    return f"{delta / timedelta(days=1):.1f}d"
+    """A duration in working days, named so it isn't read as calendar days."""
+    return f"{delta / timedelta(days=1):.1f} working days"
 
 
 def render_context(context: DeliveryContext) -> str:
     """Render the computed metrics as compact text for an LLM."""
     flow = context.flow
     flow_days = (flow.window_end - flow.window_start).days
-    lines = [f"Flow metrics (trailing {flow_days} days, ending {flow.window_end.date()}):"]
+    lines = [f"Flow metrics (trailing {flow_days} calendar days, ending {flow.window_end.date()}):"]
     lines.append(f"- completed={flow.completed}, wip={flow.wip}")
     if flow.lead_time is not None:
         lt = flow.lead_time
@@ -44,13 +45,16 @@ def render_context(context: DeliveryContext) -> str:
 
     dist = context.distribution
     dist_days = (dist.window_end - dist.window_start).days
+    histogram_header = (
+        f"Lead-time histogram (bins in working days; trailing {dist_days} calendar days)"
+    )
     if dist.bins:
         histogram = ", ".join(
-            f"{b.start_days}-{b.end_days}d:{b.count}" for b in dist.bins if b.count
+            f"{b.start_days}-{b.end_days}:{b.count}" for b in dist.bins if b.count
         )
-        lines.append(f"Lead-time histogram (trailing {dist_days} days): {histogram}")
+        lines.append(f"{histogram_header}: {histogram}")
     else:
-        lines.append(f"Lead-time histogram (trailing {dist_days} days): empty")
+        lines.append(f"{histogram_header}: empty")
 
     forecast = context.forecast
     lines.append(f"Monte Carlo forecast: remaining={forecast.remaining} open items")
@@ -93,7 +97,7 @@ def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str =
     header = "Aging WIP"
     if aging.cycle_time_percentile is not None:
         header += (
-            f" (cycle-time p{aging.percentile} over the last {aging.history_days} days"
+            f" (cycle-time p{aging.percentile} over the last {aging.history_days} calendar days"
             f" = {_days(aging.cycle_time_percentile)})"
         )
     lines = [header + ":"]

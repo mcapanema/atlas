@@ -1,9 +1,11 @@
-from datetime import UTC, date, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.domain.metric_rules.calendar import WorkCalendar
 from app.domain.metric_rules.entities import (
     DEFAULT_RULES,
     MetricRules,
@@ -151,8 +153,71 @@ def test_tracked_since_reads_a_stored_iso_date_as_midnight_on_the_teams_calendar
 
 
 @pytest.mark.parametrize(
-    "value", ["20-08-2026", "soon", 20260820, datetime(2026, 8, 20, tzinfo=UTC)]
+    "value",
+    ["20-08-2026", "soon", 20260820, "20260820", datetime(2026, 8, 20, tzinfo=UTC)],
 )
 def test_tracked_since_must_be_a_calendar_date(value: object) -> None:
     with pytest.raises(ValueError, match="tracked_since"):
         resolve_rules({"tracked_since": value})
+
+
+def test_working_days_default_to_monday_through_friday() -> None:
+    assert DEFAULT_RULES.working_days == (1, 2, 3, 4, 5)
+
+
+def test_working_days_are_sorted_and_deduplicated() -> None:
+    rules = apply_overrides(DEFAULT_RULES, {"working_days": [5, 1, 1, 3]})
+
+    assert rules.working_days == (1, 3, 5)
+
+
+@pytest.mark.parametrize("value", [[], [0], [8], ["mon"], [True], "12345"])
+def test_working_days_rejects_malformed_values(value: object) -> None:
+    with pytest.raises(ValueError, match="working_days"):
+        apply_overrides(DEFAULT_RULES, {"working_days": value})
+
+
+def test_work_calendar_pairs_working_days_with_the_timezone() -> None:
+    rules = replace(DEFAULT_RULES, timezone="America/Sao_Paulo")
+
+    assert rules.work_calendar == WorkCalendar(frozenset({1, 2, 3, 4, 5}), "America/Sao_Paulo")
+
+
+def test_holidays_default_to_none() -> None:
+    assert DEFAULT_RULES.holidays == ()
+
+
+def test_holidays_are_sorted_and_deduplicated() -> None:
+    rules = apply_overrides(DEFAULT_RULES, {"holidays": ["2026-12-25", "2026-01-01", "2026-12-25"]})
+
+    assert rules.holidays == (date(2026, 1, 1), date(2026, 12, 25))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-12-25",
+        ["25/12/2026"],
+        ["20261225"],
+        ["2026-W52-5"],
+        [None],
+        [datetime(2026, 12, 25, tzinfo=UTC)],
+        [(date(2027, 1, 1) + timedelta(days=i)).isoformat() for i in range(501)],
+    ],
+)
+def test_holidays_reject_malformed_values(value: object) -> None:
+    with pytest.raises(ValueError, match="holidays"):
+        apply_overrides(DEFAULT_RULES, {"holidays": value})
+
+
+def test_work_calendar_carries_the_holidays() -> None:
+    rules = replace(DEFAULT_RULES, holidays=(date(2026, 12, 25),))
+
+    assert rules.work_calendar.holidays == (date(2026, 12, 25),)
+
+
+def test_work_calendar_is_built_once_per_rules_and_keeps_equality() -> None:
+    rules = MetricRules()
+    assert rules.work_calendar is rules.work_calendar
+    assert rules == replace(rules, timezone=rules.timezone)
+    assert rules.work_calendar == MetricRules().work_calendar

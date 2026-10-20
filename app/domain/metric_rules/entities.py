@@ -11,11 +11,13 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from datetime import date, datetime, time, tzinfo
+from functools import cached_property
 from typing import Any, Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.domain._time import utcnow
+from app.domain.metric_rules.calendar import WorkCalendar
 from app.domain.work_items.entities import OPEN_STATE_TYPES, StateType, WorkItem, WorkItemType
 
 ReopenCompletion = Literal["last", "first"]
@@ -44,6 +46,13 @@ _CHOICES: dict[str, tuple[str, ...]] = {
     "canceled_then_reopened": ("canceled", "reopened"),
 }
 MAX_LIST_RULE_ENTRIES = 50
+MAX_HOLIDAYS = 500
+_HOLIDAYS_MESSAGE = "holidays must be a list of dates, e.g. 2026-12-25"
+_TRACKED_SINCE_MESSAGE = "tracked_since must be a date, e.g. 2026-08-20"
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_WEEKDAYS_MESSAGE = (
+    "working_days must be a non-empty list of ISO weekdays (1 = Monday … 7 = Sunday)"
+)
 
 # Built-in blocked-name match for labels and workflow states: whole words,
 # where "_" separates words too. English "Blocked", "Blockers", "blocker:
@@ -146,6 +155,11 @@ class MetricRules:
     # Calendar and windows. Short windows have no weekly shape to read (a
     # 7-day window is one weekly bar), so they chart throughput per day.
     timezone: str = "UTC"
+    # ISO weekdays (1 = Monday ... 7 = Sunday) that count as working time:
+    # duration metrics skip the other days.
+    working_days: tuple[int, ...] = (1, 2, 3, 4, 5)
+    # Whole local days off on top of the non-working weekdays.
+    holidays: tuple[date, ...] = ()
     daily_bucket_max_days: int = 21
     forecast_history_days: int = 90
     # When this team began tracking its work here. Older items (moved in from
@@ -162,7 +176,7 @@ class MetricRules:
 
     def __post_init__(self) -> None:
         _normalize_collections(self)
-        object.__setattr__(self, "tracked_since", _calendar_date(self.tracked_since))
+        object.__setattr__(self, "tracked_since", _tracked_since(self.tracked_since))
         _check_types(self)
         _check_ranges(self)
         _check_order(self)
@@ -171,6 +185,10 @@ class MetricRules:
     @property
     def tz(self) -> tzinfo:
         return ZoneInfo(self.timezone)
+
+    @cached_property
+    def work_calendar(self) -> WorkCalendar:
+        return WorkCalendar(frozenset(self.working_days), self.timezone, self.holidays)
 
     @property
     def tracked_since_at(self) -> datetime | None:
@@ -227,14 +245,16 @@ def _normalize_collections(rules: MetricRules) -> None:
     )
     object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
     object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))
+    object.__setattr__(rules, "working_days", _weekdays(rules.working_days))
+    object.__setattr__(rules, "holidays", _holidays(rules.holidays))
 
 
-def _entries(name: str, value: object) -> list[object]:
+def _entries(name: str, value: object, cap: int = MAX_LIST_RULE_ENTRIES) -> list[object]:
     if isinstance(value, str | bytes) or not isinstance(value, Iterable):
         raise ValueError(f"{name} must be a list")
     entries = list(value)
-    if len(entries) > MAX_LIST_RULE_ENTRIES:
-        raise ValueError(f"{name} must have at most {MAX_LIST_RULE_ENTRIES} entries")
+    if len(entries) > cap:
+        raise ValueError(f"{name} must have at most {cap} entries")
     return entries
 
 
@@ -246,6 +266,24 @@ def _label(name: str, value: object) -> str:
 
 def _names(rule: str, value: object) -> tuple[str, ...]:
     return tuple(_label(rule, entry) for entry in _entries(rule, value))
+
+
+def _weekday(day: object) -> int:
+    if isinstance(day, bool) or not isinstance(day, int) or not 1 <= day <= 7:
+        raise ValueError(_WEEKDAYS_MESSAGE)
+    return day
+
+
+def _weekdays(value: object) -> tuple[int, ...]:
+    days = {_weekday(day) for day in _entries("working_days", value)}
+    if not days:
+        raise ValueError(_WEEKDAYS_MESSAGE)
+    return tuple(sorted(days))
+
+
+def _holidays(value: object) -> tuple[date, ...]:
+    entries = _entries("holidays", value, cap=MAX_HOLIDAYS)
+    return tuple(sorted({_calendar_date(entry, _HOLIDAYS_MESSAGE) for entry in entries}))
 
 
 def _state_types(value: object) -> tuple[StateType, ...]:
@@ -281,16 +319,24 @@ def _type_labels(value: object) -> tuple[tuple[str, WorkItemType], ...]:
     return pairs
 
 
-def _calendar_date(value: object) -> date | None:
-    """A date rule from the domain (a date) or stored JSON (an ISO string)."""
-    if value is None or (isinstance(value, date) and not isinstance(value, datetime)):
+def _calendar_date(value: object, message: str) -> date:
+    """A date from the domain (a date) or stored JSON (a YYYY-MM-DD string).
+
+    Only the extended YYYY-MM-DD form: `date.fromisoformat` alone also takes
+    20261225 and 2026-W52-5, which nothing in Atlas writes.
+    """
+    if isinstance(value, date) and not isinstance(value, datetime):
         return value
-    if isinstance(value, str):
+    if isinstance(value, str) and _ISO_DATE.fullmatch(value):
         try:
             return date.fromisoformat(value)
-        except ValueError:
+        except ValueError:  # 2026-02-30
             pass
-    raise ValueError("tracked_since must be a date, e.g. 2026-08-20")
+    raise ValueError(message)
+
+
+def _tracked_since(value: object) -> date | None:
+    return None if value is None else _calendar_date(value, _TRACKED_SINCE_MESSAGE)
 
 
 def _check_types(rules: MetricRules) -> None:

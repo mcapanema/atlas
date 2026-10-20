@@ -1,9 +1,14 @@
 """Shared builders for API-level tests: create real parent chains via the API."""
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.domain.metric_rules.entities import RuleOverrides
+from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 
 
 async def create_org_and_team(
@@ -23,6 +28,30 @@ async def create_org_and_team(
 
 async def create_team(client: AsyncClient) -> str:
     return (await create_org_and_team(client))[1]
+
+
+async def use_calendar_days(
+    sessionmaker: async_sessionmaker[AsyncSession], organization_id: str
+) -> None:
+    """Make the organization's durations plain calendar time (all seven days work).
+
+    For tests that seed events relative to the wall clock and assert exact
+    durations: the default Monday-Friday calendar would make them depend on
+    the weekday the suite runs on.
+
+    Writes through the repository, not the rules endpoint: a PATCH starts the
+    recompute runner, which the `client` fixture's single in-memory connection
+    can't host (see `file_sessionmaker`). Call it before seeding events, so
+    there is no history the skipped recompute would have rebuilt.
+    """
+    async with sessionmaker() as session:
+        await SqlAlchemyMetricRuleOverridesRepository(session).save(
+            RuleOverrides(
+                organization_id=UUID(organization_id),
+                overrides={"working_days": [1, 2, 3, 4, 5, 6, 7]},
+            )
+        )
+        await session.commit()
 
 
 async def settle(app: FastAPI) -> None:

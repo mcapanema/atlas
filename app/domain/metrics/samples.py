@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
 from app.domain.events.timeline import BlockedPeriod, blocked_periods
+from app.domain.metric_rules.calendar import EVERY_DAY, WorkCalendar
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.stats import percentile
 from app.domain.work_items.entities import NOT_STARTED_STATE_TYPES, StateType
@@ -31,6 +32,12 @@ class FlowSample:
     # When lead time starts if not at creation: the Triage exit, set only
     # under lead_time_start="triage_exit" (see arrived_at).
     triage_exit_at: datetime | None = None
+    # The working days every duration of this sample is measured on.
+    calendar: WorkCalendar = EVERY_DAY
+
+    def elapsed(self, start: datetime, end: datetime) -> timedelta:
+        """Time from `start` to `end` on this sample's working calendar."""
+        return self.calendar.elapsed(start, end)
 
     @property
     def arrived_at(self) -> datetime:
@@ -188,7 +195,10 @@ def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
 
 
 def _blocked_in_cycle(
-    periods: Sequence[BlockedPeriod], started_at: datetime | None, completed_at: datetime | None
+    periods: Sequence[BlockedPeriod],
+    started_at: datetime | None,
+    completed_at: datetime | None,
+    calendar: WorkCalendar,
 ) -> timedelta:
     """Blocked time inside the cycle, started_at -> completed_at.
 
@@ -206,7 +216,7 @@ def _blocked_in_cycle(
             ended_at = completed_at if ended_at is None else min(ended_at, completed_at)
         begun = max(period.started_at, started_at)
         if ended_at is not None and ended_at > begun:
-            total += ended_at - begun
+            total += calendar.elapsed(begun, ended_at)
     return total
 
 
@@ -238,6 +248,8 @@ def derive_flow_sample(
     move from Done / Canceled to a not-started state reopens the item (open,
     not in progress); a later start after a Done reopen keeps the clock.
     arrived_at is the Triage exit under lead_time_start="triage_exit".
+    Durations (cycle, lead, queue, touch, blocked, age) are measured on the rules'
+    working days, so a non-working day adds no time.
     """
     if not events:
         return None
@@ -245,18 +257,20 @@ def derive_flow_sample(
     state = _replay(ordered, rules)
     started_at, completed_at = state.started_at, state.completed_at
 
+    calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
 
     return FlowSample(
         created_at=ordered[0].occurred_at,
         started_at=started_at,
         completed_at=completed_at,
-        blocked_time=_blocked_in_cycle(periods, started_at, completed_at),
+        blocked_time=_blocked_in_cycle(periods, started_at, completed_at, calendar),
         stopped_at=state.stopped_at,
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
         blocked_now=any(p.ended_at is None for p in periods),
         triage_exit_at=_triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None,
+        calendar=calendar,
     )
 
 

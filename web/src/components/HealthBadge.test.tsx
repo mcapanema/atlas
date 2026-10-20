@@ -22,7 +22,9 @@ describe("HealthBadge", () => {
     const badge = screen.getByRole("button");
     fireEvent.click(badge);
     expect(
-      screen.getByText("69% of 40 items finished within 6d (cycle p85 of the 90 days before)"),
+      screen.getByText(
+        "69% of 40 items finished within 6d of working time (cycle p85 of the 90 days before)",
+      ),
     ).toBeInTheDocument();
     // Component scores state their scale — a critical "risk 0" must read as
     // 0-out-of-100, not "zero risk".

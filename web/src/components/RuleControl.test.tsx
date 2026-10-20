@@ -11,6 +11,31 @@ function spec(name: string): RuleSpec {
 }
 
 describe("RuleControl", () => {
+  it("shows the working days checked and reports a sorted list when one is added", () => {
+    const onChange = vi.fn();
+    render(<RuleControl spec={spec("working_days")} value={[1, 2, 3, 4, 5]} onChange={onChange} />);
+    expect(screen.getByRole("checkbox", { name: "Mon" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Sat" })).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sat" }));
+
+    expect(onChange).toHaveBeenLastCalledWith([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("shows the holidays selected and reports an empty list when cleared", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <RuleControl spec={spec("holidays")} value={["2026-12-25"]} onChange={onChange} />,
+    );
+    expect(screen.getByText("25-12-2026")).toBeInTheDocument();
+
+    const clear = container.querySelector(".ant-picker-clear");
+    fireEvent.mouseDown(clear!);
+    fireEvent.click(clear!);
+
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+
   it("reports a typed number and ignores a cleared field", () => {
     const onChange = vi.fn();
     render(<RuleControl spec={spec("healthy_min")} value={70} onChange={onChange} />);

@@ -89,7 +89,7 @@ def compute_aging_wip(
     for item, sample in items_with_samples:
         if not in_progress(sample, now) or sample.started_at is None:
             continue
-        age = now - sample.started_at
+        age = sample.elapsed(sample.started_at, now)
         aging.append(
             AgingItem(
                 work_item_id=item.id,

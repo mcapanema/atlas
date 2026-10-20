@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -112,3 +113,49 @@ def test_blocked_defaults_migration_schedules_a_history_recompute(
 
     assert {UUID(org) for org, _, _ in rows} == {with_row, without_row}
     assert all(state == "running" and started for _, state, started in rows)
+
+
+def test_working_days_migration_schedules_a_history_recompute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0017 moved durations onto working days, so stored snapshot history
+    is stale: upgrading from the previous revision marks every organization's
+    workspace row "running", inserting an empty one for an organization
+    without it."""
+    db_path = tmp_path / "working-days.db"
+    monkeypatch.setenv("ATLAS_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    get_settings.cache_clear()
+    config = Config("alembic.ini")
+    with_row, without_row = uuid4(), uuid4()
+    engine = create_engine(f"sqlite:///{db_path}")
+    try:
+        command.upgrade(config, "c4e7a2d9b1f3")
+        with engine.begin() as connection:
+            for org in (with_row, without_row):
+                connection.execute(
+                    text("INSERT INTO organizations (id, name, created_at) VALUES (:id, 'O', :at)"),
+                    {"id": org.hex, "at": "2026-10-01 00:00:00"},
+                )
+            connection.execute(
+                text(
+                    "INSERT INTO metric_rule_overrides (id, organization_id, team_id, overrides,"
+                    " recompute_state, updated_at) VALUES (:id, :org, NULL, '{}', 'idle', :at)"
+                ),
+                {"id": uuid4().hex, "org": with_row.hex, "at": "2026-10-01 00:00:00"},
+            )
+        command.upgrade(config, "8b2d5f6a1c47")
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT organization_id, overrides, recompute_state, recompute_started_at"
+                    " FROM metric_rule_overrides WHERE team_id IS NULL"
+                )
+            ).all()
+    finally:
+        engine.dispose()
+        get_settings.cache_clear()
+
+    assert {UUID(org) for org, *_ in rows} == {with_row, without_row}
+    assert all(state == "running" and started for _, _, state, started in rows)
+    inserted = next(row for row in rows if UUID(row[0]) == without_row)
+    assert json.loads(inserted[1]) == {}

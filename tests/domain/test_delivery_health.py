@@ -6,6 +6,8 @@ import pytest
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import MetricRules
 from app.domain.metrics.health import HealthComponent, compute_delivery_health
+from app.domain.metrics.samples import derive_flow_sample
+from tests.fakes import CALENDAR_DAYS
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -255,7 +257,8 @@ def _window(cycle_days: int, count: int = 5) -> list[list[Event]]:
 
 
 def _predictability(streams: list[list[Event]]) -> HealthComponent | None:
-    health = compute_delivery_health(streams, now=NOW)
+    samples = [derive_flow_sample(stream, CALENDAR_DAYS) for stream in streams]
+    health = compute_delivery_health(streams, now=NOW, samples=samples)
     return next((c for c in health.components if c.name == "predictability"), None)
 
 
@@ -266,7 +269,18 @@ def test_a_slow_window_cannot_raise_its_own_service_level() -> None:
 
     assert component is not None
     assert component.score == 0
-    assert component.reason.startswith("0% of 5 items finished within 1d")
+    assert component.reason.startswith("0% of 5 items finished within 1d of working time")
+
+
+def test_omitted_samples_are_derived_with_the_scopes_rules() -> None:
+    streams = [*_prior(1), *_window(10)]
+    samples = [derive_flow_sample(stream, CALENDAR_DAYS) for stream in streams]
+
+    derived = compute_delivery_health(streams, now=NOW, rules=CALENDAR_DAYS)
+
+    assert derived == compute_delivery_health(
+        streams, now=NOW, rules=CALENDAR_DAYS, samples=samples
+    )
 
 
 def test_meeting_the_service_level_more_often_than_the_target_scores_100() -> None:

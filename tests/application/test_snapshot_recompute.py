@@ -66,7 +66,11 @@ async def test_recompute_rewrites_history_in_place_under_new_rules() -> None:
         _at(item, EventType.STARTED, 4),
         _at(item, EventType.COMPLETED, 2),
     ]
-    overrides = InMemoryMetricRuleOverridesRepository()
+    # All seven days count, so the cycle times below are plain calendar days.
+    seven_days = RuleOverrides(
+        organization_id=ORG, overrides={"working_days": [1, 2, 3, 4, 5, 6, 7]}
+    )
+    overrides = InMemoryMetricRuleOverridesRepository([seven_days])
     service, metric_snapshots, _ = _service(team, [item], events, overrides)
     await service.capture_all(now=NOW)
     (before,) = await metric_snapshots.list(team_id=team.id)

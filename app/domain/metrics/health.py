@@ -111,6 +111,7 @@ def _predictability(
         score=_clamp(100 * (hit - floor) / (pct / 100 - floor)),
         reason=(
             f"{hit:.0%} of {len(window)} items finished within {_short_duration(sle)} "
+            "of working time "
             f"(cycle p{pct} of the {rules.aging_history_days} days before)"
         ),
     )
@@ -197,7 +198,8 @@ def _risk(
     at_risk = sum(
         1
         for sample, blocked in open_items
-        if blocked or (sample.started_at is not None and now - sample.started_at > cycle_limit)
+        if blocked
+        or (sample.started_at is not None and sample.elapsed(sample.started_at, now) > cycle_limit)
     )
     return _Reading(
         name="risk",
@@ -228,10 +230,10 @@ def _aging_limit(
 
 
 def _item_states(
-    streams: list[list[Event]], samples: Sequence[FlowSample | None] | None
+    streams: list[list[Event]], samples: Sequence[FlowSample | None] | None, rules: MetricRules
 ) -> list[tuple[FlowSample, bool]]:
-    """(sample, blocked right now) per item; samples derived with built-in rules if absent."""
-    derived = samples if samples is not None else [derive_flow_sample(s) for s in streams]
+    """(sample, blocked right now) per item; samples derived with `rules` if absent."""
+    derived = samples if samples is not None else [derive_flow_sample(s, rules) for s in streams]
     return [(sample, sample.blocked_now) for sample in derived if sample is not None]
 
 
@@ -270,12 +272,12 @@ def compute_delivery_health(
     """Score the scope's delivery health over the trailing window ending at `now`.
 
     `samples` are the streams' samples (aligned by index) when the caller
-    folded them with per-item rules; omitted, they're derived with the
-    built-in rules. `rules` are the scope's.
+    folded them with per-item rules; omitted, they're derived with `rules`,
+    the scope's.
     """
     window_start = now - timedelta(days=window_days)
     mid = now - timedelta(days=window_days) / 2
-    item_states = _item_states(streams, samples)
+    item_states = _item_states(streams, samples, rules)
     all_samples = [sample for sample, _ in item_states]
     in_window = [
         s

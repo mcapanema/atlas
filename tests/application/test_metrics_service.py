@@ -1,21 +1,37 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metrics.service import MetricsService
 from app.application.scope import ScopeSamples
 from app.domain.events.entities import Event, EventType
+from app.domain.metric_rules.entities import RuleOverrides
 from app.domain.metrics.samples import derive_flow_sample
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem
 from tests.fakes import (
     InMemoryEventRepository,
+    InMemoryMetricRuleOverridesRepository,
     InMemoryProjectRepository,
     InMemoryTeamRepository,
     InMemoryWorkItemRepository,
 )
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
+ORG = uuid4()
+
+
+def _calendar_days(team: Team) -> MetricRulesResolver:
+    """Rules measuring on all seven days, for tests whose durations span a weekend."""
+    seven_days = RuleOverrides(
+        organization_id=ORG, overrides={"working_days": [1, 2, 3, 4, 5, 6, 7]}
+    )
+    return MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository([seven_days]),
+        InMemoryTeamRepository([team]),
+        InMemoryProjectRepository(),
+    )
 
 
 def _item(team_id: UUID) -> WorkItem:
@@ -27,7 +43,8 @@ def _event(item: WorkItem, type_: EventType, days_ago: int) -> Event:
 
 
 async def test_team_metrics_across_completed_and_in_progress_items() -> None:
-    team_id = uuid4()
+    team = Team(organization_id=ORG, name="Platform")
+    team_id = team.id
     done, doing = _item(team_id), _item(team_id)
     service = MetricsService(
         InMemoryWorkItemRepository([done, doing]),
@@ -40,6 +57,7 @@ async def test_team_metrics_across_completed_and_in_progress_items() -> None:
                 _event(doing, EventType.STARTED, 4),
             ]
         ),
+        _calendar_days(team),
     )
 
     metrics = await service.get_flow_metrics(team_id=team_id, now=NOW)
@@ -155,7 +173,8 @@ async def test_flow_history_for_team() -> None:
 
 
 async def test_lead_time_distribution_for_team() -> None:
-    team_id = uuid4()
+    team = Team(organization_id=ORG, name="Platform")
+    team_id = team.id
     done = _item(team_id)
     service = MetricsService(
         InMemoryWorkItemRepository([done]),
@@ -165,6 +184,7 @@ async def test_lead_time_distribution_for_team() -> None:
                 _event(done, EventType.COMPLETED, 2),
             ]
         ),
+        _calendar_days(team),
     )
 
     dist = await service.get_lead_time_distribution(team_id=team_id, now=NOW)
@@ -194,7 +214,8 @@ async def test_precomputed_scope_skips_repository_loading() -> None:
 
 
 async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
-    team_id = uuid4()
+    team = Team(organization_id=ORG, name="Platform")
+    team_id = team.id
     old, young, done = _item(team_id), _item(team_id), _item(team_id)
     service = MetricsService(
         InMemoryWorkItemRepository([old, young, done]),
@@ -209,6 +230,7 @@ async def test_aging_wip_lists_in_progress_items_oldest_first() -> None:
                 _event(done, EventType.COMPLETED, 1),
             ]
         ),
+        _calendar_days(team),
     )
 
     aging = await service.get_aging_wip(team_id=team_id, now=NOW)

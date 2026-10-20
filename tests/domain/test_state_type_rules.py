@@ -1,4 +1,5 @@
 # tests/domain/test_state_type_rules.py
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from app.domain.metrics.lead_time import lead_times
 from app.domain.metrics.queue_touch import queue_times
 from app.domain.metrics.samples import derive_flow_sample, in_progress, state_type_at
 from app.domain.work_items.entities import StateType
+from tests.fakes import CALENDAR_DAYS
 
 ITEM = uuid4()
 T = StateType
@@ -146,11 +148,11 @@ BORN_IN_TRIAGE = [
     _moved(T.BACKLOG, T.STARTED, 5, EventType.STARTED),
     _moved(T.STARTED, T.COMPLETED, 9, EventType.COMPLETED),
 ]
-TRIAGE_EXIT = MetricRules(lead_time_start="triage_exit")
+TRIAGE_EXIT = replace(CALENDAR_DAYS, lead_time_start="triage_exit")
 
 
 def test_lead_time_starts_at_creation_by_default() -> None:
-    sample = derive_flow_sample(BORN_IN_TRIAGE)
+    sample = derive_flow_sample(BORN_IN_TRIAGE, CALENDAR_DAYS)
 
     assert sample is not None
     assert sample.arrived_at == _day(1)

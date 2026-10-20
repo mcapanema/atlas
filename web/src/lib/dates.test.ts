@@ -1,6 +1,7 @@
+import dayjs from "dayjs";
 import { describe, expect, it } from "vitest";
 
-import { DATE_FORMAT, formatDateTime, formatDay } from "./dates";
+import { DATE_FORMAT, formatDates, formatDateTime, formatDay, toHolidayList } from "./dates";
 
 describe("formatDay", () => {
   it("renders a date-only ISO string as DD-MM-YYYY", () => {
@@ -34,5 +35,34 @@ describe("formatDateTime", () => {
 describe("DATE_FORMAT", () => {
   it("is the dayjs pattern the AntD pickers display", () => {
     expect(DATE_FORMAT).toBe("DD-MM-YYYY");
+  });
+});
+
+describe("toHolidayList", () => {
+  it("sorts and dedupes the picked days as ISO dates", () => {
+    const picked = [dayjs("2026-12-25"), dayjs("2026-01-01"), dayjs("2026-12-25")];
+    expect(toHolidayList(picked)).toEqual(["2026-01-01", "2026-12-25"]);
+  });
+
+  it("is an empty list when cleared", () => {
+    expect(toHolidayList(null)).toEqual([]);
+  });
+});
+
+describe("formatDates", () => {
+  it("lists a short list in full", () => {
+    expect(formatDates(["2026-01-01", "2026-12-25"])).toBe("01-01-2026, 25-12-2026");
+  });
+
+  it("is None when empty", () => {
+    expect(formatDates([])).toBe("None");
+  });
+
+  it("summarizes a long list as its count and range", () => {
+    const isos = Array.from(
+      { length: 36 },
+      (_, i) => `${2026 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`,
+    );
+    expect(formatDates(isos)).toBe("36 dates, 01-01-2026 … 01-12-2028");
   });
 });
