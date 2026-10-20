@@ -114,3 +114,33 @@ def test_holidays_are_counted_by_range_not_scan() -> None:
     cal = WorkCalendar(frozenset({1, 2, 3, 4, 5}), holidays=holidays)
     start = datetime(2026, 1, 5, tzinfo=UTC)
     assert cal.elapsed(start, start + timedelta(weeks=52)) == timedelta(0)
+
+
+def test_a_same_day_span_on_a_holiday_is_zero() -> None:
+    cal = WorkCalendar(frozenset({1, 2, 3, 4, 5}), holidays=(date(2026, 10, 19),))
+    assert cal.elapsed(
+        datetime(2026, 10, 19, 9, tzinfo=UTC), datetime(2026, 10, 19, 12, tzinfo=UTC)
+    ) == timedelta(0)
+
+
+def test_a_same_day_span_on_a_non_holiday_is_plain_subtraction() -> None:
+    cal = WorkCalendar(frozenset({1, 2, 3, 4, 5}), holidays=(date(2026, 10, 19),))
+    assert cal.elapsed(
+        datetime(2026, 10, 20, 9, tzinfo=UTC), datetime(2026, 10, 20, 12, tzinfo=UTC)
+    ) == timedelta(hours=3)
+
+
+def test_a_span_ending_on_a_holiday_skips_it() -> None:
+    cal = WorkCalendar(frozenset({1, 2, 3, 4, 5}), holidays=(date(2026, 10, 19),))
+    assert cal.elapsed(
+        datetime(2026, 10, 16, 9, tzinfo=UTC), datetime(2026, 10, 19, 12, tzinfo=UTC)
+    ) == timedelta(hours=15)
+
+
+def test_holidays_on_both_ends_are_skipped() -> None:
+    cal = WorkCalendar(
+        frozenset({1, 2, 3, 4, 5}), holidays=(date(2026, 10, 19), date(2026, 10, 21))
+    )
+    assert cal.elapsed(
+        datetime(2026, 10, 19, 9, tzinfo=UTC), datetime(2026, 10, 21, 12, tzinfo=UTC)
+    ) == timedelta(days=1)

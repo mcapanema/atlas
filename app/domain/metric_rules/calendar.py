@@ -50,8 +50,7 @@ class WorkCalendar:
                 for i in range(rest)
                 if (first + timedelta(days=1 + i)).isoweekday() not in self.working_days
             )
-            + bisect_left(self.holidays, last)
-            - bisect_right(self.holidays, first)
+            + max(0, bisect_left(self.holidays, last) - bisect_right(self.holidays, first))
         )
         return max(timedelta(0), (end - start) - off - timedelta(days=off_days))
 
