@@ -13,7 +13,7 @@ def measured_cycles(samples: list[FlowSample]) -> list[tuple[FlowSample, float]]
     for sample in samples:
         if sample.completed_at is None or sample.started_at is None:
             continue
-        cycle = (sample.completed_at - sample.started_at).total_seconds()
+        cycle = sample.elapsed(sample.started_at, sample.completed_at).total_seconds()
         if cycle > 0:
             cycles.append((sample, cycle))
     return cycles

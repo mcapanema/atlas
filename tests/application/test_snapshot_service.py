@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.application.forecasting.service import ForecastService
+from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metrics.service import MetricsService
 from app.application.scope import ScopeSamples
 from app.application.snapshots.service import (
@@ -9,7 +10,7 @@ from app.application.snapshots.service import (
     SnapshotService,
 )
 from app.domain.events.entities import Event, EventType
-from app.domain.metric_rules.entities import DEFAULT_RULES
+from app.domain.metric_rules.entities import DEFAULT_RULES, RuleOverrides
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot
 from app.domain.teams.entities import Team
@@ -17,6 +18,7 @@ from app.domain.work_items.entities import WorkItem
 from tests.fakes import (
     InMemoryEventRepository,
     InMemoryForecastSnapshotRepository,
+    InMemoryMetricRuleOverridesRepository,
     InMemoryMetricSnapshotRepository,
     InMemoryProjectRepository,
     InMemoryTeamRepository,
@@ -62,11 +64,20 @@ def _harness() -> tuple[
     event_repo = InMemoryEventRepository(events)
     metric_snapshots = InMemoryMetricSnapshotRepository()
     forecast_snapshots = InMemoryForecastSnapshotRepository()
+    teams = InMemoryTeamRepository([team])
+    projects = InMemoryProjectRepository([project])
+    # All seven days count, so the lead time asserted below is plain calendar days.
+    seven_days = RuleOverrides(
+        organization_id=team.organization_id, overrides={"working_days": [1, 2, 3, 4, 5, 6, 7]}
+    )
+    resolver = MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository([seven_days]), teams, projects
+    )
     service = SnapshotService(
-        MetricsService(work_items, event_repo),
-        ForecastService(work_items, event_repo),
-        InMemoryTeamRepository([team]),
-        InMemoryProjectRepository([project]),
+        MetricsService(work_items, event_repo, resolver),
+        ForecastService(work_items, event_repo, resolver),
+        teams,
+        projects,
         metric_snapshots,
         forecast_snapshots,
     )

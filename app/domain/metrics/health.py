@@ -197,7 +197,8 @@ def _risk(
     at_risk = sum(
         1
         for sample, blocked in open_items
-        if blocked or (sample.started_at is not None and now - sample.started_at > cycle_limit)
+        if blocked
+        or (sample.started_at is not None and sample.elapsed(sample.started_at, now) > cycle_limit)
     )
     return _Reading(
         name="risk",

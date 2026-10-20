@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -6,10 +7,11 @@ from app.domain.events.timeline import BlockedPeriod, blocked_periods
 from app.domain.metric_rules.entities import MetricRules
 from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.samples import derive_flow_sample
+from tests.fakes import CALENDAR_DAYS
 
 ITEM = uuid4()
-RELATIONS = MetricRules(blocked_by_relations=True)
-NO_RELATIONS = MetricRules(blocked_by_relations=False)
+RELATIONS = replace(CALENDAR_DAYS, blocked_by_relations=True)
+NO_RELATIONS = replace(CALENDAR_DAYS, blocked_by_relations=False)
 
 
 def _day(day: int) -> datetime:

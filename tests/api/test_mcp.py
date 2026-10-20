@@ -28,7 +28,7 @@ from app.api.mcp_server import _aging_from_json
 from app.api.schemas import AgingItemRead, AgingWipRead
 from app.domain.metrics.aging import AgingItem, AgingWip
 from app.main import _RedactSecret, create_app
-from tests.api.helpers import create_team, days_ago
+from tests.api.helpers import create_org_and_team, create_team, days_ago, use_calendar_days
 
 TOKEN = "test-token-0123456789abcdefghij"
 
@@ -308,7 +308,8 @@ async def test_meeting_brief_names_the_aging_history(
     async with running_app(sessionmaker, settings_env) as app:
         transport = ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-            team_id = await create_team(client)
+            org_id, team_id = await create_org_and_team(client)
+            await use_calendar_days(sessionmaker, org_id)
             await _seed_item(
                 client, team_id, "Shipped", ("created", 10), ("started", 6), ("completed", 2)
             )

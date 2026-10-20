@@ -8,8 +8,9 @@ from app.domain.metric_rules.entities import HEALTH_COMPONENTS, MetricRules, res
 from app.domain.metrics.aging import compute_aging_wip
 from app.domain.metrics.health import compute_delivery_health
 from app.domain.metrics.history import compute_flow_history
-from app.domain.metrics.samples import FlowSample
+from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from app.domain.work_items.entities import WorkItem
+from tests.fakes import CALENDAR_DAYS
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -59,15 +60,19 @@ SLE_SCOPE = [
     *[_cycle(40 + days, 40) for days in (1, 2, 3, 4, 5)],
     *[_cycle(2 + days, 2) for days in (1, 2, 3, 6, 8)],
 ]
+SLE_SAMPLES = [derive_flow_sample(stream, CALENDAR_DAYS) for stream in SLE_SCOPE]
 
 
 def test_predictability_falls_from_the_target_to_the_floor() -> None:
     # 60% hit: 100 * (0.60 - 0.25) / (0.85 - 0.25) = 58; with no floor, 100 * 0.60 / 0.85 = 71.
     rules = _only("predictability")
 
-    default = compute_delivery_health(SLE_SCOPE, now=NOW, rules=rules)
+    default = compute_delivery_health(SLE_SCOPE, now=NOW, rules=rules, samples=SLE_SAMPLES)
     no_floor = compute_delivery_health(
-        SLE_SCOPE, now=NOW, rules=replace(rules, predictability_floor=0)
+        SLE_SCOPE,
+        now=NOW,
+        rules=replace(rules, predictability_floor=0),
+        samples=SLE_SAMPLES,
     )
 
     assert (default.score, no_floor.score) == (58, 71)

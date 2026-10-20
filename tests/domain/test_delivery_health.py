@@ -6,6 +6,8 @@ import pytest
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import MetricRules
 from app.domain.metrics.health import HealthComponent, compute_delivery_health
+from app.domain.metrics.samples import derive_flow_sample
+from tests.fakes import CALENDAR_DAYS
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -255,7 +257,8 @@ def _window(cycle_days: int, count: int = 5) -> list[list[Event]]:
 
 
 def _predictability(streams: list[list[Event]]) -> HealthComponent | None:
-    health = compute_delivery_health(streams, now=NOW)
+    samples = [derive_flow_sample(stream, CALENDAR_DAYS) for stream in streams]
+    health = compute_delivery_health(streams, now=NOW, samples=samples)
     return next((c for c in health.components if c.name == "predictability"), None)
 
 

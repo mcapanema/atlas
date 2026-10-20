@@ -18,7 +18,7 @@ from app.domain.metrics.samples import FlowSample
 def queue_times(samples: list[FlowSample]) -> list[timedelta]:
     """Queue time per sample that was both started and completed."""
     return [
-        (s.started_at - s.arrived_at) + s.blocked_time
+        s.elapsed(s.arrived_at, s.started_at) + s.blocked_time
         for s in samples
         if s.completed_at is not None and s.started_at is not None
     ]
@@ -30,6 +30,6 @@ def touch_times(samples: list[FlowSample]) -> list[timedelta]:
     for s in samples:
         if s.completed_at is None or s.started_at is None:
             continue
-        cycle = s.completed_at - s.started_at
+        cycle = s.elapsed(s.started_at, s.completed_at)
         result.append(cycle - min(s.blocked_time, cycle))
     return result
