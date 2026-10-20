@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.domain._time import utcnow
+from app.domain.metric_rules.calendar import WorkCalendar
 from app.domain.work_items.entities import OPEN_STATE_TYPES, StateType, WorkItem, WorkItemType
 
 ReopenCompletion = Literal["last", "first"]
@@ -44,6 +45,9 @@ _CHOICES: dict[str, tuple[str, ...]] = {
     "canceled_then_reopened": ("canceled", "reopened"),
 }
 MAX_LIST_RULE_ENTRIES = 50
+_WEEKDAYS_MESSAGE = (
+    "working_days must be a non-empty list of ISO weekdays (1 = Monday … 7 = Sunday)"
+)
 
 # Built-in blocked-name match for labels and workflow states: whole words,
 # where "_" separates words too. English "Blocked", "Blockers", "blocker:
@@ -146,6 +150,9 @@ class MetricRules:
     # Calendar and windows. Short windows have no weekly shape to read (a
     # 7-day window is one weekly bar), so they chart throughput per day.
     timezone: str = "UTC"
+    # ISO weekdays (1 = Monday ... 7 = Sunday) that count as working time:
+    # duration metrics skip the other days.
+    working_days: tuple[int, ...] = (1, 2, 3, 4, 5)
     daily_bucket_max_days: int = 21
     forecast_history_days: int = 90
     # When this team began tracking its work here. Older items (moved in from
@@ -171,6 +178,10 @@ class MetricRules:
     @property
     def tz(self) -> tzinfo:
         return ZoneInfo(self.timezone)
+
+    @property
+    def work_calendar(self) -> WorkCalendar:
+        return WorkCalendar(frozenset(self.working_days), self.timezone)
 
     @property
     def tracked_since_at(self) -> datetime | None:
@@ -227,6 +238,7 @@ def _normalize_collections(rules: MetricRules) -> None:
     )
     object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
     object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))
+    object.__setattr__(rules, "working_days", _weekdays(rules.working_days))
 
 
 def _entries(name: str, value: object) -> list[object]:
@@ -246,6 +258,19 @@ def _label(name: str, value: object) -> str:
 
 def _names(rule: str, value: object) -> tuple[str, ...]:
     return tuple(_label(rule, entry) for entry in _entries(rule, value))
+
+
+def _weekday(day: object) -> int:
+    if isinstance(day, bool) or not isinstance(day, int) or not 1 <= day <= 7:
+        raise ValueError(_WEEKDAYS_MESSAGE)
+    return day
+
+
+def _weekdays(value: object) -> tuple[int, ...]:
+    days = {_weekday(day) for day in _entries("working_days", value)}
+    if not days:
+        raise ValueError(_WEEKDAYS_MESSAGE)
+    return tuple(sorted(days))
 
 
 def _state_types(value: object) -> tuple[StateType, ...]:
