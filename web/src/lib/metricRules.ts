@@ -11,7 +11,7 @@ import type {
   WorkItemTypeName,
 } from "../api/metricRules";
 import type { Team } from "../api/teams";
-import { formatDay } from "./dates";
+import { formatDates, formatDay } from "./dates";
 import { formatWeekdays } from "./syncSchedule";
 
 type Control =
@@ -20,6 +20,7 @@ type Control =
   | { kind: "number"; min: number; max: number; step: number; suffix?: string }
   | { kind: "timezone" }
   | { kind: "weekdays" }
+  | { kind: "dates" }
   | { kind: "date" }
   | { kind: "labels" }
   | { kind: "names" }
@@ -273,6 +274,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "weekdays" },
       },
       {
+        name: "holidays",
+        label: "Holidays",
+        help: "Dates that don't count as working days in lead, cycle, blocked and aging times, in the team's time zone. Set them on the workspace for every team; a team's own list replaces it. Changing it recomputes history.",
+        control: { kind: "dates" },
+      },
+      {
         name: "daily_bucket_max_days",
         label: "Daily throughput bars up to",
         help: "Windows up to this many days chart throughput per day; longer windows per week.",
@@ -333,21 +340,17 @@ export function timeZoneOptions() {
 }
 
 function formatListValue(kind: Control["kind"], value: RuleValue): string | undefined {
-  if (kind === "labels" || kind === "names") {
-    const names = value as string[];
-    return names.length ? names.join(", ") : "None";
-  }
+  if (kind === "labels" || kind === "names") return (value as string[]).join(", ") || "None";
   if (kind === "states") {
     return STATE_TYPE_OPTIONS.filter((o) => (value as string[]).includes(o.value))
       .map((o) => o.label)
       .join(", ");
   }
   if (kind === "weekdays") return formatWeekdays(value as number[]);
-  if (kind === "typeLabels") {
-    const rows = value as TypeLabel[];
-    return rows.length ? rows.map((row) => `${row.label} → ${row.type}`).join(", ") : "None";
-  }
-  return undefined;
+  if (kind === "dates") return formatDates(value as string[]);
+  if (kind !== "typeLabels") return undefined;
+  const rows = (value as TypeLabel[]).map((row) => `${row.label} → ${row.type}`);
+  return rows.join(", ") || "None";
 }
 
 export function formatRuleValue(spec: RuleSpec, value: RuleValue): string {

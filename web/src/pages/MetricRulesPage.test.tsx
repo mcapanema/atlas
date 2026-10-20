@@ -43,6 +43,7 @@ const BUILT_IN: MetricRules = {
   remaining_state_types: ["triage", "backlog", "unstarted", "started"],
   type_labels: [],
   working_days: [1, 2, 3, 4, 5],
+  holidays: [],
   sprint_length_days: 14,
 };
 

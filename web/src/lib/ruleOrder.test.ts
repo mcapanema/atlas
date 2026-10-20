@@ -16,6 +16,7 @@ describe("orderProblems", () => {
     weight_stability: 1,
     weight_risk: 1,
     working_days: [1, 2, 3, 4, 5],
+    holidays: [],
   };
 
   it("finds nothing wrong with the built-in rules", () => {

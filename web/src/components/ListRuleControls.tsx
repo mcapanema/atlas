@@ -1,4 +1,5 @@
-import { AutoComplete, Button, Checkbox, Select, Space } from "antd";
+import { AutoComplete, Button, Checkbox, DatePicker, Select, Space } from "antd";
+import dayjs, { type Dayjs } from "dayjs";
 
 import type { OpenStateType, RuleValue, TypeLabel, WorkItemTypeName } from "../api/metricRules";
 import {
@@ -7,6 +8,7 @@ import {
   canonicalStates,
   type RuleSpec,
 } from "../lib/metricRules";
+import { DATE_FORMAT } from "../lib/dates";
 import { WEEKDAY_OPTIONS } from "../lib/syncSchedule";
 
 function asOptions(labels: string[]) {
@@ -118,7 +120,12 @@ export function TypeLabelsEditor({
   );
 }
 
-/** The list-valued rule controls: free-text tags, state types, weekdays, label-to-type rows. */
+/** Picked days as sorted, deduped ISO dates; [] when cleared. */
+function toHolidayList(days: Dayjs[] | null): string[] {
+  return [...new Set((days ?? []).map((d) => d.format("YYYY-MM-DD")))].sort();
+}
+
+/** The list-valued rule controls: free-text tags, state types, weekdays, dates, label-to-type rows. */
 export function ListRuleControl({
   control,
   label,
@@ -128,7 +135,7 @@ export function ListRuleControl({
 }: {
   control: Extract<
     RuleSpec["control"],
-    { kind: "labels" | "names" | "states" | "typeLabels" | "weekdays" }
+    { kind: "labels" | "names" | "states" | "typeLabels" | "weekdays" | "dates" }
   >;
   label: string;
   value: RuleValue;
@@ -164,6 +171,17 @@ export function ListRuleControl({
           options={WEEKDAY_OPTIONS}
           value={value as number[]}
           onChange={(next) => onChange([...next].sort((a, b) => a - b))}
+        />
+      );
+    case "dates":
+      return (
+        <DatePicker
+          multiple
+          aria-label={label}
+          format={DATE_FORMAT}
+          style={{ width: 320 }}
+          value={(value as string[]).map((d) => dayjs(d))}
+          onChange={(next: Dayjs[] | null) => onChange(toHolidayList(next))}
         />
       );
     case "typeLabels":

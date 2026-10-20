@@ -32,6 +32,8 @@ export interface MetricRules {
   timezone: string;
   /** Sorted ISO weekdays, 1 = Monday … 7 = Sunday. */
   working_days: number[];
+  /** Sorted ISO dates (YYYY-MM-DD) that durations skip, like non-working days. */
+  holidays: string[];
   daily_bucket_max_days: number;
   forecast_history_days: number;
   /** ISO calendar date, or null when the start is estimated. */

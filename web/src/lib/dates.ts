@@ -21,3 +21,8 @@ export function formatDay(iso: string): string {
 export function formatDateTime(iso: string): string {
   return dayjs(iso).format(`${DATE_FORMAT} HH:mm`);
 }
+
+/** ISO dates as the page's day format, comma-joined; "None" when empty. */
+export function formatDates(isos: string[]): string {
+  return isos.length ? isos.map(formatDay).join(", ") : "None";
+}

@@ -109,6 +109,10 @@ describe("list-valued rules", () => {
       "Mon, Tue, Wed, Thu, Fri",
     );
     expect(formatRuleValue(ruleSpec("working_days"), [1, 2, 3, 4, 5, 6, 7])).toBe("Every day");
+    expect(formatRuleValue(ruleSpec("holidays"), [])).toBe("None");
+    expect(formatRuleValue(ruleSpec("holidays"), ["2026-01-01", "2026-12-25"])).toBe(
+      "01-01-2026, 25-12-2026",
+    );
     expect(formatRuleValue(ruleSpec("blocked_label_names"), [])).toBe("None");
     expect(formatRuleValue(ruleSpec("blocked_label_names"), ["Blocked", "On hold"])).toBe(
       "Blocked, On hold",
