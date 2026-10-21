@@ -178,3 +178,20 @@ def test_listed_review_lowers_flow_efficiency() -> None:
     # A 5-day cycle with 3 days in review: 1.0 unlisted, 0.4 listed.
     assert flow_efficiency([_sample(REVIEW_THEN_DONE, CALENDAR_DAYS)]) == 1.0
     assert flow_efficiency([_sample(REVIEW_THEN_DONE)]) == 0.4
+
+
+def test_review_outlasting_a_blocked_label_counts_only_the_unblocked_rest() -> None:
+    # Blocked days 3-5, In Review days 4-6: 3 days of wait, 2 of them blocked.
+    sample = _sample(
+        [
+            _at(EventType.CREATED, 1),
+            _move(EventType.STARTED, 2, "Todo", "In Progress"),
+            _at(EventType.LABEL_ADDED, 3, "Blocked"),
+            _move(EventType.STATE_CHANGED, 4, "In Progress", "In Review"),
+            _at(EventType.LABEL_REMOVED, 5, "Blocked"),
+            _move(EventType.COMPLETED, 6, "In Review", "Done"),
+        ]
+    )
+
+    assert sample.blocked_time == timedelta(days=2)
+    assert sample.state_wait_time == timedelta(days=1)
