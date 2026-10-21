@@ -12,7 +12,7 @@ import {
   scopeOptions,
   scopeParams,
   scopeValue,
-} from "../lib/metricRules";
+} from "../lib/rulesScope";
 
 function RecomputeBanner({
   status,

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { teamFixture } from "../test/fixtures";
 import type { MetricRules } from "../api/metricRules";
 import {
   RULE_GROUPS,
@@ -8,10 +7,7 @@ import {
   draftValue,
   formatRuleValue,
   pendingChanges,
-  recomputeOrganization,
-  scopeFromParams,
   sameRuleValue,
-  scopeParams,
   type RuleSpec,
 } from "./metricRules";
 
@@ -52,35 +48,6 @@ describe("formatRuleValue", () => {
   });
 });
 
-describe("scope helpers", () => {
-  it("prefers a team, then the org param, then the first organization", () => {
-    expect(scopeFromParams(new URLSearchParams("team=t1&org=o1"), "o0")).toEqual({
-      kind: "team",
-      id: "t1",
-    });
-    expect(scopeFromParams(new URLSearchParams("org=o1"), "o0")).toEqual({
-      kind: "organization",
-      id: "o1",
-    });
-    expect(scopeFromParams(new URLSearchParams(), "o0")).toEqual({
-      kind: "organization",
-      id: "o0",
-    });
-    expect(scopeFromParams(new URLSearchParams(), undefined)).toBeUndefined();
-  });
-
-  it("maps a picker value to search params", () => {
-    expect(scopeParams("team:t1")).toEqual({ team: "t1" });
-    expect(scopeParams("organization:o1")).toEqual({ org: "o1" });
-  });
-
-  it("finds the organization whose history a scope's recompute rewrites", () => {
-    const team = { ...teamFixture, has_custom_rules: false };
-    expect(recomputeOrganization({ kind: "team", id: team.id }, [team])).toBe(team.organization_id);
-    expect(recomputeOrganization({ kind: "organization", id: "o1" }, undefined)).toBe("o1");
-  });
-});
-
 describe("list-valued rules", () => {
   it("treats an equal list as no override", () => {
     const inherited = { blocked_label_names: ["Blocked"] } as unknown as MetricRules;
@@ -103,6 +70,10 @@ describe("list-valued rules", () => {
     expect(
       formatRuleValue(ruleSpec("blocked_state_names"), ["Blocked", "Aguardando cliente"]),
     ).toBe("Blocked, Aguardando cliente");
+    expect(formatRuleValue(ruleSpec("wait_state_names"), [])).toBe("None");
+    expect(formatRuleValue(ruleSpec("wait_state_names"), ["In Review", "Waiting for Deploy"])).toBe(
+      "In Review, Waiting for Deploy",
+    );
     expect(formatRuleValue(ruleSpec("health_min_sample"), 3)).toBe("3 items");
     expect(formatRuleValue(ruleSpec("sprint_length_days"), 14)).toBe("14 days");
     expect(formatRuleValue(ruleSpec("working_days"), [1, 2, 3, 4, 5])).toBe(

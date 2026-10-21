@@ -1,4 +1,3 @@
-import type { Organization } from "../api/organizations";
 import type {
   MetricRules,
   MetricRulesView,
@@ -6,11 +5,9 @@ import type {
   RuleName,
   OpenStateType,
   RuleValue,
-  RulesScope,
   TypeLabel,
   WorkItemTypeName,
 } from "../api/metricRules";
-import type { Team } from "../api/teams";
 import { formatDates, formatDay } from "./dates";
 import { formatWeekdays } from "./syncSchedule";
 
@@ -190,6 +187,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         name: "blocked_state_names",
         label: "More blocked states",
         help: "Further workflow state names an item is blocked while in (any case), e.g. Aguardando cliente.",
+        control: { kind: "names" },
+      },
+      {
+        name: "wait_state_names",
+        label: "Waiting states",
+        help: "Workflow states where work waits rather than progresses, e.g. In Review or Waiting for Deploy (any case). Time in them counts as wait in flow efficiency, queue time and touch time; blocked time is unchanged.",
         control: { kind: "names" },
       },
       {
@@ -384,42 +387,4 @@ export function pendingChanges(saved: Partial<MetricRules>, draft: RuleChanges):
     if (!sameRuleValue(next, saved[name] ?? null)) changes[name] = next;
   }
   return changes;
-}
-
-export function scopeFromParams(
-  params: URLSearchParams,
-  fallbackOrganizationId: string | undefined,
-): RulesScope | undefined {
-  const team = params.get("team");
-  if (team) return { kind: "team", id: team };
-  const organization = params.get("org") ?? fallbackOrganizationId;
-  return organization ? { kind: "organization", id: organization } : undefined;
-}
-
-export function scopeValue(scope: RulesScope | undefined): string | undefined {
-  return scope && `${scope.kind}:${scope.id}`;
-}
-
-export function scopeParams(value: string): Record<string, string> {
-  const [kind, id = ""] = value.split(":");
-  return kind === "team" ? { team: id } : { org: id };
-}
-
-export function scopeOptions(organizations: Organization[], teams: Team[]) {
-  return [
-    ...organizations.map((org) => ({
-      value: `organization:${org.id}`,
-      label: `Workspace default — ${org.name}`,
-    })),
-    ...teams.map((team) => ({ value: `team:${team.id}`, label: team.name })),
-  ];
-}
-
-/** The organization whose history a recompute for `scope` rewrites. */
-export function recomputeOrganization(
-  scope: RulesScope | undefined,
-  teams: Team[] | undefined,
-): string | undefined {
-  if (scope?.kind === "team") return teams?.find((team) => team.id === scope.id)?.organization_id;
-  return scope?.id;
 }

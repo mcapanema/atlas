@@ -270,6 +270,7 @@ async def test_collection_rules_round_trip_normalized(
         json={
             "blocked_label_names": [" On hold "],
             "blocked_state_names": [" Aguardando cliente "],
+            "wait_state_names": [" In Review "],
             "remaining_state_types": ["started", "unstarted"],
             "type_labels": [{"label": "Bug", "type": "bug"}],
         },
@@ -283,6 +284,7 @@ async def test_collection_rules_round_trip_normalized(
     assert response.status_code == 200
     assert effective["blocked_label_names"] == ["On hold"]
     assert effective["blocked_state_names"] == ["Aguardando cliente"]
+    assert effective["wait_state_names"] == ["In Review"]
     assert effective["remaining_state_types"] == ["unstarted", "started"]
     assert effective["type_labels"] == [{"label": "Bug", "type": "bug"}]
     assert rejected.status_code == 422
