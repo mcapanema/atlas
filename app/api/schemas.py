@@ -489,6 +489,7 @@ class MetricRulesRead(BaseModel):
     blocked_by_relations: bool
     blocked_state_pattern: bool
     blocked_state_names: list[str]
+    wait_state_names: list[str]
     remaining_state_types: list[OpenStateType]
     type_labels: list[TypeLabelRead]
     sprint_length_days: int
@@ -544,6 +545,7 @@ class MetricRulesOverridesWrite(BaseModel):
     blocked_by_relations: bool | None = None
     blocked_state_pattern: bool | None = None
     blocked_state_names: list[str] | None = None
+    wait_state_names: list[str] | None = None
     remaining_state_types: list[OpenStateType] | None = None
     type_labels: list[TypeLabelRead] | None = None
     sprint_length_days: int | None = None

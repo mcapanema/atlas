@@ -98,3 +98,18 @@ def test_flow_metrics_include_queue_and_touch_time() -> None:
     assert metrics.queue_time.p50 == timedelta(days=5)  # 4d pre-start wait + 1d blocked
     assert metrics.touch_time is not None
     assert metrics.touch_time.p50 == timedelta(days=3)  # 4d cycle - 1d blocked
+
+
+def test_flow_metrics_total_wait_time_adds_waiting_states_to_blocked_time() -> None:
+    sample = FlowSample(
+        created_at=NOW - timedelta(days=10),
+        started_at=NOW - timedelta(days=6),
+        completed_at=NOW - timedelta(days=2),
+        blocked_time=timedelta(days=1),
+        state_wait_time=timedelta(days=2),
+    )
+
+    metrics = compute_flow_metrics([sample, _sample(20, 15, None, blocked_days=3)], now=NOW)
+
+    assert metrics.blocked_time == timedelta(days=1)
+    assert metrics.wait_time == timedelta(days=3)

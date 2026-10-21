@@ -57,8 +57,8 @@ persisted events; these slices have no tables and no migrations.
   band read against the same cutoffs as the overall score;
   predictability scores how often recent cycles met the team's own service
   level, the aging percentile over the history before the window (ADR-0016), and
-  efficiency carries no weight in the built-in rules (it can't discriminate
-  until queue-state waits are measured);
+  efficiency carries no weight in the built-in rules (a team that lists no
+  wait states reads blocked-only efficiency, near 100%; ADR-0018);
   a component backed by fewer than `health_min_sample` items is left out,
   and with none left the scope is unscored).
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
@@ -111,7 +111,8 @@ and Executive Dashboard).
 ### Metric rules (ADR-0010)
 
 Every rule that changes how a metric is computed — lifecycle interpretation
-(incl. reopens, parent issues, lead-time start), the blocked signal, health
+(incl. reopens, parent issues, lead-time start), the blocked signal, the
+wait states flow efficiency and queue/touch time count as wait (ADR-0018), health
 scales, weights and evidence floor, timezone, working days, holidays, chart
 bucketing, forecast history and remaining, label → type mapping — is a field
 of `MetricRules` (`app/domain/metric_rules/entities.py`). Defaults are the

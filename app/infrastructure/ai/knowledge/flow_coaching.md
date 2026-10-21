@@ -33,6 +33,12 @@ not adding people.
   make blockers visible before optimizing "work speed".
 - Recurring blocked periods usually indicate an external dependency or an
   approval queue — a system problem, not an individual one.
+- Wait time counts blocked time plus time in the team's waiting states
+  (e.g. In Review, Waiting for Deploy). When wait time far exceeds blocked
+  time, the waiting happens at handoffs, not at blockers: look at review
+  capacity, batch sizes and deploy cadence before chasing blockers. With no
+  wait-time line, the team lists no waiting states, and flow efficiency
+  reflects blocked time only — likely overstating active time.
 
 ## Theory of Constraints
 Find the stage where work queues up (the bottleneck); improving anywhere

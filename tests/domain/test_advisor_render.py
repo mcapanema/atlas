@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -261,3 +262,20 @@ def test_titles_render_quoted_on_one_line_and_bounded() -> None:
     long = quote_title("x" * 500)
     assert len(long) == 122  # 120 characters plus the two quotes
     assert long.endswith('…"')
+
+
+def test_render_context_shows_wait_time_beyond_blocked_time() -> None:
+    context = _context()
+    flow = replace(context.flow, wait_time=timedelta(days=9))
+
+    text = render_context(replace(context, flow=flow))
+
+    assert "- blocked time total=2.0 working days" in text
+    assert "- wait time total=9.0 working days (blocked + waiting states)" in text
+
+
+def test_render_context_omits_wait_time_when_it_is_only_blocked_time() -> None:
+    context = _context()
+    flow = replace(context.flow, wait_time=context.flow.blocked_time)
+
+    assert "wait time total" not in render_context(replace(context, flow=flow))

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
-from app.domain.events.timeline import BlockedPeriod, blocked_periods
+from app.domain.events.timeline import BlockedPeriod, blocked_periods, state_periods
 from app.domain.metric_rules.calendar import EVERY_DAY, WorkCalendar
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.stats import percentile
@@ -34,10 +34,18 @@ class FlowSample:
     triage_exit_at: datetime | None = None
     # The working days every duration of this sample is measured on.
     calendar: WorkCalendar = EVERY_DAY
+    # In-cycle time in a wait state (the rules' wait_state_names) while not
+    # blocked: wait_time adds it to blocked_time without counting twice.
+    state_wait_time: timedelta = timedelta(0)
 
     def elapsed(self, start: datetime, end: datetime) -> timedelta:
         """Time from `start` to `end` on this sample's working calendar."""
         return self.calendar.elapsed(start, end)
+
+    @property
+    def wait_time(self) -> timedelta:
+        """In-cycle time not spent working: blocked, or in a wait state."""
+        return self.blocked_time + self.state_wait_time
 
     @property
     def arrived_at(self) -> datetime:
@@ -194,16 +202,16 @@ def _replay(ordered: list[Event], rules: MetricRules) -> _Lifecycle:
     return state
 
 
-def _blocked_in_cycle(
+def _in_cycle(
     periods: Sequence[BlockedPeriod],
     started_at: datetime | None,
     completed_at: datetime | None,
     calendar: WorkCalendar,
 ) -> timedelta:
-    """Blocked time inside the cycle, started_at -> completed_at.
+    """Time the periods cover inside the cycle, started_at -> completed_at.
 
-    A label left on after Done isn't blocked work, pre-start blocking is
-    already queue time, and an item never started has no cycle, so none
+    A label left on after Done isn't blocked work, pre-start blocking or
+    waiting is already queue time, and an item never started has no cycle, so none
     (audit 2026-10-13). A still-open period on an uncompleted item is
     unmeasurable and not counted.
     """
@@ -218,6 +226,51 @@ def _blocked_in_cycle(
         if ended_at is not None and ended_at > begun:
             total += calendar.elapsed(begun, ended_at)
     return total
+
+
+def _merged(periods: Sequence[BlockedPeriod]) -> list[BlockedPeriod]:
+    """The union of `periods` as disjoint periods; an open one runs to the end."""
+    merged: list[BlockedPeriod] = []
+    for period in sorted(periods, key=lambda p: p.started_at):
+        last = merged[-1] if merged else None
+        if last is None or (last.ended_at is not None and period.started_at > last.ended_at):
+            merged.append(period)
+        elif last.ended_at is not None and (
+            period.ended_at is None or period.ended_at > last.ended_at
+        ):
+            merged[-1] = BlockedPeriod(started_at=last.started_at, ended_at=period.ended_at)
+    return merged
+
+
+def _state_wait_time(
+    ordered: list[Event],
+    rules: MetricRules,
+    blocked: Sequence[BlockedPeriod],
+    *,
+    started_at: datetime | None,
+    completed_at: datetime | None,
+    blocked_time: timedelta,
+) -> timedelta:
+    """In-cycle time in the rules' wait states while not blocked; zero when none are listed.
+
+    The union of blocked periods and wait-state stays, clipped like blocked
+    time, minus `blocked_time`. On an unfinished item open periods count
+    nothing (_in_cycle); left in, one would absorb an earlier closed period
+    and undercount it, so they stay out of the union.
+    """
+    if not rules.wait_state_names:
+        return timedelta(0)
+    waits = [
+        *blocked,
+        *(
+            BlockedPeriod(started_at=stay.entered_at, ended_at=stay.exited_at)
+            for stay in state_periods(ordered)
+            if rules.is_wait_state(stay.state)
+        ),
+    ]
+    if completed_at is None:
+        waits = [p for p in waits if p.ended_at is not None]
+    return _in_cycle(_merged(waits), started_at, completed_at, rules.work_calendar) - blocked_time
 
 
 def derive_flow_sample(
@@ -241,8 +294,10 @@ def derive_flow_sample(
     item created already completed and never started (see _born_done).
     Blocked time sums the rules' blocked periods (labels, workflow states,
     relations, explicit events) clipped to the cycle, started_at to
-    completed_at (see _blocked_in_cycle); an item never started has none.
+    completed_at (see _in_cycle); an item never started has none.
     `born_in` is the item's creation state, as blocked_periods takes it.
+    state_wait_time is the cycle time spent in the rules' wait states while
+    not blocked (the union of both, clipped the same way, minus blocked time).
 
     With done_then_reopened / canceled_then_reopened = "reopened", a typed
     move from Done / Canceled to a not-started state reopens the item (open,
@@ -259,18 +314,27 @@ def derive_flow_sample(
 
     calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
+    blocked_time = _in_cycle(periods, started_at, completed_at, calendar)
 
     return FlowSample(
         created_at=ordered[0].occurred_at,
         started_at=started_at,
         completed_at=completed_at,
-        blocked_time=_blocked_in_cycle(periods, started_at, completed_at, calendar),
+        blocked_time=blocked_time,
         stopped_at=state.stopped_at,
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
         blocked_now=any(p.ended_at is None for p in periods),
         triage_exit_at=_triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None,
         calendar=calendar,
+        state_wait_time=_state_wait_time(
+            ordered,
+            rules,
+            periods,
+            started_at=started_at,
+            completed_at=completed_at,
+            blocked_time=blocked_time,
+        ),
     )
 
 

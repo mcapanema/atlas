@@ -173,41 +173,45 @@ def _close(periods: list[BlockedPeriod], at: datetime) -> None:
         periods[-1] = BlockedPeriod(started_at=started_at, ended_at=at)
 
 
-def derive_timeline(
-    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
-) -> WorkItemTimeline:
-    """Fold a Work Item's events into state periods and blocked periods.
+def state_periods(events: list[Event]) -> tuple[StatePeriod, ...]:
+    """Contiguous stays in each workflow state, from the events carrying to_state.
 
-    Events are put in `chain_order` defensively. State periods come from
-    events carrying to_state; if the first such event also names a from_state
-    and an earlier event exists (usually CREATED), the gap becomes the initial
-    period — the time the item waited in its starting state. Blocked periods
-    come from `blocked_periods` under the rules (`born_in` as there).
+    Events are put in `chain_order` defensively. If the first such event also
+    names a from_state and an earlier event exists (usually CREATED), the gap
+    becomes the initial period — the time the item waited in its starting
+    state.
     """
     ordered = chain_order(events)
-
-    state_periods: list[StatePeriod] = []
+    periods: list[StatePeriod] = []
     for event in ordered:
         if event.to_state is None:
             continue
-        if state_periods:
-            previous = state_periods[-1]
-            state_periods[-1] = StatePeriod(
+        if periods:
+            previous = periods[-1]
+            periods[-1] = StatePeriod(
                 state=previous.state,
                 entered_at=previous.entered_at,
                 exited_at=event.occurred_at,
             )
         elif event.from_state is not None and ordered[0].occurred_at < event.occurred_at:
-            state_periods.append(
+            periods.append(
                 StatePeriod(
                     state=event.from_state,
                     entered_at=ordered[0].occurred_at,
                     exited_at=event.occurred_at,
                 )
             )
-        state_periods.append(StatePeriod(state=event.to_state, entered_at=event.occurred_at))
+        periods.append(StatePeriod(state=event.to_state, entered_at=event.occurred_at))
+    return tuple(periods)
 
+
+def derive_timeline(
+    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
+) -> WorkItemTimeline:
+    """Fold a Work Item's events into state periods (`state_periods`) and
+    blocked periods (`blocked_periods` under the rules, `born_in` as there).
+    """
     return WorkItemTimeline(
-        state_periods=tuple(state_periods),
-        blocked_periods=blocked_periods(ordered, rules, born_in=born_in),
+        state_periods=state_periods(events),
+        blocked_periods=blocked_periods(events, rules, born_in=born_in),
     )

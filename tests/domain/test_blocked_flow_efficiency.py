@@ -11,6 +11,7 @@ def _sample(
     started_days_ago: int | None,
     completed_days_ago: int | None,
     blocked_days: int = 0,
+    state_wait_days: int = 0,
 ) -> FlowSample:
     return FlowSample(
         created_at=NOW - timedelta(days=30),
@@ -19,6 +20,7 @@ def _sample(
         if completed_days_ago is not None
         else None,
         blocked_time=timedelta(days=blocked_days),
+        state_wait_time=timedelta(days=state_wait_days),
     )
 
 
@@ -47,6 +49,15 @@ def test_flow_efficiency_ignores_uncompleted_and_unstarted_samples() -> None:
 def test_flow_efficiency_clamps_blocked_time_to_cycle() -> None:
     # blocked longer than cycle (block spanned pre-start queue time) -> floor at 0.0
     assert flow_efficiency([_sample(2, 0, 5)]) == 0.0
+
+
+def test_flow_efficiency_penalizes_wait_state_time() -> None:
+    # cycle 10d, 6d in a wait state -> 0.4
+    assert flow_efficiency([_sample(10, 0, state_wait_days=6)]) == 0.4
+
+
+def test_flow_efficiency_clamps_wait_to_cycle() -> None:
+    assert flow_efficiency([_sample(10, 0, 8, state_wait_days=5)]) == 0.0
 
 
 def test_flow_efficiency_none_without_data() -> None:

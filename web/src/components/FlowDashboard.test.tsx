@@ -415,9 +415,7 @@ describe("FlowDashboard", () => {
     expect(trigger).toHaveAttribute("tabindex", "0");
 
     fireEvent.focus(trigger);
-    expect(
-      await screen.findByText(/share of its in-progress time that was not blocked/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/not blocked and not in a waiting state/)).toBeInTheDocument();
   });
 
   it("labels aging flags with the team's aging percentile", async () => {

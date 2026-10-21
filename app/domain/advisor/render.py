@@ -35,6 +35,8 @@ def render_context(context: DeliveryContext) -> str:
         ct = flow.cycle_time
         lines.append(f"- cycle time p50={_days(ct.p50)}, p85={_days(ct.p85)}")
     lines.append(f"- blocked time total={_days(flow.blocked_time)}")
+    if flow.wait_time > flow.blocked_time:
+        lines.append(f"- wait time total={_days(flow.wait_time)} (blocked + waiting states)")
     if flow.flow_efficiency is not None:
         lines.append(f"- flow efficiency={flow.flow_efficiency:.2f}")
     if flow.queue_time is not None and flow.touch_time is not None:

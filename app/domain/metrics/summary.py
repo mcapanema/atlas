@@ -1,7 +1,7 @@
 """Aggregate a scope's FlowSamples into one FlowMetrics snapshot.
 
 Computed on read — nothing here is persisted. Window semantics: duration
-percentiles, blocked time, and flow efficiency cover items completed in the
+percentiles, blocked and wait time, and flow efficiency cover items completed in the
 trailing window; WIP is the instant `now`.
 """
 
@@ -46,6 +46,9 @@ class FlowMetrics:
     flow_efficiency: float | None
     queue_time: DurationStats | None = None
     touch_time: DurationStats | None = None
+    # In-cycle wait of window completions: blocked time plus time in the
+    # team's waiting states (FlowSample.wait_time, ADR-0018).
+    wait_time: timedelta = timedelta(0)
 
 
 def _duration_stats(durations: list[timedelta]) -> DurationStats | None:
@@ -80,4 +83,5 @@ def compute_flow_metrics(
         flow_efficiency=flow_efficiency(in_window),
         queue_time=_duration_stats(queue_times(in_window)),
         touch_time=_duration_stats(touch_times(in_window)),
+        wait_time=sum((s.wait_time for s in in_window), timedelta(0)),
     )

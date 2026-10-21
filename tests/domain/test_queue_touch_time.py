@@ -6,12 +6,13 @@ from app.domain.metrics.samples import FlowSample
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _sample(*, start_h: int, done_h: int, blocked_h: int = 0) -> FlowSample:
+def _sample(*, start_h: int, done_h: int, blocked_h: int = 0, state_wait_h: int = 0) -> FlowSample:
     return FlowSample(
         created_at=T0,
         started_at=T0 + timedelta(hours=start_h),
         completed_at=T0 + timedelta(hours=done_h),
         blocked_time=timedelta(hours=blocked_h),
+        state_wait_time=timedelta(hours=state_wait_h),
     )
 
 
@@ -21,6 +22,12 @@ def test_queue_time_is_prestart_wait_plus_blocked() -> None:
 
 def test_touch_time_is_cycle_minus_blocked() -> None:
     assert touch_times([_sample(start_h=4, done_h=10, blocked_h=2)]) == [timedelta(hours=4)]
+
+
+def test_queue_and_touch_time_count_wait_state_time_as_queue() -> None:
+    sample = _sample(start_h=4, done_h=10, blocked_h=1, state_wait_h=2)
+    assert queue_times([sample]) == [timedelta(hours=7)]
+    assert touch_times([sample]) == [timedelta(hours=3)]
 
 
 def test_blocked_longer_than_cycle_floors_touch_at_zero() -> None:
