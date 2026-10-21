@@ -212,3 +212,36 @@ def test_open_review_absorbing_a_closed_block_never_goes_negative() -> None:
     assert sample.blocked_time == timedelta(days=2)
     assert sample.state_wait_time == timedelta(0)
     assert sample.wait_time == timedelta(days=2)
+
+
+def test_block_and_review_starting_together_count_once() -> None:
+    # Both open on day 3: blocked days 3-4, in review days 3-6.
+    sample = _sample(
+        [
+            _at(EventType.CREATED, 1),
+            _move(EventType.STARTED, 2, "Todo", "In Progress"),
+            _at(EventType.LABEL_ADDED, 3, "Blocked"),
+            _move(EventType.STATE_CHANGED, 3, "In Progress", "In Review"),
+            _at(EventType.LABEL_REMOVED, 4, "Blocked"),
+            _move(EventType.COMPLETED, 6, "In Review", "Done"),
+        ]
+    )
+
+    assert sample.blocked_time == timedelta(days=1)
+    assert sample.state_wait_time == timedelta(days=2)
+
+
+def test_block_left_open_through_done_absorbs_the_review_stay() -> None:
+    # Blocked from day 3 and never cleared: clipped at Done, it covers review.
+    sample = _sample(
+        [
+            _at(EventType.CREATED, 1),
+            _move(EventType.STARTED, 2, "Todo", "In Progress"),
+            _at(EventType.LABEL_ADDED, 3, "Blocked"),
+            _move(EventType.STATE_CHANGED, 4, "In Progress", "In Review"),
+            _move(EventType.COMPLETED, 6, "In Review", "Done"),
+        ]
+    )
+
+    assert sample.blocked_time == timedelta(days=3)
+    assert sample.state_wait_time == timedelta(0)

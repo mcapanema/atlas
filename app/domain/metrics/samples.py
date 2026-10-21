@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from app.domain.events.entities import Event, EventType, event_order
-from app.domain.events.timeline import BlockedPeriod, blocked_periods, derive_timeline
+from app.domain.events.timeline import BlockedPeriod, blocked_periods, state_periods
 from app.domain.metric_rules.calendar import EVERY_DAY, WorkCalendar
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.stats import percentile
@@ -228,10 +228,10 @@ def _in_cycle(
     return total
 
 
-def _merged(*groups: Sequence[BlockedPeriod]) -> list[BlockedPeriod]:
-    """The union of `groups`' periods as disjoint periods; an open one runs to the end."""
+def _merged(periods: Sequence[BlockedPeriod]) -> list[BlockedPeriod]:
+    """The union of `periods` as disjoint periods; an open one runs to the end."""
     merged: list[BlockedPeriod] = []
-    for period in sorted((p for group in groups for p in group), key=lambda p: p.started_at):
+    for period in sorted(periods, key=lambda p: p.started_at):
         last = merged[-1] if merged else None
         if last is None or (last.ended_at is not None and period.started_at > last.ended_at):
             merged.append(period)
@@ -242,17 +242,35 @@ def _merged(*groups: Sequence[BlockedPeriod]) -> list[BlockedPeriod]:
     return merged
 
 
-def _wait_state_periods(
-    ordered: list[Event], rules: MetricRules, born_in: str | None
-) -> list[BlockedPeriod]:
-    """Stays in the rules' wait states, as periods; none when the rules list none."""
+def _state_wait_time(
+    ordered: list[Event],
+    rules: MetricRules,
+    blocked: Sequence[BlockedPeriod],
+    *,
+    started_at: datetime | None,
+    completed_at: datetime | None,
+    blocked_time: timedelta,
+) -> timedelta:
+    """In-cycle time in the rules' wait states while not blocked; zero when none are listed.
+
+    The union of blocked periods and wait-state stays, clipped like blocked
+    time, minus `blocked_time`. On an unfinished item open periods count
+    nothing (_in_cycle); left in, one would absorb an earlier closed period
+    and undercount it, so they stay out of the union.
+    """
     if not rules.wait_state_names:
-        return []
-    return [
-        BlockedPeriod(started_at=stay.entered_at, ended_at=stay.exited_at)
-        for stay in derive_timeline(ordered, rules, born_in=born_in).state_periods
-        if rules.is_wait_state(stay.state)
+        return timedelta(0)
+    waits = [
+        *blocked,
+        *(
+            BlockedPeriod(started_at=stay.entered_at, ended_at=stay.exited_at)
+            for stay in state_periods(ordered)
+            if rules.is_wait_state(stay.state)
+        ),
     ]
+    if completed_at is None:
+        waits = [p for p in waits if p.ended_at is not None]
+    return _in_cycle(_merged(waits), started_at, completed_at, rules.work_calendar) - blocked_time
 
 
 def derive_flow_sample(
@@ -297,12 +315,6 @@ def derive_flow_sample(
     calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
     blocked_time = _in_cycle(periods, started_at, completed_at, calendar)
-    waits = [*periods, *_wait_state_periods(ordered, rules, born_in)]
-    if completed_at is None:
-        # Open periods count nothing on an unfinished item (_in_cycle); left
-        # in, one would absorb an earlier closed period and undercount it.
-        waits = [p for p in waits if p.ended_at is not None]
-    waiting = _merged(waits)
 
     return FlowSample(
         created_at=ordered[0].occurred_at,
@@ -315,7 +327,14 @@ def derive_flow_sample(
         blocked_now=any(p.ended_at is None for p in periods),
         triage_exit_at=_triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None,
         calendar=calendar,
-        state_wait_time=_in_cycle(waiting, started_at, completed_at, calendar) - blocked_time,
+        state_wait_time=_state_wait_time(
+            ordered,
+            rules,
+            periods,
+            started_at=started_at,
+            completed_at=completed_at,
+            blocked_time=blocked_time,
+        ),
     )
 
 
