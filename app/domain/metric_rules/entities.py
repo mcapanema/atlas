@@ -66,7 +66,7 @@ _BLOCKED_NAME = re.compile(
 )
 
 
-def _named_blocked(name: str, *, pattern: bool, listed: tuple[str, ...]) -> bool:
+def _named(name: str, *, pattern: bool, listed: tuple[str, ...]) -> bool:
     """`name` matches the built-in pattern (when on) or a listed name (any case)."""
     if pattern and _BLOCKED_NAME.search(name):
         return True
@@ -123,6 +123,11 @@ class MetricRules:
     blocked_by_relations: bool = True
     blocked_state_pattern: bool = True
     blocked_state_names: tuple[str, ...] = ()
+    # Wait signal: workflow-state names (exact, any case) where work waits
+    # rather than progresses, e.g. In Review or Waiting for Deploy. Their
+    # in-cycle time counts as wait in flow efficiency and queue/touch time;
+    # blocked time is unchanged. None by default (ADR-0018).
+    wait_state_names: tuple[str, ...] = ()
     # Delivery-health scoring. Calibrated on live data (review 2026-10-09):
     # flow efficiency reads 92-100% everywhere because blocked periods are
     # its only wait signal, so efficiency stays out of the built-in score
@@ -203,15 +208,15 @@ class MetricRules:
 
     def is_blocked_label(self, name: str) -> bool:
         """Whether a label named `name` marks blocked work under these rules."""
-        return _named_blocked(
-            name, pattern=self.blocked_label_pattern, listed=self.blocked_label_names
-        )
+        return _named(name, pattern=self.blocked_label_pattern, listed=self.blocked_label_names)
 
     def is_blocked_state(self, name: str) -> bool:
         """Whether a workflow state named `name` holds blocked work under these rules."""
-        return _named_blocked(
-            name, pattern=self.blocked_state_pattern, listed=self.blocked_state_names
-        )
+        return _named(name, pattern=self.blocked_state_pattern, listed=self.blocked_state_names)
+
+    def is_wait_state(self, name: str) -> bool:
+        """Whether time in a workflow state named `name` counts as wait under these rules."""
+        return _named(name, pattern=False, listed=self.wait_state_names)
 
     def type_of(self, item: WorkItem) -> WorkItemType:
         """The item's type: its first type_labels hit among its labels, else its stored type.
@@ -242,6 +247,9 @@ def _normalize_collections(rules: MetricRules) -> None:
     )
     object.__setattr__(
         rules, "blocked_state_names", _names("blocked_state_names", rules.blocked_state_names)
+    )
+    object.__setattr__(
+        rules, "wait_state_names", _names("wait_state_names", rules.wait_state_names)
     )
     object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
     object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))
