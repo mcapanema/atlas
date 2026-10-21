@@ -24,7 +24,7 @@ const COMPONENT_HELP = new Map<string, string>([
   ],
   [
     "efficiency",
-    "Flow efficiency of the items completed in the window: the share of their in-progress time that was not blocked.",
+    "Flow efficiency of the items completed in the window: the share of their in-progress time that was not blocked and not in a waiting state.",
   ],
   [
     "flow",

@@ -133,12 +133,12 @@ function FlowStats({
       <StatCard
         title="Queue time P50"
         value={duration(data.queue_time, "p50_seconds")}
-        help="Median time an item spent waiting: from arriving until work started, plus any time it was blocked while in progress."
+        help="Median time an item spent waiting: from arriving until work started, plus any time it was blocked or in a waiting state (Metric rules) while in progress."
       />
       <StatCard
         title="Touch time P50"
         value={duration(data.touch_time, "p50_seconds")}
-        help="Median time an item was in progress and not blocked."
+        help="Median time an item was in progress, not blocked and not in a waiting state."
       />
       <StatCard
         title={`Blocked time (${statLabel})`}
@@ -148,7 +148,7 @@ function FlowStats({
       <StatCard
         title="Flow efficiency"
         value={data.flow_efficiency != null ? `${Math.round(data.flow_efficiency * 100)}%` : "—"}
-        help="For each completed item, the share of its in-progress time that was not blocked, averaged across items. Waiting before work started isn't counted here (see Queue time), and only blocked labels, states and relations count as waiting, so teams that rarely mark work blocked read close to 100%."
+        help="For each completed item, the share of its in-progress time that was not blocked and not in a waiting state, averaged across items. Waiting before work started isn't counted here (see Queue time). Waiting states such as In Review are listed per team in Metric rules; a team that lists none and rarely marks work blocked reads close to 100%."
       />
     </div>
   );
