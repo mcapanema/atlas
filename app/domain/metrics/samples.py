@@ -276,7 +276,7 @@ def derive_flow_sample(
     item created already completed and never started (see _born_done).
     Blocked time sums the rules' blocked periods (labels, workflow states,
     relations, explicit events) clipped to the cycle, started_at to
-    completed_at (see _blocked_in_cycle); an item never started has none.
+    completed_at (see _in_cycle); an item never started has none.
     `born_in` is the item's creation state, as blocked_periods takes it.
     state_wait_time is the cycle time spent in the rules' wait states while
     not blocked (the union of both, clipped the same way, minus blocked time).
@@ -297,7 +297,12 @@ def derive_flow_sample(
     calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
     blocked_time = _in_cycle(periods, started_at, completed_at, calendar)
-    waiting = _merged(periods, _wait_state_periods(ordered, rules, born_in))
+    waits = [*periods, *_wait_state_periods(ordered, rules, born_in)]
+    if completed_at is None:
+        # Open periods count nothing on an unfinished item (_in_cycle); left
+        # in, one would absorb an earlier closed period and undercount it.
+        waits = [p for p in waits if p.ended_at is not None]
+    waiting = _merged(waits)
 
     return FlowSample(
         created_at=ordered[0].occurred_at,

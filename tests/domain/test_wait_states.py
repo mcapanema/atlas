@@ -195,3 +195,20 @@ def test_review_outlasting_a_blocked_label_counts_only_the_unblocked_rest() -> N
 
     assert sample.blocked_time == timedelta(days=2)
     assert sample.state_wait_time == timedelta(days=1)
+
+
+def test_open_review_absorbing_a_closed_block_never_goes_negative() -> None:
+    # Unfinished: blocked days 3-5 count, the still-open review stay doesn't.
+    sample = _sample(
+        [
+            _at(EventType.CREATED, 1),
+            _move(EventType.STARTED, 2, "Todo", "In Progress"),
+            _at(EventType.LABEL_ADDED, 3, "Blocked"),
+            _move(EventType.STATE_CHANGED, 4, "In Progress", "In Review"),
+            _at(EventType.LABEL_REMOVED, 5, "Blocked"),
+        ]
+    )
+
+    assert sample.blocked_time == timedelta(days=2)
+    assert sample.state_wait_time == timedelta(0)
+    assert sample.wait_time == timedelta(days=2)
