@@ -41,6 +41,9 @@ it completed since 2026-10-07, In Review held 59% and Waiting for Deploy
   its trailing-14-day flow efficiency from 0.97 to 0.41, queue time p50
   from 0.2 to 1.8 working days and touch time p50 from 1.4 to 0.2 working
   days. An unconfigured team's numbers were unchanged.
+- The advisor context (and the MCP brief) adds a wait-time total when it
+  exceeds blocked time, so advice can attribute low efficiency to waiting
+  stages rather than to blockers.
 - Teams that list no wait states still read blocked-only efficiency, near
   100%. `weight_efficiency` stays 0: re-weighting the efficiency health
   component needs calibration once enough teams are configured.
