@@ -129,9 +129,10 @@ class MetricRules:
     # blocked time is unchanged. None by default (ADR-0018).
     wait_state_names: tuple[str, ...] = ()
     # Delivery-health scoring. Calibrated on live data (review 2026-10-09):
-    # flow efficiency reads 92-100% everywhere because blocked periods are
-    # its only wait signal, so efficiency stays out of the built-in score
-    # until queue-state waits are measured (see flow_efficiency.py).
+    # flow efficiency read 92-100% everywhere with blocked periods as its
+    # only wait signal. Wait states (ADR-0018) are a per-team list, empty by
+    # default, so efficiency stays out of the built-in score until enough
+    # teams list theirs to recalibrate it.
     healthy_min: int = 70
     warning_min: int = 40
     # Predictability is the share of window completions within the service
