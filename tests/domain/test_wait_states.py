@@ -6,6 +6,7 @@ import pytest
 
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules, resolve_rules
+from app.domain.metrics.flow_efficiency import flow_efficiency
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from tests.fakes import CALENDAR_DAYS
 
@@ -171,3 +172,9 @@ def test_review_over_a_weekend_counts_working_time_only() -> None:
     )
 
     assert sample.state_wait_time == timedelta(days=1)
+
+
+def test_listed_review_lowers_flow_efficiency() -> None:
+    # A 5-day cycle with 3 days in review: 1.0 unlisted, 0.4 listed.
+    assert flow_efficiency([_sample(REVIEW_THEN_DONE, CALENDAR_DAYS)]) == 1.0
+    assert flow_efficiency([_sample(REVIEW_THEN_DONE)]) == 0.4

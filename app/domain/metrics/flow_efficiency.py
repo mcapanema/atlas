@@ -1,4 +1,4 @@
-"""Flow Efficiency: share of cycle time spent actively working (not blocked)."""
+"""Flow Efficiency: share of cycle time spent actively working (not waiting)."""
 
 from app.domain.metrics.samples import FlowSample
 
@@ -20,15 +20,18 @@ def measured_cycles(samples: list[FlowSample]) -> list[tuple[FlowSample, float]]
 
 
 def flow_efficiency(samples: list[FlowSample]) -> float | None:
-    """Mean of (cycle - blocked) / cycle over the measured samples; None without any.
+    """Mean of (cycle - wait) / cycle over the measured samples; None without any.
 
-    ponytail: blocked periods are the only wait signal, so a team that marks
-    blocked work by none of the blocked rules (labels, workflow states,
-    relations) reads 100%. Count queue-state waiting (e.g. time in Review
-    without a reviewer) as wait too if blocked periods prove too coarse.
+    Wait is blocked time plus time in the team's wait states
+    (wait_state_names, ADR-0018).
+
+    ponytail: wait states are a manual per-team list, so a team that lists
+    none (and marks no blocked work) still reads close to 100%. Upgrade
+    path: suggest likely wait states from state names if unconfigured
+    teams prove common.
     """
     ratios = [
-        (cycle - min(sample.blocked_time.total_seconds(), cycle)) / cycle
+        (cycle - min(sample.wait_time.total_seconds(), cycle)) / cycle
         for sample, cycle in measured_cycles(samples)
     ]
     return sum(ratios) / len(ratios) if ratios else None
