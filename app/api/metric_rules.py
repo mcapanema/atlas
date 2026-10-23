@@ -34,26 +34,39 @@ def _read(view: RulesView | None, missing: str) -> MetricRulesViewRead:
     return MetricRulesViewRead.model_validate(view)
 
 
+async def _saved[T](
+    save: Callable[[], Awaitable[T | None]],
+    change: Callable[[T], RulesChange],
+    missing: str,
+    session: AsyncSession,
+    runner: RecomputeRunner,
+) -> T:
+    """Run a rules write and queue the history it invalidated; 404 when `save` finds nothing."""
+    # The runner is paused BEFORE the write: a scope rewrite holds SQLite's
+    # single write lock until it commits, so writing first would block (and
+    # 500) behind it. It restarts on exit, even on a 404/422, so pending
+    # work isn't stranded.
+    async with runner.paused() as queue:
+        result = await save()
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"{missing} not found"
+            )
+        await session.commit()  # the new rules (and "running"), before the run restarts
+        saved = change(result)
+        if saved.scopes:
+            queue(saved.organization_id, saved.scopes)
+    return result
+
+
 async def _save(
     save: Callable[[], Awaitable[RulesChange | None]],
     missing: str,
     session: AsyncSession,
     runner: RecomputeRunner,
 ) -> MetricRulesViewRead:
-    # The runner is paused BEFORE the write: a scope rewrite holds SQLite's
-    # single write lock until it commits, so writing first would block (and
-    # 500) behind it. It restarts on exit, even on a 404/422, so pending
-    # work isn't stranded.
-    async with runner.paused() as queue:
-        change = await save()
-        if change is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"{missing} not found"
-            )
-        await session.commit()  # the new rules (and "running"), before the run restarts
-        if change.scopes:
-            queue(change.organization_id, change.scopes)
-    return MetricRulesViewRead.model_validate(change.view)
+    saved = await _saved(save, lambda c: c, missing, session, runner)
+    return MetricRulesViewRead.model_validate(saved.view)
 
 
 @router.get("/api/organizations/{organization_id}/metric-rules", response_model=MetricRulesViewRead)
@@ -148,16 +161,13 @@ async def import_rules(
     session: SessionDep,
     runner: RecomputeRunnerDep,
 ) -> MetricRulesImportRead:
-    async with runner.paused() as queue:  # before writing; see _save
-        result = await service.import_rules(organization_id, _shared(payload))
-        if result is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Organization {organization_id} not found",
-            )
-        await session.commit()
-        if result.change.scopes:
-            queue(organization_id, result.change.scopes)
+    result = await _saved(
+        lambda: service.import_rules(organization_id, _shared(payload)),
+        lambda imported: imported.change,
+        f"Organization {organization_id}",
+        session,
+        runner,
+    )
     return MetricRulesImportRead(
         imported_teams=list(result.imported_teams),
         skipped_teams=list(result.skipped_teams),
