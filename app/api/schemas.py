@@ -3,7 +3,8 @@ from datetime import date, datetime, time
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
@@ -621,6 +622,23 @@ class SharedRulesWrite(BaseModel):
     exported_at: datetime | None = None
     workspace: MetricRulesOverridesWrite
     teams: list[SharedTeamRulesWrite] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _atlas_rules_file(cls, value: object) -> object:
+        # Field errors ("format: Input should be…") don't tell a person they
+        # picked the wrong file, or one from a newer Atlas.
+        if not isinstance(value, dict) or value.get("format") != "atlas-metric-rules":
+            raise PydanticCustomError("not_atlas_rules", "Not an Atlas metric rules file")
+        version = value.get("version")
+        if isinstance(version, int) and not isinstance(version, bool) and version > 1:
+            raise PydanticCustomError(
+                "newer_rules_file",
+                "This rules file is version {version}; this Atlas reads version 1. "
+                "Update Atlas to import it.",
+                {"version": version},
+            )
+        return value
 
 
 class MetricRulesImportRead(BaseModel):

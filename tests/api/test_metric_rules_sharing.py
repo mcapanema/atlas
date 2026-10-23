@@ -113,6 +113,30 @@ async def test_import_rejects_foreign_or_newer_files(
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "body", [[1, 2], "rules", {"hello": "world"}, {"format": "other", "version": 1}]
+)
+async def test_import_names_a_non_atlas_file(rules_client: AsyncClient, body: object) -> None:
+    org, _ = await create_org_and_team(rules_client)
+
+    response = await rules_client.post(f"/api/organizations/{org}/metric-rules/import", json=body)
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "Not an Atlas metric rules file"
+
+
+async def test_import_names_a_newer_file_version(rules_client: AsyncClient) -> None:
+    org, _ = await create_org_and_team(rules_client)
+    body = {"format": "atlas-metric-rules", "version": 2, "workspace": {}}
+
+    response = await rules_client.post(f"/api/organizations/{org}/metric-rules/import", json=body)
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == (
+        "This rules file is version 2; this Atlas reads version 1. Update Atlas to import it."
+    )
+
+
 async def test_unknown_organization_is_404(rules_client: AsyncClient) -> None:
     missing = uuid4()
 
