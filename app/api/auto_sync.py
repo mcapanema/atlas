@@ -8,9 +8,10 @@ same sync + snapshot capture as `POST /api/connectors/linear/sync`, in its
 own session and transaction. The outcome is recorded on the schedule in a
 second session, so a failed sync's rollback can't erase its own error.
 An upstream failure (DataSourceError) logs a one-line warning; anything
-else logs a traceback. A failure still consumes its slot: no retry until the next one. Each slot
-is also attempted at most once per process, so a run whose outcome can't be
-recorded isn't re-synced every tick; a restart retries it once.
+else logs a traceback. A failure still consumes its slot: no retry until
+the next one. Each slot is also attempted at most once per process, so a
+run whose outcome can't be recorded isn't re-synced every tick; a restart
+retries it once.
 
 Manual and automatic syncs share `lock`. A tick that finds a sync
 running skips and retries next tick; the manual route waits for a
@@ -133,7 +134,8 @@ class AutoSyncRunner:
                 await snapshot_service_for(session).capture_all()
                 await session.commit()
         except DataSourceError as exc:
-            # An upstream outage (Linear down, DNS blip): expected, so no traceback.
+            # Linear unreachable, an error response, or a malformed payload:
+            # the message says which, so no traceback.
             logger.warning("Auto sync failed for organization %s: %s", organization_id, exc)
             return str(exc) or type(exc).__name__
         except Exception as exc:
