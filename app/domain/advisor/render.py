@@ -90,7 +90,8 @@ def quote_title(title: str) -> str:
 
 
 def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str = "") -> str:
-    """Aging WIP as text: the reference line, then the `limit` oldest items.
+    """Aging WIP as text: the reference line, the `limit` oldest items, then every
+    blocked item past them (a standup asks for anything blocked, however young).
 
     `more_hint` follows the "... and N more" line, e.g. which tool lists the rest.
     """
@@ -103,12 +104,17 @@ def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str =
             f" = {_days(aging.cycle_time_percentile)})"
         )
     lines = [header + ":"]
-    for item in aging.items[:limit]:
+    # ponytail: blocked rows are uncapped — a scope with dozens blocked grows the
+    # brief past the token budget the cap protects; cap them too, with their own
+    # "N more blocked" line, if that ever happens.
+    listed = [item for i, item in enumerate(aging.items) if i < limit or item.blocked]
+    for item in listed:
         flag = f" [over p{aging.percentile}]" if item.over_percentile else ""
         flag += " [blocked]" if item.blocked else ""
         lines.append(f"- {quote_title(item.title)} — {item.state}, {_days(item.age)}{flag}")
-    if len(aging.items) > limit:
-        lines.append(f"... and {len(aging.items) - limit} more{more_hint}")
+    hidden = len(aging.items) - len(listed)
+    if hidden > 0:
+        lines.append(f"... and {hidden} more{more_hint}")
     return "\n".join(lines)
 
 
