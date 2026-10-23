@@ -7,9 +7,11 @@ organizations have a slot due and syncs them one at a time. That's the
 same sync + snapshot capture as `POST /api/connectors/linear/sync`, in its
 own session and transaction. The outcome is recorded on the schedule in a
 second session, so a failed sync's rollback can't erase its own error.
-A failure still consumes its slot: no retry until the next one. Each slot
-is also attempted at most once per process, so a run whose outcome can't be
-recorded isn't re-synced every tick; a restart retries it once.
+An upstream failure (DataSourceError) logs a one-line warning; anything
+else logs a traceback. A failure still consumes its slot: no retry until
+the next one. Each slot is also attempted at most once per process, so a
+run whose outcome can't be recorded isn't re-synced every tick; a restart
+retries it once.
 
 Manual and automatic syncs share `lock`. A tick that finds a sync
 running skips and retries next tick; the manual route waits for a
@@ -39,7 +41,7 @@ from app.api.deps import (
 )
 from app.api.recompute import RecomputeRunner, get_recompute_runner
 from app.application.sync_schedules.service import DueSync
-from app.domain.sync.port import DeliveryDataSource
+from app.domain.sync.port import DataSourceError, DeliveryDataSource
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +133,11 @@ class AutoSyncRunner:
                 await sync_service_for(session, source).sync(organization_id)
                 await snapshot_service_for(session).capture_all()
                 await session.commit()
+        except DataSourceError as exc:
+            # Linear unreachable, an error response, or a malformed payload:
+            # the message says which, so no traceback.
+            logger.warning("Auto sync failed for organization %s: %s", organization_id, exc)
+            return str(exc) or type(exc).__name__
         except Exception as exc:
             logger.exception("Auto sync failed for organization %s", organization_id)
             return str(exc) or type(exc).__name__

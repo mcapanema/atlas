@@ -16,6 +16,22 @@ LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 
 _MAX_ATTEMPTS = 3
 
+# Network failures a retry can outlive. Not retried: a read/write timeout
+# (Linear accepted the connection and is hanging, so a retry triples the
+# worst case), a pool timeout (each attempt opens a fresh pool, so it
+# signals local exhaustion), and permanent misconfiguration
+# (UnsupportedProtocol, ProxyError, LocalProtocolError).
+_RETRYABLE_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadError,
+    httpx.WriteError,
+    httpx.RemoteProtocolError,
+)
+
+# Connecting gets its own short timeout so a DNS/connect outage fails fast.
+_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+
 # Seam for tests: monkeypatch this to record delays instead of sleeping.
 _sleep = asyncio.sleep
 
@@ -33,6 +49,15 @@ def _retry_delay(retry_after: str | None, attempt: int) -> float:
     if retry_after is not None and retry_after.isdigit():
         return float(retry_after)
     return float(2 ** (attempt - 1))
+
+
+def _retry_reason(outcome: httpx.Response | httpx.TransportError) -> str | None:
+    """Why this attempt is worth repeating, or None if it isn't."""
+    if isinstance(outcome, httpx.TransportError):
+        return f"request failed ({outcome})"
+    if outcome.status_code == 429 or outcome.status_code >= 500:
+        return f"returned HTTP {outcome.status_code}"
+    return None
 
 
 def _parse(response: httpx.Response) -> dict[str, Any]:
@@ -66,13 +91,18 @@ class LinearGraphQLClient:
     async def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         attempt = 1
         while True:
-            response = await self._post(query, variables)
-            retryable = response.status_code == 429 or response.status_code >= 500
-            if retryable and attempt < _MAX_ATTEMPTS:
-                delay = _retry_delay(response.headers.get("Retry-After"), attempt)
+            outcome = await self._post(query, variables)
+            reason = _retry_reason(outcome)
+            if reason is not None and attempt < _MAX_ATTEMPTS:
+                retry_after = (
+                    outcome.headers.get("Retry-After")
+                    if isinstance(outcome, httpx.Response)
+                    else None
+                )
+                delay = _retry_delay(retry_after, attempt)
                 logger.warning(
-                    "Linear API returned HTTP %d; retrying in %.0fs (attempt %d/%d)",
-                    response.status_code,
+                    "Linear API %s; retrying in %.0fs (attempt %d/%d)",
+                    reason,
                     delay,
                     attempt,
                     _MAX_ATTEMPTS,
@@ -80,17 +110,24 @@ class LinearGraphQLClient:
                 await _sleep(delay)
                 attempt += 1
                 continue
-            return _parse(response)
+            if isinstance(outcome, httpx.TransportError):
+                raise LinearAPIError(f"Linear API request failed: {outcome}") from outcome
+            return _parse(outcome)
 
-    async def _post(self, query: str, variables: dict[str, Any] | None) -> httpx.Response:
+    async def _post(
+        self, query: str, variables: dict[str, Any] | None
+    ) -> httpx.Response | httpx.TransportError:
+        """The response, or a network failure in _RETRYABLE_TRANSPORT_ERRORS."""
         # ponytail: a fresh connection per attempt. Hold a pooled AsyncClient
         # (with aclose()) if sync latency over many pages ever matters.
         try:
-            async with httpx.AsyncClient(transport=self._transport, timeout=30.0) as http:
+            async with httpx.AsyncClient(transport=self._transport, timeout=_TIMEOUT) as http:
                 return await http.post(
                     self._base_url,
                     json={"query": query, "variables": variables or {}},
                     headers={"Authorization": self._api_key},
                 )
+        except _RETRYABLE_TRANSPORT_ERRORS as exc:
+            return exc
         except httpx.HTTPError as exc:
             raise LinearAPIError(f"Linear API request failed: {exc}") from exc
