@@ -16,8 +16,11 @@ LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 
 _MAX_ATTEMPTS = 3
 
-# Network failures a retry can outlive. A read timeout isn't one: Linear
-# accepted the request and is hanging, so retrying triples the worst case.
+# Network failures a retry can outlive. Not retried: a read/write timeout
+# (Linear accepted the connection and is hanging, so a retry triples the
+# worst case), a pool timeout (each attempt opens a fresh pool, so it
+# signals local exhaustion), and permanent misconfiguration
+# (UnsupportedProtocol, ProxyError, LocalProtocolError).
 _RETRYABLE_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
     httpx.ConnectError,
     httpx.ConnectTimeout,

@@ -134,32 +134,29 @@ async def test_execute_does_not_retry_4xx_other_than_429() -> None:
     assert calls == 1
 
 
-async def test_execute_does_not_retry_permanent_transport_errors(
-    recorded_sleeps: list[float],
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ReadTimeout("read timed out"),
+        httpx.WriteTimeout("write timed out"),
+        httpx.PoolTimeout("pool timed out"),
+        httpx.UnsupportedProtocol("unsupported protocol 'ftp://'"),
+        httpx.ProxyError("proxy refused"),
+        httpx.LocalProtocolError("illegal header"),
+    ],
+    ids=lambda error: type(error).__name__,
+)
+async def test_execute_does_not_retry_non_transient_transport_errors(
+    error: httpx.TransportError, recorded_sleeps: list[float]
 ) -> None:
     calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        raise httpx.UnsupportedProtocol("Request URL has an unsupported protocol 'ftp://'")
+        raise error
 
-    with pytest.raises(LinearAPIError, match=r"request failed: .*unsupported protocol"):
-        await _client(handler).execute("{ viewer { id } }")
-
-    assert calls == 1
-    assert recorded_sleeps == []
-
-
-async def test_execute_does_not_retry_read_timeouts(recorded_sleeps: list[float]) -> None:
-    calls = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal calls
-        calls += 1
-        raise httpx.ReadTimeout("timed out")
-
-    with pytest.raises(LinearAPIError, match="request failed: timed out"):
+    with pytest.raises(LinearAPIError, match=f"request failed: {error}"):
         await _client(handler).execute("{ viewer { id } }")
 
     assert calls == 1
