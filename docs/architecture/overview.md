@@ -131,6 +131,14 @@ snapshot history through the background `RecomputeRunner` in
 `app/api/recompute.py` (it cancels the running task before a save writes,
 then restarts with the pending scopes; status on the organization row,
 resumed by the lifespan). Edited on the Metric rules page (`/metric-rules`).
+An organization's layers travel between installs as a JSON file (ADR-0019):
+`GET …/metric-rules/export` and `POST …/metric-rules/import` under
+`/api/organizations/{id}`, with the file's dataclasses and team matching
+(`external_id`, then name) in `app/application/metric_rules/sharing.py`;
+each layer is validated like a PATCH body (`MetricRulesOverridesWrite`).
+An import replaces the workspace layer and each matched team's layer, skips
+and reports unknown or ambiguous teams, and recomputes history the same way a
+PATCH does.
 One rule changes no metric: `sprint_length_days` (`MEETING_RULES`), the
 retrospective's default window on the Meetings page, `GET /api/meetings/prep`
 and the MCP `retrospective` prompt (teams carry it in `GET /api/teams`).

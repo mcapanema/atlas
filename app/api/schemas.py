@@ -3,7 +3,8 @@ from datetime import date, datetime, time
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
@@ -580,3 +581,70 @@ class MetricRulesViewRead(BaseModel):
     overrides: dict[str, Any]
     effective: MetricRulesRead
     recompute: RecomputeStatusRead
+
+
+SharedRulesFormat = Literal["atlas-metric-rules"]
+
+
+class SharedTeamRulesRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    external_id: str | None
+    overrides: dict[str, Any]
+
+
+class SharedRulesRead(BaseModel):
+    """An exported rules file (ADR-0019): no Atlas UUIDs, teams by source id and name."""
+
+    format: SharedRulesFormat = "atlas-metric-rules"
+    version: Literal[1] = 1
+    exported_at: datetime
+    workspace: dict[str, Any]
+    teams: list[SharedTeamRulesRead]
+
+
+class SharedTeamRulesWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    external_id: str | None = None
+    overrides: MetricRulesOverridesWrite
+
+
+class SharedRulesWrite(BaseModel):
+    """An imported rules file; each layer is validated exactly like a PATCH body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    format: SharedRulesFormat
+    version: Literal[1]
+    exported_at: datetime | None = None
+    workspace: MetricRulesOverridesWrite
+    teams: list[SharedTeamRulesWrite] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _atlas_rules_file(cls, value: object) -> object:
+        # Field errors ("format: Input should be…") don't tell a person they
+        # picked the wrong file, or one from a newer Atlas.
+        if not isinstance(value, dict) or value.get("format") != "atlas-metric-rules":
+            raise PydanticCustomError("not_atlas_rules", "Not an Atlas metric rules file")
+        version = value.get("version")
+        if isinstance(version, bool):  # lax Literal[1] would read `true` as 1
+            raise PydanticCustomError("rules_file_version", "version must be 1")
+        if isinstance(version, int) and version > 1:
+            raise PydanticCustomError(
+                "newer_rules_file",
+                "This rules file is version {version}; this Atlas reads version 1. "
+                "Update Atlas to import it.",
+                {"version": version},
+            )
+        return value
+
+
+class MetricRulesImportRead(BaseModel):
+    imported_teams: list[str]
+    skipped_teams: list[str]
+    ambiguous_teams: list[str]
+    rules: MetricRulesViewRead

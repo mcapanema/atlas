@@ -31,6 +31,16 @@ export function scopeOptions(organizations: Organization[], teams: Team[]) {
   ];
 }
 
+/** The organization a workspace scope names; undefined for a team (rules travel per organization). */
+export function workspaceOrganization(
+  scope: RulesScope | undefined,
+  organizations: Organization[],
+): Organization | undefined {
+  return scope?.kind === "organization"
+    ? organizations.find((org) => org.id === scope.id)
+    : undefined;
+}
+
 /** The organization whose history a recompute for `scope` rewrites. */
 export function recomputeOrganization(
   scope: RulesScope | undefined,

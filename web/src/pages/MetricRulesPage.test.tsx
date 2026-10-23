@@ -70,9 +70,14 @@ interface Call {
 function mockApi(
   current: MetricRulesView,
   patchStatus = 200,
-  extra: { recomputeStatus?: number; organizations?: (typeof ORG)[] } = {},
+  extra: {
+    recomputeStatus?: number;
+    organizations?: (typeof ORG)[];
+    afterImport?: MetricRulesView;
+  } = {},
 ): Call[] {
   const calls: Call[] = [];
+  let imported = false;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     const method = init?.method ?? "GET";
@@ -82,6 +87,16 @@ function mockApi(
     if (url.startsWith("/api/work-items/labels")) return jsonResponse(["Blocked", "Bug"]);
     if (url.includes("/metric-rules")) {
       calls.push({ url, method, body });
+      if (url.endsWith("/import") && extra.afterImport) {
+        imported = true;
+        return jsonResponse({
+          imported_teams: [],
+          skipped_teams: [],
+          ambiguous_teams: [],
+          rules: extra.afterImport,
+        });
+      }
+      if (imported && extra.afterImport) return jsonResponse(extra.afterImport);
       if (method === "POST" && extra.recomputeStatus) {
         return jsonResponse({ detail: "recompute is unavailable" }, extra.recomputeStatus);
       }
@@ -114,6 +129,49 @@ describe("MetricRulesPage", { timeout: 15_000 }, () => {
     expect(await screen.findByText("Lifecycle")).toBeInTheDocument();
     expect(screen.getAllByText(/^Built-in:/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("offers export and import for the workspace default, not for a team", async () => {
+    mockApi(view());
+    const { unmount } = renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    expect(await screen.findByRole("button", { name: /export/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import$/i })).toBeEnabled();
+    unmount();
+
+    renderWithClient(<MetricRulesPage />, [`/metric-rules?team=${teamFixture.id}`]);
+    expect(await screen.findByText("Lifecycle")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /export/i })).not.toBeInTheDocument();
+  });
+
+  it("reloads the form from the imported rules, leaving nothing to save", async () => {
+    const afterImport = view({
+      overrides: { restart_clock_after_move_back: true },
+      effective: { ...BUILT_IN, restart_clock_after_move_back: true },
+    });
+    mockApi(view(), 200, { afterImport });
+    const { container } = renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+    expect(await screen.findByRole("switch", { name: RESTART })).not.toBeChecked();
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(input!, {
+      target: { files: [new File(['{"format": "atlas-metric-rules"}'], "rules.json")] },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Import and replace" }));
+
+    await waitFor(() => expect(screen.getByRole("switch", { name: RESTART })).toBeChecked());
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /import$/i })).toBeEnabled();
+  });
+
+  it("disables export and import while the form has unsaved edits", async () => {
+    mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    fireEvent.click(await screen.findByRole("switch", { name: RESTART }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /import$/i })).toBeDisabled());
+    expect(screen.getByRole("button", { name: /export$/i })).toBeDisabled();
   });
 
   it("saves just the rule that changed", async () => {
