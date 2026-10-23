@@ -118,6 +118,8 @@ async def test_import_with_one_invalid_team_writes_nothing(rules_client: AsyncCl
         {"format": "atlas-metric-rules", "version": 2, "workspace": {}},
         {"format": "atlas-metric-rules", "version": 1, "workspace": {"bogus": 1}},
         {"format": "atlas-metric-rules", "version": 1, "workspace": {}, "teams": [{"name": ""}]},
+        {"format": "atlas-metric-rules", "version": True, "workspace": {}},
+        {"format": "atlas-metric-rules", "version": "1", "workspace": {}},
     ],
 )
 async def test_import_rejects_foreign_or_newer_files(

@@ -631,7 +631,9 @@ class SharedRulesWrite(BaseModel):
         if not isinstance(value, dict) or value.get("format") != "atlas-metric-rules":
             raise PydanticCustomError("not_atlas_rules", "Not an Atlas metric rules file")
         version = value.get("version")
-        if isinstance(version, int) and not isinstance(version, bool) and version > 1:
+        if isinstance(version, bool):  # lax Literal[1] would read `true` as 1
+            raise PydanticCustomError("rules_file_version", "version must be 1")
+        if isinstance(version, int) and version > 1:
             raise PydanticCustomError(
                 "newer_rules_file",
                 "This rules file is version {version}; this Atlas reads version 1. "
