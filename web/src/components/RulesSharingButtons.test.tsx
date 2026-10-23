@@ -173,6 +173,22 @@ describe("RulesSharingButtons", () => {
     await waitFor(() => expect(screen.queryByText(SUMMARY)).not.toBeInTheDocument());
   });
 
+  it("keeps Export locked while an import is running", async () => {
+    // The import never answers: it stays pending for the whole test.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    const { container } = renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
+
+    chooseFile(container, JSON.stringify(SHARED));
+    fireEvent.click(await screen.findByRole("button", { name: "Import and replace" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /export$/i })).toBeDisabled());
+  });
+
   it("opens the file picker from the Import button", () => {
     mockFetch();
     const pick = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});

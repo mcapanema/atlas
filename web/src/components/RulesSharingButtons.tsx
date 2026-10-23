@@ -70,11 +70,13 @@ export function RulesSharingButtons({
     <Space direction="vertical" style={{ width: "100%" }}>
       {modalContext}
       <Space wrap>
-        {/* With unsaved edits, Export would quietly save the stored rules. */}
+        {/* With unsaved edits, Export would quietly save the stored rules. Each
+            button also waits for the other's request: clearOutcome() resets a
+            pending mutation, which drops its onImported callback. */}
         <Tooltip title={lockedTitle}>
           <Button
             icon={<DownloadOutlined />}
-            disabled={disabled}
+            disabled={disabled || importRules.isPending}
             onClick={() => {
               clearOutcome();
               exportRules.mutate();
@@ -87,7 +89,7 @@ export function RulesSharingButtons({
         <Tooltip title={lockedTitle}>
           <Button
             icon={<UploadOutlined />}
-            disabled={disabled}
+            disabled={disabled || exportRules.isPending}
             onClick={() => fileInput.current?.click()}
             loading={importRules.isPending}
           >
