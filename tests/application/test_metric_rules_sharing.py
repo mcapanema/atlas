@@ -221,6 +221,35 @@ async def test_import_skips_an_unlisted_team_whose_stored_rules_were_already_inv
     assert ScopeRef(team_id=BETA.id) in result.change.scopes
 
 
+async def test_reimporting_an_export_with_an_already_invalid_team_is_accepted() -> None:
+    service, repo, _ = _world()
+    await repo.save(
+        RuleOverrides(organization_id=ORG.id, team_id=ALPHA.id, overrides={"healthy_min": 30})
+    )
+    shared = await service.export_rules(ORG.id)
+    assert shared is not None
+
+    result = await service.import_rules(ORG.id, shared)
+
+    assert result is not None
+    assert result.imported_teams == ("Alpha",)
+    alpha_row = await repo.get(ORG.id, team_id=ALPHA.id)
+    assert alpha_row is not None
+    assert alpha_row.overrides == {"healthy_min": 30}
+
+
+async def test_changing_an_already_invalid_team_to_another_invalid_layer_is_rejected() -> None:
+    service, repo, _ = _world()
+    await repo.save(
+        RuleOverrides(organization_id=ORG.id, team_id=ALPHA.id, overrides={"healthy_min": 30})
+    )
+
+    with pytest.raises(ValueError, match="Alpha"):
+        await service.import_rules(
+            ORG.id, SharedRules({}, (SharedTeamRules("Alpha", "lin-alpha", {"healthy_min": 20}),))
+        )
+
+
 async def test_import_into_unknown_organization_is_none() -> None:
     service, *_ = _world()
 

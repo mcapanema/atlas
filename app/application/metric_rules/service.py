@@ -149,9 +149,11 @@ def _imported_layer(
     """The team's layer after an import; raises ValueError if it can't resolve.
 
     A team the file names takes the file's layer; any other keeps its own,
-    which must still resolve under the imported workspace.
+    which must still resolve under the imported workspace. A named team whose
+    file layer equals its stored one counts as kept, so an install can
+    re-import its own export even if a stored layer predates a validation rule.
     """
-    if entry is None:
+    if entry is None or dict(entry.overrides) == dict(own):
         _check_team(team, before, workspace, own)
         return dict(own)
     layer = dict(entry.overrides)
