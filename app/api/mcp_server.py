@@ -61,6 +61,7 @@ def _aging_from_json(data: dict[str, Any]) -> AgingWip:
                 age=timedelta(seconds=item.age_seconds),
                 over_percentile=item.over_percentile,
                 assignee=item.assignee,
+                blocked=item.blocked,
             )
             for item in dto.items
         ),

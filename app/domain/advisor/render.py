@@ -105,6 +105,7 @@ def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str =
     lines = [header + ":"]
     for item in aging.items[:limit]:
         flag = f" [over p{aging.percentile}]" if item.over_percentile else ""
+        flag += " [blocked]" if item.blocked else ""
         lines.append(f"- {quote_title(item.title)} — {item.state}, {_days(item.age)}{flag}")
     if len(aging.items) > limit:
         lines.append(f"... and {len(aging.items) - limit} more{more_hint}")

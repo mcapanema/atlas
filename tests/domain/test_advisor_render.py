@@ -120,13 +120,14 @@ def _delivery() -> DeliveryContext:
     )
 
 
-def _aging_item(title: str, days: int, over: bool) -> AgingItem:
+def _aging_item(title: str, days: int, over: bool, *, blocked: bool = False) -> AgingItem:
     return AgingItem(
         work_item_id=uuid4(),
         title=title,
         state="In Progress",
         age=timedelta(days=days),
         over_percentile=over,
+        blocked=blocked,
     )
 
 
@@ -226,6 +227,22 @@ def test_render_aging_names_the_percentile_and_history() -> None:
         "Aging WIP (cycle-time p70 over the last 30 calendar days = 4.0 working days):\n"
         '- "Fix login" — In Progress, 6.0 working days [over p70]'
     )
+
+
+def test_render_aging_flags_blocked_items() -> None:
+    aging = AgingWip(
+        now=_NOW,
+        cycle_time_percentile=timedelta(days=4),
+        items=(
+            _aging_item("Fix login", 6, True, blocked=True),
+            _aging_item("Docs", 2, False, blocked=True),
+        ),
+    )
+
+    assert render_aging(aging).splitlines()[1:] == [
+        '- "Fix login" — In Progress, 6.0 working days [over p85] [blocked]',
+        '- "Docs" — In Progress, 2.0 working days [blocked]',
+    ]
 
 
 def test_render_aging_makes_no_history_claim_without_a_reference() -> None:
