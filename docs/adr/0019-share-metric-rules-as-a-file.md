@@ -27,8 +27,9 @@ UUIDs differ between installs and can't identify a team in a shared file.
   trimmed) when exactly one local team has it.
 - Import replaces: the workspace layer becomes the file's, and each matched
   team's layer becomes the file's for it. Teams the file doesn't name keep
-  their layers. Teams the file names but this install lacks are skipped and
-  listed in the response.
+  their layers. A file entry that matches no team here is skipped and listed
+  in `skipped_teams`; one whose name matches several teams here (and whose
+  `external_id` picks none) is skipped and listed in `ambiguous_teams`.
 - Import is atomic: an unknown rule, an invalid value, a wrong `format` or
   `version`, two entries for one team, or a workspace layer that conflicts
   with an unnamed team's own overrides is a 422, and nothing is written.

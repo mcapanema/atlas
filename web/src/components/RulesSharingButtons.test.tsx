@@ -65,7 +65,12 @@ describe("RulesSharingButtons", () => {
 
   it("imports a chosen file after confirming and shows the summary", async () => {
     const fetchMock = mockFetch(
-      jsonResponse({ imported_teams: [], skipped_teams: ["Ghost"], rules: {} }),
+      jsonResponse({
+        imported_teams: [],
+        skipped_teams: ["Ghost"],
+        ambiguous_teams: [],
+        rules: {},
+      }),
     );
     const { container } = renderWithClient(
       <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,

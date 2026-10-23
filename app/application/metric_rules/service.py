@@ -77,6 +77,8 @@ class RulesImport:
     imported_teams: tuple[str, ...]
     # The file's names for teams matching none here, in file order.
     skipped_teams: tuple[str, ...]
+    # The file's names for teams matching several here by name, in file order.
+    ambiguous_teams: tuple[str, ...]
 
 
 def _layer(row: RuleOverrides | None) -> dict[str, object]:
@@ -288,7 +290,8 @@ class MetricRulesService:
         for layer in (shared.workspace, *(entry.overrides for entry in shared.teams)):
             _reject_unknown(layer)
         teams = await self._organization_teams(organization_id)
-        matched, skipped = match_teams(shared.teams, teams)
+        match = match_teams(shared.teams, teams)
+        matched = match.matched
         rows = await self._overrides.list_for_organization(organization_id)
         workspace_row = next((r for r in rows if r.team_id is None), None)
         team_rows = {r.team_id: r for r in rows if r.team_id is not None}
@@ -328,7 +331,8 @@ class MetricRulesService:
         return RulesImport(
             change=RulesChange(view=view, organization_id=organization_id, scopes=scopes),
             imported_teams=tuple(sorted(t.name for t in teams if t.id in matched)),
-            skipped_teams=skipped,
+            skipped_teams=match.missing,
+            ambiguous_teams=match.ambiguous,
         )
 
     async def _replace_layer(

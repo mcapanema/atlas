@@ -89,7 +89,12 @@ function mockApi(
       calls.push({ url, method, body });
       if (url.endsWith("/import") && extra.afterImport) {
         imported = true;
-        return jsonResponse({ imported_teams: [], skipped_teams: [], rules: extra.afterImport });
+        return jsonResponse({
+          imported_teams: [],
+          skipped_teams: [],
+          ambiguous_teams: [],
+          rules: extra.afterImport,
+        });
       }
       if (imported && extra.afterImport) return jsonResponse(extra.afterImport);
       if (method === "POST" && extra.recomputeStatus) {

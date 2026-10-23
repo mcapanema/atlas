@@ -21,17 +21,22 @@ export function parseRulesFile(text: string): unknown {
   }
 }
 
-/** One line on what an import changed and which of the file's teams this install lacks. */
+function skippedSentence(names: string[], why: string): string[] {
+  return names.length > 0 ? [`Skipped ${teams(names.length)} ${why}: ${names.join(", ")}.`] : [];
+}
+
+/** One line on what an import changed and which of the file's teams didn't land here. */
 export function importSummary(result: RulesImportResult): string {
   const imported = result.imported_teams;
-  const skipped = result.skipped_teams;
   const head =
     imported.length > 0
       ? `Imported the workspace default and ${teams(imported.length)}: ${imported.join(", ")}.`
       : "Imported the workspace default.";
-  return skipped.length > 0
-    ? `${head} Skipped ${teams(skipped.length)} not found here: ${skipped.join(", ")}.`
-    : head;
+  return [
+    head,
+    ...skippedSentence(result.skipped_teams, "not found here"),
+    ...skippedSentence(result.ambiguous_teams, "whose name matches several teams here"),
+  ].join(" ");
 }
 
 /** Hands the browser `data` as a pretty-printed JSON file to save. */

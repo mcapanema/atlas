@@ -161,6 +161,7 @@ async def import_rules(
     return MetricRulesImportRead(
         imported_teams=list(result.imported_teams),
         skipped_teams=list(result.skipped_teams),
+        ambiguous_teams=list(result.ambiguous_teams),
         rules=MetricRulesViewRead.model_validate(result.change.view),
     )
 

@@ -92,6 +92,8 @@ export interface SharedRules {
 export interface RulesImportResult {
   imported_teams: string[];
   skipped_teams: string[];
+  // The file's teams whose name matches several teams here.
+  ambiguous_teams: string[];
   rules: MetricRulesView;
 }
 

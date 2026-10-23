@@ -79,6 +79,23 @@ async def test_import_reports_skipped_teams_and_recomputes(
     assert team_view["recompute"]["state"] == "idle"
 
 
+async def test_import_reports_a_name_matching_several_teams(rules_client: AsyncClient) -> None:
+    org, _ = await create_org_and_team(rules_client)
+    for _ in range(2):
+        created = await rules_client.post(
+            "/api/teams", json={"organization_id": org, "name": "Twin"}
+        )
+        assert created.status_code == 201
+    shared = _file({}, [{"name": "Twin", "overrides": {"aging_percentile": 70}}])
+
+    response = await rules_client.post(f"/api/organizations/{org}/metric-rules/import", json=shared)
+
+    assert response.status_code == 200
+    assert response.json()["ambiguous_teams"] == ["Twin"]
+    assert response.json()["skipped_teams"] == []
+    assert response.json()["imported_teams"] == []
+
+
 async def test_import_with_one_invalid_team_writes_nothing(rules_client: AsyncClient) -> None:
     org, _ = await create_org_and_team(rules_client)
     shared = _file(

@@ -644,4 +644,5 @@ class SharedRulesWrite(BaseModel):
 class MetricRulesImportRead(BaseModel):
     imported_teams: list[str]
     skipped_teams: list[str]
+    ambiguous_teams: list[str]
     rules: MetricRulesViewRead

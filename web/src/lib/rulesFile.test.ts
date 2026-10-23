@@ -5,8 +5,12 @@ import { downloadJson, importSummary, parseRulesFile, rulesFileName } from "./ru
 
 const rules = {} as MetricRulesView;
 
-function result(imported: string[], skipped: string[]): RulesImportResult {
-  return { imported_teams: imported, skipped_teams: skipped, rules };
+function result(
+  imported: string[],
+  skipped: string[],
+  ambiguous: string[] = [],
+): RulesImportResult {
+  return { imported_teams: imported, skipped_teams: skipped, ambiguous_teams: ambiguous, rules };
 }
 
 describe("rulesFileName", () => {
@@ -43,6 +47,12 @@ describe("importSummary", () => {
   it("names the skipped teams", () => {
     expect(importSummary(result([], ["Ghost"]))).toBe(
       "Imported the workspace default. Skipped 1 team not found here: Ghost.",
+    );
+  });
+
+  it("names teams whose name matches several here apart from missing ones", () => {
+    expect(importSummary(result([], ["Ghost"], ["Twin"]))).toBe(
+      "Imported the workspace default. Skipped 1 team not found here: Ghost. Skipped 1 team whose name matches several teams here: Twin.",
     );
   });
 

@@ -28,36 +28,47 @@ class SharedRules:
     teams: tuple[SharedTeamRules, ...] = ()
 
 
+@dataclass(frozen=True)
+class TeamMatch:
+    """How a file's team entries landed on this install's teams."""
+
+    matched: dict[UUID, SharedTeamRules]
+    # File names, in file order: no team here has that name...
+    missing: tuple[str, ...]
+    # ...or several do, and no external id picked one.
+    ambiguous: tuple[str, ...]
+
+
 def _folded(name: str) -> str:
     return name.strip().casefold()
 
 
-def _match(entry: SharedTeamRules, teams: Sequence[Team]) -> Team | None:
-    """The team with the entry's external id, else the one team with its name."""
+def _candidates(entry: SharedTeamRules, teams: Sequence[Team]) -> list[Team]:
+    """The team with the entry's external id, else every team with its name."""
     if entry.external_id is not None:
-        by_id = next((t for t in teams if t.external_id == entry.external_id), None)
-        if by_id is not None:
+        by_id = [t for t in teams if t.external_id == entry.external_id]
+        if by_id:
             return by_id
-    named = [t for t in teams if _folded(t.name) == _folded(entry.name)]
-    return named[0] if len(named) == 1 else None
+    return [t for t in teams if _folded(t.name) == _folded(entry.name)]
 
 
-def match_teams(
-    shared: Sequence[SharedTeamRules], teams: Sequence[Team]
-) -> tuple[dict[UUID, SharedTeamRules], tuple[str, ...]]:
-    """Each matched local team's entry, and the file names of the entries matching none.
+def match_teams(shared: Sequence[SharedTeamRules], teams: Sequence[Team]) -> TeamMatch:
+    """Match each entry to a local team; report the entries matching none or several.
 
     Raises ValueError when two entries match the same local team: which one
     wins would be a guess.
     """
     matched: dict[UUID, SharedTeamRules] = {}
-    skipped: list[str] = []
+    missing: list[str] = []
+    ambiguous: list[str] = []
     for entry in shared:
-        team = _match(entry, teams)
-        if team is None:
-            skipped.append(entry.name)
-        elif team.id in matched:
-            raise ValueError(f"The file names team {team.name} more than once")
+        found = _candidates(entry, teams)
+        if not found:
+            missing.append(entry.name)
+        elif len(found) > 1:
+            ambiguous.append(entry.name)
+        elif found[0].id in matched:
+            raise ValueError(f"The file names team {found[0].name} more than once")
         else:
-            matched[team.id] = entry
-    return matched, tuple(skipped)
+            matched[found[0].id] = entry
+    return TeamMatch(matched, tuple(missing), tuple(ambiguous))

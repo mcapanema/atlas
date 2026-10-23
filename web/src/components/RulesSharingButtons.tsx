@@ -12,7 +12,7 @@ function SharingOutcome({ error, result }: { error?: string; result?: RulesImpor
   if (result === undefined) return null;
   return (
     <Alert
-      type={result.skipped_teams.length > 0 ? "warning" : "success"}
+      type={result.skipped_teams.length + result.ambiguous_teams.length > 0 ? "warning" : "success"}
       showIcon
       message={importSummary(result)}
     />

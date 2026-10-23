@@ -3,7 +3,12 @@ from uuid import uuid4
 import pytest
 
 from app.application.metric_rules.service import MetricRulesService, ScopeRef
-from app.application.metric_rules.sharing import SharedRules, SharedTeamRules, match_teams
+from app.application.metric_rules.sharing import (
+    SharedRules,
+    SharedTeamRules,
+    TeamMatch,
+    match_teams,
+)
 from app.domain.metric_rules.entities import RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
@@ -36,20 +41,27 @@ def _world() -> tuple[MetricRulesService, InMemoryMetricRuleOverridesRepository,
 def test_matches_by_external_id_even_after_a_rename() -> None:
     entry = SharedTeamRules(name="Old Alpha", external_id="lin-alpha", overrides={})
 
-    assert match_teams([entry], [ALPHA, BETA]) == ({ALPHA.id: entry}, ())
+    assert match_teams([entry], [ALPHA, BETA]) == TeamMatch({ALPHA.id: entry}, (), ())
 
 
 def test_falls_back_to_name_when_external_id_is_unknown() -> None:
     entry = SharedTeamRules(name="  beta ", external_id="other-workspace", overrides={})
 
-    assert match_teams([entry], [ALPHA, BETA]) == ({BETA.id: entry}, ())
+    assert match_teams([entry], [ALPHA, BETA]) == TeamMatch({BETA.id: entry}, (), ())
 
 
-def test_unmatched_and_ambiguous_names_are_skipped() -> None:
+def test_ambiguous_names_are_reported_apart_from_missing_ones() -> None:
     twin = Team(organization_id=ORG.id, name="Beta")
     entries = [SharedTeamRules("Gamma", None, {}), SharedTeamRules("Beta", None, {})]
 
-    assert match_teams(entries, [ALPHA, BETA, twin]) == ({}, ("Gamma", "Beta"))
+    assert match_teams(entries, [ALPHA, BETA, twin]) == TeamMatch({}, ("Gamma",), ("Beta",))
+
+
+def test_external_id_wins_over_an_ambiguous_name() -> None:
+    twin = Team(organization_id=ORG.id, name="Beta")
+    entry = SharedTeamRules("Beta", "lin-beta", {})
+
+    assert match_teams([entry], [ALPHA, BETA, twin]) == TeamMatch({BETA.id: entry}, (), ())
 
 
 def test_two_entries_for_one_team_are_rejected() -> None:
@@ -103,6 +115,7 @@ async def test_import_replaces_workspace_and_matched_team_layers() -> None:
     assert beta_row.overrides == {"wait_state_names": ["QA"]}
     assert result.imported_teams == ("Beta",)
     assert result.skipped_teams == ("Gamma",)
+    assert result.ambiguous_teams == ()
     assert ScopeRef(team_id=BETA.id) in result.change.scopes
     assert ScopeRef(project_id=launch.id) in result.change.scopes
     assert result.change.organization_id == ORG.id
