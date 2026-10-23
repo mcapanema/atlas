@@ -224,8 +224,8 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
     @mcp.tool()
     async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
         """Every in-progress item with its age, flagged when older than the
-        scope's configured aging percentile of cycle time — the 'what is stuck' view for a daily
-        standup. Provide exactly one of team_id/project_id.
+        scope's configured aging percentile of cycle time or blocked right now — the 'what is
+        stuck' view for a daily standup. Provide exactly one of team_id/project_id.
         """
         aging = await _api(
             app,

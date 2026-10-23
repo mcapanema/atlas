@@ -29,7 +29,8 @@ class AgingItem:
     over_percentile: bool
     # Who the item is assigned to as of the last sync; None when unassigned.
     assignee: str | None = None
-    # A blocked period is open at `now`, under the scope's metric rules.
+    # A blocked period is still open at the end of the item's history, under
+    # the scope's metric rules (FlowSample.blocked_now).
     blocked: bool = False
 
 
