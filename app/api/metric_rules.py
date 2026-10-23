@@ -13,8 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import MetricRulesServiceDep, SessionDep
 from app.api.recompute import RecomputeRunner, RecomputeRunnerDep
-from app.api.schemas import MetricRulesOverridesWrite, MetricRulesViewRead
+from app.api.schemas import (
+    MetricRulesImportRead,
+    MetricRulesOverridesWrite,
+    MetricRulesViewRead,
+    SharedRulesRead,
+    SharedRulesWrite,
+    SharedTeamRulesRead,
+)
 from app.application.metric_rules.service import RulesChange, RulesView
+from app.application.metric_rules.sharing import SharedRules, SharedTeamRules
+from app.domain._time import utcnow
 
 router = APIRouter(tags=["metric-rules"])
 
@@ -93,6 +102,66 @@ async def recompute_history(
         queue(organization_id, scopes)
     return _read(
         await service.organization_view(organization_id), f"Organization {organization_id}"
+    )
+
+
+@router.get(
+    "/api/organizations/{organization_id}/metric-rules/export", response_model=SharedRulesRead
+)
+async def export_rules(organization_id: UUID, service: MetricRulesServiceDep) -> SharedRulesRead:
+    shared = await service.export_rules(organization_id)
+    if shared is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization {organization_id} not found",
+        )
+    return SharedRulesRead(
+        exported_at=utcnow(),
+        workspace=dict(shared.workspace),
+        teams=[SharedTeamRulesRead.model_validate(team) for team in shared.teams],
+    )
+
+
+def _layer(overrides: MetricRulesOverridesWrite) -> dict[str, object]:
+    # In a file a null names no override, the same as leaving the rule out.
+    return {name: value for name, value in overrides.changes().items() if value is not None}
+
+
+def _shared(payload: SharedRulesWrite) -> SharedRules:
+    return SharedRules(
+        workspace=_layer(payload.workspace),
+        teams=tuple(
+            SharedTeamRules(team.name, team.external_id, _layer(team.overrides))
+            for team in payload.teams
+        ),
+    )
+
+
+@router.post(
+    "/api/organizations/{organization_id}/metric-rules/import",
+    response_model=MetricRulesImportRead,
+)
+async def import_rules(
+    organization_id: UUID,
+    payload: SharedRulesWrite,
+    service: MetricRulesServiceDep,
+    session: SessionDep,
+    runner: RecomputeRunnerDep,
+) -> MetricRulesImportRead:
+    async with runner.paused() as queue:  # before writing; see _save
+        result = await service.import_rules(organization_id, _shared(payload))
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Organization {organization_id} not found",
+            )
+        await session.commit()
+        if result.change.scopes:
+            queue(organization_id, result.change.scopes)
+    return MetricRulesImportRead(
+        imported_teams=list(result.imported_teams),
+        skipped_teams=list(result.skipped_teams),
+        rules=MetricRulesViewRead.model_validate(result.change.view),
     )
 
 

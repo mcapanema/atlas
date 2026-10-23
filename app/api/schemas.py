@@ -580,3 +580,50 @@ class MetricRulesViewRead(BaseModel):
     overrides: dict[str, Any]
     effective: MetricRulesRead
     recompute: RecomputeStatusRead
+
+
+SharedRulesFormat = Literal["atlas-metric-rules"]
+
+
+class SharedTeamRulesRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    external_id: str | None
+    overrides: dict[str, Any]
+
+
+class SharedRulesRead(BaseModel):
+    """An exported rules file (ADR-0019): no Atlas UUIDs, teams by source id and name."""
+
+    format: SharedRulesFormat = "atlas-metric-rules"
+    version: Literal[1] = 1
+    exported_at: datetime
+    workspace: dict[str, Any]
+    teams: list[SharedTeamRulesRead]
+
+
+class SharedTeamRulesWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    external_id: str | None = None
+    overrides: MetricRulesOverridesWrite
+
+
+class SharedRulesWrite(BaseModel):
+    """An imported rules file; each layer is validated exactly like a PATCH body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    format: SharedRulesFormat
+    version: Literal[1]
+    exported_at: datetime | None = None
+    workspace: MetricRulesOverridesWrite
+    teams: list[SharedTeamRulesWrite] = Field(default_factory=list)
+
+
+class MetricRulesImportRead(BaseModel):
+    imported_teams: list[str]
+    skipped_teams: list[str]
+    rules: MetricRulesViewRead
