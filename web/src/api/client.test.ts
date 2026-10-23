@@ -70,6 +70,26 @@ describe("apiFetch", () => {
     );
   });
 
+  it("names a nested field by its full path, so a team's error says which team", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              loc: ["body", "teams", 1, "overrides", "reopen_completion"],
+              msg: "Input should be 'last' or 'first'",
+            },
+          ],
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(apiFetch("/api/things")).rejects.toThrow(
+      "teams[1].overrides.reopen_completion: Input should be 'last' or 'first'",
+    );
+  });
+
   it("falls back to the status code when detail is neither a string nor a list", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: { nested: true } }), {
