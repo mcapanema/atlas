@@ -44,11 +44,15 @@ def _folded(name: str) -> str:
 
 
 def _candidates(entry: SharedTeamRules, teams: Sequence[Team]) -> list[Team]:
-    """The team with the entry's external id, else every team with its name."""
+    """The team with the entry's external id, else every team with its name.
+
+    External ids are unique (`teams.external_id`), so only a name can match
+    several teams.
+    """
     if entry.external_id is not None:
-        by_id = [t for t in teams if t.external_id == entry.external_id]
-        if by_id:
-            return by_id
+        by_id = next((t for t in teams if t.external_id == entry.external_id), None)
+        if by_id is not None:
+            return [by_id]
     return [t for t in teams if _folded(t.name) == _folded(entry.name)]
 
 
