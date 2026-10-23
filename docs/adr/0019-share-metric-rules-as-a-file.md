@@ -44,7 +44,10 @@ UUIDs differ between installs and can't identify a team in a shared file.
 - A new rule needs no format change: an older file simply doesn't name it.
   Renaming or reshaping a rule's value is a breaking change and needs
   `version` 2 plus an upgrade path for version-1 files.
-- Re-importing an install's own export is a no-op, even when a team's stored
-  layer predates a validation rule (a layer the file leaves as stored is
-  checked like an unnamed team's): no row is rewritten and
-  no history is recomputed.
+- Re-importing an install's own export is a no-op: no row is rewritten and
+  no history is recomputed. That holds even when a team's stored layer
+  predates a domain rule (a range or cross-field check), because a layer the
+  file leaves as stored is checked like an unnamed team's. A stored value
+  that predates a field-level schema check (a value outside a rule's allowed
+  choices, a malformed holiday) still makes the file a 422: the import body
+  is validated like a PATCH before any stored layer is read.
