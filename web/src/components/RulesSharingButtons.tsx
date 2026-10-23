@@ -1,7 +1,7 @@
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Modal, Space, Tooltip } from "antd";
-import { useRef, useState } from "react";
+import { Alert, Button, Modal, Space, Typography } from "antd";
+import { useId, useRef, useState } from "react";
 
 import { fetchSharedRules, useImportMetricRules, type RulesImportResult } from "../api/metricRules";
 import type { Organization } from "../api/organizations";
@@ -46,7 +46,9 @@ export function RulesSharingButtons({
     importRules.reset();
     exportRules.reset();
   };
-  const lockedTitle = disabled ? "Save or discard your edits first" : undefined;
+  // Visible text, not a tooltip: a disabled button takes no keyboard focus.
+  const lockedNote = useId();
+  const describedBy = disabled ? lockedNote : undefined;
 
   const chooseFile = async (file: File) => {
     clearOutcome();
@@ -73,29 +75,32 @@ export function RulesSharingButtons({
         {/* With unsaved edits, Export would quietly save the stored rules. Each
             button also waits for the other's request: clearOutcome() resets a
             pending mutation, which drops its onImported callback. */}
-        <Tooltip title={lockedTitle}>
-          <Button
-            icon={<DownloadOutlined />}
-            disabled={disabled || importRules.isPending}
-            onClick={() => {
-              clearOutcome();
-              exportRules.mutate();
-            }}
-            loading={exportRules.isPending}
-          >
-            Export
-          </Button>
-        </Tooltip>
-        <Tooltip title={lockedTitle}>
-          <Button
-            icon={<UploadOutlined />}
-            disabled={disabled || exportRules.isPending}
-            onClick={() => fileInput.current?.click()}
-            loading={importRules.isPending}
-          >
-            Import
-          </Button>
-        </Tooltip>
+        <Button
+          icon={<DownloadOutlined />}
+          aria-describedby={describedBy}
+          disabled={disabled || importRules.isPending}
+          onClick={() => {
+            clearOutcome();
+            exportRules.mutate();
+          }}
+          loading={exportRules.isPending}
+        >
+          Export
+        </Button>
+        <Button
+          icon={<UploadOutlined />}
+          aria-describedby={describedBy}
+          disabled={disabled || exportRules.isPending}
+          onClick={() => fileInput.current?.click()}
+          loading={importRules.isPending}
+        >
+          Import
+        </Button>
+        {disabled && (
+          <Typography.Text type="secondary" id={lockedNote}>
+            Save or discard your edits to export or import.
+          </Typography.Text>
+        )}
         <input
           ref={fileInput}
           type="file"

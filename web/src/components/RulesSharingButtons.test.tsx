@@ -132,6 +132,16 @@ describe("RulesSharingButtons", () => {
     expect(screen.getByRole("button", { name: /export$/i })).toBeDisabled();
   });
 
+  it("says why both buttons are locked, visibly and to assistive tech", () => {
+    mockFetch();
+    renderWithClient(<RulesSharingButtons organization={ORG} disabled onImported={vi.fn()} />);
+
+    const reason = "Save or discard your edits to export or import.";
+    expect(screen.getByText(reason)).toBeVisible();
+    expect(screen.getByRole("button", { name: /export$/i })).toHaveAccessibleDescription(reason);
+    expect(screen.getByRole("button", { name: /import$/i })).toHaveAccessibleDescription(reason);
+  });
+
   it("offers exactly one control per action", () => {
     mockFetch();
     renderWithClient(
