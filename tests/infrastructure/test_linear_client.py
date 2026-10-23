@@ -134,9 +134,90 @@ async def test_execute_does_not_retry_4xx_other_than_429() -> None:
     assert calls == 1
 
 
-async def test_execute_wraps_transport_errors() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ReadTimeout("read timed out"),
+        httpx.WriteTimeout("write timed out"),
+        httpx.PoolTimeout("pool timed out"),
+        httpx.UnsupportedProtocol("unsupported protocol 'ftp://'"),
+        httpx.ProxyError("proxy refused"),
+        httpx.LocalProtocolError("illegal header"),
+    ],
+    ids=lambda error: type(error).__name__,
+)
+async def test_execute_does_not_retry_non_transient_transport_errors(
+    error: httpx.TransportError, recorded_sleeps: list[float]
+) -> None:
+    calls = 0
 
-    with pytest.raises(LinearAPIError, match="request failed"):
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise error
+
+    with pytest.raises(LinearAPIError, match=f"request failed: {error}"):
         await _client(handler).execute("{ viewer { id } }")
+
+    assert calls == 1
+    assert recorded_sleeps == []
+
+
+async def test_client_uses_a_short_connect_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.extensions["timeout"] == {
+            "connect": 5.0,
+            "read": 30.0,
+            "write": 30.0,
+            "pool": 30.0,
+        }
+        return httpx.Response(200, json={"data": {}})
+
+    assert await _client(handler).execute("{ viewer { id } }") == {}
+
+
+async def test_execute_retries_transport_errors(recorded_sleeps: list[float]) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ConnectError("[Errno -2] Name or service not known")
+        return httpx.Response(200, json={"data": {"viewer": {"id": "u1"}}})
+
+    data = await _client(handler).execute("{ viewer { id } }")
+
+    assert data == {"viewer": {"id": "u1"}}
+    assert calls == 2
+    assert recorded_sleeps == [1.0]
+
+
+async def test_execute_gives_up_on_persistent_transport_errors(
+    recorded_sleeps: list[float],
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("[Errno -2] Name or service not known")
+
+    with pytest.raises(LinearAPIError, match=r"request failed: .*Name or service not known"):
+        await _client(handler).execute("{ viewer { id } }")
+
+    assert recorded_sleeps == [1.0, 2.0]
+
+
+async def test_transport_errors_and_5xx_share_the_retry_budget(
+    recorded_sleeps: list[float],
+) -> None:
+    outcomes: list[Exception | int] = [httpx.ConnectTimeout("slow"), 503, 503]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return httpx.Response(outcome, json={})
+
+    with pytest.raises(LinearAPIError, match="503"):
+        await _client(handler).execute("{ viewer { id } }")
+
+    assert outcomes == []
+    assert recorded_sleeps == [1.0, 2.0]
