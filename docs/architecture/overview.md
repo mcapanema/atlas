@@ -52,7 +52,8 @@ persisted events; these slices have no tables and no migrations.
   (`summary.py`) — plus daily CFD phase counts (`cfd.py`), adaptive
   daily/weekly throughput buckets (`history.py`), and a lead-time histogram
   (`distribution.py`). The metrics slice also computes Queue Time, Touch
-  Time, Aging WIP, and a Delivery Health composite (predictability /
+  Time, Aging WIP (each item flagged when over the aging percentile or
+  blocked now), and a Delivery Health composite (predictability /
   efficiency / flow / stability / risk, each 0–100 with a reason string and a
   band read against the same cutoffs as the overall score;
   predictability scores how often recent cycles met the team's own service

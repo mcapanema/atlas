@@ -105,7 +105,7 @@ Atlas reads your Linear workspace and turns its history into these views
   tile, with its reason, for each weighted component (predictability, flow,
   stability, risk; efficiency is off by default — weights live in Metric
   rules); Lead/Cycle Time, Throughput, WIP, Blocked Time and Flow
-  Efficiency; flow charts; Aging WIP with each item's owner; and a Monte
+  Efficiency; flow charts; Aging WIP with each item's owner and a tag on blocked items; and a Monte
   Carlo completion forecast. **Sync team** refreshes just that team from
   Linear.
 - **Projects** (`/projects`) — the same analytics scoped to one project.

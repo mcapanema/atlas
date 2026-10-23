@@ -54,8 +54,12 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
     { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
     {
       title: "",
-      render: (_, item) =>
-        item.over_percentile ? <Tag color="red">over P{percentile}</Tag> : null,
+      render: (_, item) => (
+        <>
+          {item.over_percentile && <Tag color="red">over P{percentile}</Tag>}
+          {item.blocked && <Tag color="orange">blocked</Tag>}
+        </>
+      ),
     },
   ];
 }
@@ -228,7 +232,7 @@ function AgingWipCard({
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. Flagged when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules).`}
+      help={`Items currently in progress, oldest first. Flagged when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). Tagged blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"

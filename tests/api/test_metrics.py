@@ -225,6 +225,32 @@ async def test_aging_wip_end_to_end(
     assert aging_item["age_seconds"] > 5 * 86400
 
 
+async def test_aging_wip_flags_items_blocked_now(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    org_id, team_id = await create_org_and_team(client)
+    await use_calendar_days(sessionmaker, org_id)
+    for title, events in (
+        ("Waiting", (("started", 6), ("blocked", 2))),
+        ("Unblocked", (("started", 6), ("blocked", 4), ("unblocked", 3))),
+    ):
+        item = (
+            await client.post("/api/work-items", json={"team_id": team_id, "title": title})
+        ).json()
+        for type_, days in events:
+            await client.post(
+                "/api/events",
+                json={"work_item_id": item["id"], "type": type_, "occurred_at": days_ago(days)},
+            )
+
+    body = (await client.get(f"/api/metrics/aging-wip?team_id={team_id}")).json()
+
+    assert {i["title"]: i["blocked"] for i in body["items"]} == {
+        "Waiting": True,
+        "Unblocked": False,
+    }
+
+
 async def test_aging_wip_shows_the_stored_assignee(
     client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> None:

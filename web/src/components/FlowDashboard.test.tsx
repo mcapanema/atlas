@@ -183,6 +183,22 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("over P85")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.queryByText("blocked")).not.toBeInTheDocument();
+  });
+
+  it("tags blocked aging items next to the percentile flag", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [{ ...agingWipFixture.items[0], blocked: true }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const blocked = await screen.findByText("blocked");
+    const over = screen.getByText("over P85");
+    expect(over.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("marks unassigned aging items", async () => {

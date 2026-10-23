@@ -153,6 +153,7 @@ export const agingWipFixture = {
       age_seconds: 518400,
       over_percentile: true,
       assignee: "Ada Lovelace",
+      blocked: false,
     },
   ],
 };
