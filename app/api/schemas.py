@@ -380,6 +380,7 @@ class AgingItemRead(BaseModel):
     age_seconds: float
     over_percentile: bool
     assignee: str | None
+    blocked: bool
 
 
 class AgingWipRead(BaseModel):

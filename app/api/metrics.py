@@ -251,6 +251,7 @@ async def get_aging_wip(
                 age_seconds=item.age.total_seconds(),
                 over_percentile=item.over_percentile,
                 assignee=item.assignee,
+                blocked=item.blocked,
             )
             for item in aging.items
         ],

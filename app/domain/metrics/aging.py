@@ -3,7 +3,7 @@
 Flags items whose in-progress age exceeds the scope's recent completed
 cycle-time percentile (the team's aging_percentile over its aging_history_days,
 P85 over 90 days by default) — the "this one is quietly getting stuck" signal
-from Kanban practice.
+from Kanban practice. Items whose block is still open are marked `blocked`.
 """
 
 from collections.abc import Sequence
@@ -29,6 +29,8 @@ class AgingItem:
     over_percentile: bool
     # Who the item is assigned to as of the last sync; None when unassigned.
     assignee: str | None = None
+    # A blocked period is open at `now`, under the scope's metric rules.
+    blocked: bool = False
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,7 @@ def compute_aging_wip(
                 age=age,
                 over_percentile=limit is not None and age > limit,
                 assignee=item.assignee,
+                blocked=sample.blocked_now,
             )
         )
     aging.sort(key=lambda a: a.age, reverse=True)

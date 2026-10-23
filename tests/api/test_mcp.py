@@ -389,6 +389,7 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 age_seconds=item.age.total_seconds(),
                 over_percentile=item.over_percentile,
                 assignee=item.assignee,
+                blocked=item.blocked,
             )
             for item in domain.items
         ],
