@@ -116,6 +116,28 @@ describe("MetricRulesPage", { timeout: 15_000 }, () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
+  it("offers export and import for the workspace default, not for a team", async () => {
+    mockApi(view());
+    const { unmount } = renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    expect(await screen.findByRole("button", { name: /export/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import/i })).toBeEnabled();
+    unmount();
+
+    renderWithClient(<MetricRulesPage />, [`/metric-rules?team=${teamFixture.id}`]);
+    expect(await screen.findByText("Lifecycle")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /export/i })).not.toBeInTheDocument();
+  });
+
+  it("disables import while the form has unsaved edits", async () => {
+    mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    fireEvent.click(await screen.findByRole("switch", { name: RESTART }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /import/i })).toBeDisabled());
+  });
+
   it("saves just the rule that changed", async () => {
     const calls = mockApi(view());
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);

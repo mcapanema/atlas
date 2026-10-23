@@ -6,12 +6,14 @@ import { useMetricRules, useRecomputeHistory, type RecomputeStatus } from "../ap
 import { useOrganizations, type Organization } from "../api/organizations";
 import { useTeams } from "../api/teams";
 import { MetricRulesForm } from "../components/MetricRulesForm";
+import { RulesSharingButtons } from "../components/RulesSharingButtons";
 import {
   recomputeOrganization,
   scopeFromParams,
   scopeOptions,
   scopeParams,
   scopeValue,
+  workspaceOrganization,
 } from "../lib/rulesScope";
 
 function RecomputeBanner({
@@ -86,6 +88,7 @@ function RulesWorkspace({
   const recompute = useRecomputeHistory(organizationId);
   const { reset: resetRecompute } = recompute;
   const scopeKey = scopeValue(scope);
+  const workspace = workspaceOrganization(scope, organizations);
   // A failed recompute belongs to the scope it ran for.
   useEffect(() => resetRecompute(), [scopeKey, resetRecompute]);
 
@@ -108,6 +111,7 @@ function RulesWorkspace({
           </Button>
         )}
       </Space>
+      {workspace && <RulesSharingButtons organization={workspace} disabled={dirty} />}
       {recompute.isError && (
         <Alert
           type="error"
