@@ -306,7 +306,9 @@ class MetricRulesService:
             for t in teams
             if _changed(
                 resolve_layers(before, _layer(team_rows.get(t.id)), subject=f"team {t.id}"),
-                resolve_rules(workspace, layers[t.id]),
+                # A team already invalid was let through above; it resolves
+                # like the resolver's built-in fallback, the same as `before`.
+                resolve_layers(workspace, layers[t.id], subject=f"team {t.id}"),
             )
         ]
         await self._replace_layer(workspace_row, organization_id, None, workspace)

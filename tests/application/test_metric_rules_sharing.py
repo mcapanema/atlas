@@ -4,6 +4,7 @@ import pytest
 
 from app.application.metric_rules.service import MetricRulesService, ScopeRef
 from app.application.metric_rules.sharing import SharedRules, SharedTeamRules, match_teams
+from app.domain.metric_rules.entities import RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
@@ -191,6 +192,20 @@ async def test_import_rejects_workspace_conflicting_with_an_unlisted_team() -> N
     workspace_row = await repo.get(ORG.id)  # the setup's recompute status created it
     assert workspace_row is not None
     assert workspace_row.overrides == {}
+
+
+async def test_import_skips_an_unlisted_team_whose_stored_rules_were_already_invalid() -> None:
+    service, repo, _ = _world()
+    # Legacy/corrupt layer: healthy_min below the default warning_min (40).
+    await repo.save(
+        RuleOverrides(organization_id=ORG.id, team_id=ALPHA.id, overrides={"healthy_min": 30})
+    )
+
+    result = await service.import_rules(ORG.id, SharedRules({"aging_percentile": 70}))
+
+    assert result is not None
+    assert result.change.view.overrides == {"aging_percentile": 70}
+    assert ScopeRef(team_id=BETA.id) in result.change.scopes
 
 
 async def test_import_into_unknown_organization_is_none() -> None:
