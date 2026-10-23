@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from uuid import UUID
 
 from app.application.metric_rules.resolver import resolve_layers
+from app.application.metric_rules.sharing import SharedRules, SharedTeamRules
 from app.domain._time import utcnow
 from app.domain.metric_rules.entities import (
     DEFAULT_RULES,
@@ -229,6 +230,22 @@ class MetricRulesService:
             recompute=status,
         )
         return RulesChange(view=view, organization_id=team.organization_id, scopes=scopes)
+
+    async def export_rules(self, organization_id: UUID) -> SharedRules | None:
+        """The workspace layer and every team's non-empty layer, teams by name."""
+        if await self._organizations.get(organization_id) is None:
+            return None
+        rows = await self._overrides.list_for_organization(organization_id)
+        workspace = next((dict(r.overrides) for r in rows if r.team_id is None), {})
+        own = {r.team_id: dict(r.overrides) for r in rows if r.team_id is not None and r.overrides}
+        teams = sorted(
+            (t for t in await self._organization_teams(organization_id) if t.id in own),
+            key=lambda t: t.name,
+        )
+        return SharedRules(
+            workspace=workspace,
+            teams=tuple(SharedTeamRules(t.name, t.external_id, own[t.id]) for t in teams),
+        )
 
     async def organization_scopes(self, organization_id: UUID) -> tuple[ScopeRef, ...]:
         """Every team of the organization and every project they own."""
