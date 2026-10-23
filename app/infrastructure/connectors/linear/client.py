@@ -16,6 +16,19 @@ LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 
 _MAX_ATTEMPTS = 3
 
+# Network failures a retry can outlive. A read timeout isn't one: Linear
+# accepted the request and is hanging, so retrying triples the worst case.
+_RETRYABLE_TRANSPORT_ERRORS: tuple[type[httpx.TransportError], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadError,
+    httpx.WriteError,
+    httpx.RemoteProtocolError,
+)
+
+# Connecting gets its own short timeout so a DNS/connect outage fails fast.
+_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+
 # Seam for tests: monkeypatch this to record delays instead of sleeping.
 _sleep = asyncio.sleep
 
@@ -101,17 +114,17 @@ class LinearGraphQLClient:
     async def _post(
         self, query: str, variables: dict[str, Any] | None
     ) -> httpx.Response | httpx.TransportError:
-        """The response, or the network failure (DNS, connect, timeout) to retry."""
+        """The response, or a network failure in _RETRYABLE_TRANSPORT_ERRORS."""
         # ponytail: a fresh connection per attempt. Hold a pooled AsyncClient
         # (with aclose()) if sync latency over many pages ever matters.
         try:
-            async with httpx.AsyncClient(transport=self._transport, timeout=30.0) as http:
+            async with httpx.AsyncClient(transport=self._transport, timeout=_TIMEOUT) as http:
                 return await http.post(
                     self._base_url,
                     json={"query": query, "variables": variables or {}},
                     headers={"Authorization": self._api_key},
                 )
-        except httpx.TransportError as exc:
+        except _RETRYABLE_TRANSPORT_ERRORS as exc:
             return exc
         except httpx.HTTPError as exc:
             raise LinearAPIError(f"Linear API request failed: {exc}") from exc

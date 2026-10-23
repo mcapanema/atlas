@@ -134,12 +134,49 @@ async def test_execute_does_not_retry_4xx_other_than_429() -> None:
     assert calls == 1
 
 
-async def test_execute_wraps_transport_errors(recorded_sleeps: list[float]) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
+async def test_execute_does_not_retry_permanent_transport_errors(
+    recorded_sleeps: list[float],
+) -> None:
+    calls = 0
 
-    with pytest.raises(LinearAPIError, match="request failed"):
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.UnsupportedProtocol("Request URL has an unsupported protocol 'ftp://'")
+
+    with pytest.raises(LinearAPIError, match=r"request failed: .*unsupported protocol"):
         await _client(handler).execute("{ viewer { id } }")
+
+    assert calls == 1
+    assert recorded_sleeps == []
+
+
+async def test_execute_does_not_retry_read_timeouts(recorded_sleeps: list[float]) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ReadTimeout("timed out")
+
+    with pytest.raises(LinearAPIError, match="request failed: timed out"):
+        await _client(handler).execute("{ viewer { id } }")
+
+    assert calls == 1
+    assert recorded_sleeps == []
+
+
+async def test_client_uses_a_short_connect_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.extensions["timeout"] == {
+            "connect": 5.0,
+            "read": 30.0,
+            "write": 30.0,
+            "pool": 30.0,
+        }
+        return httpx.Response(200, json={"data": {}})
+
+    assert await _client(handler).execute("{ viewer { id } }") == {}
 
 
 async def test_execute_retries_transport_errors(recorded_sleeps: list[float]) -> None:
@@ -174,7 +211,7 @@ async def test_execute_gives_up_on_persistent_transport_errors(
 async def test_transport_errors_and_5xx_share_the_retry_budget(
     recorded_sleeps: list[float],
 ) -> None:
-    outcomes: list[Exception | int] = [httpx.ReadTimeout("slow"), 503, 503]
+    outcomes: list[Exception | int] = [httpx.ConnectTimeout("slow"), 503, 503]
 
     def handler(request: httpx.Request) -> httpx.Response:
         outcome = outcomes.pop(0)
