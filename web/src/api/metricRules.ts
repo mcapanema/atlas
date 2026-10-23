@@ -150,8 +150,15 @@ export function useImportMetricRules(organizationId: string) {
         method: "POST",
         body: JSON.stringify(file),
       }),
-    // Rules move numbers on every page, and the teams' rules changed too.
-    onSuccess: () => queryClient.invalidateQueries(),
+    onSuccess: (result) => {
+      // The fresh view lands first, so a form remounted on success starts from it.
+      const workspace = rulesKey({ kind: "organization", id: organizationId });
+      queryClient.setQueryData(workspace, result.rules);
+      // Rules move numbers on every page, and the teams' rules changed too.
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryHash !== JSON.stringify(workspace),
+      });
+    },
   });
 }
 

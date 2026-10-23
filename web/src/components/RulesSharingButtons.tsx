@@ -23,9 +23,12 @@ function SharingOutcome({ error, result }: { error?: string; result?: RulesImpor
 export function RulesSharingButtons({
   organization,
   disabled,
+  onImported,
 }: {
   organization: Organization;
   disabled: boolean;
+  // After a successful import, once the workspace view holds the imported rules.
+  onImported: () => void;
 }) {
   const [modal, modalContext] = Modal.useModal();
   const [fileError, setFileError] = useState<string>();
@@ -51,7 +54,7 @@ export function RulesSharingButtons({
       content:
         "This replaces the workspace default and the rules of every team the file names. Teams it doesn't name keep their rules.",
       okText: "Import and replace",
-      onOk: () => importRules.mutate(parsed),
+      onOk: () => importRules.mutate(parsed, { onSuccess: onImported }),
     });
   };
 

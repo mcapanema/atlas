@@ -80,6 +80,8 @@ function RulesWorkspace({
 }) {
   const [searchParams] = useSearchParams();
   const [dirty, setDirty] = useState(false);
+  // Bumped by an import: the form remounts from the imported rules, not its old draft.
+  const [imports, setImports] = useState(0);
   const [switchScope, modalContext] = useScopeSwitch(dirty);
   const teams = useTeams();
   const scope = scopeFromParams(searchParams, organizations[0]?.id);
@@ -111,7 +113,13 @@ function RulesWorkspace({
           </Button>
         )}
       </Space>
-      {workspace && <RulesSharingButtons organization={workspace} disabled={dirty} />}
+      {workspace && (
+        <RulesSharingButtons
+          organization={workspace}
+          disabled={dirty}
+          onImported={() => setImports((n) => n + 1)}
+        />
+      )}
       {recompute.isError && (
         <Alert
           type="error"
@@ -130,7 +138,7 @@ function RulesWorkspace({
             canRetry={organizationId !== undefined}
           />
           <MetricRulesForm
-            key={scopeValue(scope)}
+            key={`${scopeValue(scope)}:${imports}`}
             scope={scope}
             view={view.data}
             onDirtyChange={setDirty}

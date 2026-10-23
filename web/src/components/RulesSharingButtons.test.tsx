@@ -53,7 +53,9 @@ describe("RulesSharingButtons", () => {
 
   it("exports the workspace rules as a named JSON file", async () => {
     const fetchMock = mockFetch();
-    renderWithClient(<RulesSharingButtons organization={ORG} disabled={false} />);
+    renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /export/i }));
 
@@ -66,7 +68,7 @@ describe("RulesSharingButtons", () => {
       jsonResponse({ imported_teams: [], skipped_teams: ["Ghost"], rules: {} }),
     );
     const { container } = renderWithClient(
-      <RulesSharingButtons organization={ORG} disabled={false} />,
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
     );
 
     chooseFile(container, JSON.stringify(SHARED));
@@ -85,7 +87,7 @@ describe("RulesSharingButtons", () => {
   it("shows an error for a non-JSON file without calling the API", async () => {
     const fetchMock = mockFetch();
     const { container } = renderWithClient(
-      <RulesSharingButtons organization={ORG} disabled={false} />,
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
     );
 
     chooseFile(container, "not json");
@@ -99,7 +101,7 @@ describe("RulesSharingButtons", () => {
       jsonResponse({ detail: "Team Platform: aging_percentile must be between 50 and 99" }, 422),
     );
     const { container } = renderWithClient(
-      <RulesSharingButtons organization={ORG} disabled={false} />,
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
     );
 
     chooseFile(container, JSON.stringify(SHARED));
@@ -112,7 +114,7 @@ describe("RulesSharingButtons", () => {
 
   it("disables Import while the form has unsaved edits", () => {
     mockFetch();
-    renderWithClient(<RulesSharingButtons organization={ORG} disabled />);
+    renderWithClient(<RulesSharingButtons organization={ORG} disabled onImported={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /import/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /export/i })).toBeEnabled();
