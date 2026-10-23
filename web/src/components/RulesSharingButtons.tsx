@@ -1,7 +1,7 @@
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Modal, Space, Tooltip, Upload } from "antd";
-import { useState } from "react";
+import { Alert, Button, Modal, Space, Tooltip } from "antd";
+import { useRef, useState } from "react";
 
 import { fetchSharedRules, useImportMetricRules, type RulesImportResult } from "../api/metricRules";
 import type { Organization } from "../api/organizations";
@@ -39,9 +39,17 @@ export function RulesSharingButtons({
       downloadJson(rulesFileName(organization.name, shared.exported_at), shared),
   });
 
-  const chooseFile = async (file: File) => {
+  const fileInput = useRef<HTMLInputElement>(null);
+  // Only the latest action's outcome shows.
+  const clearOutcome = () => {
     setFileError(undefined);
     importRules.reset();
+    exportRules.reset();
+  };
+  const lockedTitle = disabled ? "Save or discard your edits first" : undefined;
+
+  const chooseFile = async (file: File) => {
+    clearOutcome();
     let parsed: unknown;
     try {
       parsed = parseRulesFile(await file.text());
@@ -62,28 +70,42 @@ export function RulesSharingButtons({
     <Space direction="vertical" style={{ width: "100%" }}>
       {modalContext}
       <Space wrap>
-        <Button
-          icon={<DownloadOutlined />}
-          onClick={() => exportRules.mutate()}
-          loading={exportRules.isPending}
-        >
-          Export
-        </Button>
-        <Tooltip title={disabled ? "Save or discard your edits first" : undefined}>
-          <Upload
-            accept=".json,application/json"
-            showUploadList={false}
+        {/* With unsaved edits, Export would quietly save the stored rules. */}
+        <Tooltip title={lockedTitle}>
+          <Button
+            icon={<DownloadOutlined />}
             disabled={disabled}
-            beforeUpload={(file) => {
-              void chooseFile(file);
-              return false; // read here; never sent by AntD
+            onClick={() => {
+              clearOutcome();
+              exportRules.mutate();
             }}
+            loading={exportRules.isPending}
           >
-            <Button icon={<UploadOutlined />} disabled={disabled} loading={importRules.isPending}>
-              Import
-            </Button>
-          </Upload>
+            Export
+          </Button>
         </Tooltip>
+        <Tooltip title={lockedTitle}>
+          <Button
+            icon={<UploadOutlined />}
+            disabled={disabled}
+            onClick={() => fileInput.current?.click()}
+            loading={importRules.isPending}
+          >
+            Import
+          </Button>
+        </Tooltip>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // Cleared so choosing the same file again still fires a change.
+            event.target.value = "";
+            if (file) void chooseFile(file);
+          }}
+        />
       </Space>
       <SharingOutcome
         error={fileError ?? importRules.error?.message ?? exportRules.error?.message}

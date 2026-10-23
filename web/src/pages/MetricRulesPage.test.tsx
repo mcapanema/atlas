@@ -164,13 +164,14 @@ describe("MetricRulesPage", { timeout: 15_000 }, () => {
     expect(screen.getByRole("button", { name: /import$/i })).toBeEnabled();
   });
 
-  it("disables import while the form has unsaved edits", async () => {
+  it("disables export and import while the form has unsaved edits", async () => {
     mockApi(view());
     renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
 
     fireEvent.click(await screen.findByRole("switch", { name: RESTART }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: /import$/i })).toBeDisabled());
+    expect(screen.getByRole("button", { name: /export$/i })).toBeDisabled();
   });
 
   it("saves just the rule that changed", async () => {

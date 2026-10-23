@@ -16,11 +16,18 @@ const SHARED = {
   teams: [{ name: "Ghost", external_id: null, overrides: { aging_percentile: 70 } }],
 };
 
-function mockFetch(importResponse: Response = jsonResponse({})) {
+const IMPORTED = { imported_teams: [], skipped_teams: ["Ghost"], ambiguous_teams: [], rules: {} };
+const SUMMARY = "Imported the workspace default. Skipped 1 team not found here: Ghost.";
+
+function mockFetch(
+  importResponse: Response = jsonResponse({}),
+  exportResponse: Response = jsonResponse(SHARED),
+) {
+  // Each call gets a fresh body: a Response can be read only once.
   const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
     (input) =>
       Promise.resolve(
-        requestUrl(input).endsWith("/import") ? importResponse : jsonResponse(SHARED),
+        (requestUrl(input).endsWith("/import") ? importResponse : exportResponse).clone(),
       ),
   );
   vi.stubGlobal("fetch", fetchMock);
@@ -117,11 +124,78 @@ describe("RulesSharingButtons", () => {
     ).toBeInTheDocument();
   });
 
-  it("disables Import while the form has unsaved edits", () => {
+  it("disables Export and Import while the form has unsaved edits", () => {
     mockFetch();
     renderWithClient(<RulesSharingButtons organization={ORG} disabled onImported={vi.fn()} />);
 
-    expect(screen.getByRole("button", { name: /import/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /export/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /import$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /export$/i })).toBeDisabled();
+  });
+
+  it("offers exactly one control per action", () => {
+    mockFetch();
+    renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
+
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Export",
+      "Import",
+    ]);
+  });
+
+  it("clears a failed export's error when an import succeeds", async () => {
+    mockFetch(jsonResponse(IMPORTED), jsonResponse({ detail: "export broke" }, 500));
+    const { container } = renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /export$/i }));
+    expect(await screen.findByText("export broke")).toBeInTheDocument();
+    chooseFile(container, JSON.stringify(SHARED));
+    fireEvent.click(await screen.findByRole("button", { name: "Import and replace" }));
+
+    expect(await screen.findByText(SUMMARY)).toBeInTheDocument();
+    expect(screen.queryByText("export broke")).not.toBeInTheDocument();
+  });
+
+  it("clears an import's summary when exporting", async () => {
+    mockFetch(jsonResponse(IMPORTED));
+    const { container } = renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
+    chooseFile(container, JSON.stringify(SHARED));
+    fireEvent.click(await screen.findByRole("button", { name: "Import and replace" }));
+    expect(await screen.findByText(SUMMARY)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /export$/i }));
+
+    await waitFor(() => expect(screen.queryByText(SUMMARY)).not.toBeInTheDocument());
+  });
+
+  it("opens the file picker from the Import button", () => {
+    mockFetch();
+    const pick = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
+    renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /import$/i }));
+
+    expect(pick).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets you choose the same file again", () => {
+    mockFetch();
+    // A browser fires no change for an unchanged value; jsdom can't show
+    // that, so assert the input is cleared after each read.
+    const setValue = vi.spyOn(HTMLInputElement.prototype, "value", "set");
+    const { container } = renderWithClient(
+      <RulesSharingButtons organization={ORG} disabled={false} onImported={vi.fn()} />,
+    );
+
+    chooseFile(container, JSON.stringify(SHARED));
+
+    expect(setValue).toHaveBeenCalledWith("");
   });
 });
