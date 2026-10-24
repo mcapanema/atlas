@@ -120,13 +120,14 @@ def _delivery() -> DeliveryContext:
     )
 
 
-def _aging_item(title: str, days: int, over: bool) -> AgingItem:
+def _aging_item(title: str, days: int, over: bool, *, blocked: bool = False) -> AgingItem:
     return AgingItem(
         work_item_id=uuid4(),
         title=title,
         state="In Progress",
         age=timedelta(days=days),
         over_percentile=over,
+        blocked=blocked,
     )
 
 
@@ -228,6 +229,22 @@ def test_render_aging_names_the_percentile_and_history() -> None:
     )
 
 
+def test_render_aging_flags_blocked_items() -> None:
+    aging = AgingWip(
+        now=_NOW,
+        cycle_time_percentile=timedelta(days=4),
+        items=(
+            _aging_item("Fix login", 6, True, blocked=True),
+            _aging_item("Docs", 2, False, blocked=True),
+        ),
+    )
+
+    assert render_aging(aging).splitlines()[1:] == [
+        '- "Fix login" — In Progress, 6.0 working days [over p85] [blocked]',
+        '- "Docs" — In Progress, 2.0 working days [blocked]',
+    ]
+
+
 def test_render_aging_makes_no_history_claim_without_a_reference() -> None:
     # Review focus 2: nothing completed in the aging history -> no line to name.
     aging = AgingWip(
@@ -248,6 +265,46 @@ def test_render_aging_caps_rows_and_appends_the_hint() -> None:
 
     assert len([line for line in lines if line.startswith("- ")]) == 3
     assert lines[-1] == "... and 2 more (ask for the rest)"
+
+
+def test_render_aging_names_blocked_items_past_the_cap() -> None:
+    items = tuple(_aging_item(f"Item {i}", 12 - i, False, blocked=i in (4, 7)) for i in range(8))
+    aging = AgingWip(now=_NOW, cycle_time_percentile=None, items=items)
+
+    rows = [line for line in render_aging(aging, limit=3).splitlines() if line.startswith("- ")]
+
+    assert [row.split('"')[1] for row in rows] == ["Item 0", "Item 1", "Item 2", "Item 4", "Item 7"]
+    assert rows[3].endswith("[blocked]")
+    assert render_aging(aging, limit=3).splitlines()[-1] == "... and 3 more"
+
+
+def test_render_aging_omits_the_more_line_when_every_item_is_listed() -> None:
+    items = (
+        _aging_item("Old", 9, False),
+        _aging_item("Young blocked", 2, False, blocked=True),
+    )
+    aging = AgingWip(now=_NOW, cycle_time_percentile=None, items=items)
+
+    text = render_aging(aging, limit=1)
+
+    assert '"Young blocked"' in text
+    assert "more" not in text
+
+
+def test_render_meeting_context_names_a_young_blocked_item() -> None:
+    items = tuple(_aging_item(f"Item {i}", 14 - i, False, blocked=i == 11) for i in range(14))
+    context = MeetingContext(
+        delivery=_delivery(),
+        health=DeliveryHealth(
+            window_start=_START, window_end=_NOW, score=None, band=None, components=()
+        ),
+        aging=AgingWip(now=_NOW, cycle_time_percentile=None, items=items),
+    )
+
+    text = render_meeting_context(context)
+
+    assert '- "Item 11" — In Progress, 3.0 working days [blocked]' in text
+    assert "... and 3 more" in text
 
 
 def test_render_aging_reports_nothing_in_progress() -> None:

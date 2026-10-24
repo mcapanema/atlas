@@ -73,6 +73,30 @@ export interface MetricRulesView {
   recompute: RecomputeStatus;
 }
 
+/** One team's layer in a shared rules file: teams travel by source id and name (ADR-0019). */
+export interface SharedTeamRules {
+  name: string;
+  external_id: string | null;
+  overrides: Partial<MetricRules>;
+}
+
+/** An exported rules file. */
+export interface SharedRules {
+  format: "atlas-metric-rules";
+  version: 1;
+  exported_at: string;
+  workspace: Partial<MetricRules>;
+  teams: SharedTeamRules[];
+}
+
+export interface RulesImportResult {
+  imported_teams: string[];
+  skipped_teams: string[];
+  // The file's teams whose name matches several teams here.
+  ambiguous_teams: string[];
+  rules: MetricRulesView;
+}
+
 /** The workspace default (an organization) or one team. */
 export type RulesScope = { kind: "organization"; id: string } | { kind: "team"; id: string };
 
@@ -110,6 +134,31 @@ export function useSaveMetricRules(scope: RulesScope) {
       // Rules move numbers on every page: refetch everything else cached.
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] !== "metric-rules",
+      });
+    },
+  });
+}
+
+export function fetchSharedRules(organizationId: string): Promise<SharedRules> {
+  return apiFetch<SharedRules>(`/api/organizations/${organizationId}/metric-rules/export`);
+}
+
+export function useImportMetricRules(organizationId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    // The parsed file goes as-is; the API validates its shape.
+    mutationFn: (file: unknown) =>
+      apiFetch<RulesImportResult>(`/api/organizations/${organizationId}/metric-rules/import`, {
+        method: "POST",
+        body: JSON.stringify(file),
+      }),
+    onSuccess: (result) => {
+      // The fresh view lands first, so a form remounted on success starts from it.
+      const workspace = rulesKey({ kind: "organization", id: organizationId });
+      queryClient.setQueryData(workspace, result.rules);
+      // Rules move numbers on every page, and the teams' rules changed too.
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryHash !== JSON.stringify(workspace),
       });
     },
   });
