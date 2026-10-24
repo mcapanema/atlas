@@ -1,9 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import { teamFixture } from "../test/fixtures";
-import { recomputeOrganization, scopeFromParams, scopeParams } from "./rulesScope";
+import {
+  recomputeOrganization,
+  scopeFromParams,
+  scopeParams,
+  workspaceOrganization,
+} from "./rulesScope";
 
 describe("scope helpers", () => {
+  it("finds the organization of a workspace scope only", () => {
+    const org = { id: "o1", name: "Acme", created_at: "2026-07-01T00:00:00Z" };
+    expect(workspaceOrganization({ kind: "organization", id: "o1" }, [org])).toBe(org);
+    expect(workspaceOrganization({ kind: "organization", id: "o2" }, [org])).toBeUndefined();
+    expect(workspaceOrganization({ kind: "team", id: "o1" }, [org])).toBeUndefined();
+    expect(workspaceOrganization(undefined, [org])).toBeUndefined();
+  });
+
   it("prefers a team, then the org param, then the first organization", () => {
     expect(scopeFromParams(new URLSearchParams("team=t1&org=o1"), "o0")).toEqual({
       kind: "team",

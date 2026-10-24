@@ -77,3 +77,21 @@ def test_items_carry_the_current_assignee() -> None:
         ("Owned", "Ada Lovelace"),
         ("Unowned", None),
     ]
+
+
+def test_items_blocked_now_are_flagged() -> None:
+    item, sample = _pair("Waiting", started_days=5, completed_days=None)
+    free = _pair("Free", started_days=3, completed_days=None)
+
+    aging = compute_aging_wip([(item, replace(sample, blocked_now=True)), free], now=NOW)
+
+    assert [(a.title, a.blocked) for a in aging.items] == [("Waiting", True), ("Free", False)]
+
+
+def test_items_blocked_in_the_past_are_not_flagged() -> None:
+    item, sample = _pair("Was stuck", started_days=5, completed_days=None)
+    lifted = replace(sample, blocked_time=timedelta(days=2), blocked_now=False)
+
+    aging = compute_aging_wip([(item, lifted)], now=NOW)
+
+    assert aging.items[0].blocked is False

@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from uuid import UUID
 
 from app.application.metric_rules.resolver import resolve_layers
+from app.application.metric_rules.sharing import SharedRules, SharedTeamRules, match_teams
 from app.domain._time import utcnow
 from app.domain.metric_rules.entities import (
     DEFAULT_RULES,
@@ -65,6 +66,19 @@ class TeamRulesSummary:
 
     effective: MetricRules
     custom: bool
+
+
+@dataclass(frozen=True)
+class RulesImport:
+    """An imported rules file: the saved change, and which of its teams landed."""
+
+    change: RulesChange
+    # Local team names, sorted.
+    imported_teams: tuple[str, ...]
+    # The file's names for teams matching none here, in file order.
+    skipped_teams: tuple[str, ...]
+    # The file's names for teams matching several here by name, in file order.
+    ambiguous_teams: tuple[str, ...]
 
 
 def _layer(row: RuleOverrides | None) -> dict[str, object]:
@@ -123,6 +137,31 @@ def _check_team(
             )
             return
         raise ValueError(f"Conflicts with team {team.name}'s own rules: {exc}") from exc
+
+
+def _imported_layer(
+    team: Team,
+    before: Mapping[str, object],
+    workspace: Mapping[str, object],
+    own: Mapping[str, object],
+    entry: SharedTeamRules | None,
+) -> dict[str, object]:
+    """The team's layer after an import; raises ValueError if it can't resolve.
+
+    A team the file names takes the file's layer; any other keeps its own,
+    which must still resolve under the imported workspace. A named team whose
+    file layer equals its stored one counts as kept, so an install can
+    re-import its own export even if a stored layer predates a validation rule.
+    """
+    if entry is None or dict(entry.overrides) == dict(own):
+        _check_team(team, before, workspace, own)
+        return dict(own)
+    layer = dict(entry.overrides)
+    try:
+        resolve_rules(workspace, layer)
+    except ValueError as exc:
+        raise ValueError(f"Team {team.name}: {exc}") from exc
+    return layer
 
 
 class MetricRulesService:
@@ -229,6 +268,90 @@ class MetricRulesService:
             recompute=status,
         )
         return RulesChange(view=view, organization_id=team.organization_id, scopes=scopes)
+
+    async def export_rules(self, organization_id: UUID) -> SharedRules | None:
+        """The workspace layer and every team's non-empty layer, teams by name."""
+        if await self._organizations.get(organization_id) is None:
+            return None
+        rows = await self._overrides.list_for_organization(organization_id)
+        workspace = next((dict(r.overrides) for r in rows if r.team_id is None), {})
+        own = {r.team_id: dict(r.overrides) for r in rows if r.team_id is not None and r.overrides}
+        teams = sorted(
+            (t for t in await self._organization_teams(organization_id) if t.id in own),
+            key=lambda t: t.name,
+        )
+        return SharedRules(
+            workspace=workspace,
+            teams=tuple(SharedTeamRules(t.name, t.external_id, own[t.id]) for t in teams),
+        )
+
+    async def import_rules(self, organization_id: UUID, shared: SharedRules) -> RulesImport | None:
+        """Replace the workspace layer and each matched team's; nothing is saved on ValueError."""
+        if await self._organizations.get(organization_id) is None:
+            return None
+        for layer in (shared.workspace, *(entry.overrides for entry in shared.teams)):
+            _reject_unknown(layer)
+        teams = await self._organization_teams(organization_id)
+        match = match_teams(shared.teams, teams)
+        matched = match.matched
+        rows = await self._overrides.list_for_organization(organization_id)
+        workspace_row = next((r for r in rows if r.team_id is None), None)
+        team_rows = {r.team_id: r for r in rows if r.team_id is not None}
+        before = _layer(workspace_row)
+        workspace = dict(shared.workspace)
+        after = resolve_rules(workspace)
+        layers = {
+            t.id: _imported_layer(
+                t, before, workspace, _layer(team_rows.get(t.id)), matched.get(t.id)
+            )
+            for t in teams
+        }
+        changed = [
+            t.id
+            for t in teams
+            if _changed(
+                resolve_layers(before, _layer(team_rows.get(t.id)), subject=f"team {t.id}"),
+                # A team already invalid was let through above; it resolves
+                # like the resolver's built-in fallback, the same as `before`.
+                resolve_layers(workspace, layers[t.id], subject=f"team {t.id}"),
+            )
+        ]
+        await self._replace_layer(workspace_row, organization_id, None, workspace)
+        for team_id in matched:
+            await self._replace_layer(
+                team_rows.get(team_id), organization_id, team_id, layers[team_id]
+            )
+        scopes = await self._scopes_for(changed)
+        status = await self._mark_running(organization_id) if scopes else _status(workspace_row)
+        view = RulesView(
+            built_in=DEFAULT_RULES,
+            inherited=DEFAULT_RULES,
+            overrides=workspace,
+            effective=after,
+            recompute=status,
+        )
+        return RulesImport(
+            change=RulesChange(view=view, organization_id=organization_id, scopes=scopes),
+            imported_teams=tuple(sorted(t.name for t in teams if t.id in matched)),
+            skipped_teams=match.missing,
+            ambiguous_teams=match.ambiguous,
+        )
+
+    async def _replace_layer(
+        self,
+        row: RuleOverrides | None,
+        organization_id: UUID,
+        team_id: UUID | None,
+        layer: dict[str, object],
+    ) -> None:
+        """Save `layer` as the row's overrides, only when they differ."""
+        if row is None:
+            if layer:
+                await self._overrides.save(
+                    RuleOverrides(organization_id=organization_id, team_id=team_id, overrides=layer)
+                )
+        elif layer != dict(row.overrides):  # a same-value import must not bump "last edited"
+            await self._overrides.save(replace(row, overrides=layer, updated_at=utcnow()))
 
     async def organization_scopes(self, organization_id: UUID) -> tuple[ScopeRef, ...]:
         """Every team of the organization and every project they own."""

@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.domain.events.entities import EventType
+from app.infrastructure.connectors.linear import client as client_module
 from app.infrastructure.connectors.linear import datasource as datasource_module
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
@@ -196,6 +197,30 @@ async def test_fetch_work_items_maps_label_history_with_names() -> None:
         (EventType.LABEL_REMOVED, "Blocked"),
     ]
     assert items[0].labels == ("Blocked",)
+
+
+async def test_pagination_recovers_from_a_dropped_connection_mid_way(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def no_sleep(delay: float) -> None:
+        pass
+
+    monkeypatch.setattr(client_module, "_sleep", no_sleep)
+    second_page_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal second_page_calls
+        if json.loads(request.content)["variables"]["after"] is None:
+            return _page("teams", [{"id": "t1", "name": "Platform"}], end_cursor="c1")
+        second_page_calls += 1
+        if second_page_calls == 1:
+            raise httpx.ReadError("connection reset by peer")
+        return _page("teams", [{"id": "t2", "name": "Growth"}])
+
+    teams = await _datasource(handler).fetch_teams()
+
+    assert [t.external_id for t in teams] == ["t1", "t2"]
+    assert second_page_calls == 2
 
 
 async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:

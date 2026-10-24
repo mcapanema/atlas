@@ -10,7 +10,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 // FastAPI puts human-readable errors in a string `detail` field; 422
 // validation errors carry an array of {loc, msg} there, joined as
-// "<field>: <msg>".
+// "<field>: <msg>" — a nested field by its path, e.g. "teams[1].overrides.x".
 async function errorDetail(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: unknown } | null;
@@ -23,7 +23,16 @@ async function errorDetail(response: Response): Promise<string> {
   return `Request failed: ${response.status}`;
 }
 
+const REQUEST_PARTS = new Set(["body", "query", "path"]);
+
+function fieldPath(loc: (string | number)[]): string {
+  return loc
+    .filter((part, i) => i > 0 || !REQUEST_PARTS.has(String(part)))
+    .map((part, i) => (typeof part === "number" ? `[${part}]` : i === 0 ? part : `.${part}`))
+    .join("");
+}
+
 function validationMessage(item: { loc?: (string | number)[]; msg?: string }): string {
-  const field = item.loc?.at(-1);
-  return field === undefined ? String(item.msg) : `${field}: ${String(item.msg)}`;
+  const field = item.loc ? fieldPath(item.loc) : "";
+  return field === "" ? String(item.msg) : `${field}: ${String(item.msg)}`;
 }

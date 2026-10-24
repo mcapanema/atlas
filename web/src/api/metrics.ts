@@ -111,6 +111,8 @@ export interface AgingItem {
   over_percentile: boolean;
   /** Who the item is assigned to as of the last sync; null when unassigned. */
   assignee: string | null;
+  /** A blocked period is open right now, under the team's metric rules. */
+  blocked: boolean;
 }
 
 export interface AgingWip {

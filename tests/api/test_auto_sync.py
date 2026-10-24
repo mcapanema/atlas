@@ -1,9 +1,11 @@
 import asyncio
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, time
 from unittest import mock
 from uuid import UUID
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -98,6 +100,44 @@ async def test_tick_records_failure_and_does_not_retry_the_slot(
     assert run is not None
     assert run.error == "boom"
     assert await runner.tick() == 0
+
+
+async def test_tick_logs_a_data_source_error_without_traceback(
+    sessionmaker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
+) -> None:
+    org_id = await _seed(sessionmaker)
+    runner = AutoSyncRunner(sessionmaker, _FailingSource, recompute=RecomputeRunner(sessionmaker))
+
+    with caplog.at_level(logging.WARNING, logger="app.api.auto_sync"):
+        await runner.tick()
+
+    [record] = [r for r in caplog.records if r.name == "app.api.auto_sync"]
+    assert record.levelno == logging.WARNING
+    assert record.exc_info is None
+    assert str(org_id) in record.getMessage()
+    assert "boom" in record.getMessage()
+
+
+class _BuggySource(FakeDataSource):
+    async def fetch_teams(self) -> list[SourceTeam]:
+        raise RuntimeError("bug")
+
+
+async def test_tick_logs_an_unexpected_error_with_traceback(
+    sessionmaker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
+) -> None:
+    org_id = await _seed(sessionmaker)
+    runner = AutoSyncRunner(sessionmaker, _BuggySource, recompute=RecomputeRunner(sessionmaker))
+
+    with caplog.at_level(logging.WARNING, logger="app.api.auto_sync"):
+        await runner.tick()
+
+    [record] = [r for r in caplog.records if r.name == "app.api.auto_sync"]
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
+    run = await _last_run(sessionmaker, org_id)
+    assert run is not None
+    assert run.error == "bug"
 
 
 async def test_tick_records_unconfigured_connector(

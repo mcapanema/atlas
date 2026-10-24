@@ -6,12 +6,14 @@ import { useMetricRules, useRecomputeHistory, type RecomputeStatus } from "../ap
 import { useOrganizations, type Organization } from "../api/organizations";
 import { useTeams } from "../api/teams";
 import { MetricRulesForm } from "../components/MetricRulesForm";
+import { RulesSharingButtons } from "../components/RulesSharingButtons";
 import {
   recomputeOrganization,
   scopeFromParams,
   scopeOptions,
   scopeParams,
   scopeValue,
+  workspaceOrganization,
 } from "../lib/rulesScope";
 
 function RecomputeBanner({
@@ -78,6 +80,8 @@ function RulesWorkspace({
 }) {
   const [searchParams] = useSearchParams();
   const [dirty, setDirty] = useState(false);
+  // Bumped by an import: the form remounts from the imported rules, not its old draft.
+  const [imports, setImports] = useState(0);
   const [switchScope, modalContext] = useScopeSwitch(dirty);
   const teams = useTeams();
   const scope = scopeFromParams(searchParams, organizations[0]?.id);
@@ -86,6 +90,7 @@ function RulesWorkspace({
   const recompute = useRecomputeHistory(organizationId);
   const { reset: resetRecompute } = recompute;
   const scopeKey = scopeValue(scope);
+  const workspace = workspaceOrganization(scope, organizations);
   // A failed recompute belongs to the scope it ran for.
   useEffect(() => resetRecompute(), [scopeKey, resetRecompute]);
 
@@ -108,6 +113,13 @@ function RulesWorkspace({
           </Button>
         )}
       </Space>
+      {workspace && (
+        <RulesSharingButtons
+          organization={workspace}
+          disabled={dirty}
+          onImported={() => setImports((n) => n + 1)}
+        />
+      )}
       {recompute.isError && (
         <Alert
           type="error"
@@ -126,7 +138,7 @@ function RulesWorkspace({
             canRetry={organizationId !== undefined}
           />
           <MetricRulesForm
-            key={scopeValue(scope)}
+            key={`${scopeValue(scope)}:${imports}`}
             scope={scope}
             view={view.data}
             onDirtyChange={setDirty}
