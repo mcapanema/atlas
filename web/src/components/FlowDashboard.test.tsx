@@ -180,10 +180,39 @@ describe("FlowDashboard", () => {
 
     await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
     expect(screen.getByText("Stuck item")).toBeInTheDocument();
-    expect(screen.getByText("over P85")).toBeInTheDocument();
+    const flag = screen.getByLabelText("over P85");
+    expect(flag).toHaveTextContent("> P85");
+    expect(flag).toHaveClass("delta", "delta--bad");
+    // The flag lives in the Age cell, beside the figure it qualifies.
+    expect(flag.closest("td")).toHaveTextContent("6d");
+    expect(screen.getByText("Age")).toHaveClass("th-help");
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.queryByText("blocked")).not.toBeInTheDocument();
+  });
+
+  it("names the percentile threshold on the Age header", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Age"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("P85 of recent cycle times: 3d");
+  });
+
+  it("shows a plain Age header when there is no percentile history", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        cycle_time_percentile_seconds: null,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("Age")).not.toHaveClass("th-help");
+    expect(screen.queryByLabelText("over P85")).toBeNull();
   });
 
   it("tags blocked aging items next to the percentile flag", async () => {
@@ -197,7 +226,7 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const blocked = await screen.findByText("blocked");
-    const over = screen.getByText("over P85");
+    const over = screen.getByLabelText("over P85");
     expect(over.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -439,7 +468,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "t1" }} />);
 
-    expect(await screen.findByText("over P70")).toBeInTheDocument();
+    expect(await screen.findByLabelText("over P70")).toBeInTheDocument();
   });
 
   it("explains how the throughput chart is built", async () => {

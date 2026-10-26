@@ -34,10 +34,11 @@ import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { HealthPanel } from "./HealthPanel";
+import { HelpLabel } from "./HelpLabel";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 
-function agingColumns(percentile: number): ColumnsType<AgingItem> {
+function agingColumns(percentile: number, thresholdSeconds: number | null): ColumnsType<AgingItem> {
   return [
     {
       title: "Title",
@@ -51,15 +52,31 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
         assignee ?? <Typography.Text type="secondary">Unassigned</Typography.Text>,
     },
     { title: "State", dataIndex: "state" },
-    { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
     {
-      title: "",
+      title:
+        thresholdSeconds === null ? (
+          "Age"
+        ) : (
+          <HelpLabel
+            label="Age"
+            help={`Time in progress. Flagged past P${percentile} of recent cycle times: ${formatSeconds(thresholdSeconds)}.`}
+          />
+        ),
+      className: "fig",
       render: (_, item) => (
         <>
-          {item.over_percentile && <Tag color="red">over P{percentile}</Tag>}
-          {item.blocked && <Tag color="orange">blocked</Tag>}
+          {formatSeconds(item.age_seconds)}
+          {item.over_percentile && (
+            <span className="delta-slot delta delta--bad" aria-label={`over P${percentile}`}>
+              &gt; P{percentile}
+            </span>
+          )}
         </>
       ),
+    },
+    {
+      title: "",
+      render: (_, item) => item.blocked && <Tag color="orange">blocked</Tag>,
     },
   ];
 }
@@ -224,10 +241,12 @@ function AgingWipCard({
   items,
   percentile,
   historyDays,
+  thresholdSeconds,
 }: {
   items: AgingItem[];
   percentile: number;
   historyDays: number;
+  thresholdSeconds: number | null;
 }) {
   return (
     <ChartCard
@@ -238,7 +257,7 @@ function AgingWipCard({
         size="small"
         rowKey="work_item_id"
         pagination={false}
-        columns={agingColumns(percentile)}
+        columns={agingColumns(percentile, thresholdSeconds)}
         dataSource={items}
       />
     </ChartCard>
@@ -290,6 +309,7 @@ export function FlowDashboard({
           items={aging.data.items}
           percentile={aging.data.percentile}
           historyDays={aging.data.history_days}
+          thresholdSeconds={aging.data.cycle_time_percentile_seconds}
         />
       )}
       <ForecastCard scope={scope} filters={filters} />
