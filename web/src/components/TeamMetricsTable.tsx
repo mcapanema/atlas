@@ -11,6 +11,7 @@ import type { CellState, TeamRow } from "../lib/teamRows";
 import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { HealthBadge } from "./HealthBadge";
 import { HelpLabel } from "./HelpLabel";
+import { SlottedTitle } from "./SlottedTitle";
 import { Sparkline } from "./Sparkline";
 
 // AntD's Table doesn't forward aria props to the <table> element itself;
@@ -149,7 +150,11 @@ function buildColumns(
       // the as-of line and restated per-column in each tooltip; at 1288px the
       // suffixes were pushing the last column behind a horizontal scrollbar.
       key: "throughput",
-      title: columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`),
+      title: (
+        <SlottedTitle slot={showDeltas}>
+          {columnHelp("Throughput", `Work items completed in the last ${periodLabel}.`)}
+        </SlottedTitle>
+      ),
       align: "right",
       sorter: (a, b) => (a.metrics?.completed ?? -1) - (b.metrics?.completed ?? -1),
       render: (_, row) => (
@@ -173,9 +178,13 @@ function buildColumns(
     },
     {
       key: "lead-time",
-      title: columnHelp(
-        "Lead time P85",
-        `85% of items completed in the last ${periodLabel} took no longer than this, created → done.`,
+      title: (
+        <SlottedTitle slot={showDeltas}>
+          {columnHelp(
+            "Lead time P85",
+            `85% of items completed in the last ${periodLabel} took no longer than this, created → done.`,
+          )}
+        </SlottedTitle>
       ),
       align: "right",
       sorter: (a, b) =>

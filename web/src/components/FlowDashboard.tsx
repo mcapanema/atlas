@@ -34,10 +34,28 @@ import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { HealthPanel } from "./HealthPanel";
+import { HelpLabel } from "./HelpLabel";
+import { SlottedTitle } from "./SlottedTitle";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 
-function agingColumns(percentile: number): ColumnsType<AgingItem> {
+/** "the last day" / "the last 90 days" — the aging history window, in prose. */
+function lastDays(days: number): string {
+  return days === 1 ? "the last day" : `the last ${days} days`;
+}
+
+function agingColumns({
+  percentile,
+  historyDays,
+  thresholdSeconds,
+  slot,
+}: {
+  percentile: number;
+  historyDays: number;
+  thresholdSeconds: number | null;
+  /** Some row is flagged: every row reserves the flag slot, so ages share a right edge. */
+  slot: boolean;
+}): ColumnsType<AgingItem> {
   return [
     {
       title: "Title",
@@ -50,15 +68,47 @@ function agingColumns(percentile: number): ColumnsType<AgingItem> {
       render: (assignee: string | null) =>
         assignee ?? <Typography.Text type="secondary">Unassigned</Typography.Text>,
     },
-    { title: "State", dataIndex: "state" },
-    { title: "Age", className: "fig", render: (_, item) => formatSeconds(item.age_seconds) },
     {
-      title: "",
+      title: "State",
+      dataIndex: "state",
+      render: (state: string, item) => (
+        <span className="aging-state">
+          {state}
+          {item.blocked && (
+            <Tag className="aging-blocked" color="warning" variant="outlined">
+              Blocked
+            </Tag>
+          )}
+        </span>
+      ),
+    },
+    {
+      title: (
+        <SlottedTitle slot={slot}>
+          {thresholdSeconds === null ? (
+            "Age"
+          ) : (
+            <HelpLabel
+              label="Age"
+              help={`Time in progress. Flagged past P${percentile} of cycle times over ${lastDays(historyDays)}: ${formatSeconds(thresholdSeconds)}.`}
+            />
+          )}
+        </SlottedTitle>
+      ),
+      align: "right",
       render: (_, item) => (
-        <>
-          {item.over_percentile && <Tag color="red">over P{percentile}</Tag>}
-          {item.blocked && <Tag color="orange">blocked</Tag>}
-        </>
+        <span className="aging-age">
+          <span className="fig">{formatSeconds(item.age_seconds)}</span>
+          {slot && (
+            <span className="delta-slot">
+              {item.over_percentile && (
+                <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
+                  &gt; P{percentile}
+                </span>
+              )}
+            </span>
+          )}
+        </span>
       ),
     },
   ];
@@ -224,21 +274,28 @@ function AgingWipCard({
   items,
   percentile,
   historyDays,
+  thresholdSeconds,
 }: {
   items: AgingItem[];
   percentile: number;
   historyDays: number;
+  thresholdSeconds: number | null;
 }) {
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. Flagged when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). Tagged blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. An item's age is flagged (> P${percentile}) when it has been in progress longer than ${percentile}% of the items completed in ${lastDays(historyDays)} took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"
         rowKey="work_item_id"
         pagination={false}
-        columns={agingColumns(percentile)}
+        columns={agingColumns({
+          percentile,
+          historyDays,
+          thresholdSeconds,
+          slot: items.some((item) => item.over_percentile),
+        })}
         dataSource={items}
       />
     </ChartCard>
@@ -290,6 +347,7 @@ export function FlowDashboard({
           items={aging.data.items}
           percentile={aging.data.percentile}
           historyDays={aging.data.history_days}
+          thresholdSeconds={aging.data.cycle_time_percentile_seconds}
         />
       )}
       <ForecastCard scope={scope} filters={filters} />

@@ -162,6 +162,25 @@ h5 {
 .delta--flat {
   color: var(--ant-color-text-tertiary);
 }
+/* Aging WIP: the Blocked chip rides beside the state it qualifies, and the
+   pair never wraps. */
+.aging-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+/* The age never wraps, so "4d 23h" can't split across lines. No flex gap:
+   the .delta-slot brings its own margin. */
+.aging-age {
+  white-space: nowrap;
+}
+/* Light warning text (#c8800d) is 3.05:1 on the tag's tint — darkening it
+   toward ink clears AA at 11px; dark mode already passes. Scoped under
+   .aging-state to outrank AntD's four-class outlined-status selector. */
+:root:not([data-theme="dark"]) .aging-state .ant-tag.aging-blocked {
+  color: color-mix(in srgb, var(--ant-color-warning-text) 75%, black);
+}
 .health-badge {
   display: inline-flex;
   align-items: center;

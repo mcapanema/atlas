@@ -180,13 +180,128 @@ describe("FlowDashboard", () => {
 
     await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
     expect(screen.getByText("Stuck item")).toBeInTheDocument();
-    expect(screen.getByText("over P85")).toBeInTheDocument();
+    // role="img": an aria-label on a bare span is not announced.
+    const flag = screen.getByRole("img", { name: "over P85" });
+    expect(flag).toHaveTextContent("> P85");
+    expect(flag).toHaveClass("delta", "delta--bad");
+    // Figure and flag ride in one no-wrap group, so "4d 23h" never splits.
+    expect(flag.closest(".aging-age")).toHaveTextContent("6d");
+    // The flag lives in the Age cell, beside the figure it qualifies.
+    expect(flag.closest("td")).toHaveTextContent("6d");
+    expect(screen.getByText("Age")).toHaveClass("th-help");
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.queryByText("blocked")).not.toBeInTheDocument();
+    expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader")).toHaveLength(4);
   });
 
-  it("tags blocked aging items next to the percentile flag", async () => {
+  it("names the percentile threshold on the Age header", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Age"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Time in progress. Flagged past P85 of cycle times over the last 90 days: 3d.",
+    );
+  });
+
+  it("explains the aging flags in the card help", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Aging WIP"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "An item's age is flagged (> P85) when it has been in progress longer than 85% of the items completed in the last 90 days took",
+    );
+  });
+
+  it("shows a plain Age header when there is no percentile history", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        cycle_time_percentile_seconds: null,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("Age")).not.toHaveClass("th-help");
+    expect(screen.queryByLabelText("over P85")).toBeNull();
+  });
+
+  it("right-aligns ages and reserves the flag slot on every row", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [
+          { ...agingWipFixture.items[0] },
+          {
+            ...agingWipFixture.items[0],
+            work_item_id: "55555555-5555-5555-5555-555555555555",
+            title: "Fresh item",
+            age_seconds: 86400,
+            over_percentile: false,
+          },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Fresh item");
+    const ages = [...document.querySelectorAll(".aging-age")].map((n) => n.closest("td"));
+    expect(ages).toHaveLength(2);
+    // AntD applies `align` as an inline text-align on the cell.
+    ages.forEach((td) => expect(td).toHaveStyle({ textAlign: "right" }));
+    // The unflagged row keeps an empty slot so its figure ends where the flagged one does.
+    const slot = screen
+      .getByText("Fresh item")
+      .closest("tr")!
+      .querySelector(".aging-age .delta-slot");
+    expect(slot).not.toBeNull();
+    expect(slot).toBeEmptyDOMElement();
+    // The header reserves it too, so "Age" ends over the figures.
+    expect(
+      screen.getByRole("columnheader", { name: "Age" }).querySelector(".delta-slot"),
+    ).not.toBeNull();
+    // Only the figure is mono; the flag matches the Executive delta chips.
+    expect(screen.getByText("6d")).toHaveClass("fig");
+    expect(screen.getByRole("img", { name: "over P85" }).closest(".fig")).toBeNull();
+  });
+
+  it("reserves no flag slot when nothing is over the percentile", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Stuck item");
+    expect(document.querySelector(".aging-age")).not.toBeNull();
+    expect(document.querySelector(".aging-age .delta-slot")).toBeNull();
+    expect(
+      screen.getByRole("columnheader", { name: "Age" }).querySelector(".delta-slot"),
+    ).toBeNull();
+  });
+
+  it("says 'the last day' for a one-day aging history", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, history_days: 1 } });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Age"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Flagged past P85 of cycle times over the last day: 3d.",
+    );
+  });
+
+  it("marks blocked aging items beside their state", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
@@ -196,9 +311,11 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const blocked = await screen.findByText("blocked");
-    const over = screen.getByText("over P85");
-    expect(over.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const blocked = await screen.findByText("Blocked");
+    // Light-mode AA fix for the warning text lives on this class (index.css).
+    expect(blocked).toHaveClass("aging-blocked");
+    expect(blocked.closest("td")).toHaveTextContent("in_progress");
+    expect(blocked.closest("td")).not.toBe(screen.getByLabelText("over P85").closest("td"));
   });
 
   it("marks unassigned aging items", async () => {
@@ -439,7 +556,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "t1" }} />);
 
-    expect(await screen.findByText("over P70")).toBeInTheDocument();
+    expect(await screen.findByLabelText("over P70")).toBeInTheDocument();
   });
 
   it("explains how the throughput chart is built", async () => {
