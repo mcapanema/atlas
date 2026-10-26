@@ -202,7 +202,7 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Age"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Time in progress. Flagged past P85 of the last 90 days' cycle times: 3d.",
+      "Time in progress. Flagged past P85 of cycle times over the last 90 days: 3d.",
     );
   });
 
@@ -263,6 +263,13 @@ describe("FlowDashboard", () => {
       .querySelector(".aging-age .delta-slot");
     expect(slot).not.toBeNull();
     expect(slot).toBeEmptyDOMElement();
+    // The header reserves it too, so "Age" ends over the figures.
+    expect(
+      screen.getByRole("columnheader", { name: "Age" }).querySelector(".delta-slot"),
+    ).not.toBeNull();
+    // Only the figure is mono; the flag matches the Executive delta chips.
+    expect(screen.getByText("6d")).toHaveClass("fig");
+    expect(screen.getByRole("img", { name: "over P85" }).closest(".fig")).toBeNull();
   });
 
   it("reserves no flag slot when nothing is over the percentile", async () => {
@@ -278,6 +285,20 @@ describe("FlowDashboard", () => {
     await screen.findByText("Stuck item");
     expect(document.querySelector(".aging-age")).not.toBeNull();
     expect(document.querySelector(".aging-age .delta-slot")).toBeNull();
+    expect(
+      screen.getByRole("columnheader", { name: "Age" }).querySelector(".delta-slot"),
+    ).toBeNull();
+  });
+
+  it("says 'the last day' for a one-day aging history", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, history_days: 1 } });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Age"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Flagged past P85 of cycle times over the last day: 3d.",
+    );
   });
 
   it("marks blocked aging items beside their state", async () => {

@@ -162,15 +162,16 @@ h5 {
 .delta--flat {
   color: var(--ant-color-text-tertiary);
 }
-/* Aging WIP: each flag rides beside the state or figure it qualifies, and
-   the group never wraps, so "4d 23h" can't split across lines. */
+/* Aging WIP: the Blocked chip rides beside the state it qualifies, and the
+   pair never wraps. */
 .aging-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
 }
-/* No flex gap here: the .delta-slot brings its own margin. */
+/* The age never wraps, so "4d 23h" can't split across lines. No flex gap:
+   the .delta-slot brings its own margin. */
 .aging-age {
   white-space: nowrap;
 }

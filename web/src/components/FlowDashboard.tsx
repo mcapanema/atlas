@@ -35,8 +35,14 @@ import { EChart } from "./EChart";
 import { ForecastCard } from "./ForecastCard";
 import { HealthPanel } from "./HealthPanel";
 import { HelpLabel } from "./HelpLabel";
+import { SlottedTitle } from "./SlottedTitle";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
+
+/** "the last day" / "the last 90 days" — the aging history window, in prose. */
+function lastDays(days: number): string {
+  return days === 1 ? "the last day" : `the last ${days} days`;
+}
 
 function agingColumns({
   percentile,
@@ -77,20 +83,22 @@ function agingColumns({
       ),
     },
     {
-      title:
-        thresholdSeconds === null ? (
-          "Age"
-        ) : (
-          <HelpLabel
-            label="Age"
-            help={`Time in progress. Flagged past P${percentile} of the last ${historyDays} days' cycle times: ${formatSeconds(thresholdSeconds)}.`}
-          />
-        ),
-      className: "fig",
+      title: (
+        <SlottedTitle slot={slot}>
+          {thresholdSeconds === null ? (
+            "Age"
+          ) : (
+            <HelpLabel
+              label="Age"
+              help={`Time in progress. Flagged past P${percentile} of cycle times over ${lastDays(historyDays)}: ${formatSeconds(thresholdSeconds)}.`}
+            />
+          )}
+        </SlottedTitle>
+      ),
       align: "right",
       render: (_, item) => (
         <span className="aging-age">
-          {formatSeconds(item.age_seconds)}
+          <span className="fig">{formatSeconds(item.age_seconds)}</span>
           {slot && (
             <span className="delta-slot">
               {item.over_percentile && (
@@ -276,7 +284,7 @@ function AgingWipCard({
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. An item's age is flagged (> P${percentile}) when it has been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. An item's age is flagged (> P${percentile}) when it has been in progress longer than ${percentile}% of the items completed in ${lastDays(historyDays)} took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"

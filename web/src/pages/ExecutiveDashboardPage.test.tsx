@@ -506,6 +506,12 @@ describe("ExecutiveDashboardPage", () => {
       expect(screen.getByText("17").nextElementSibling).toHaveClass("delta-slot"),
     );
     expect(screen.getByText("23").nextElementSibling).toHaveClass("delta-slot");
+    // Slotted headers reserve it too, so each label ends over its figures.
+    const header = (label: string) =>
+      screen.getAllByRole("columnheader").find((th) => th.textContent === label);
+    expect(header("Throughput")?.querySelector(".delta-slot")).not.toBeNull();
+    expect(header("Lead time P85")?.querySelector(".delta-slot")).not.toBeNull();
+    expect(header("WIP")?.querySelector(".delta-slot")).toBeNull();
   });
 
   it("keeps a missing figure's dash on the figures' edge", async () => {
