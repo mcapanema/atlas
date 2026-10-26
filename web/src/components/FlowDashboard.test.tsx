@@ -202,7 +202,20 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     fireEvent.focus(await screen.findByText("Age"));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("P85 of recent cycle times: 3d");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Time in progress. Flagged past P85 of the last 90 days' cycle times: 3d.",
+    );
+  });
+
+  it("explains the aging flags in the card help", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Aging WIP"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "An item's age is flagged (> P85) when it has been in progress longer than 85% of the items completed in the last 90 days took",
+    );
   });
 
   it("shows a plain Age header when there is no percentile history", async () => {

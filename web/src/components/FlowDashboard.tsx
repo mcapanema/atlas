@@ -38,7 +38,17 @@ import { HelpLabel } from "./HelpLabel";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 
-function agingColumns(percentile: number, thresholdSeconds: number | null): ColumnsType<AgingItem> {
+function agingColumns({
+  percentile,
+  historyDays,
+  thresholdSeconds,
+}: {
+  percentile: number;
+  historyDays: number;
+  thresholdSeconds: number | null;
+  /** Some row is flagged: every row reserves the flag slot (Task 2). */
+  slot: boolean;
+}): ColumnsType<AgingItem> {
   return [
     {
       title: "Title",
@@ -72,7 +82,7 @@ function agingColumns(percentile: number, thresholdSeconds: number | null): Colu
         ) : (
           <HelpLabel
             label="Age"
-            help={`Time in progress. Flagged past P${percentile} of recent cycle times: ${formatSeconds(thresholdSeconds)}.`}
+            help={`Time in progress. Flagged past P${percentile} of the last ${historyDays} days' cycle times: ${formatSeconds(thresholdSeconds)}.`}
           />
         ),
       className: "fig",
@@ -260,13 +270,13 @@ function AgingWipCard({
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. Age is flagged (> P${percentile}) when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. An item's age is flagged (> P${percentile}) when it has been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"
         rowKey="work_item_id"
         pagination={false}
-        columns={agingColumns(percentile, thresholdSeconds)}
+        columns={agingColumns({ percentile, historyDays, thresholdSeconds, slot: false })}
         dataSource={items}
       />
     </ChartCard>
