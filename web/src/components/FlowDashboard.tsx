@@ -42,11 +42,12 @@ function agingColumns({
   percentile,
   historyDays,
   thresholdSeconds,
+  slot,
 }: {
   percentile: number;
   historyDays: number;
   thresholdSeconds: number | null;
-  /** Some row is flagged: every row reserves the flag slot (Task 2). */
+  /** Some row is flagged: every row reserves the flag slot, so ages share a right edge. */
   slot: boolean;
 }): ColumnsType<AgingItem> {
   return [
@@ -86,12 +87,17 @@ function agingColumns({
           />
         ),
       className: "fig",
+      align: "right",
       render: (_, item) => (
         <span className="aging-age">
           {formatSeconds(item.age_seconds)}
-          {item.over_percentile && (
-            <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
-              &gt; P{percentile}
+          {slot && (
+            <span className="delta-slot">
+              {item.over_percentile && (
+                <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
+                  &gt; P{percentile}
+                </span>
+              )}
             </span>
           )}
         </span>
@@ -276,7 +282,12 @@ function AgingWipCard({
         size="small"
         rowKey="work_item_id"
         pagination={false}
-        columns={agingColumns({ percentile, historyDays, thresholdSeconds, slot: false })}
+        columns={agingColumns({
+          percentile,
+          historyDays,
+          thresholdSeconds,
+          slot: items.some((item) => item.over_percentile),
+        })}
         dataSource={items}
       />
     </ChartCard>

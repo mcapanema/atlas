@@ -162,13 +162,16 @@ h5 {
 .delta--flat {
   color: var(--ant-color-text-tertiary);
 }
-/* Aging WIP: each flag rides beside the figure or state it qualifies, and
+/* Aging WIP: each flag rides beside the state or figure it qualifies, and
    the group never wraps, so "4d 23h" can't split across lines. */
-.aging-state,
-.aging-age {
+.aging-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+/* No flex gap here: the .delta-slot brings its own margin. */
+.aging-age {
   white-space: nowrap;
 }
 /* Light warning text (#c8800d) is 3.05:1 on the tag's tint — darkening it

@@ -185,8 +185,7 @@ describe("FlowDashboard", () => {
     expect(flag).toHaveTextContent("> P85");
     expect(flag).toHaveClass("delta", "delta--bad");
     // Figure and flag ride in one no-wrap group, so "4d 23h" never splits.
-    expect(flag.parentElement).toHaveClass("aging-age");
-    expect(flag.parentElement).toHaveTextContent("6d");
+    expect(flag.closest(".aging-age")).toHaveTextContent("6d");
     // The flag lives in the Age cell, beside the figure it qualifies.
     expect(flag.closest("td")).toHaveTextContent("6d");
     expect(screen.getByText("Age")).toHaveClass("th-help");
@@ -231,6 +230,54 @@ describe("FlowDashboard", () => {
 
     expect(await screen.findByText("Age")).not.toHaveClass("th-help");
     expect(screen.queryByLabelText("over P85")).toBeNull();
+  });
+
+  it("right-aligns ages and reserves the flag slot on every row", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [
+          { ...agingWipFixture.items[0] },
+          {
+            ...agingWipFixture.items[0],
+            work_item_id: "55555555-5555-5555-5555-555555555555",
+            title: "Fresh item",
+            age_seconds: 86400,
+            over_percentile: false,
+          },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Fresh item");
+    const ages = [...document.querySelectorAll(".aging-age")].map((n) => n.closest("td"));
+    expect(ages).toHaveLength(2);
+    // AntD applies `align` as an inline text-align on the cell.
+    ages.forEach((td) => expect(td).toHaveStyle({ textAlign: "right" }));
+    // The unflagged row keeps an empty slot so its figure ends where the flagged one does.
+    const slot = screen
+      .getByText("Fresh item")
+      .closest("tr")!
+      .querySelector(".aging-age .delta-slot");
+    expect(slot).not.toBeNull();
+    expect(slot).toBeEmptyDOMElement();
+  });
+
+  it("reserves no flag slot when nothing is over the percentile", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Stuck item");
+    expect(document.querySelector(".aging-age")).not.toBeNull();
+    expect(document.querySelector(".aging-age .delta-slot")).toBeNull();
   });
 
   it("marks blocked aging items beside their state", async () => {
