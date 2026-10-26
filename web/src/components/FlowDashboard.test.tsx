@@ -188,7 +188,8 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Age")).toHaveClass("th-help");
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.queryByText("blocked")).not.toBeInTheDocument();
+    expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader")).toHaveLength(4);
   });
 
   it("names the percentile threshold on the Age header", async () => {
@@ -215,7 +216,7 @@ describe("FlowDashboard", () => {
     expect(screen.queryByLabelText("over P85")).toBeNull();
   });
 
-  it("tags blocked aging items next to the percentile flag", async () => {
+  it("marks blocked aging items beside their state", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
@@ -225,9 +226,9 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const blocked = await screen.findByText("blocked");
-    const over = screen.getByLabelText("over P85");
-    expect(over.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const blocked = await screen.findByText("Blocked");
+    expect(blocked.closest("td")).toHaveTextContent("in_progress");
+    expect(blocked.closest("td")).not.toBe(screen.getByLabelText("over P85").closest("td"));
   });
 
   it("marks unassigned aging items", async () => {

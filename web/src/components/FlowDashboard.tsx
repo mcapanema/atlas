@@ -51,7 +51,20 @@ function agingColumns(percentile: number, thresholdSeconds: number | null): Colu
       render: (assignee: string | null) =>
         assignee ?? <Typography.Text type="secondary">Unassigned</Typography.Text>,
     },
-    { title: "State", dataIndex: "state" },
+    {
+      title: "State",
+      dataIndex: "state",
+      render: (state: string, item) => (
+        <span className="aging-state">
+          {state}
+          {item.blocked && (
+            <Tag color="warning" variant="outlined">
+              Blocked
+            </Tag>
+          )}
+        </span>
+      ),
+    },
     {
       title:
         thresholdSeconds === null ? (
@@ -73,10 +86,6 @@ function agingColumns(percentile: number, thresholdSeconds: number | null): Colu
           )}
         </>
       ),
-    },
-    {
-      title: "",
-      render: (_, item) => item.blocked && <Tag color="orange">blocked</Tag>,
     },
   ];
 }
@@ -251,7 +260,7 @@ function AgingWipCard({
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. Flagged when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). Tagged blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. Age is flagged (> P${percentile}) when they have been in progress longer than ${percentile}% of the items completed in the last ${historyDays} days took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"

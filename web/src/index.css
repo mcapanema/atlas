@@ -159,6 +159,13 @@ h5 {
 :root[data-theme="dark"] .delta--bad {
   color: color-mix(in srgb, var(--ant-color-error-text) 82%, white);
 }
+/* Aging WIP: the Blocked chip rides beside the state it qualifies. */
+.aging-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
 .delta--flat {
   color: var(--ant-color-text-tertiary);
 }
