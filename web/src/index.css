@@ -159,15 +159,23 @@ h5 {
 :root[data-theme="dark"] .delta--bad {
   color: color-mix(in srgb, var(--ant-color-error-text) 82%, white);
 }
-/* Aging WIP: the Blocked chip rides beside the state it qualifies. */
-.aging-state {
+.delta--flat {
+  color: var(--ant-color-text-tertiary);
+}
+/* Aging WIP: each flag rides beside the figure or state it qualifies, and
+   the group never wraps, so "4d 23h" can't split across lines. */
+.aging-state,
+.aging-age {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
 }
-.delta--flat {
-  color: var(--ant-color-text-tertiary);
+/* Light warning text (#c8800d) is 3.05:1 on the tag's tint — darkening it
+   toward ink clears AA at 11px; dark mode already passes. Scoped under
+   .aging-state to outrank AntD's four-class outlined-status selector. */
+:root:not([data-theme="dark"]) .aging-state .ant-tag.aging-blocked {
+  color: color-mix(in srgb, var(--ant-color-warning-text) 75%, black);
 }
 .health-badge {
   display: inline-flex;

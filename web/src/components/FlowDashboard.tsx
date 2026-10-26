@@ -58,7 +58,7 @@ function agingColumns(percentile: number, thresholdSeconds: number | null): Colu
         <span className="aging-state">
           {state}
           {item.blocked && (
-            <Tag color="warning" variant="outlined">
+            <Tag className="aging-blocked" color="warning" variant="outlined">
               Blocked
             </Tag>
           )}
@@ -77,14 +77,14 @@ function agingColumns(percentile: number, thresholdSeconds: number | null): Colu
         ),
       className: "fig",
       render: (_, item) => (
-        <>
+        <span className="aging-age">
           {formatSeconds(item.age_seconds)}
           {item.over_percentile && (
-            <span className="delta-slot delta delta--bad" aria-label={`over P${percentile}`}>
+            <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
               &gt; P{percentile}
             </span>
           )}
-        </>
+        </span>
       ),
     },
   ];

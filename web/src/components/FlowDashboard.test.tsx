@@ -180,9 +180,13 @@ describe("FlowDashboard", () => {
 
     await waitFor(() => expect(screen.getByText("Aging WIP")).toBeInTheDocument());
     expect(screen.getByText("Stuck item")).toBeInTheDocument();
-    const flag = screen.getByLabelText("over P85");
+    // role="img": an aria-label on a bare span is not announced.
+    const flag = screen.getByRole("img", { name: "over P85" });
     expect(flag).toHaveTextContent("> P85");
     expect(flag).toHaveClass("delta", "delta--bad");
+    // Figure and flag ride in one no-wrap group, so "4d 23h" never splits.
+    expect(flag.parentElement).toHaveClass("aging-age");
+    expect(flag.parentElement).toHaveTextContent("6d");
     // The flag lives in the Age cell, beside the figure it qualifies.
     expect(flag.closest("td")).toHaveTextContent("6d");
     expect(screen.getByText("Age")).toHaveClass("th-help");
@@ -227,6 +231,8 @@ describe("FlowDashboard", () => {
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const blocked = await screen.findByText("Blocked");
+    // Light-mode AA fix for the warning text lives on this class (index.css).
+    expect(blocked).toHaveClass("aging-blocked");
     expect(blocked.closest("td")).toHaveTextContent("in_progress");
     expect(blocked.closest("td")).not.toBe(screen.getByLabelText("over P85").closest("td"));
   });
