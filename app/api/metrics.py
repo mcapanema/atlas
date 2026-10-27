@@ -241,6 +241,9 @@ async def get_aging_wip(
             if aging.cycle_time_percentile is not None
             else None
         ),
+        cycle_time_median_seconds=(
+            aging.cycle_time_median.total_seconds() if aging.cycle_time_median is not None else None
+        ),
         percentile=aging.percentile,
         history_days=aging.history_days,
         items=[
@@ -252,6 +255,7 @@ async def get_aging_wip(
                 over_percentile=item.over_percentile,
                 assignee=item.assignee,
                 blocked=item.blocked,
+                over_median=item.over_median,
             )
             for item in aging.items
         ],

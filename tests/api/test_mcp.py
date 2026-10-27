@@ -363,6 +363,7 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 over_percentile=reference is not None,
                 assignee="Ada Lovelace",
                 blocked=True,
+                over_median=reference is not None,
             ),
             AgingItem(
                 work_item_id=uuid4(),
@@ -374,11 +375,17 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
         ),
         percentile=70,
         history_days=30,
+        cycle_time_median=reference / 2 if reference is not None else None,
     )
     wire = AgingWipRead(
         now=domain.now,
         cycle_time_percentile_seconds=(
             reference.total_seconds() if reference is not None else None
+        ),
+        cycle_time_median_seconds=(
+            domain.cycle_time_median.total_seconds()
+            if domain.cycle_time_median is not None
+            else None
         ),
         percentile=domain.percentile,
         history_days=domain.history_days,
@@ -391,6 +398,7 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 over_percentile=item.over_percentile,
                 assignee=item.assignee,
                 blocked=item.blocked,
+                over_median=item.over_median,
             )
             for item in domain.items
         ],
