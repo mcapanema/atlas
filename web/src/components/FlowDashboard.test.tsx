@@ -202,7 +202,7 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Age"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Time in progress. Flagged past P85 of cycle times over the last 90 days: 3d.",
+      "Time in progress. Flagged > P50 past the median cycle time (1d) and > P85 past P85 (3d), over the last 90 days.",
     );
   });
 
@@ -213,7 +213,7 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Aging WIP"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "An item's age is flagged (> P85) when it has been in progress longer than 85% of the items completed in the last 90 days took",
+      "An item's age is flagged > P50 when it has been in progress longer than half the items completed in the last 90 days took, and > P85 when longer than 85% of them",
     );
   });
 
@@ -222,7 +222,8 @@ describe("FlowDashboard", () => {
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
         cycle_time_percentile_seconds: null,
-        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+        cycle_time_median_seconds: null,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false, over_median: false }],
       },
     });
 
@@ -244,6 +245,7 @@ describe("FlowDashboard", () => {
             title: "Fresh item",
             age_seconds: 86400,
             over_percentile: false,
+            over_median: false,
           },
         ],
       },
@@ -272,11 +274,11 @@ describe("FlowDashboard", () => {
     expect(screen.getByRole("img", { name: "over P85" }).closest(".fig")).toBeNull();
   });
 
-  it("reserves no flag slot when nothing is over the percentile", async () => {
+  it("reserves no flag slot when nothing is flagged", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
-        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+        items: [{ ...agingWipFixture.items[0], over_percentile: false, over_median: false }],
       },
     });
 
@@ -290,6 +292,43 @@ describe("FlowDashboard", () => {
     ).toBeNull();
   });
 
+  it("flags items past the median in yellow when under the team percentile", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false, over_median: true }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const flag = await screen.findByRole("img", { name: "over P50" });
+    expect(flag).toHaveTextContent("> P50");
+    expect(flag).toHaveClass("delta", "delta--warn");
+    // A median-only row still reserves the slot, so ages share a right edge.
+    expect(flag.closest(".delta-slot")).not.toBeNull();
+    expect(screen.queryByRole("img", { name: "over P85" })).toBeNull();
+  });
+
+  it("shows only the team-percentile flag when past both", async () => {
+    mockMetricsFetch(); // the fixture item is past both lines
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByRole("img", { name: "over P85" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "over P50" })).toBeNull();
+  });
+
+  it("shows a single flag when the team percentile is the median", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, percentile: 50 } });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const flag = await screen.findByRole("img", { name: "over P50" });
+    expect(flag).toHaveClass("delta--bad");
+    expect(screen.getAllByRole("img", { name: "over P50" })).toHaveLength(1);
+  });
+
   it("says 'the last day' for a one-day aging history", async () => {
     mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, history_days: 1 } });
 
@@ -297,7 +336,7 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Age"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Flagged past P85 of cycle times over the last day: 3d.",
+      "Flagged > P50 past the median cycle time (1d) and > P85 past P85 (3d), over the last day.",
     );
   });
 

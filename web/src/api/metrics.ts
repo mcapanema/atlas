@@ -113,11 +113,14 @@ export interface AgingItem {
   assignee: string | null;
   /** A blocked period is open right now, under the team's metric rules. */
   blocked: boolean;
+  /** Past the median (P50) cycle time of the aging history. */
+  over_median: boolean;
 }
 
 export interface AgingWip {
   now: string;
   cycle_time_percentile_seconds: number | null;
+  cycle_time_median_seconds: number | null;
   items: AgingItem[];
   percentile: number;
   history_days: number;

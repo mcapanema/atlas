@@ -44,15 +44,37 @@ function lastDays(days: number): string {
   return days === 1 ? "the last day" : `the last ${days} days`;
 }
 
+/** One flag per row: past the team percentile (red) wins over past the median (yellow). */
+function AgeFlag({ item, percentile }: { item: AgingItem; percentile: number }) {
+  if (item.over_percentile) {
+    return (
+      <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
+        &gt; P{percentile}
+      </span>
+    );
+  }
+  if (item.over_median) {
+    return (
+      <span className="delta delta--warn" role="img" aria-label="over P50">
+        &gt; P50
+      </span>
+    );
+  }
+  return null;
+}
+
 function agingColumns({
   percentile,
   historyDays,
   thresholdSeconds,
+  medianSeconds,
   slot,
 }: {
   percentile: number;
   historyDays: number;
   thresholdSeconds: number | null;
+  /** Null exactly when thresholdSeconds is: both come from the same history. */
+  medianSeconds: number | null;
   /** Some row is flagged: every row reserves the flag slot, so ages share a right edge. */
   slot: boolean;
 }): ColumnsType<AgingItem> {
@@ -85,12 +107,12 @@ function agingColumns({
     {
       title: (
         <SlottedTitle slot={slot}>
-          {thresholdSeconds === null ? (
+          {thresholdSeconds === null || medianSeconds === null ? (
             "Age"
           ) : (
             <HelpLabel
               label="Age"
-              help={`Time in progress. Flagged past P${percentile} of cycle times over ${lastDays(historyDays)}: ${formatSeconds(thresholdSeconds)}.`}
+              help={`Time in progress. Flagged > P50 past the median cycle time (${formatSeconds(medianSeconds)}) and > P${percentile} past P${percentile} (${formatSeconds(thresholdSeconds)}), over ${lastDays(historyDays)}.`}
             />
           )}
         </SlottedTitle>
@@ -101,11 +123,7 @@ function agingColumns({
           <span className="fig">{formatSeconds(item.age_seconds)}</span>
           {slot && (
             <span className="delta-slot">
-              {item.over_percentile && (
-                <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
-                  &gt; P{percentile}
-                </span>
-              )}
+              <AgeFlag item={item} percentile={percentile} />
             </span>
           )}
         </span>
@@ -275,16 +293,18 @@ function AgingWipCard({
   percentile,
   historyDays,
   thresholdSeconds,
+  medianSeconds,
 }: {
   items: AgingItem[];
   percentile: number;
   historyDays: number;
   thresholdSeconds: number | null;
+  medianSeconds: number | null;
 }) {
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. An item's age is flagged (> P${percentile}) when it has been in progress longer than ${percentile}% of the items completed in ${lastDays(historyDays)} took (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. An item's age is flagged > P50 when it has been in progress longer than half the items completed in ${lastDays(historyDays)} took, and > P${percentile} when longer than ${percentile}% of them (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"
@@ -294,7 +314,8 @@ function AgingWipCard({
           percentile,
           historyDays,
           thresholdSeconds,
-          slot: items.some((item) => item.over_percentile),
+          medianSeconds,
+          slot: items.some((item) => item.over_percentile || item.over_median),
         })}
         dataSource={items}
       />
@@ -348,6 +369,7 @@ export function FlowDashboard({
           percentile={aging.data.percentile}
           historyDays={aging.data.history_days}
           thresholdSeconds={aging.data.cycle_time_percentile_seconds}
+          medianSeconds={aging.data.cycle_time_median_seconds}
         />
       )}
       <ForecastCard scope={scope} filters={filters} />
