@@ -120,8 +120,8 @@ function agingColumns({
       render: (state: string, item) => (
         <span className="aging-state">
           {item.blocked && (
-            <Tooltip title="Blocked">
-              <StopOutlined className="aging-blocked" aria-label="Blocked" />
+            <Tooltip title="Blocked" trigger={["hover", "focus"]}>
+              <StopOutlined className="aging-blocked" aria-label="Blocked" tabIndex={0} />
             </Tooltip>
           )}
           {state}

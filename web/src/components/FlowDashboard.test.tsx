@@ -386,6 +386,10 @@ describe("FlowDashboard", () => {
     expect(pair.firstChild).toBe(icon);
     expect(pair.lastChild?.textContent).toBe("in_progress");
     expect(cell).not.toBe(screen.getByLabelText("over P85").closest("td"));
+    // Keyboard users reach the tooltip too.
+    expect(icon).toHaveAttribute("tabindex", "0");
+    fireEvent.focus(icon);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Blocked");
   });
 
   it("marks unassigned aging items", async () => {

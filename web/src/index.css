@@ -186,6 +186,12 @@ h5 {
 .aging-blocked {
   color: var(--ant-color-warning-text);
 }
+/* Focusable so keyboard users get its tooltip; show where focus is. */
+.aging-blocked:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
 /* Light warning (#c8800d) is ~3:1 on white — darkening it toward ink keeps
    the icon well clear of the 3:1 non-text floor; dark mode already passes. */
 :root:not([data-theme="dark"]) .aging-blocked {
