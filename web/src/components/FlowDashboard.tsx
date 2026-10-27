@@ -93,6 +93,7 @@ function agingColumns({
   thresholdSeconds,
   medianSeconds,
   slot,
+  blockedSlot,
 }: {
   percentile: number;
   historyDays: number;
@@ -101,6 +102,8 @@ function agingColumns({
   medianSeconds: number | null;
   /** Some row is flagged: every row reserves the flag slot, so ages share a right edge. */
   slot: boolean;
+  /** Some row is blocked: every row reserves the icon slot, so states share a left edge. */
+  blockedSlot: boolean;
 }): ColumnsType<AgingItem> {
   return [
     {
@@ -119,10 +122,14 @@ function agingColumns({
       dataIndex: "state",
       render: (state: string, item) => (
         <span className="aging-state">
-          {item.blocked && (
-            <Tooltip title="Blocked" trigger={["hover", "focus"]}>
-              <StopOutlined className="aging-blocked" aria-label="Blocked" tabIndex={0} />
-            </Tooltip>
+          {blockedSlot && (
+            <span className="aging-blocked-slot">
+              {item.blocked && (
+                <Tooltip title="Blocked" trigger={["hover", "focus"]}>
+                  <StopOutlined className="aging-blocked" aria-label="Blocked" tabIndex={0} />
+                </Tooltip>
+              )}
+            </span>
           )}
           {state}
         </span>
@@ -340,6 +347,7 @@ function AgingWipCard({
           thresholdSeconds,
           medianSeconds,
           slot: items.some((item) => item.over_percentile || item.over_median),
+          blockedSlot: items.some((item) => item.blocked),
         })}
         dataSource={items}
       />

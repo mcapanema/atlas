@@ -383,13 +383,53 @@ describe("FlowDashboard", () => {
     // The state reads alone: no "Blocked" text beside it, the icon leads it.
     expect(cell).toHaveTextContent(/^in_progress$/);
     const pair = icon.closest(".aging-state")!;
-    expect(pair.firstChild).toBe(icon);
+    expect(pair.firstElementChild).toHaveClass("aging-blocked-slot");
+    expect(pair.firstElementChild).toContainElement(icon);
     expect(pair.lastChild?.textContent).toBe("in_progress");
     expect(cell).not.toBe(screen.getByLabelText("over P85").closest("td"));
     // Keyboard users reach the tooltip too.
     expect(icon).toHaveAttribute("tabindex", "0");
     fireEvent.focus(icon);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Blocked");
+  });
+
+  it("reserves the blocked icon slot on unblocked rows when any row is blocked", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [
+          { ...agingWipFixture.items[0], blocked: true },
+          {
+            ...agingWipFixture.items[0],
+            work_item_id: "55555555-5555-5555-5555-555555555555",
+            title: "Fresh item",
+            blocked: false,
+          },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const icon = await screen.findByRole("img", { name: "Blocked" });
+    expect(icon.closest(".aging-blocked-slot")).not.toBeNull();
+    // The unblocked row keeps an empty slot, so its state starts where the blocked one does.
+    const slot = screen
+      .getByText("Fresh item")
+      .closest("tr")!
+      .querySelector(".aging-state")!.firstElementChild;
+    expect(slot).toHaveClass("aging-blocked-slot");
+    expect(slot).toBeEmptyDOMElement();
+  });
+
+  it("reserves no blocked slot when nothing is blocked", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Stuck item");
+    expect(document.querySelector(".aging-state")).not.toBeNull();
+    expect(document.querySelector(".aging-blocked-slot")).toBeNull();
   });
 
   it("marks unassigned aging items", async () => {

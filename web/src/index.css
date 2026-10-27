@@ -183,6 +183,13 @@ h5 {
 .aging-age {
   white-space: nowrap;
 }
+/* Fixed-width home for the Blocked icon, reserved on every row when any row
+   is blocked, so state text starts at one x. */
+.aging-blocked-slot {
+  display: inline-flex;
+  justify-content: center;
+  width: 1em;
+}
 .aging-blocked {
   color: var(--ant-color-warning-text);
 }
