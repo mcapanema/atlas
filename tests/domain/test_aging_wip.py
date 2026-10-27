@@ -44,6 +44,26 @@ def test_no_completed_history_means_no_p85_and_no_flags() -> None:
 
     assert aging.cycle_time_percentile is None
     assert aging.items[0].over_percentile is False
+    assert aging.cycle_time_median is None
+    assert aging.items[0].over_median is False
+
+
+def test_flags_items_past_the_median_cycle_time() -> None:
+    # Cycles 2d, 4d, 10d -> P50 = 4d, P85 = 8.2d (inclusive interpolation).
+    done = [_pair(f"Done {d}", started_days=d + 1, completed_days=1) for d in (2, 4, 10)]
+    past_both = _pair("Past both", started_days=9, completed_days=None)
+    past_median = _pair("Past median", started_days=5, completed_days=None)
+    young = _pair("Young", started_days=3, completed_days=None)
+
+    aging = compute_aging_wip([*done, past_both, past_median, young], now=NOW)
+
+    assert aging.cycle_time_median == timedelta(days=4)
+    flags = {a.title: (a.over_percentile, a.over_median) for a in aging.items}
+    assert flags == {
+        "Past both": (True, True),
+        "Past median": (False, True),
+        "Young": (False, False),
+    }
 
 
 def test_unstarted_and_completed_items_are_excluded() -> None:

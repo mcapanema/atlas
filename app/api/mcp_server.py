@@ -50,6 +50,7 @@ def _aging_from_json(data: dict[str, Any]) -> AgingWip:
     """GET /api/metrics/aging-wip's JSON back as the domain value, for render_aging."""
     dto = AgingWipRead.model_validate(data)
     seconds = dto.cycle_time_percentile_seconds
+    median = dto.cycle_time_median_seconds
     return AgingWip(
         now=dto.now,
         cycle_time_percentile=timedelta(seconds=seconds) if seconds is not None else None,
@@ -62,11 +63,13 @@ def _aging_from_json(data: dict[str, Any]) -> AgingWip:
                 over_percentile=item.over_percentile,
                 assignee=item.assignee,
                 blocked=item.blocked,
+                over_median=item.over_median,
             )
             for item in dto.items
         ),
         percentile=dto.percentile,
         history_days=dto.history_days,
+        cycle_time_median=timedelta(seconds=median) if median is not None else None,
     )
 
 

@@ -191,7 +191,7 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Age")).toHaveClass("th-help");
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Blocked" })).toBeNull();
     expect(screen.getAllByRole("columnheader")).toHaveLength(4);
   });
 
@@ -202,7 +202,7 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Age"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Time in progress. Flagged past P85 of cycle times over the last 90 days: 3d.",
+      "Time in progress. Flagged > P50 past the median cycle time (1d) and > P85 past P85 (3d), over the last 90 days.",
     );
   });
 
@@ -213,7 +213,7 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Aging WIP"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "An item's age is flagged (> P85) when it has been in progress longer than 85% of the items completed in the last 90 days took",
+      "An item's age is flagged > P50 when it has been in progress longer than half the items completed in the last 90 days took, and > P85 when longer than 85% of them",
     );
   });
 
@@ -222,7 +222,8 @@ describe("FlowDashboard", () => {
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
         cycle_time_percentile_seconds: null,
-        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+        cycle_time_median_seconds: null,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false, over_median: false }],
       },
     });
 
@@ -244,6 +245,7 @@ describe("FlowDashboard", () => {
             title: "Fresh item",
             age_seconds: 86400,
             over_percentile: false,
+            over_median: false,
           },
         ],
       },
@@ -272,11 +274,11 @@ describe("FlowDashboard", () => {
     expect(screen.getByRole("img", { name: "over P85" }).closest(".fig")).toBeNull();
   });
 
-  it("reserves no flag slot when nothing is over the percentile", async () => {
+  it("reserves no flag slot when nothing is flagged", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
-        items: [{ ...agingWipFixture.items[0], over_percentile: false }],
+        items: [{ ...agingWipFixture.items[0], over_percentile: false, over_median: false }],
       },
     });
 
@@ -290,6 +292,69 @@ describe("FlowDashboard", () => {
     ).toBeNull();
   });
 
+  it("flags items past the median in yellow when under the team percentile", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [{ ...agingWipFixture.items[0], over_percentile: false, over_median: true }],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const flag = await screen.findByRole("img", { name: "over P50" });
+    expect(flag).toHaveTextContent("> P50");
+    expect(flag).toHaveClass("delta", "delta--warn");
+    // A median-only row still reserves the slot, so ages share a right edge.
+    expect(flag.closest(".delta-slot")).not.toBeNull();
+    expect(screen.queryByRole("img", { name: "over P85" })).toBeNull();
+  });
+
+  it("shows only the team-percentile flag when past both", async () => {
+    mockMetricsFetch(); // the fixture item is past both lines
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByRole("img", { name: "over P85" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "over P50" })).toBeNull();
+  });
+
+  // At P50 both reference lines are the same number.
+  const medianTeamFixture = {
+    ...agingWipFixture,
+    percentile: 50,
+    cycle_time_percentile_seconds: 86400,
+    cycle_time_median_seconds: 86400,
+  };
+
+  it("shows a single flag when the team percentile is the median", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": medianTeamFixture });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const flag = await screen.findByRole("img", { name: "over P50" });
+    expect(flag).toHaveClass("delta--bad");
+    expect(screen.getAllByRole("img", { name: "over P50" })).toHaveLength(1);
+
+    fireEvent.focus(screen.getByText("Age"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Time in progress. Flagged > P50 past the median cycle time (1d), over the last 90 days.",
+    );
+  });
+
+  it("explains a single flag in the card help when the team percentile is the median", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": medianTeamFixture });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Aging WIP"));
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(
+      "An item's age is flagged > P50 when it has been in progress longer than half the items completed in the last 90 days took (the team's aging percentile",
+    );
+    expect(tooltip).not.toHaveTextContent("and > P50");
+  });
+
   it("says 'the last day' for a one-day aging history", async () => {
     mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, history_days: 1 } });
 
@@ -297,11 +362,11 @@ describe("FlowDashboard", () => {
 
     fireEvent.focus(await screen.findByText("Age"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Flagged past P85 of cycle times over the last day: 3d.",
+      "Flagged > P50 past the median cycle time (1d) and > P85 past P85 (3d), over the last day.",
     );
   });
 
-  it("marks blocked aging items beside their state", async () => {
+  it("marks blocked aging items with an icon before their state", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
@@ -311,11 +376,60 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const blocked = await screen.findByText("Blocked");
-    // Light-mode AA fix for the warning text lives on this class (index.css).
-    expect(blocked).toHaveClass("aging-blocked");
-    expect(blocked.closest("td")).toHaveTextContent("in_progress");
-    expect(blocked.closest("td")).not.toBe(screen.getByLabelText("over P85").closest("td"));
+    const icon = await screen.findByRole("img", { name: "Blocked" });
+    // Light-mode AA fix for the warning color lives on this class (index.css).
+    expect(icon).toHaveClass("aging-blocked");
+    const cell = icon.closest("td")!;
+    // The state reads alone: no "Blocked" text beside it, the icon leads it.
+    expect(cell).toHaveTextContent(/^in_progress$/);
+    const pair = icon.closest(".aging-state")!;
+    expect(pair.firstElementChild).toHaveClass("aging-blocked-slot");
+    expect(pair.firstElementChild).toContainElement(icon);
+    expect(pair.lastChild?.textContent).toBe("in_progress");
+    expect(cell).not.toBe(screen.getByLabelText("over P85").closest("td"));
+    // Keyboard users reach the tooltip too.
+    expect(icon).toHaveAttribute("tabindex", "0");
+    fireEvent.focus(icon);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Blocked");
+  });
+
+  it("reserves the blocked icon slot on unblocked rows when any row is blocked", async () => {
+    mockMetricsFetch({
+      "/api/metrics/aging-wip": {
+        ...agingWipFixture,
+        items: [
+          { ...agingWipFixture.items[0], blocked: true },
+          {
+            ...agingWipFixture.items[0],
+            work_item_id: "55555555-5555-5555-5555-555555555555",
+            title: "Fresh item",
+            blocked: false,
+          },
+        ],
+      },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    const icon = await screen.findByRole("img", { name: "Blocked" });
+    expect(icon.closest(".aging-blocked-slot")).not.toBeNull();
+    // The unblocked row keeps an empty slot, so its state starts where the blocked one does.
+    const slot = screen
+      .getByText("Fresh item")
+      .closest("tr")!
+      .querySelector(".aging-state")!.firstElementChild;
+    expect(slot).toHaveClass("aging-blocked-slot");
+    expect(slot).toBeEmptyDOMElement();
+  });
+
+  it("reserves no blocked slot when nothing is blocked", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Stuck item");
+    expect(document.querySelector(".aging-state")).not.toBeNull();
+    expect(document.querySelector(".aging-blocked-slot")).toBeNull();
   });
 
   it("marks unassigned aging items", async () => {

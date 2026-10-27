@@ -143,6 +143,7 @@ export const accuracyFixture = {
 export const agingWipFixture = {
   now: "2026-07-10T00:00:00Z",
   cycle_time_percentile_seconds: 259200,
+  cycle_time_median_seconds: 86400,
   percentile: 85,
   history_days: 90,
   items: [
@@ -154,6 +155,7 @@ export const agingWipFixture = {
       over_percentile: true,
       assignee: "Ada Lovelace",
       blocked: false,
+      over_median: true,
     },
   ],
 };

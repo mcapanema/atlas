@@ -3,7 +3,9 @@
 Flags items whose in-progress age exceeds the scope's recent completed
 cycle-time percentile (the team's aging_percentile over its aging_history_days,
 P85 over 90 days by default) — the "this one is quietly getting stuck" signal
-from Kanban practice. Items whose block is still open are marked `blocked`.
+from Kanban practice. A second, earlier line at the median (P50) of the same
+history marks items running longer than usual (`over_median`). Items whose
+block is still open are marked `blocked`.
 """
 
 from collections.abc import Sequence
@@ -32,6 +34,8 @@ class AgingItem:
     # A blocked period is still open at the end of the item's history, under
     # the scope's metric rules (FlowSample.blocked_now).
     blocked: bool = False
+    # Past the median (P50) cycle time of the same aging history.
+    over_median: bool = False
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,7 @@ class AgingWip:
     `cycle_time_percentile` is the `percentile` (the team's aging_percentile)
     of cycle times completed in the trailing `history_days` (its
     aging_history_days); None when nothing completed in them.
+    `cycle_time_median` is the P50 of the same cycle times (None likewise).
     """
 
     now: datetime
@@ -48,6 +53,7 @@ class AgingWip:
     items: tuple[AgingItem, ...]
     percentile: int = DEFAULT_RULES.aging_percentile
     history_days: int = DEFAULT_RULES.aging_history_days
+    cycle_time_median: timedelta | None = None
 
 
 def completed_cycles(
@@ -79,15 +85,13 @@ def compute_aging_wip(
 ) -> AgingWip:
     """Age of every item in progress at `now` (started, not completed).
 
-    The reference line is `aging_reference`; over_percentile is False
-    everywhere when nothing completed in the aging history.
+    The reference lines are `aging_reference` at the team percentile and at
+    P50; over_percentile and over_median are False everywhere when nothing
+    completed in the aging history.
     """
-    limit = aging_reference(
-        [sample for _, sample in items_with_samples],
-        now=now,
-        pct=aging_percentile,
-        history_days=history_days,
-    )
+    samples = [sample for _, sample in items_with_samples]
+    limit = aging_reference(samples, now=now, pct=aging_percentile, history_days=history_days)
+    median = aging_reference(samples, now=now, pct=50, history_days=history_days)
     aging: list[AgingItem] = []
     for item, sample in items_with_samples:
         if not in_progress(sample, now) or sample.started_at is None:
@@ -102,6 +106,7 @@ def compute_aging_wip(
                 over_percentile=limit is not None and age > limit,
                 assignee=item.assignee,
                 blocked=sample.blocked_now,
+                over_median=median is not None and age > median,
             )
         )
     aging.sort(key=lambda a: a.age, reverse=True)
@@ -111,4 +116,5 @@ def compute_aging_wip(
         items=tuple(aging),
         percentile=aging_percentile,
         history_days=history_days,
+        cycle_time_median=median,
     )

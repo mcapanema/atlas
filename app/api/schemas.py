@@ -381,11 +381,13 @@ class AgingItemRead(BaseModel):
     over_percentile: bool
     assignee: str | None
     blocked: bool
+    over_median: bool
 
 
 class AgingWipRead(BaseModel):
     now: datetime
     cycle_time_percentile_seconds: float | None
+    cycle_time_median_seconds: float | None
     items: list[AgingItemRead]
     percentile: int
     history_days: int
