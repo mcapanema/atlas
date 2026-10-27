@@ -319,14 +319,40 @@ describe("FlowDashboard", () => {
     expect(screen.queryByRole("img", { name: "over P50" })).toBeNull();
   });
 
+  // At P50 both reference lines are the same number.
+  const medianTeamFixture = {
+    ...agingWipFixture,
+    percentile: 50,
+    cycle_time_percentile_seconds: 86400,
+    cycle_time_median_seconds: 86400,
+  };
+
   it("shows a single flag when the team percentile is the median", async () => {
-    mockMetricsFetch({ "/api/metrics/aging-wip": { ...agingWipFixture, percentile: 50 } });
+    mockMetricsFetch({ "/api/metrics/aging-wip": medianTeamFixture });
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
     const flag = await screen.findByRole("img", { name: "over P50" });
     expect(flag).toHaveClass("delta--bad");
     expect(screen.getAllByRole("img", { name: "over P50" })).toHaveLength(1);
+
+    fireEvent.focus(screen.getByText("Age"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Time in progress. Flagged > P50 past the median cycle time (1d), over the last 90 days.",
+    );
+  });
+
+  it("explains a single flag in the card help when the team percentile is the median", async () => {
+    mockMetricsFetch({ "/api/metrics/aging-wip": medianTeamFixture });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    fireEvent.focus(await screen.findByText("Aging WIP"));
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(
+      "An item's age is flagged > P50 when it has been in progress longer than half the items completed in the last 90 days took (the team's aging percentile",
+    );
+    expect(tooltip).not.toHaveTextContent("and > P50");
   });
 
   it("says 'the last day' for a one-day aging history", async () => {

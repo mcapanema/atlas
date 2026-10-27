@@ -45,6 +45,29 @@ function lastDays(days: number): string {
   return days === 1 ? "the last day" : `the last ${days} days`;
 }
 
+/** The Age header's help. At a P50 team percentile the two lines coincide: one flag. */
+function ageHelp(
+  percentile: number,
+  historyDays: number,
+  medianSeconds: number,
+  thresholdSeconds: number,
+): string {
+  const median = `Flagged > P50 past the median cycle time (${formatSeconds(medianSeconds)})`;
+  const team =
+    percentile === 50
+      ? ""
+      : ` and > P${percentile} past P${percentile} (${formatSeconds(thresholdSeconds)})`;
+  return `Time in progress. ${median}${team}, over ${lastDays(historyDays)}.`;
+}
+
+/** The card help's flag sentence; one flag when the team percentile is the median. */
+function agingFlagsHelp(percentile: number, historyDays: number): string {
+  const median = `An item's age is flagged > P50 when it has been in progress longer than half the items completed in ${lastDays(historyDays)} took`;
+  const team =
+    percentile === 50 ? "" : `, and > P${percentile} when longer than ${percentile}% of them`;
+  return `${median}${team} (the team's aging percentile and history, set in Metric rules).`;
+}
+
 /** One flag per row: past the team percentile (red) wins over past the median (yellow). */
 function AgeFlag({ item, percentile }: { item: AgingItem; percentile: number }) {
   if (item.over_percentile) {
@@ -113,7 +136,7 @@ function agingColumns({
           ) : (
             <HelpLabel
               label="Age"
-              help={`Time in progress. Flagged > P50 past the median cycle time (${formatSeconds(medianSeconds)}) and > P${percentile} past P${percentile} (${formatSeconds(thresholdSeconds)}), over ${lastDays(historyDays)}.`}
+              help={ageHelp(percentile, historyDays, medianSeconds, thresholdSeconds)}
             />
           )}
         </SlottedTitle>
@@ -305,7 +328,7 @@ function AgingWipCard({
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. An item's age is flagged > P50 when it has been in progress longer than half the items completed in ${lastDays(historyDays)} took, and > P${percentile} when longer than ${percentile}% of them (the team's aging percentile and history, set in Metric rules). A stop icon before the state marks an item whose blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. ${agingFlagsHelp(percentile, historyDays)} A stop icon before the state marks an item whose blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"
