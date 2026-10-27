@@ -1,4 +1,5 @@
-import { Alert, Col, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
+import { StopOutlined } from "@ant-design/icons";
+import { Alert, Col, Row, Skeleton, Space, Table, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -95,12 +96,12 @@ function agingColumns({
       dataIndex: "state",
       render: (state: string, item) => (
         <span className="aging-state">
-          {state}
           {item.blocked && (
-            <Tag className="aging-blocked" color="warning" variant="outlined">
-              Blocked
-            </Tag>
+            <Tooltip title="Blocked">
+              <StopOutlined className="aging-blocked" aria-label="Blocked" />
+            </Tooltip>
           )}
+          {state}
         </span>
       ),
     },
@@ -304,7 +305,7 @@ function AgingWipCard({
   return (
     <ChartCard
       label="Aging WIP"
-      help={`Items currently in progress, oldest first. An item's age is flagged > P50 when it has been in progress longer than half the items completed in ${lastDays(historyDays)} took, and > P${percentile} when longer than ${percentile}% of them (the team's aging percentile and history, set in Metric rules). State is marked Blocked while a blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
+      help={`Items currently in progress, oldest first. An item's age is flagged > P50 when it has been in progress longer than half the items completed in ${lastDays(historyDays)} took, and > P${percentile} when longer than ${percentile}% of them (the team's aging percentile and history, set in Metric rules). A stop icon before the state marks an item whose blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
     >
       <Table
         size="small"

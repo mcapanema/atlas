@@ -191,7 +191,7 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Age")).toHaveClass("th-help");
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Blocked" })).toBeNull();
     expect(screen.getAllByRole("columnheader")).toHaveLength(4);
   });
 
@@ -340,7 +340,7 @@ describe("FlowDashboard", () => {
     );
   });
 
-  it("marks blocked aging items beside their state", async () => {
+  it("marks blocked aging items with an icon before their state", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
         ...agingWipFixture,
@@ -350,11 +350,16 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const blocked = await screen.findByText("Blocked");
-    // Light-mode AA fix for the warning text lives on this class (index.css).
-    expect(blocked).toHaveClass("aging-blocked");
-    expect(blocked.closest("td")).toHaveTextContent("in_progress");
-    expect(blocked.closest("td")).not.toBe(screen.getByLabelText("over P85").closest("td"));
+    const icon = await screen.findByRole("img", { name: "Blocked" });
+    // Light-mode AA fix for the warning color lives on this class (index.css).
+    expect(icon).toHaveClass("aging-blocked");
+    const cell = icon.closest("td")!;
+    // The state reads alone: no "Blocked" text beside it, the icon leads it.
+    expect(cell).toHaveTextContent(/^in_progress$/);
+    const pair = icon.closest(".aging-state")!;
+    expect(pair.firstChild).toBe(icon);
+    expect(pair.lastChild?.textContent).toBe("in_progress");
+    expect(cell).not.toBe(screen.getByLabelText("over P85").closest("td"));
   });
 
   it("marks unassigned aging items", async () => {

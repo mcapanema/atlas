@@ -170,8 +170,8 @@ h5 {
 .delta--flat {
   color: var(--ant-color-text-tertiary);
 }
-/* Aging WIP: the Blocked chip rides beside the state it qualifies, and the
-   pair never wraps. */
+/* Aging WIP: the Blocked icon leads the state it qualifies, and the pair
+   never wraps. */
 .aging-state {
   display: inline-flex;
   align-items: center;
@@ -183,10 +183,12 @@ h5 {
 .aging-age {
   white-space: nowrap;
 }
-/* Light warning text (#c8800d) is 3.05:1 on the tag's tint — darkening it
-   toward ink clears AA at 11px; dark mode already passes. Scoped under
-   .aging-state to outrank AntD's four-class outlined-status selector. */
-:root:not([data-theme="dark"]) .aging-state .ant-tag.aging-blocked {
+.aging-blocked {
+  color: var(--ant-color-warning-text);
+}
+/* Light warning (#c8800d) is ~3:1 on white — darkening it toward ink keeps
+   the icon well clear of the 3:1 non-text floor; dark mode already passes. */
+:root:not([data-theme="dark"]) .aging-blocked {
   color: color-mix(in srgb, var(--ant-color-warning-text) 75%, black);
 }
 .health-badge {
