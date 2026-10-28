@@ -12,6 +12,7 @@ from datetime import date, datetime
 from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
+from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
@@ -366,6 +367,41 @@ class InMemoryPersonaGuidanceRepository:
             (g for g in self._guidance.values() if g.persona is persona and g.version == version),
             None,
         )
+
+
+class InMemoryAdviceRunRepository:
+    def __init__(self, runs: list[AdviceRun] | None = None) -> None:
+        self._runs: dict[UUID, AdviceRun] = {r.id: r for r in runs or []}
+
+    async def add(self, run: AdviceRun) -> None:
+        self._runs[run.id] = run
+
+    async def get(self, run_id: UUID) -> AdviceRun | None:
+        return self._runs.get(run_id)
+
+    async def update(self, run: AdviceRun) -> None:
+        self._runs[run.id] = run
+
+    async def latest(
+        self,
+        *,
+        team_id: UUID | None,
+        project_id: UUID | None,
+        persona: Persona,
+        params: str,
+    ) -> AdviceRun | None:
+        found = [
+            r
+            for r in self._runs.values()
+            if r.team_id == team_id
+            and r.project_id == project_id
+            and r.persona is persona
+            and r.params == params
+        ]
+        return max(found, key=lambda r: r.requested_at, default=None)
+
+    async def list_running(self) -> list[AdviceRun]:
+        return [r for r in self._runs.values() if r.status is RunStatus.RUNNING]
 
 
 class InMemoryForecastSnapshotRepository:
