@@ -104,7 +104,7 @@ class MetricsService:
         )
 
     async def _synced_at(self, team_id: UUID | None, project_id: UUID | None) -> datetime | None:
-        """The scope's team's last sync (a project's owning team); None if unknown."""
+        """The scope's team's last sync (a project's home team); None if unknown."""
         if project_id is not None and self._projects is not None:
             project = await self._projects.get(project_id)
             team_id = project.team_id if project is not None else None

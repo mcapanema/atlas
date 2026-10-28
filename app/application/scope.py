@@ -35,7 +35,7 @@ class ScopeSamples:
     but not those excluded records. `items_with_samples` pairs each evented item with its
     derived sample (aging WIP needs item identity). `stream_rules[i]` are the
     rules stream i was folded with (its item's team's); `rules` are the
-    scope's own (its team's, or its project's team's). `remaining_count` is
+    scope's own (its team's; a project's per ADR-0020). `remaining_count` is
     the forecast's remaining work: open items whose state type the scope's
     remaining_state_types counts; None only for a hand-built scope.
     """

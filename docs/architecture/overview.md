@@ -33,7 +33,9 @@ The slices come in the kinds below.
 `Organization → Team → Project → Work Item → Event`, each with
 `entities.py` + `repository.py` (a `Protocol` port), a SQLAlchemy adapter
 in `app/infrastructure/repositories/`, and a CRUD router. A Team owns
-Projects and Work Items; a Project groups Work Items; each Work Item
+Projects and Work Items; a Project groups Work Items; a Project's teams are
+derived from its items (`WorkItemRepository.team_ids_by_project()`, ADR-0020),
+with `Project.team_id` only its home team; each Work Item
 accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). Events
 are the source of truth everything analytical derives from. One pure
 derivation lives beside its aggregate: `derive_timeline`
@@ -125,7 +127,10 @@ floor (ADR-0015) and durations counting Monday-to-Friday working days
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace
 ⊕ team, and `ScopeSampleLoader` (`app/application/scope.py`) folds each item
 with its team's rules, so durations count each item's own team's working
-days, while the scope's own rules drive health, calendar and windows.
+days, while the scope's own rules drive health, calendar and windows. A
+project scope reads the rules of its items' team when they share one, the
+workspace rules when they span several, and its home team's when it has none
+(ADR-0020).
 `MetricRulesService` serves `GET/PATCH /api/organizations/{id}/metric-rules`
 and `/api/teams/{id}/metric-rules`; a change rewrites the affected scopes'
 snapshot history through the background `RecomputeRunner` in
@@ -189,7 +194,7 @@ that package. The first connector is Linear
 personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
 mapping functions, and a paginating `LinearDataSource`. Exposed as
 `POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
-and the Connectors page in the frontend. The mapper stores raw
+and the Connectors page in the frontend. A project's home team is the first of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events, state types on transitions, and each issue's labels, parent and
 current assignee name — an email or handle Linear uses as the name is
