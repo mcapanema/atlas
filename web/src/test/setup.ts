@@ -1,4 +1,10 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
+
+// findBy*/waitFor give up after 1 s by default; lazy routes and multi-hop
+// query chains take longer under the same parallel load as testTimeout
+// (vite.config.ts), so give them the headroom once, here.
+configure({ asyncUtilTimeout: 5_000 });
 
 // jsdom does not implement matchMedia; antd's responsive Grid/Table
 // components call it on mount. Polyfill so components render in tests.

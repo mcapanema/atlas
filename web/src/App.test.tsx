@@ -88,7 +88,7 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    await screen.findByText("Team Dashboard", {}, { timeout: 5000 });
+    await screen.findByText("Team Dashboard");
     expect(document.title).toBe("Atlas — Teams");
   });
 
@@ -111,9 +111,7 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    // The lazy import + FlowDashboard render chain can exceed Testing
-    // Library's default 1000ms findByText timeout under load.
-    expect(await screen.findByText("Team Dashboard", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText("Team Dashboard")).toBeInTheDocument();
   });
 
   it("renders the (lazy-loaded) project dashboard route", async () => {
@@ -124,7 +122,7 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(await screen.findByText("Project Dashboard", {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText("Project Dashboard")).toBeInTheDocument();
   });
 
   it("lists the Meetings entry in the Intelligence group and routes to it", async () => {
