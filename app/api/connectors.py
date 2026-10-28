@@ -29,7 +29,7 @@ def _start(jobs: SyncJobRunner, request: SyncJobRequest, source: DeliveryDataSou
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"A {running.request.kind} sync of this organization is running "
+                f"Another {running.request.kind} sync is running "
                 f"(started {running.started_at:%H:%M} UTC); try again when it finishes"
             ),
         ) from exc

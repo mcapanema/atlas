@@ -550,7 +550,7 @@ async def test_rebuild_while_a_plain_sync_runs_is_409(
     started = datetime.fromisoformat(plain.json()["started_at"])
     assert rebuild.status_code == 409
     assert rebuild.json()["detail"] == (
-        f"A organization sync of this organization is running (started {started:%H:%M} UTC); "
+        f"Another organization sync is running (started {started:%H:%M} UTC); "
         "try again when it finishes"
     )
 

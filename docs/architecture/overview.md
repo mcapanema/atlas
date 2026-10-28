@@ -48,7 +48,7 @@ derivation lives beside its aggregate: `derive_timeline`
 and — under its team's rules (`blocked_periods`) — blocked periods for `GET /api/work-items/{id}/timeline` and the Work
 Item Explorer (`/work-items`).
 
-### Computed-on-read analytics (ADR-0003, amended by ADR-0008)
+### Computed-on-read analytics (ADR-0003, amended by ADR-0008 and ADR-0023)
 
 Metrics and forecasts are recomputed per request from the persisted
 events; these slices have no tables and no migrations. AI advice is the
@@ -186,8 +186,9 @@ custom.
   Sync routes start a background job and answer `202` with it
   (`SyncJobRunner`, `app/api/sync_jobs.py`, ADR-0022): one sync at a time, a
   request the running job covers gets that job back, any other answers
-  `409`, and the last 20 jobs are kept in memory (a restart loses them;
-  `GET /api/connectors/linear/jobs/{id}` then answers `404`).
+  `409`, and the last `HISTORY_SIZE` jobs (`app/api/sync_jobs.py`) are kept
+  in memory (a restart loses them; `GET /api/connectors/linear/jobs/{id}`
+  then answers `404`).
   Each sync stamps `teams.last_synced_at` for the teams it pulled; the flow
   history's `data_as_of` is the later of that stamp and the newest event's
   `recorded_at`.

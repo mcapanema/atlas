@@ -28,7 +28,7 @@ not to each item.
 - **People come from issue nodes, not a users query.** Every organization
   sync fetches every issue, so each sync sees each assignee's current name.
   There is no new `DeliveryDataSource` method; `SourceWorkItem.assignee` is a
-  `SourcePerson(id, name, email)`. An assignee with a blank name reads as
+  `SourcePerson(external_id, name, email)`. An assignee with a blank name reads as
   unassigned. People who own no item are not stored.
 - **Sync upserts people by `external_id`.** It writes `name` and `email` and
   never `display_name`, so the override survives every sync and every
