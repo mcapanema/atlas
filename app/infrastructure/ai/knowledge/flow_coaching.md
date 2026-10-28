@@ -41,9 +41,15 @@ not adding people.
   reflects blocked time only — likely overstating active time.
 
 ## Theory of Constraints
-Find the stage where work queues up (the bottleneck); improving anywhere
-else is waste. Exploit the constraint (keep it busy on the right work),
-subordinate everything else to it, then elevate it.
+Atlas computes the bottleneck: the workflow state where items completed in
+the flow window spent the most in-cycle time ("Time in state"). Use that
+state; never name a different stage as the bottleneck. A wait state as the
+bottleneck points to a handoff (review capacity, batch size, deploy
+cadence); a work state points to capacity or item size. A high "queue now"
+in the same state confirms that work is piling up there. With no computed
+bottleneck the data is too sparse: say so instead of guessing. Then
+exploit the constraint (keep it busy on the right work), subordinate
+everything else to it, and elevate it. Improving anywhere else is waste.
 
 ## Forecasting discipline
 - Monte Carlo percentiles are commitments-with-confidence: quote p85, not

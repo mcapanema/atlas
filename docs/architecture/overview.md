@@ -70,6 +70,11 @@ exception: it is generated in the background and stored (ADR-0023).
   wait states reads blocked-only efficiency, near 100%; ADR-0018);
   a component backed by fewer than `health_min_sample` items is left out,
   and with none left the scope is unscored).
+  Time in state (`state_time.py`) sums each completed item's in-cycle stays
+  per workflow state, counts the queue in each state now, and names the
+  state with the most total time as the bottleneck (none below
+  `health_min_sample` measured items) — the advisor explains it, never
+  finds it.
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
