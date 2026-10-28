@@ -21,7 +21,6 @@ class PeopleService:
         person = await self._people.get(person_id)
         if person is None:
             raise UnknownPersonError(f"Person {person_id} does not exist")
-        person.display_name = display_name
-        person.__post_init__()  # a blank override normalises to None
+        person.set_display_name(display_name)
         await self._people.update(person)
         return person

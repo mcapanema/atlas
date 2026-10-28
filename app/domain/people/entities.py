@@ -23,7 +23,11 @@ class Person:
         if not stripped:
             raise ValueError("Person name must not be empty")
         self.name = stripped
-        self.display_name = (self.display_name or "").strip() or None
+        self.set_display_name(self.display_name)
+
+    def set_display_name(self, value: str | None) -> None:
+        """Blank means no override."""
+        self.display_name = (value or "").strip() or None
 
     @property
     def shown_name(self) -> str:

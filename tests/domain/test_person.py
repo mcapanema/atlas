@@ -23,3 +23,11 @@ def test_shown_name_prefers_display_name() -> None:
         == "João Barbosa"
     )
     assert Person(organization_id=org, name="Joao Barbosa").shown_name == "Joao Barbosa"
+
+
+def test_set_display_name_normalises_blank_to_none() -> None:
+    person = Person(organization_id=uuid4(), name="Ada")
+    person.set_display_name(" Ada L ")
+    assert person.display_name == "Ada L"
+    person.set_display_name("  ")
+    assert person.display_name is None
