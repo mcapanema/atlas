@@ -135,3 +135,16 @@ def test_completions_outside_the_window_are_ignored() -> None:
 
     assert result.measured == 0
     assert result.states == ()
+
+
+def test_items_completed_without_a_start_have_no_cycle_to_measure() -> None:
+    item = uuid4()
+    stream = [
+        Event(work_item_id=item, type=EventType.CREATED, occurred_at=_day(1)),
+        _move(item, EventType.COMPLETED, 5, "Todo", "Done"),
+    ]
+
+    result = _compute(stream)
+
+    assert result.measured == 0
+    assert result.states == ()
