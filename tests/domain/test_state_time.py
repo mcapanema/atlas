@@ -148,3 +148,65 @@ def test_items_completed_without_a_start_have_no_cycle_to_measure() -> None:
 
     assert result.measured == 0
     assert result.states == ()
+
+
+def test_time_after_a_move_back_is_not_in_progress_time() -> None:
+    item = uuid4()
+    stream = [
+        _move(item, EventType.STARTED, 1, "Todo", "In Progress"),
+        _move(item, EventType.STOPPED, 2, "In Progress", "Todo"),
+        _move(item, EventType.STARTED, 22, "Todo", "In Progress"),
+        _move(item, EventType.COMPLETED, 24, "In Progress", "Done"),
+    ]
+
+    result = _compute(stream)
+
+    assert [(s.state, s.total) for s in result.states] == [("In Progress", timedelta(days=3))]
+
+
+def test_time_in_done_before_a_reopen_is_not_counted() -> None:
+    item = uuid4()
+    stream = [
+        _move(item, EventType.STARTED, 1, "Todo", "In Progress"),
+        _move(item, EventType.COMPLETED, 3, "In Progress", "Done"),
+        _move(item, EventType.STATE_CHANGED, 20, "Done", "Todo"),
+        _move(item, EventType.STARTED, 21, "Todo", "In Progress"),
+        _move(item, EventType.COMPLETED, 22, "In Progress", "Done"),
+    ]
+    first = replace(RULES, reopen_completion="first", done_then_reopened="reopened")
+
+    for rules in (RULES, first):
+        sample = derive_flow_sample(stream, rules)
+        assert sample is not None
+        result = compute_state_times([stream], [sample], now=NOW, rules=rules)
+        assert {s.state for s in result.states} == {"In Progress"}
+
+
+def test_a_moved_back_item_is_not_queued_in_a_not_started_state() -> None:
+    item = uuid4()
+    stream = [
+        _move(item, EventType.STARTED, 20, "Todo", "In Progress"),
+        _move(item, EventType.STOPPED, 25, "In Progress", "Todo"),
+    ]
+    keeps_wip = replace(RULES, move_back_ends_wip=False)
+    sample = derive_flow_sample(stream, keeps_wip)
+    assert sample is not None
+
+    result = compute_state_times([stream], [sample], now=NOW, rules=keeps_wip)
+
+    assert result.states == ()
+
+
+def test_wait_states_follow_each_items_team_rules() -> None:
+    item = uuid4()
+    stream = [
+        _move(item, EventType.STARTED, 1, "Todo", "Waiting on QA"),
+        _move(item, EventType.COMPLETED, 3, "Waiting on QA", "Done"),
+    ]
+    team_rules = replace(RULES, wait_state_names=("Waiting on QA",))
+
+    result = compute_state_times(
+        [stream], [_sample(stream)], now=NOW, rules=RULES, stream_rules=[team_rules]
+    )
+
+    assert result.states[0].wait_state is True

@@ -100,6 +100,7 @@ class MetricsService:
             now=window_end,
             window_days=window_days,
             rules=scope.rules,
+            stream_rules=scope.stream_rules,
         )
 
     async def get_flow_history(
