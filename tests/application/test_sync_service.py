@@ -5,7 +5,12 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.application.sync.service import SyncService, UnknownOrganizationError, UnknownTeamError
+from app.application.sync.service import (
+    SyncPhase,
+    SyncService,
+    UnknownOrganizationError,
+    UnknownTeamError,
+)
 from app.domain.events.entities import Event, EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import (
@@ -1314,3 +1319,60 @@ async def test_team_sync_stamps_only_that_team() -> None:
     assert mine.last_synced_at is not None
     assert mine.last_synced_at > old_stamp
     assert theirs.last_synced_at == other_stamp
+
+
+async def test_sync_reports_each_phase_in_order() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    phases: list[SyncPhase] = []
+
+    await harness.service.sync(org_id, on_phase=phases.append)
+
+    assert phases == [SyncPhase.TEAMS, SyncPhase.PROJECTS, SyncPhase.WORK_ITEMS]
+
+
+async def test_sync_team_reports_each_phase_in_order() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    phases: list[SyncPhase] = []
+
+    await harness.service.sync_team(lt1_id, on_phase=phases.append)
+
+    assert phases == [SyncPhase.TEAMS, SyncPhase.PROJECTS, SyncPhase.WORK_ITEMS]
+
+
+async def test_resolve_organization_bootstraps_and_rejects_unknown_and_ambiguous() -> None:
+    harness = Harness(full_source())
+    with pytest.raises(UnknownOrganizationError):
+        await harness.service.resolve_organization(uuid4())
+
+    created = await harness.service.resolve_organization(None)
+    assert [o.id for o in await harness.organizations.list()] == [created]
+    assert await harness.service.resolve_organization(None) == created
+
+    await harness.organizations.add(Organization(name="B"))
+    with pytest.raises(ValueError, match="specify organization_id"):
+        await harness.service.resolve_organization(None)
+
+
+async def test_resolve_team_returns_its_organization() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    team = await harness.teams.get(lt1_id)
+    assert team is not None
+
+    assert await harness.service.resolve_team(lt1_id) == team.organization_id
+
+
+async def test_resolve_team_rejects_unknown_and_hand_made_teams() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    manual = Team(organization_id=org_id, name="Made in Atlas")
+    await harness.teams.add(manual)
+
+    with pytest.raises(UnknownTeamError):
+        await harness.service.resolve_team(uuid4())
+    with pytest.raises(ValueError, match="nothing to sync"):
+        await harness.service.resolve_team(manual.id)

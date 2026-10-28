@@ -1,5 +1,7 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from uuid import UUID
 
 from app.domain._time import utcnow
@@ -31,6 +33,22 @@ class UnknownOrganizationError(Exception):
 
 class UnknownTeamError(Exception):
     """A team sync was requested for a team that doesn't exist (404, not 422)."""
+
+
+class SyncPhase(StrEnum):
+    """Coarse progress of a sync run, reported through `PhaseCallback`.
+
+    SNAPSHOTS follows the sync proper and is reported by the job runner, not
+    the service.
+    """
+
+    TEAMS = "teams"
+    PROJECTS = "projects"
+    WORK_ITEMS = "work_items"
+    SNAPSHOTS = "snapshots"
+
+
+PhaseCallback = Callable[[SyncPhase], None]
 
 
 @dataclass(frozen=True)
@@ -97,19 +115,36 @@ class SyncService:
         self._people = people
 
     async def sync(
-        self, organization_id: UUID | None = None, *, rebuild: bool = False
+        self,
+        organization_id: UUID | None = None,
+        *,
+        rebuild: bool = False,
+        on_phase: PhaseCallback | None = None,
     ) -> SyncSummary:
-        resolved = await self._resolve_organization(organization_id)
+        resolved = await self.resolve_organization(organization_id)
         logger.info("Sync started for organization %s (rebuild=%s)", resolved, rebuild)
-        return await self._run(resolved, None, rebuild=rebuild)
+        return await self._run(resolved, None, rebuild=rebuild, on_phase=on_phase)
 
-    async def sync_team(self, team_id: UUID) -> SyncSummary:
+    async def sync_team(
+        self, team_id: UUID, *, on_phase: PhaseCallback | None = None
+    ) -> SyncSummary:
         """Sync one team's work items; teams and projects still sync org-wide.
 
         Nothing is pruned: a team-filtered fetch can't tell an item deleted
         upstream from one moved to another team, so deletions wait for the
         next organization sync (manual or scheduled).
         """
+        team = await self._syncable_team(team_id)
+        logger.info("Sync started for team %s (%s)", team.id, team.name)
+        return await self._run(
+            team.organization_id, team.external_id, rebuild=False, on_phase=on_phase
+        )
+
+    async def resolve_team(self, team_id: UUID) -> UUID:
+        """The organization of a team that can be synced; raises as `sync_team` would."""
+        return (await self._syncable_team(team_id)).organization_id
+
+    async def _syncable_team(self, team_id: UUID) -> Team:
         team = await self._teams.get(team_id)
         if team is None:
             raise UnknownTeamError(f"Team {team_id} does not exist")
@@ -118,14 +153,25 @@ class SyncService:
             raise ValueError(
                 f"Team {team.name!r} was not synced from a source; there is nothing to sync"
             )
-        logger.info("Sync started for team %s (%s)", team.id, team.name)
-        return await self._run(team.organization_id, team.external_id, rebuild=False)
+        return team
 
     async def _run(
-        self, organization_id: UUID, team_external_id: str | None, *, rebuild: bool
+        self,
+        organization_id: UUID,
+        team_external_id: str | None,
+        *,
+        rebuild: bool,
+        on_phase: PhaseCallback | None,
     ) -> SyncSummary:
+        def report(phase: SyncPhase) -> None:
+            if on_phase is not None:
+                on_phase(phase)
+
+        report(SyncPhase.TEAMS)
         teams = await self._sync_teams(organization_id)
+        report(SyncPhase.PROJECTS)
         projects = await self._sync_projects()
+        report(SyncPhase.WORK_ITEMS)
         sources = await self._source.fetch_work_items(team_external_id=team_external_id)
         people_by_eid = await self._sync_people(organization_id, sources)
         work_items, events, divergences, deleted, rebuilt = await self._sync_work_items(
@@ -163,7 +209,7 @@ class SyncService:
         )
         return summary
 
-    async def _resolve_organization(self, organization_id: UUID | None) -> UUID:
+    async def resolve_organization(self, organization_id: UUID | None) -> UUID:
         if organization_id is not None:
             if await self._organizations.get(organization_id) is None:
                 raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
