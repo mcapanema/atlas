@@ -55,7 +55,10 @@ Presentation is allowed to know a concrete adapter exists).
   commit, then `queue`): a running scope holds SQLite's write lock.
 - **Background advice** (`advice_runner.py`): the in-process
   `AdviceRunner` generates advice / meeting prep as one asyncio task per
-  stored `AdviceRun`; a start for a key with a live run returns that run.
+  stored `AdviceRun`; a start for a key with a live run returns that run. `POST` starts (202,
+  409 until configured), `GET` reads the latest run for the same request
+  params (`null` if none, no key needed); the GET key is built from the
+  request params, never from defaults the runner resolves.
   A task never holds a transaction across the LLM call (build context,
   commit and close; call the port; store the outcome in a new session),
   and the lifespan fails runs a restart left running.

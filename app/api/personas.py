@@ -31,7 +31,7 @@ async def reflect(
     persona: Persona,
     # Declared before the service on purpose: an unconfigured advisor answers
     # 409 before any feedback/guidance state is consulted (same pattern as
-    # GET /api/recommendations).
+    # POST /api/recommendations).
     advisor: AdvisorPortDep,
     service: PersonaServiceDep,
     session: SessionDep,

@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic_core import PydanticCustomError
 
 from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
-from app.domain.advisor.entities import MeetingType, Persona
+from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType, Persona
+from app.domain.advisor.runs import AdviceRun
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
@@ -387,6 +388,52 @@ class MeetingPrepRead(BaseModel):
     generated_at: datetime
     headline: str
     talking_points: list[TalkingPointRead]
+
+
+class AdviceRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: Literal["running", "succeeded", "failed"]
+    requested_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    advice: DeliveryAdviceRead | None
+
+    @classmethod
+    def from_run(cls, run: AdviceRun) -> "AdviceRunRead":
+        advice = run.result if isinstance(run.result, DeliveryAdvice) else None
+        return cls(
+            id=run.id,
+            status=run.status.value,
+            requested_at=run.requested_at,
+            finished_at=run.finished_at,
+            error=run.error,
+            advice=DeliveryAdviceRead.model_validate(advice) if advice else None,
+        )
+
+
+class MeetingPrepRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: Literal["running", "succeeded", "failed"]
+    requested_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    prep: MeetingPrepRead | None
+
+    @classmethod
+    def from_run(cls, run: AdviceRun) -> "MeetingPrepRunRead":
+        prep = run.result if isinstance(run.result, MeetingPrep) else None
+        return cls(
+            id=run.id,
+            status=run.status.value,
+            requested_at=run.requested_at,
+            finished_at=run.finished_at,
+            error=run.error,
+            prep=MeetingPrepRead.model_validate(prep) if prep else None,
+        )
 
 
 class MetricSnapshotRead(BaseModel):

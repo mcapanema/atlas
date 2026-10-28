@@ -94,8 +94,10 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 `ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
-`/api/metrics/health`, `/api/forecasts`, and `GET /api/recommendations` (409 until
-`ATLAS_OPENROUTER_API_KEY` is set — ADR-0005). `GET /api/metrics/overview`
+`/api/metrics/health`, `/api/forecasts`, and `/api/recommendations` (`POST` starts a stored
+background run and answers 202 — 409 until `ATLAS_OPENROUTER_API_KEY` is set,
+ADR-0005; `GET` reads the latest stored run for the same scope, persona and
+window, or `null`, with no key needed). `GET /api/metrics/overview`
 is the Executive Dashboard's per-team row: flow metrics, health, forecast
 accuracy and snapshot history from one scope load, identical to the
 standalone endpoints for the same query. The frontend consumes them
@@ -151,7 +153,7 @@ An import replaces the workspace layer and each matched team's layer, skips
 and reports unknown or ambiguous teams, and recomputes history the same way a
 PATCH does.
 One rule changes no metric: `sprint_length_days` (`MEETING_RULES`), the
-retrospective's default window on the Meetings page, `GET /api/meetings/prep`
+retrospective's default window on the Meetings page, `/api/meetings/prep`
 and the MCP `retrospective` prompt (teams carry it in `GET /api/teams`).
 Changing it rewrites no snapshot history and doesn't mark a team's rules as
 custom.
@@ -277,8 +279,8 @@ answers 403 to everything else.
 
 Meeting preparation has two deliberate paths: **external** — the MCP prompts
 (`daily_standup`, `retrospective`, `planning`) instruct a connected chat AI
-(Claude/ChatGPT) to call Atlas's MCP tools; and **internal** — `GET
-/api/meetings/prep` builds the same digest (`MeetingContext` = advisor context
+(Claude/ChatGPT) to call Atlas's MCP tools; and **internal** — `POST
+/api/meetings/prep` starts a stored run (`GET` reads the latest) that builds the same digest (`MeetingContext` = advisor context
 + delivery health + aging WIP, rendered by `render_meeting_context`) and sends
 it to the OpenRouter advisor (`AdvisorPort.prepare_meeting`), so Atlas works
 stand-alone. Meeting types are backed by learnable personas (`daily_standup`,

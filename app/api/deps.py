@@ -192,6 +192,13 @@ def advice_run_service_for(session: AsyncSession) -> AdviceRunService:
     return AdviceRunService(SqlAlchemyAdviceRunRepository(session))
 
 
+def get_advice_run_service(session: SessionDep) -> AdviceRunService:
+    return advice_run_service_for(session)
+
+
+AdviceRunServiceDep = Annotated[AdviceRunService, Depends(get_advice_run_service)]
+
+
 LINEAR_NOT_CONFIGURED = "Linear connector is not configured; set ATLAS_LINEAR_API_KEY"
 
 
