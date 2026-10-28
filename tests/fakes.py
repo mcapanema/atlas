@@ -122,6 +122,13 @@ class InMemoryWorkItemRepository:
     async def parent_ids(self) -> set[UUID]:
         return {item.parent_id for item in self._items.values() if item.parent_id is not None}
 
+    async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
+        teams: dict[UUID, set[UUID]] = {}
+        for item in self._items.values():
+            if item.project_id is not None:
+                teams.setdefault(item.project_id, set()).add(item.team_id)
+        return {project_id: frozenset(ids) for project_id, ids in teams.items()}
+
     async def list(
         self,
         *,

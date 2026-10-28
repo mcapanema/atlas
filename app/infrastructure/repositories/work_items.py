@@ -129,6 +129,18 @@ class SqlAlchemyWorkItemRepository:
         )
         return {parent_id for parent_id in result.scalars() if parent_id is not None}
 
+    async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
+        result = await self._session.execute(
+            select(WorkItemModel.project_id, WorkItemModel.team_id)
+            .distinct()
+            .where(WorkItemModel.project_id.is_not(None))
+        )
+        teams: dict[UUID, set[UUID]] = {}
+        for project_id, team_id in result.all():
+            if project_id is not None:
+                teams.setdefault(project_id, set()).add(team_id)
+        return {project_id: frozenset(ids) for project_id, ids in teams.items()}
+
     async def list(
         self,
         *,

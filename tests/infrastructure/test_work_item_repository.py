@@ -229,3 +229,20 @@ async def test_assignee_defaults_to_none(session: AsyncSession) -> None:
 
     assert fetched is not None
     assert fetched.assignee is None
+
+
+async def test_team_ids_by_project_groups_distinct_teams(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_a, team_b = await _team_id(session), await _team_id(session)
+    project_p = await _project_id(session, team_a)
+    project_q = await _project_id(session, team_a)
+    await repo.add(WorkItem(team_id=team_a, title="1", project_id=project_p))
+    await repo.add(WorkItem(team_id=team_a, title="2", project_id=project_p))
+    await repo.add(WorkItem(team_id=team_b, title="3", project_id=project_p))
+    await repo.add(WorkItem(team_id=team_a, title="4", project_id=project_q))
+    await repo.add(WorkItem(team_id=team_b, title="5"))
+
+    assert await repo.team_ids_by_project() == {
+        project_p: frozenset({team_a, team_b}),
+        project_q: frozenset({team_a}),
+    }

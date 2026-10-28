@@ -34,6 +34,10 @@ class WorkItemRepository(Protocol):
         """Every work item that is some item's parent."""
         ...
 
+    async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
+        """Each project that has items, mapped to the distinct teams of those items."""
+        ...
+
     async def list(
         self,
         *,
