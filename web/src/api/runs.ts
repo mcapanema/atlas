@@ -21,7 +21,8 @@ export function runView(
 ): { running: boolean; error: string | undefined } {
   const failed = run?.status === "failed" ? (run.error ?? "The run failed") : undefined;
   return {
-    running: start.isPending || run?.status === "running",
+    // After a failed read, data still says "running" but nothing polls it: let POST restart.
+    running: start.isPending || (run?.status === "running" && readError === null),
     error: start.error?.message ?? readError?.message ?? failed,
   };
 }

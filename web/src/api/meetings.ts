@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { apiFetch } from "./client";
 import { scopeParam, type MetricsScope } from "./metrics";
@@ -69,8 +70,17 @@ export function useGenerateMeetingPrep(
 ) {
   const queryClient = useQueryClient();
   const { queryKey, path } = prepRequest(scope, meeting, params);
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: () => apiFetch<MeetingPrepRun>(path, { method: "POST" }),
-    onSuccess: (run) => queryClient.setQueryData(queryKey, run),
+    onSuccess: async (run) => {
+      // An initial GET still in flight would otherwise overwrite the run with null.
+      await queryClient.cancelQueries({ queryKey });
+      queryClient.setQueryData(queryKey, run);
+    },
   });
+  // Mutation state belongs to one request: drop it when the key changes.
+  const { reset } = mutation;
+  const keyId = JSON.stringify(queryKey);
+  useEffect(() => reset, [keyId, reset]);
+  return mutation;
 }

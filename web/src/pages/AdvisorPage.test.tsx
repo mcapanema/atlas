@@ -137,6 +137,64 @@ describe("AdvisorPage", () => {
     expect(screen.getByText("LLM unavailable")).toBeInTheDocument();
   });
 
+  it("re-enables the button when a poll fails", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let gets = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+        const url = requestUrl(input);
+        if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+        if (url.startsWith("/api/recommendations/status")) {
+          return Promise.resolve(jsonResponse({ configured: true }));
+        }
+        if (url.startsWith("/api/personas")) return Promise.resolve(jsonResponse([]));
+        gets += 1;
+        return Promise.resolve(
+          gets === 1
+            ? jsonResponse(runFixture({ status: "running" }))
+            : jsonResponse({ detail: "poll boom" }, 500),
+        );
+      });
+
+      renderPage(`/advisor?team=${teamFixture.id}`);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Get advice/ })).toBeDisabled(),
+      );
+      await vi.advanceTimersByTimeAsync(2100);
+
+      expect(await screen.findByText("poll boom")).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(gets).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a start failure when another persona is selected", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+      if (url.startsWith("/api/recommendations/status")) {
+        return Promise.resolve(jsonResponse({ configured: true }));
+      }
+      if (url.startsWith("/api/personas")) return Promise.resolve(jsonResponse([]));
+      return Promise.resolve(
+        init?.method === "POST" ? jsonResponse({ detail: "no key" }, 409) : jsonResponse(null),
+      );
+    });
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+    expect(await screen.findByText("no key")).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getAllByRole("combobox")[1]);
+    fireEvent.click(await screen.findByTitle("Delivery Analyst"));
+
+    await waitFor(() => expect(screen.queryByText("no key")).not.toBeInTheDocument());
+  });
+
   it("disables the button while a run is running", async () => {
     mockFetch({ stored: runFixture({ status: "running" }) });
 
