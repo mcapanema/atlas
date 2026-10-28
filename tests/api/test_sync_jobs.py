@@ -347,6 +347,29 @@ async def test_run_waits_for_the_running_job_then_runs_to_completion(
     assert runner.get(second.id) is second
 
 
+async def test_cancelling_a_waiting_run_leaves_the_running_job_alone(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # Auto sync's loop waits in run() behind a manual job; closing it must not
+    # cancel (and roll back) that manual job.
+    org_id = await _seed_org(sessionmaker)
+    runner = _runner(sessionmaker)
+    source = _BlockingSource()
+    first = runner.start(SyncJobRequest(org_id, "organization", "manual"), source)
+
+    waiter = asyncio.create_task(
+        runner.run(SyncJobRequest(org_id, "organization", "auto"), _source())
+    )
+    await asyncio.sleep(0)
+    waiter.cancel()
+    await asyncio.gather(waiter, return_exceptions=True)
+    source.release.set()
+    await runner.wait_idle()
+
+    assert waiter.cancelled()
+    assert first.state == "succeeded"
+
+
 async def test_run_returns_a_failed_job_without_raising(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:

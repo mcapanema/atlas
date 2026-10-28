@@ -156,9 +156,13 @@ class SyncJobRunner:
             del self._jobs[next(iter(self._jobs))]
 
     async def wait_idle(self) -> None:
-        """Until no job is in flight (tests, auto sync, shutdown)."""
+        """Until no job is in flight (tests, auto sync, shutdown).
+
+        `asyncio.wait`, not `gather`: cancelling a waiter must not cancel
+        someone else's job. Only `close()` and `run()`'s own job propagate it.
+        """
         while (task := self._task) is not None and not task.done():
-            await asyncio.gather(task, return_exceptions=True)
+            await asyncio.wait({task})
 
     async def close(self) -> None:
         task = self._task
