@@ -76,13 +76,16 @@ async def file_sessionmaker(tmp_path: Path) -> AsyncIterator[async_sessionmaker[
 async def rules_app(
     file_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[FastAPI]:
-    """The app on the file-backed DB; stops the sync and recompute runners on teardown."""
+    """The app on the file-backed DB; stops the advice, sync and recompute runners on teardown."""
     application = create_app()
     application.state.sessionmaker = file_sessionmaker
     yield application
     jobs = getattr(application.state, "sync_job_runner", None)
     if jobs is not None:
         await jobs.close()
+    advice = getattr(application.state, "advice_runner", None)
+    if advice is not None:
+        await advice.close()
     runner = getattr(application.state, "recompute_runner", None)
     if runner is not None:
         await runner.close()

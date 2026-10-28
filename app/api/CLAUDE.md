@@ -53,6 +53,12 @@ Presentation is allowed to know a concrete adapter exists).
   resumes organizations left "running". A route that changes rules does
   its write inside `async with runner.paused()` (cancel first, write and
   commit, then `queue`): a running scope holds SQLite's write lock.
+- **Background advice** (`advice_runner.py`): the in-process
+  `AdviceRunner` generates advice / meeting prep as one asyncio task per
+  stored `AdviceRun`; a start for a key with a live run returns that run.
+  A task never holds a transaction across the LLM call (build context,
+  commit and close; call the port; store the outcome in a new session),
+  and the lifespan fails runs a restart left running.
 - **Auto sync** (`auto_sync.py`, ADR-0014): the in-process
   `AutoSyncRunner` ticks every minute and syncs each organization whose
   schedule has a due slot by running it through `SyncJobRunner` (own

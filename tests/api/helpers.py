@@ -55,7 +55,10 @@ async def use_calendar_days(
 
 
 async def settle(app: FastAPI) -> None:
-    """Wait for the sync job runner, then the recompute runner it may start, to go idle."""
+    """Wait for the advice and sync job runners, then the recompute runner, to go idle."""
+    advice = getattr(app.state, "advice_runner", None)
+    if advice is not None:
+        await advice.wait_idle()
     jobs = getattr(app.state, "sync_job_runner", None)
     if jobs is not None:
         await jobs.wait_idle()
