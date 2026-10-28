@@ -250,3 +250,15 @@ export function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   return input instanceof URL ? input.href : input.url;
 }
+
+/** A stored advice/meeting-prep run; add `advice`/`prep` for its payload. */
+export function runFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "run-1",
+    status: "succeeded",
+    requested_at: "2026-07-12T00:00:00Z",
+    finished_at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+    error: null,
+    ...overrides,
+  };
+}

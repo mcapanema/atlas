@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, teamFixture, requestUrl } from "../test/fixtures";
+import { jsonResponse, requestUrl, runFixture, teamFixture } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { AdvisorPage } from "./AdvisorPage";
 
@@ -20,8 +20,18 @@ const advice = {
   ],
 };
 
-function mockFetch({ configured = true } = {}) {
-  vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+const succeededRun = () => runFixture({ advice });
+
+/** GET answers the stored run; POST stores and answers `onPost()` (a succeeded run by default). */
+interface MockOptions {
+  configured?: boolean;
+  stored?: object | null;
+  onPost?: () => object;
+}
+
+function mockFetch({ configured = true, stored = null, onPost = succeededRun }: MockOptions = {}) {
+  let latest = stored;
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const url = requestUrl(input);
     if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
     if (url.startsWith("/api/recommendations/status")) {
@@ -45,7 +55,13 @@ function mockFetch({ configured = true } = {}) {
         ),
       );
     }
-    if (url.startsWith("/api/recommendations")) return Promise.resolve(jsonResponse(advice));
+    if (url.startsWith("/api/recommendations")) {
+      if (init?.method === "POST") {
+        latest = onPost();
+        return Promise.resolve(jsonResponse(latest, 202));
+      }
+      return Promise.resolve(jsonResponse(latest));
+    }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
 }
@@ -67,14 +83,66 @@ describe("AdvisorPage", () => {
     await waitFor(() => expect(screen.getByText(/Advisor is not configured/)).toBeInTheDocument());
   });
 
-  it("does not fetch advice until the button is clicked", async () => {
-    mockFetch();
+  it("shows the stored advice on load without a click", async () => {
+    mockFetch({ stored: succeededRun() });
 
     renderPage(`/advisor?team=${teamFixture.id}`);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
-    expect(urls.some((u) => u.startsWith("/api/recommendations?"))).toBe(false);
+    expect(await screen.findByText("Flow is healthy.")).toBeInTheDocument();
+    expect(screen.getByText(/Generated .* ago/)).toBeInTheDocument();
+    const posts = vi.mocked(globalThis.fetch).mock.calls.filter((c) => c[1]?.method === "POST");
+    expect(posts).toHaveLength(0);
+  });
+
+  it("posts and polls until the run succeeds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let polls = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+        const url = requestUrl(input);
+        if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
+        if (url.startsWith("/api/recommendations/status")) {
+          return Promise.resolve(jsonResponse({ configured: true }));
+        }
+        if (url.startsWith("/api/personas")) return Promise.resolve(jsonResponse([]));
+        if (init?.method === "POST") {
+          return Promise.resolve(jsonResponse(runFixture({ status: "running" }), 202));
+        }
+        polls += 1;
+        const latest =
+          polls === 1 ? null : polls === 2 ? runFixture({ status: "running" }) : succeededRun();
+        return Promise.resolve(jsonResponse(latest));
+      });
+
+      renderPage(`/advisor?team=${teamFixture.id}`);
+      await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeEnabled());
+      fireEvent.click(screen.getByRole("button", { name: /Get advice/ }));
+      expect(screen.queryByText("Flow is healthy.")).not.toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(2100);
+      await vi.advanceTimersByTimeAsync(2100);
+
+      expect(await screen.findByText("Flow is healthy.")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows the run error when the run failed", async () => {
+    mockFetch({ stored: runFixture({ status: "failed", error: "LLM unavailable" }) });
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    expect(await screen.findByText("Failed to generate advice")).toBeInTheDocument();
+    expect(screen.getByText("LLM unavailable")).toBeInTheDocument();
+  });
+
+  it("disables the button while a run is running", async () => {
+    mockFetch({ stored: runFixture({ status: "running" }) });
+
+    renderPage(`/advisor?team=${teamFixture.id}`);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Get advice/ })).toBeDisabled());
   });
 
   it("renders summary and recommendations after clicking Get advice", async () => {
@@ -91,8 +159,8 @@ describe("AdvisorPage", () => {
     expect(screen.getByText("wip=12")).toBeInTheDocument();
   });
 
-  it("surfaces an advice generation failure", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+  it("surfaces a failure to start a run", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
@@ -102,7 +170,11 @@ describe("AdvisorPage", () => {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.startsWith("/api/recommendations")) {
-        return Promise.resolve(jsonResponse({ detail: "LLM unavailable" }, 500));
+        return Promise.resolve(
+          init?.method === "POST"
+            ? jsonResponse({ detail: "LLM unavailable" }, 409)
+            : jsonResponse(null),
+        );
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
@@ -230,7 +302,8 @@ describe("AdvisorPage", () => {
       if (url.endsWith("/feedback")) {
         return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
       }
-      if (url.startsWith("/api/recommendations")) return Promise.resolve(jsonResponse(advice));
+      if (url.startsWith("/api/recommendations"))
+        return Promise.resolve(jsonResponse(succeededRun()));
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
 

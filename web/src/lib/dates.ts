@@ -1,4 +1,7 @@
 import dayjs, { type Dayjs } from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
 
 /** The display format for every user-facing date. Also the AntD picker format. */
 export const DATE_FORMAT = "DD-MM-YYYY";
@@ -35,4 +38,9 @@ export function formatDates(isos: string[]): string {
 /** Picked days as sorted, deduped ISO dates (antd emits selection order); [] when cleared. */
 export function toHolidayList(days: Dayjs[] | null): string[] {
   return [...new Set((days ?? []).map((d) => d.format("YYYY-MM-DD")))].sort();
+}
+
+/** "3 hours ago" — how long ago a point in time was. */
+export function formatRelative(iso: string): string {
+  return dayjs(iso).fromNow();
 }

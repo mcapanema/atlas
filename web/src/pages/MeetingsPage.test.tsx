@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, teamFixture, requestUrl } from "../test/fixtures";
+import { jsonResponse, requestUrl, runFixture, teamFixture } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { MeetingsPage } from "./MeetingsPage";
 
@@ -20,8 +20,17 @@ const prep = {
   ],
 };
 
-function mockFetch({ configured = true, teams = [teamFixture] } = {}) {
-  vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+const succeededRun = () => runFixture({ prep });
+
+/** GET answers the run stored under its URL; POST stores and answers a succeeded run. */
+interface MockOptions {
+  configured?: boolean;
+  teams?: object[];
+  stored?: Record<string, object>;
+}
+
+function mockFetch({ configured = true, teams = [teamFixture], stored = {} }: MockOptions = {}) {
+  vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
     const url = requestUrl(input);
     if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse(teams));
     if (url.startsWith("/api/recommendations/status")) {
@@ -45,7 +54,13 @@ function mockFetch({ configured = true, teams = [teamFixture] } = {}) {
         ),
       );
     }
-    if (url.startsWith("/api/meetings/prep")) return Promise.resolve(jsonResponse(prep));
+    if (url.startsWith("/api/meetings/prep")) {
+      if (init?.method === "POST") {
+        stored[url] = succeededRun();
+        return Promise.resolve(jsonResponse(stored[url], 202));
+      }
+      return Promise.resolve(jsonResponse(stored[url] ?? null));
+    }
     return Promise.reject(new Error(`Unexpected fetch: ${url}`));
   });
 }
@@ -90,16 +105,44 @@ describe("MeetingsPage", () => {
     );
   });
 
-  it("does not fetch a prep until the button is clicked", async () => {
-    mockFetch();
+  it("posts with the meeting params and shows the stored prep", async () => {
+    const url = `/api/meetings/prep?team_id=${teamFixture.id}&meeting=retrospective&window_days=14`;
+    mockFetch({ stored: { [url]: succeededRun() } });
 
-    renderPage(`/meetings?team=${teamFixture.id}`);
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=retrospective`);
 
+    expect(await screen.findByText("One item is past the p85 age line.")).toBeInTheDocument();
+    expect(screen.getByText(/Generated .* ago/)).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /Prepare meeting/ })).toBeEnabled(),
     );
-    const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
-    expect(urls.some((u) => u.startsWith("/api/meetings/prep"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /Prepare meeting/ }));
+
+    await waitFor(() => {
+      const post = vi.mocked(globalThis.fetch).mock.calls.find((c) => c[1]?.method === "POST");
+      expect(requestUrl(post![0])).toBe(url);
+    });
+  });
+
+  it("changing remaining reads a different stored prep", async () => {
+    const base = `/api/meetings/prep?team_id=${teamFixture.id}&meeting=planning`;
+    mockFetch({
+      stored: {
+        [`${base}&remaining=8`]: runFixture({
+          prep: { ...prep, headline: "Eight items fit." },
+        }),
+      },
+    });
+
+    renderPage(`/meetings?team=${teamFixture.id}&meeting=planning`);
+
+    await waitFor(() => expect(requestedUrls()).toContain(base));
+    expect(screen.queryByText("Eight items fit.")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Planned scope (items)"), {
+      target: { value: "8" },
+    });
+
+    expect(await screen.findByText("Eight items fit.")).toBeInTheDocument();
   });
 
   it("renders headline and talking points after clicking Prepare meeting", async () => {
@@ -162,8 +205,8 @@ describe("MeetingsPage", () => {
     );
   });
 
-  it("surfaces a prep generation failure", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+  it("surfaces a failure to start a run", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = requestUrl(input);
       if (url.startsWith("/api/teams")) return Promise.resolve(jsonResponse([teamFixture]));
       if (url.startsWith("/api/recommendations/status")) {
@@ -173,7 +216,11 @@ describe("MeetingsPage", () => {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.startsWith("/api/meetings/prep")) {
-        return Promise.resolve(jsonResponse({ detail: "LLM unavailable" }, 500));
+        return Promise.resolve(
+          init?.method === "POST"
+            ? jsonResponse({ detail: "LLM unavailable" }, 409)
+            : jsonResponse(null),
+        );
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`));
     });
