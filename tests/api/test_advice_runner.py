@@ -1,12 +1,16 @@
 import asyncio
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 from unittest import mock
 from uuid import UUID
 
+import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api import advice_runner
 from app.api.advice_runner import AdviceRunner
 from app.api.deps import advice_run_service_for, persona_service_for
 from app.domain.advisor.entities import (
@@ -199,6 +203,74 @@ async def test_unexpected_error_marks_the_run_failed(file_sessionmaker: Sessions
     stored = await _stored(file_sessionmaker, run)
     assert stored.status is RunStatus.FAILED
     assert stored.error == "RuntimeError"
+
+
+async def test_blank_error_message_falls_back_to_the_error_type(
+    file_sessionmaker: Sessions,
+) -> None:
+    team_id = await _team(file_sessionmaker)
+    runner = AdviceRunner(file_sessionmaker)
+
+    run = await _start(runner, FakePort(error=AdvisorError("  ")), team_id)
+    await runner.wait_idle()
+
+    stored = await _stored(file_sessionmaker, run)
+    assert stored.status is RunStatus.FAILED
+    assert stored.error == "AdvisorError"
+
+
+def _locked_update(failures: int | None, sessions: list[AsyncSession]) -> Any:
+    """`update` raising SQLite's busy error `failures` times (None: always)."""
+    update = SqlAlchemyAdviceRunRepository.update
+
+    async def locked(self: SqlAlchemyAdviceRunRepository, run: AdviceRun) -> None:
+        sessions.append(self._session)
+        if failures is None or len(sessions) <= failures:
+            raise OperationalError("UPDATE advice_runs", {}, Exception("database is locked"))
+        await update(self, run)
+
+    return locked
+
+
+async def test_outcome_write_retries_while_the_database_is_locked(
+    file_sessionmaker: Sessions, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(advice_runner, "OUTCOME_RETRY_DELAYS", (0, 0, 0))
+    team_id = await _team(file_sessionmaker)
+    runner = AdviceRunner(file_sessionmaker)
+    sessions: list[AsyncSession] = []
+
+    with mock.patch.object(SqlAlchemyAdviceRunRepository, "update", _locked_update(2, sessions)):
+        run = await _start(runner, FakePort(), team_id)
+        await runner.wait_idle()
+
+    assert len(sessions) == 3
+    assert len(set(map(id, sessions))) == 3  # each attempt in a fresh session
+    stored = await _stored(file_sessionmaker, run)
+    assert stored.status is RunStatus.SUCCEEDED
+    assert isinstance(stored.result, DeliveryAdvice)
+
+
+async def test_outcome_write_gives_up_after_the_retries(
+    file_sessionmaker: Sessions,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(advice_runner, "OUTCOME_RETRY_DELAYS", (0, 0))
+    team_id = await _team(file_sessionmaker)
+    runner = AdviceRunner(file_sessionmaker)
+    sessions: list[AsyncSession] = []
+
+    with (
+        mock.patch.object(SqlAlchemyAdviceRunRepository, "update", _locked_update(None, sessions)),
+        caplog.at_level(logging.ERROR, logger=advice_runner.__name__),
+    ):
+        run = await _start(runner, FakePort(), team_id)
+        await runner.wait_idle()
+
+    assert len(sessions) == 3  # the first attempt + one per delay
+    assert any("Could not store the outcome" in r.message for r in caplog.records)
+    assert (await _stored(file_sessionmaker, run)).status is RunStatus.RUNNING
 
 
 async def test_start_meeting_prep_uses_the_meeting_persona_guidance(

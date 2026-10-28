@@ -13,6 +13,10 @@ port runs with no open session; a second session stores the outcome. A
 cancelled task (shutdown) writes nothing (CancelledError is not an
 Exception) — the next startup's `fail_interrupted` fails the row.
 
+The outcome write retries while SQLite is locked: a sync job holds the write
+lock for its whole transaction, longer than SQLite's busy timeout, and
+dropping the write would lose a paid result.
+
 ponytail: one process, tasks not durable — a restart loses in-flight runs
 (failed as interrupted at startup). Move to a job table + worker if advice
 generation outgrows one process (same ceiling as `recompute.py`).
@@ -26,6 +30,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, Request
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import advice_run_service_for, advisor_service_for, persona_service_for
@@ -46,6 +51,15 @@ Result = DeliveryAdvice | MeetingPrep
 # Reads what the LLM call needs inside `session`; returns the call itself,
 # to run once that session is closed.
 Prepare = Callable[[AsyncSession], Awaitable[Callable[[], Awaitable[Result]]]]
+
+# Seconds between outcome-write attempts that hit `database is locked`:
+# about two minutes in all, then the run stays running until it goes stale.
+OUTCOME_RETRY_DELAYS: tuple[float, ...] = (1, 2, 4, 8, 16, 32, 60)
+
+
+def _message(exc: Exception) -> str:
+    """The error stored on the run: never blank (`AdviceRun.fail` rejects it)."""
+    return str(exc).strip() or type(exc).__name__
 
 
 class AdviceRunner:
@@ -156,32 +170,51 @@ class AdviceRunner:
             result = await call()
         except AdvisorError as exc:
             logger.warning("Advice run %s failed: %s", run_id, exc)
-            await self._finish(run_id, str(exc) or type(exc).__name__)
+            await self._finish(run_id, _message(exc))
         except Exception as exc:
             logger.exception("Advice run %s failed", run_id)
-            await self._finish(run_id, str(exc) or type(exc).__name__)
+            await self._finish(run_id, _message(exc))
         else:
             await self._finish(run_id, result)
 
     async def _finish(self, run_id: UUID, outcome: Result | str) -> None:
-        """Store the result, or the error message (a `str`)."""
-        try:
-            async with self._sessionmaker() as session:
-                service = advice_run_service_for(session)
-                if isinstance(outcome, str):
-                    await service.fail(run_id, outcome, now=utcnow())
-                else:
-                    await service.succeed(run_id, outcome, now=utcnow())
-                await session.commit()
-        except Exception:
-            # The row stays running until it goes stale (STALE_RUN_AFTER).
-            logger.exception("Could not store the outcome of advice run %s", run_id)
+        """Store the result, or the error message (a `str`).
+
+        Each attempt runs in a fresh session; only a locked database is
+        retried. The row stays running until it goes stale (STALE_RUN_AFTER)
+        if every attempt fails.
+        """
+        for delay in (*OUTCOME_RETRY_DELAYS, None):
+            try:
+                await self._store(run_id, outcome)
+            except OperationalError:
+                if delay is None:
+                    logger.exception("Could not store the outcome of advice run %s", run_id)
+                    return
+                logger.warning("Advice run %s: database locked, retrying in %ss", run_id, delay)
+                await asyncio.sleep(delay)
+            except Exception:
+                logger.exception("Could not store the outcome of advice run %s", run_id)
+                return
+            else:
+                return
+
+    async def _store(self, run_id: UUID, outcome: Result | str) -> None:
+        async with self._sessionmaker() as session:
+            service = advice_run_service_for(session)
+            if isinstance(outcome, str):
+                await service.fail(run_id, outcome, now=utcnow())
+            else:
+                await service.succeed(run_id, outcome, now=utcnow())
+            await session.commit()
 
     async def fail_interrupted(self) -> None:
         """Fail every run a restart left running (lifespan).
 
-        Holds the start lock, so a run started during startup is never
-        mistaken for an interrupted one once this has begun.
+        The lifespan schedules this before the app serves, and its first step
+        takes the start lock without suspending (the lock is free), so every
+        start waits for it: a run started after boot is never mistaken for an
+        interrupted one (single process).
         """
         try:
             async with self._lock, self._sessionmaker() as session:
