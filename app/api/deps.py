@@ -216,6 +216,7 @@ def snapshot_service_for(session: AsyncSession) -> SnapshotService:
         ForecastService(work_items, events, rules),
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
+        work_items,
         SqlAlchemyMetricSnapshotRepository(session),
         SqlAlchemyForecastSnapshotRepository(session),
     )
@@ -234,6 +235,7 @@ def metric_rules_service_for(session: AsyncSession) -> MetricRulesService:
         SqlAlchemyOrganizationRepository(session),
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
+        SqlAlchemyWorkItemRepository(session),
     )
 
 

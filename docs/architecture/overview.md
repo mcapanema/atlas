@@ -159,7 +159,8 @@ custom.
   history (ADR-0013) — the upgrade path after a mapping fix.
   A team sync (`POST /api/connectors/linear/teams/{id}/sync`, the Team
   Dashboard's "Sync team" button) fetches only that team's work items,
-  snapshots only that team and its projects, and never prunes — a
+  snapshots only that team and its single-team projects (a project holding
+  other teams' items waits for the organization sync), and never prunes — a
   filtered fetch can't tell deleted from moved — so deletions wait for the
   next organization sync.
   Each sync stamps `teams.last_synced_at` for the teams it pulled; the flow
