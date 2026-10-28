@@ -17,6 +17,22 @@ def test_source_event_requires_timezone_aware_occurred_at() -> None:
         )
 
 
+def test_source_work_item_assignee_is_a_source_person() -> None:
+    item = SourceWorkItem(
+        external_id="i1",
+        title="Fix",
+        type=WorkItemType.TASK,
+        state="Todo",
+        team_external_id="t1",
+        project_external_id=None,
+        created_at=datetime(2026, 7, 1, tzinfo=UTC),
+        assignee=SourcePerson("u1", "Ada"),
+    )
+
+    assert item.assignee is not None
+    assert item.assignee.external_id == "u1"
+
+
 def test_source_work_item_holds_immutable_events() -> None:
     event = SourceEvent(
         external_id="h1",

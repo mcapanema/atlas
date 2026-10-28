@@ -27,6 +27,7 @@ from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
+from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.personas import (
     SqlAlchemyAdviceFeedbackRepository,
     SqlAlchemyPersonaGuidanceRepository,
@@ -198,6 +199,7 @@ def sync_service_for(session: AsyncSession, source: DeliveryDataSource) -> SyncS
         SqlAlchemyProjectRepository(session),
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
+        SqlAlchemyPersonRepository(session),
     )
 
 

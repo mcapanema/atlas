@@ -11,7 +11,13 @@ from datetime import datetime
 from typing import Any
 
 from app.domain.events.entities import EventType
-from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync.source import (
+    SourceEvent,
+    SourcePerson,
+    SourceProject,
+    SourceTeam,
+    SourceWorkItem,
+)
 from app.domain.work_items.entities import StateType, WorkItemType
 
 logger = logging.getLogger(__name__)
@@ -88,8 +94,9 @@ def _initial_events(node: dict[str, Any], created_at: datetime) -> list[SourceEv
     return events
 
 
-# work_items.assignee is String(255): a longer name would fail the insert on PostgreSQL.
+# people.name is String(255): a longer name would fail the insert on PostgreSQL.
 _NAME_MAX = 255
+_EMAIL_MAX = 320
 
 
 # A handle's word separators. Hyphens are left alone: "Ana-Maria" is a real name.
@@ -106,17 +113,19 @@ def _readable_name(name: str) -> str:
     return readable or name
 
 
-# ponytail: the assignee is stored as a display name, not a user identity —
-# enough to show who owns an item. A renamed user shows the new name only
-# after the issue syncs again, and a name derived from an email has no
-# accents ("joao.barbosa" -> "Joao Barbosa"). Upgrade path: sync Linear
-# users into a Person aggregate (with an editable display name) and store
-# the id if per-person analytics are ever needed.
-def _assignee(node: dict[str, Any]) -> str | None:
-    # .get: a nameless assignee reads as unassigned — a KeyError would drop
-    # (and prune) the whole issue.
-    name = (node.get("assignee") or {}).get("name")
-    return _readable_name(str(name))[:_NAME_MAX] if name else None
+# The identity model (a Linear user becomes a Person) is in the person-aggregate ADR.
+def _assignee(node: dict[str, Any]) -> SourcePerson | None:
+    # .get: an assignee without an id or a name reads as unassigned — a
+    # KeyError would drop (and prune) the whole issue.
+    user = node.get("assignee") or {}
+    user_id, name, email = user.get("id"), user.get("name"), user.get("email")
+    if not user_id or not str(name or "").strip():
+        return None
+    return SourcePerson(
+        external_id=str(user_id),
+        name=_readable_name(str(name))[:_NAME_MAX],
+        email=str(email)[:_EMAIL_MAX] if email else None,
+    )
 
 
 def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None) -> SourceWorkItem:

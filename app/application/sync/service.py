@@ -7,10 +7,12 @@ from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.organizations.entities import Organization
 from app.domain.organizations.repository import OrganizationRepository
+from app.domain.people.entities import Person
+from app.domain.people.repository import PersonRepository
 from app.domain.projects.entities import Project
 from app.domain.projects.repository import ProjectRepository
 from app.domain.sync.port import DeliveryDataSource
-from app.domain.sync.source import SourceWorkItem
+from app.domain.sync.source import SourcePerson, SourceWorkItem
 from app.domain.teams.entities import Team
 from app.domain.teams.repository import TeamRepository
 from app.domain.work_items.entities import WorkItem
@@ -84,6 +86,7 @@ class SyncService:
         projects: ProjectRepository,
         work_items: WorkItemRepository,
         events: EventRepository,
+        people: PersonRepository,
     ) -> None:
         self._source = source
         self._organizations = organizations
@@ -91,6 +94,7 @@ class SyncService:
         self._projects = projects
         self._work_items = work_items
         self._events = events
+        self._people = people
 
     async def sync(
         self, organization_id: UUID | None = None, *, rebuild: bool = False
@@ -123,8 +127,9 @@ class SyncService:
         teams = await self._sync_teams(organization_id)
         projects = await self._sync_projects()
         sources = await self._source.fetch_work_items(team_external_id=team_external_id)
+        people_by_eid = await self._sync_people(organization_id, sources)
         work_items, events, divergences, deleted, rebuilt = await self._sync_work_items(
-            sources, rebuild=rebuild, prune=team_external_id is None
+            sources, people_by_eid, rebuild=rebuild, prune=team_external_id is None
         )
         # After the work-item sync: rebuilt and newly inserted events already carry
         # their types, so only stored events left untyped are filled — exact in both
@@ -144,11 +149,12 @@ class SyncService:
         )
         logger.info(
             "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
-            "events=%d divergences=%d deleted=%d state_types_filled=%d rebuilt=%d",
+            "people=%d events=%d divergences=%d deleted=%d state_types_filled=%d rebuilt=%d",
             organization_id,
             summary.teams,
             summary.projects,
             summary.work_items,
+            len(people_by_eid),
             summary.events,
             summary.divergences,
             summary.deleted,
@@ -198,6 +204,40 @@ class SyncService:
                 await self._teams.update(updated)
                 written += 1
         return written
+
+    async def _sync_people(
+        self, organization_id: UUID, sources: list[SourceWorkItem]
+    ) -> dict[str, UUID]:
+        """Upsert the people the items are assigned to; Linear user id -> person id.
+
+        Never pruned, and `display_name` (the user's own override) is never
+        touched: only the source's name and email are refreshed.
+        """
+        seen: dict[str, SourcePerson] = {
+            source.assignee.external_id: source.assignee
+            for source in sources
+            if source.assignee is not None
+        }
+        existing_by_eid = await self._people.get_by_external_ids(list(seen))
+        ids: dict[str, UUID] = {}
+        for external_id, source_person in seen.items():
+            existing = existing_by_eid.get(external_id)
+            if existing is None:
+                person = Person(
+                    organization_id=organization_id,
+                    name=source_person.name,
+                    email=source_person.email,
+                    external_id=external_id,
+                )
+                await self._people.add(person)
+                ids[external_id] = person.id
+                continue
+            ids[external_id] = existing.id
+            if (existing.name, existing.email) != (source_person.name, source_person.email):
+                await self._people.update(
+                    replace(existing, name=source_person.name, email=source_person.email)
+                )
+        return ids
 
     async def _stamp_synced(self, organization_id: UUID, team_external_id: str | None) -> None:
         """Date the synced teams' data: every source team of the org, or the one team."""
@@ -273,6 +313,7 @@ class SyncService:
         team_id: UUID,
         project_id: UUID | None,
         existing: WorkItem | None,
+        assignee_id: UUID | None,
     ) -> tuple[WorkItem, bool]:
         """Create or update the item from its source; (item, written?). Parents link later."""
         if existing is None:
@@ -286,7 +327,7 @@ class SyncService:
                 url=source.url,
                 state_type=source.state_type,
                 labels=source.labels,
-                assignee=source.assignee,
+                assignee_id=assignee_id,
                 created_at=source.created_at,
             )
             await self._work_items.add(item)
@@ -301,7 +342,7 @@ class SyncService:
             url=source.url,
             state_type=source.state_type,
             labels=source.labels,
-            assignee=source.assignee,
+            assignee_id=assignee_id,
         )
         if item == existing:
             return existing, False
@@ -329,7 +370,12 @@ class SyncService:
         return written
 
     async def _sync_work_items(
-        self, sources: list[SourceWorkItem], *, rebuild: bool = False, prune: bool = True
+        self,
+        sources: list[SourceWorkItem],
+        people_by_eid: dict[str, UUID],
+        *,
+        rebuild: bool = False,
+        prune: bool = True,
     ) -> tuple[int, int, int, int, int]:
         events_written = 0
         divergences = 0
@@ -366,6 +412,7 @@ class SyncService:
                 team.id,
                 project.id if project is not None else None,
                 items_by_eid.get(source.external_id),
+                people_by_eid.get(source.assignee.external_id) if source.assignee else None,
             )
             synced[source.external_id] = item
             if changed:

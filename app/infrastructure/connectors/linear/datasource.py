@@ -93,7 +93,7 @@ query Issues($after: String, $filter: IssueFilter) {{
       id
       title
       url
-      assignee {{ name }}
+      assignee {{ id name email }}
       createdAt
       completedAt
       canceledAt

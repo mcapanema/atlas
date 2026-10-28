@@ -199,8 +199,8 @@ and the Connectors page in the frontend. A project's home team is the first
 of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events, state types on transitions, and each issue's labels, parent and
-current assignee name — an email or handle Linear uses as the name is
-turned into "First Last" (ADR-0011); the team's metric rules decide at read
+current assignee (Linear user id, name, email) — an email or handle Linear
+uses as the name is turned into "First Last" (ADR-0011); the team's metric rules decide at read
 time what counts as blocked (labels, workflow-state names, relations),
 which items are parents, and which types and states count.
 Issues created directly in a started-type state start at creation, and

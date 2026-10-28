@@ -13,7 +13,13 @@ from app.api.deps import get_delivery_data_source
 from app.api.recompute import RecomputeRunner
 from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
-from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync.source import (
+    SourceEvent,
+    SourcePerson,
+    SourceProject,
+    SourceTeam,
+    SourceWorkItem,
+)
 from app.domain.work_items.entities import WorkItemType
 from tests.api.helpers import create_org_and_team, settle
 from tests.fakes import FakeDataSource
@@ -113,6 +119,25 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
         "state_types_filled": 0,
         "rebuilt": 0,
     }
+
+
+async def test_resync_with_an_assignee_writes_nothing(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    def source() -> FakeDataSource:
+        fake = _fake_source()
+        fake.work_items = [
+            dataclasses.replace(fake.work_items[0], assignee=SourcePerson("u1", "Ada", "a@x.io"))
+        ]
+        return fake
+
+    test_app.dependency_overrides[get_delivery_data_source] = source
+    org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
+
+    await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
+    second = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
+
+    assert second.json()["work_items"] == 0
 
 
 async def test_sync_unknown_organization_is_404(

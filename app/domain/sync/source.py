@@ -71,5 +71,5 @@ class SourceWorkItem:
     state_type: StateType | None = None
     labels: tuple[str, ...] = ()
     parent_external_id: str | None = None
-    # Name of the person the issue is currently assigned to; None when unassigned.
-    assignee: str | None = None
+    # Person the issue is currently assigned to; None when unassigned.
+    assignee: SourcePerson | None = None

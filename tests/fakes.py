@@ -82,7 +82,7 @@ class InMemoryPersonRepository:
 
     async def list(self, organization_id: UUID | None = None) -> list[Person]:
         people = [p for p in self._people.values() if organization_id in (None, p.organization_id)]
-        return sorted(people, key=lambda p: p.shown_name.lower())
+        return sorted(people, key=lambda p: (p.shown_name.lower(), p.id))
 
     async def get_by_external_ids(self, external_ids: Collection[str]) -> dict[str, Person]:
         return {

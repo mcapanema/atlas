@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from app.domain.events.entities import EventType
+from app.domain.sync.source import SourcePerson
 from app.domain.work_items.entities import StateType
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
@@ -124,10 +125,20 @@ def test_map_issue_without_url_key_has_none() -> None:
     assert map_issue(ISSUE_NODE).url is None
 
 
-def test_map_issue_carries_assignee_name() -> None:
-    node = {**ISSUE_NODE, "assignee": {"name": "Ada Lovelace"}}
+def test_map_issue_carries_assignee_person() -> None:
+    node = {**ISSUE_NODE, "assignee": {"id": "u1", "name": "Ada Lovelace", "email": "ada@x.io"}}
 
-    assert map_issue(node).assignee == "Ada Lovelace"
+    assert map_issue(node).assignee == SourcePerson("u1", "Ada Lovelace", "ada@x.io")
+
+
+@pytest.mark.parametrize(
+    "user", [{"id": "u1", "name": "Ada"}, {"id": "u1", "name": "Ada", "email": None}]
+)
+def test_map_issue_assignee_without_email_has_none(user: dict[str, Any]) -> None:
+    person = map_issue({**ISSUE_NODE, "assignee": user}).assignee
+
+    assert person is not None
+    assert person.email is None
 
 
 def test_map_issue_unassigned_has_none() -> None:
@@ -135,7 +146,17 @@ def test_map_issue_unassigned_has_none() -> None:
     assert map_issue(ISSUE_NODE).assignee is None  # key absent
 
 
-@pytest.mark.parametrize("assignee", [{}, {"id": "u1"}, {"name": None}, {"name": ""}])
+@pytest.mark.parametrize(
+    "assignee",
+    [
+        {},
+        {"id": "u1"},
+        {"name": "Ada"},
+        {"id": "u1", "name": None},
+        {"id": "u1", "name": ""},
+        {"id": "u1", "name": "  "},
+    ],
+)
 def test_map_issue_assignee_without_a_name_is_unassigned(assignee: dict[str, Any]) -> None:
     assert map_issue({**ISSUE_NODE, "assignee": assignee}).assignee is None
 
@@ -159,16 +180,16 @@ def test_map_issue_assignee_without_a_name_is_unassigned(assignee: dict[str, Any
     ],
 )
 def test_map_issue_assignee_email_or_handle_reads_as_a_name(name: str, expected: str) -> None:
-    node = {**ISSUE_NODE, "assignee": {"name": name}}
+    node = {**ISSUE_NODE, "assignee": {"id": "u1", "name": name}}
 
-    assert map_issue(node).assignee == expected
+    assert map_issue(node).assignee.name == expected  # type: ignore[union-attr]
 
 
 def test_map_issue_truncates_long_assignee_name() -> None:
     name = "Ada " + "x" * 300
-    node = {**ISSUE_NODE, "assignee": {"name": name}}
+    node = {**ISSUE_NODE, "assignee": {"id": "u1", "name": name}}
 
-    assert map_issue(node).assignee == name[:255]
+    assert map_issue(node).assignee.name == name[:255]  # type: ignore[union-attr]
 
 
 def test_map_issue_synthesizes_created_event_and_maps_history() -> None:
