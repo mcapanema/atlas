@@ -19,6 +19,13 @@ class SourceTeam:
 
 
 @dataclass(frozen=True)
+class SourcePerson:
+    external_id: str
+    name: str
+    email: str | None = None
+
+
+@dataclass(frozen=True)
 class SourceProject:
     external_id: str
     name: str

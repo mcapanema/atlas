@@ -1,9 +1,10 @@
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 
 import pytest
 
 from app.domain.events.entities import EventType
-from app.domain.sync.source import SourceEvent, SourceWorkItem
+from app.domain.sync.source import SourceEvent, SourcePerson, SourceWorkItem
 from app.domain.work_items.entities import WorkItemType
 
 
@@ -36,3 +37,11 @@ def test_source_work_item_holds_immutable_events() -> None:
     assert item.events == (event,)
     with pytest.raises(AttributeError):
         item.title = "changed"  # type: ignore[misc]
+
+
+def test_source_person_email_defaults_to_none_and_is_frozen() -> None:
+    person = SourcePerson("u1", "Ada")
+
+    assert person.email is None
+    with pytest.raises(FrozenInstanceError):
+        person.name = "Grace"  # type: ignore[misc]
