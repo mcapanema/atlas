@@ -160,6 +160,29 @@ async def test_state_times_label_a_missing_team_by_its_id() -> None:
     assert set(rows) == {("Platform", "In Review"), (str(growth.id), "In Review")}
 
 
+async def test_state_times_keep_same_named_teams_apart() -> None:
+    a = Team(organization_id=ORG, name="Platform")
+    b = Team(organization_id=ORG, name="Platform")
+    c = Team(organization_id=ORG, name="Growth")
+
+    rows = await _project_state_times([a, b, c], [a, b, c])
+
+    assert set(rows) == {
+        (f"Platform ({str(a.id)[:8]})", "In Review"),
+        (f"Platform ({str(b.id)[:8]})", "In Review"),
+        ("Growth", "In Review"),
+    }
+
+
+async def test_state_times_label_one_team_once_across_its_items() -> None:
+    platform = Team(organization_id=ORG, name="Platform")
+    growth = Team(organization_id=ORG, name="Growth")
+
+    rows = await _project_state_times([platform, platform, growth], [platform, growth])
+
+    assert set(rows) == {("Platform", "In Review"), ("Growth", "In Review")}
+
+
 async def test_state_times_without_a_team_repository_have_no_team() -> None:
     platform = Team(organization_id=ORG, name="Platform")
     growth = Team(organization_id=ORG, name="Growth")
