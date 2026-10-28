@@ -174,6 +174,7 @@ export const stateTimesFixture = {
       items: 6,
       queue: 4,
       wait_state: true,
+      team: null,
     },
     {
       state: "In Progress",
@@ -183,9 +184,11 @@ export const stateTimesFixture = {
       items: 6,
       queue: 2,
       wait_state: false,
+      team: null,
     },
   ],
   bottleneck: "In Review",
+  bottleneck_team: null,
 };
 
 export const healthFixture = {

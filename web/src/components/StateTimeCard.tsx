@@ -6,19 +6,27 @@ import type { StateTime, StateTimes } from "../api/metrics";
 import { formatSeconds } from "../lib/duration";
 import { ChartCard } from "./ChartCard";
 
-function columns(bottleneck: string | null): ColumnsType<StateTime> {
+/** A row's identity: a project spanning teams can list one state per team. */
+function rowKey(row: StateTime): string {
+  return `${row.team ?? ""}\u0000${row.state}`;
+}
+
+function columns(data: StateTimes): ColumnsType<StateTime> {
+  const isBottleneck = (row: StateTime) =>
+    row.state === data.bottleneck && row.team === data.bottleneck_team;
   return [
     {
       title: "State",
       dataIndex: "state",
       render: (state: string, row) => (
         <span className="state-time-name">
-          {state === bottleneck && (
+          {isBottleneck(row) && (
             <Tag icon={<AimOutlined />} color="error">
               Bottleneck
             </Tag>
           )}
           {state}
+          {row.team !== null && <Typography.Text type="secondary">{row.team}</Typography.Text>}
           {row.wait_state && <Typography.Text type="secondary">wait</Typography.Text>}
         </span>
       ),
@@ -62,16 +70,16 @@ export function StateTimeCard({ data }: { data: StateTimes }) {
   return (
     <ChartCard
       label="Time in state"
-      help="Working time that items completed in the window spent in each state, from start to done. The state with the most total time is the bottleneck. Wait marks the team's wait states; Queue counts items in that state now."
+      help="Working time that items completed in the window spent in each state, from start to done. The state with the most total time is the bottleneck. Wait marks the team's wait states; Queue counts items in that state now. In a project that spans teams, each team's states get their own rows."
     >
       {data.bottleneck === null && (
         <Typography.Paragraph type="secondary">{noBottleneckText(data)}</Typography.Paragraph>
       )}
       <Table
         size="small"
-        rowKey="state"
+        rowKey={rowKey}
         pagination={false}
-        columns={columns(data.bottleneck)}
+        columns={columns(data)}
         dataSource={data.states}
       />
     </ChartCard>

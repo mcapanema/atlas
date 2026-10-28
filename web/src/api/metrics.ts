@@ -146,6 +146,8 @@ export interface StateTime {
   /** Items in progress in this state at the window's end. */
   queue: number;
   wait_state: boolean;
+  /** The row's team in a project that spans teams; null otherwise. */
+  team: string | null;
 }
 
 export interface StateTimes {
@@ -157,6 +159,8 @@ export interface StateTimes {
   states: StateTime[];
   /** The state with the most total time; null below min_sample measured items. */
   bottleneck: string | null;
+  /** The bottleneck row's team; null when the scope isn't split by team. */
+  bottleneck_team: string | null;
 }
 
 export function useStateTimes(scope: MetricsScope, filters: MetricsFilters = {}) {

@@ -1,5 +1,5 @@
 import { screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { stateTimesFixture } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
@@ -11,6 +11,21 @@ function row(state: string): HTMLElement {
   if (tr === null) throw new Error(`no row for ${state}`);
   return tr;
 }
+
+const [review] = stateTimesFixture.states;
+const twoTeams = {
+  ...stateTimesFixture,
+  states: [
+    { ...review, team: "Platform" },
+    { ...review, team: "Growth", total_seconds: 432000, share: 0.4 },
+  ],
+  bottleneck: "In Review",
+  bottleneck_team: "Platform",
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("StateTimeCard", () => {
   it("marks the bottleneck row with text, not only color", () => {
@@ -56,5 +71,29 @@ describe("StateTimeCard", () => {
     );
 
     expect(screen.getByText("No bottleneck yet: no in-cycle time measured.")).toBeInTheDocument();
+  });
+
+  it("marks only the bottleneck team's row", () => {
+    renderWithClient(<StateTimeCard data={twoTeams} />);
+
+    const [marker] = screen.getAllByText("Bottleneck");
+    expect(screen.getAllByText("Bottleneck")).toHaveLength(1);
+    expect(marker.closest("tr")).toHaveTextContent("Platform");
+    expect(screen.getByText("Growth").closest("tr")).not.toHaveTextContent("Bottleneck");
+  });
+
+  it("renders same-named states without a duplicate key warning", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    renderWithClient(<StateTimeCard data={twoTeams} />);
+
+    const messages = error.mock.calls.map((call) => call.map(String).join(" "));
+    expect(messages.filter((message) => message.includes("same key"))).toEqual([]);
+  });
+
+  it("shows no team text when the scope is not split", () => {
+    renderWithClient(<StateTimeCard data={stateTimesFixture} />);
+
+    expect(screen.queryByText("Platform")).toBeNull();
   });
 });
