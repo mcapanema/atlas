@@ -119,7 +119,9 @@ Atlas reads your Linear workspace and turns its history into these views
   planning. A retro covers the team's sprint length by default.
 
 **Setup**
-- **Organizations** (`/organizations`) — the workspaces Atlas has synced.
+- **Organizations** (`/organizations`) — the workspaces Atlas has synced,
+  and the people who own work items. Click a person's **Display name** to
+  override how their name shows; syncs never overwrite it.
 - **Connectors** (`/connectors`) — Linear status, **Sync now**, and the
   **Auto sync** schedule.
 - **Metric rules** (`/metric-rules`) — how metrics are computed (what counts as blocked,
@@ -274,6 +276,11 @@ curl -X POST http://localhost:8000/api/connectors/linear/sync \
 
 It re-derives every synced issue's events and rewrites snapshot history;
 feedback, learned guidance, and metric rules are kept (ADR-0013).
+
+### Sync once for people
+
+After the upgrade that adds people, run **Sync now** once: owners read
+Unassigned until the next sync.
 
 ### An older `.env` and the database path
 

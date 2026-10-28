@@ -36,8 +36,13 @@ in `app/infrastructure/repositories/`, and a CRUD router. A Team owns
 Projects and Work Items; a Project groups Work Items; a Project's teams are
 derived from its items (`WorkItemRepository.team_ids_by_project()`, ADR-0020),
 with `Project.team_id` only its home team; each Work Item
-accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). Events
-are the source of truth everything analytical derives from. One pure
+accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). An Organization
+also owns People (`app/domain/people/`); a Work Item points at its assignee
+Person by `assignee_id`, and the shown name (the manager's display-name
+override, else the source name) resolves on load (ADR-0021). `GET
+/api/people` and `PATCH /api/people/{id}` serve the People table on the
+Organizations page (`/organizations`), where display names are edited.
+Events are the source of truth everything analytical derives from. One pure
 derivation lives beside its aggregate: `derive_timeline`
 (`app/domain/events/timeline.py`) turns an item's events into state periods
 and — under its team's rules (`blocked_periods`) — blocked periods for `GET /api/work-items/{id}/timeline` and the Work
@@ -158,7 +163,9 @@ custom.
   `SourceWorkItem`, `SourceEvent` in `source.py`). `SyncService`
   (`app/application/sync/service.py`) upserts snapshots into the domain
   model idempotently, matching on `external_id` — running sync twice is a
-  no-op (ADR-0004) — and deletes items the source no longer returns (ADR-0009).
+  no-op (ADR-0004) — upserts the people who own items (name and email from
+  the source, never the display-name override; people are never pruned,
+  ADR-0021) — and deletes items the source no longer returns (ADR-0009).
   A rebuild sync (`"rebuild": true`) replaces the returned items'
   source-derived events from the current mapping and rewrites snapshot
   history (ADR-0013) — the upgrade path after a mapping fix.
@@ -199,8 +206,9 @@ and the Connectors page in the frontend. A project's home team is the first
 of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events, state types on transitions, and each issue's labels, parent and
-current assignee (Linear user id, name, email) — an email or handle Linear
-uses as the name is turned into "First Last" (ADR-0011); the team's metric rules decide at read
+current assignee as a `SourcePerson` (Linear user id, name, email; a blank
+name reads as unassigned) — an email or handle Linear uses as the name is
+turned into "First Last" (ADR-0011); the team's metric rules decide at read
 time what counts as blocked (labels, workflow-state names, relations),
 which items are parents, and which types and states count.
 Issues created directly in a started-type state start at creation, and

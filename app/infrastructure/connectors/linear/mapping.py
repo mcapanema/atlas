@@ -113,7 +113,7 @@ def _readable_name(name: str) -> str:
     return readable or name
 
 
-# The identity model (a Linear user becomes a Person) is in the person-aggregate ADR.
+# The identity model (a Linear user becomes a Person) is in ADR-0021.
 def _assignee(node: dict[str, Any]) -> SourcePerson | None:
     # .get: an assignee without an id or a name reads as unassigned — a
     # KeyError would drop (and prune) the whole issue.
