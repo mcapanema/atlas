@@ -156,6 +156,12 @@ class _Tally:
         return sorted(listed, key=lambda s: (-s.total, -s.queue, s.state, s.team or ""))
 
 
+def _check_per_stream(name: str, values: Sequence[object] | None, streams: int) -> None:
+    """A given per-stream list needs one entry per stream; empty means omitted."""
+    if values and len(values) != streams:
+        raise ValueError(f"{name} has {len(values)} entries for {streams} streams")
+
+
 def compute_state_times(
     streams: Sequence[Sequence[Event]],
     samples: Sequence[FlowSample],
@@ -171,9 +177,12 @@ def compute_state_times(
     `streams[i]` folds into `samples[i]` under `stream_rules[i]` (its team's
     rules; `rules` when omitted), which name its wait states, and
     `stream_teams[i]` labels its rows (no label when omitted). A state is
-    listed when it holds time or a queue. `rules` (the scope's) set the
+    listed when it holds time or a queue. A non-empty per-stream list of the
+    wrong length raises ValueError. `rules` (the scope's) set the
     minimum sample (health_min_sample) a bottleneck needs.
     """
+    _check_per_stream("stream_rules", stream_rules, len(streams))
+    _check_per_stream("stream_teams", stream_teams, len(streams))
     window_start = now - timedelta(days=window_days)
     tally = _Tally()
     for index, (events, sample) in enumerate(zip(streams, samples, strict=True)):

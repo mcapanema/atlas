@@ -261,3 +261,39 @@ def test_unlabelled_rows_have_no_team() -> None:
 
     assert {s.team for s in result.states} == {None}
     assert result.bottleneck_team is None
+
+
+@pytest.mark.parametrize(
+    ("name", "values"),
+    [
+        ("stream_rules", [RULES]),
+        ("stream_teams", ["Platform"]),
+        ("stream_teams", ["A", "B", "C"]),
+    ],
+)
+def test_per_stream_lists_must_match_the_streams(name: str, values: list[object]) -> None:
+    streams = [_item_a(), _item_b()]
+
+    with pytest.raises(ValueError, match=f"{name} has {len(values)} entries for 2 streams"):
+        compute_state_times(
+            streams,
+            [_sample(stream) for stream in streams],
+            now=NOW,
+            rules=RULES,
+            **{name: values},  # type: ignore[arg-type]
+        )
+
+
+def test_empty_per_stream_lists_mean_omitted() -> None:
+    streams = [_item_a(), _item_b()]
+
+    result = compute_state_times(
+        streams,
+        [_sample(stream) for stream in streams],
+        now=NOW,
+        rules=RULES,
+        stream_rules=[],
+        stream_teams=[],
+    )
+
+    assert result.states == _compute(_item_a(), _item_b()).states
