@@ -22,6 +22,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const syncJob = {
+  id: "job1",
+  organization_id: "org1",
+  kind: "team",
+  trigger: "manual",
+  phase: null,
+  error: null,
+};
+
 describe("TeamDashboardPage", () => {
   it("wraps the team selector and each filter in one row, control by control", async () => {
     mockFetch();
@@ -121,13 +130,11 @@ describe("TeamDashboardPage", () => {
   it("syncs the selected team and refetches its dashboard", async () => {
     mockMetricsFetch({
       "/api/teams": [{ ...teamFixture, external_id: "lt1" }],
-      "/api/connectors/linear/teams/": {
-        teams: 0,
-        projects: 0,
-        work_items: 1,
-        events: 2,
-        divergences: 0,
-        deleted: 0,
+      "/api/connectors/linear/teams/": { ...syncJob, state: "running" },
+      "/api/connectors/linear/jobs/": {
+        ...syncJob,
+        state: "succeeded",
+        summary: { teams: 0, projects: 0, work_items: 1, events: 2, divergences: 0, deleted: 0 },
       },
     });
     renderPage(`/teams?team=${teamFixture.id}`);
@@ -156,13 +163,11 @@ describe("TeamDashboardPage", () => {
         { ...teamFixture, external_id: "lt1" },
         { ...other, external_id: "lt2" },
       ],
-      "/api/connectors/linear/teams/": {
-        teams: 0,
-        projects: 0,
-        work_items: 1,
-        events: 2,
-        divergences: 0,
-        deleted: 0,
+      "/api/connectors/linear/teams/": { ...syncJob, state: "running" },
+      "/api/connectors/linear/jobs/": {
+        ...syncJob,
+        state: "succeeded",
+        summary: { teams: 0, projects: 0, work_items: 1, events: 2, divergences: 0, deleted: 0 },
       },
     });
     renderPage(`/teams?team=${teamFixture.id}`);
@@ -232,14 +237,12 @@ describe("TeamDashboardPage", () => {
   it("shows the auto-sync wait hint on the sync row, above the team selector", async () => {
     mockMetricsFetch({
       "/api/teams": [{ ...teamFixture, external_id: "lt1" }],
-      "/api/connectors/linear": { configured: true, auto_syncing: true },
+      "/api/connectors/linear": { configured: true, running: { id: "j", state: "running" } },
     });
 
     renderPage(`/teams?team=${teamFixture.id}`);
 
-    const hint = await screen.findByText(
-      "An automatic sync is running; Sync team starts when it finishes.",
-    );
+    const hint = await screen.findByText("A sync is running; Sync team shows its result.");
     const sync = screen.getByRole("button", { name: /Sync team/ });
     const teamSelect = screen.getAllByRole("combobox")[0];
     expect(sync.compareDocumentPosition(hint)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);

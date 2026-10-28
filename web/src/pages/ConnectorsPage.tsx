@@ -2,7 +2,12 @@ import { SyncOutlined } from "@ant-design/icons";
 import { Alert, Badge, Button, Card, Flex, Select, Typography } from "antd";
 import { useState } from "react";
 
-import { useLinearStatus, useLinearSync, type ConnectorStatus } from "../api/connectors";
+import {
+  useLinearStatus,
+  useLinearSync,
+  type ConnectorStatus,
+  type SyncAction,
+} from "../api/connectors";
 import { useOrganizations, type Organization } from "../api/organizations";
 import { AutoSyncCard } from "../components/AutoSyncCard";
 import { SyncStatus } from "../components/SyncStatus";
@@ -56,19 +61,17 @@ function OrganizationPicker({
   ) : null;
 }
 
-type LinearSync = ReturnType<typeof useLinearSync>;
-
 /** Manual sync, matching the Team Dashboard's Sync team: icon, inline wait hint and outcome. */
 function SyncNow({
   sync,
   organizationId,
   configured,
-  autoSyncing,
+  otherRunning,
 }: {
-  sync: LinearSync;
+  sync: SyncAction;
   organizationId: string | undefined;
   configured: boolean;
-  autoSyncing: boolean;
+  otherRunning: boolean;
 }) {
   return (
     <Flex vertical gap="small">
@@ -77,21 +80,21 @@ function SyncNow({
           type="primary"
           icon={<SyncOutlined />}
           disabled={!configured}
-          loading={sync.isPending}
-          onClick={() => sync.mutate(organizationId)}
+          loading={sync.running}
+          onClick={() => sync.start(organizationId)}
         >
           Sync now
         </Button>
-        {autoSyncing && (
+        {otherRunning && (
           <Typography.Text type="secondary">
-            An automatic sync is running; Sync now starts when it finishes.
+            A sync is running; Sync now shows its result.
           </Typography.Text>
         )}
-        {sync.data && <Typography.Text type="secondary">{syncOutcome(sync.data)}</Typography.Text>}
+        {sync.outcome && (
+          <Typography.Text type="secondary">{syncOutcome(sync.outcome)}</Typography.Text>
+        )}
       </Flex>
-      {sync.isError && (
-        <Alert type="error" showIcon title="Sync failed" description={sync.error.message} />
-      )}
+      {sync.error && <Alert type="error" showIcon title="Sync failed" description={sync.error} />}
     </Flex>
   );
 }
@@ -103,7 +106,7 @@ function LinearCard({
   loading,
 }: {
   status: ConnectorStatus | undefined;
-  sync: LinearSync;
+  sync: SyncAction;
   organizationId: string | undefined;
   loading: boolean;
 }) {
@@ -122,7 +125,7 @@ function LinearCard({
           sync={sync}
           organizationId={organizationId}
           configured={configured}
-          autoSyncing={status?.auto_syncing ?? false}
+          otherRunning={(status?.running ?? null) !== null && !sync.running}
         />
       </Flex>
     </Card>
