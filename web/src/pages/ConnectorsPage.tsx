@@ -125,7 +125,9 @@ function LinearCard({
           sync={sync}
           organizationId={organizationId}
           configured={configured}
-          otherRunning={(status?.running ?? null) !== null && !sync.running}
+          otherRunning={
+            (status?.running ?? null) !== null && !sync.running && !sync.outcome && !sync.error
+          }
         />
       </Flex>
     </Card>

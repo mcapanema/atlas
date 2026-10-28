@@ -9,7 +9,8 @@ import { syncOutcome } from "../lib/syncOutcome";
 export function TeamSyncButton({ team }: { team: Team }) {
   const sync = useTeamSync(team.id);
   // Every sync takes one lock (ADR-0014): someone else's running job is not tracked here.
-  const otherRunning = (useLinearStatus().data?.running ?? null) !== null && !sync.running;
+  const statusRunning = useLinearStatus().data?.running ?? null;
+  const otherRunning = statusRunning !== null && !sync.running && !sync.outcome && !sync.error;
   const fromSource = team.external_id !== null;
   // Its own wrapping row: the wait hint and the outcome sit beside the button.
   return (

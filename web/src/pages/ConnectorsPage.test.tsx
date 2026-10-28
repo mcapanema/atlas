@@ -154,6 +154,18 @@ describe("ConnectorsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("hides the running-sync hint once this page's own sync has finished", async () => {
+    mockApi({ configured: true, running: true });
+
+    renderWithClient(<ConnectorsPage />);
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    expect(await screen.findByText(OUTCOME)).toBeInTheDocument();
+    expect(screen.queryByText(/A sync is running/)).not.toBeInTheDocument();
+  });
+
   it("polls the Linear status so a running auto sync shows up", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchMock = mockApi({ configured: true });

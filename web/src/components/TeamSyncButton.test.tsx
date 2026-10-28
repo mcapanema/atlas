@@ -46,6 +46,7 @@ function mockApi({
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -114,6 +115,25 @@ describe("TeamSyncButton", () => {
         "Sync was interrupted: Atlas restarted before it finished. Run it again.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("stops polling once a poll fails after a running one", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = mockApi({
+      polls: [() => jsonResponse(job("running")), () => jsonResponse({ detail: "Not found" }, 404)],
+    });
+    const jobCalls = () =>
+      fetchMock.mock.calls.filter(([input]) => requestUrl(input) === JOB_URL).length;
+
+    renderWithClient(<TeamSyncButton team={syncedTeam} />);
+    fireEvent.click(screen.getByRole("button", { name: /Sync team/ }));
+    await waitFor(() => expect(jobCalls()).toBe(1));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await screen.findByText(/Sync was interrupted/)).toBeInTheDocument();
+    expect(jobCalls()).toBe(2);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(jobCalls()).toBe(2);
   });
 
   it("is disabled for a team made in Atlas", () => {

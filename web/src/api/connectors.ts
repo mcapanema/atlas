@@ -73,7 +73,9 @@ function useSyncAction(
     queryKey: ["sync-job", jobId],
     queryFn: () => apiFetch<SyncJob>(`/api/connectors/linear/jobs/${jobId}`),
     enabled: jobId !== undefined,
-    refetchInterval: (query) => (query.state.data?.state === "running" ? 1000 : false),
+    // Stop on an error too: data still holds the last "running" poll.
+    refetchInterval: (query) =>
+      query.state.status !== "error" && query.state.data?.state === "running" ? 1000 : false,
     retry: retryPoll,
   });
   const job = poll.data ?? start.data;
@@ -119,6 +121,7 @@ export function useLinearSync(): SyncAction {
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ["organizations"] }),
       queryClient.invalidateQueries({ queryKey: ["sync-schedule"] }),
+      queryClient.invalidateQueries({ queryKey: ["connectors", "linear"] }),
     ]);
   return useSyncAction(
     // organization_id: null lets the server bootstrap the organization
