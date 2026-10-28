@@ -6,8 +6,6 @@ from unittest import mock
 from uuid import UUID
 
 import pytest
-from fastapi import FastAPI
-from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.auto_sync import AutoSyncRunner
@@ -262,29 +260,3 @@ async def test_sync_runs_with_the_recompute_runner_paused(
     assert await runner.tick() == 1
     assert paused == [True]
     assert not recompute._lock.locked()
-
-
-async def test_status_reports_a_running_auto_sync(
-    test_app: FastAPI,
-    client: AsyncClient,
-    sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
-) -> None:
-    # "Sync now" waits for a running auto sync; the page says why.
-    settings_env(linear_api_key="lin_api_test")
-    await _seed(sessionmaker)
-    seen: list[object] = []
-
-    class Probe(FakeDataSource):
-        async def fetch_teams(self) -> list[SourceTeam]:
-            seen.append((await client.get("/api/connectors/linear")).json())
-            return await super().fetch_teams()
-
-    runner = _auto(sessionmaker, Probe)
-    test_app.state.auto_sync_runner = runner
-    idle = {"configured": True, "auto_syncing": False}
-
-    assert (await client.get("/api/connectors/linear")).json() == idle
-    assert await runner.tick() == 1
-    assert seen == [{"configured": True, "auto_syncing": True}]
-    assert (await client.get("/api/connectors/linear")).json() == idle

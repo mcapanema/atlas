@@ -57,11 +57,12 @@ Presentation is allowed to know a concrete adapter exists).
   `AutoSyncRunner` ticks every minute and syncs each organization whose
   schedule has a due slot by running it through `SyncJobRunner` (own
   session + commit inside `recompute.paused()`; the outcome is recorded in a
-  second session). Every sync entry point holds `SyncJobRunner.lock` and
-  commits inside it — the organization
-  sync (`POST /api/connectors/linear/sync`) and the team sync
-  (`POST /api/connectors/linear/teams/{team_id}/sync`) both do. A new one
-  must too, or two syncs race on the same external ids.
+  second session). Every sync entry point runs as a `SyncJobRunner` job,
+  which holds `SyncJobRunner.lock` and commits inside it — the
+  organization sync (`POST /api/connectors/linear/sync`) and the team sync
+  (`POST /api/connectors/linear/teams/{team_id}/sync`) start one and
+  answer `202` with it (`GET /api/connectors/linear/jobs/{job_id}` reads
+  it). A new one must too, or two syncs race on the same external ids.
 - `mount_spa()` must be registered last in `create_app()` — the rule and
   its reason are owned by `app/infrastructure/CLAUDE.md`.
 - **MCP facade** (`mcp_server.py`): the MCP server's tools call Atlas's own

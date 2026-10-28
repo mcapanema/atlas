@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
 from app.domain.advisor.entities import MeetingType, Persona
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
@@ -130,11 +131,6 @@ class IntegrationStatusRead(BaseModel):
     configured: bool
 
 
-class LinearStatusRead(IntegrationStatusRead):
-    # An automatic sync is running now; a manual sync waits for it (ADR-0014).
-    auto_syncing: bool
-
-
 class SyncRequest(BaseModel):
     organization_id: UUID | None = None
     # Re-derive every returned item's source events from the current mapping,
@@ -153,6 +149,49 @@ class SyncSummaryRead(BaseModel):
     deleted: int
     state_types_filled: int
     rebuilt: int
+
+
+class SyncJobRead(BaseModel):
+    """A background Linear sync: running, or one of the last finished ones."""
+
+    id: UUID
+    organization_id: UUID
+    kind: SyncKind
+    team_id: UUID | None
+    rebuild: bool
+    trigger: SyncTrigger
+    state: SyncState
+    phase: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    summary: SyncSummaryRead | None
+
+    @classmethod
+    def of(cls, job: SyncJob) -> "SyncJobRead":
+        request = job.request
+        return cls(
+            id=job.id,
+            organization_id=request.organization_id,
+            kind=request.kind,
+            team_id=request.team_id,
+            rebuild=request.rebuild,
+            trigger=request.trigger,
+            state=job.state,
+            phase=job.phase,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
+            error=job.error,
+            summary=SyncSummaryRead.model_validate(job.summary)
+            if job.summary is not None
+            else None,
+        )
+
+
+class LinearStatusRead(IntegrationStatusRead):
+    # The sync job running now, manual or automatic; a new request either
+    # gets it back (it covers the request) or a 409.
+    running: SyncJobRead | None
 
 
 class SyncScheduleWrite(BaseModel):

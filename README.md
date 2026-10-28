@@ -274,6 +274,13 @@ curl -X POST http://localhost:8000/api/connectors/linear/sync \
   -H 'content-type: application/json' -d '{"rebuild": true}'
 ```
 
+It answers `202` with a background sync job; read its state, phase, counts
+and error with the job's `id`:
+
+```bash
+curl http://localhost:8000/api/connectors/linear/jobs/<id>
+```
+
 It re-derives every synced issue's events and rewrites snapshot history;
 feedback, learned guidance, and metric rules are kept (ADR-0013).
 

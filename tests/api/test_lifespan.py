@@ -3,10 +3,11 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api.auto_sync import AutoSyncRunner
-from app.api.sync_jobs import SyncJobRequest, SyncJobRunner
+from app.api.sync_jobs import SyncJobRequest, SyncJobRunner, get_sync_job_runner
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceTeam
 from app.infrastructure.database.base import Base
@@ -72,3 +73,17 @@ async def test_lifespan_cancels_a_running_sync_job(
             await asyncio.wait_for(entered.wait(), 5)
         assert job.state == "running"  # cancelled: no finish written
         assert task.cancelled()
+
+
+async def test_lifespan_auto_sync_and_routes_share_one_sync_job_runner(
+    settings_env: Callable[..., None], tmp_path: Path
+) -> None:
+    # One lock for every sync: a route's job runner is the one auto sync defers to.
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    app = create_app()
+    with mock.patch.object(AutoSyncRunner, "start", autospec=True):
+        async with lifespan(app):
+            jobs = get_sync_job_runner(Request({"type": "http", "app": app}))
+            async with jobs.lock:
+                # Skips without touching the (unmigrated) DB: it sees the lock.
+                assert await app.state.auto_sync_runner.tick() == 0

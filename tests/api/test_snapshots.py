@@ -9,6 +9,7 @@ from app.api.deps import get_delivery_data_source
 from app.domain.events.entities import EventType
 from app.domain.sync.source import SourceEvent, SourceTeam, SourceWorkItem
 from app.domain.work_items.entities import WorkItemType
+from tests.api.helpers import settle
 from tests.fakes import FakeDataSource
 
 
@@ -65,7 +66,8 @@ def synced_team_id_factory(
         response = await client.post(
             "/api/connectors/linear/sync", json={"organization_id": org["id"]}
         )
-        assert response.status_code == 200
+        assert response.status_code == 202
+        await settle(test_app)
         teams = (await client.get("/api/teams")).json()
         team_id: str = teams[0]["id"]
         return team_id
@@ -90,12 +92,13 @@ async def test_sync_captures_daily_metric_snapshot(
 
 
 async def test_second_sync_same_day_does_not_duplicate_snapshots(
-    client: AsyncClient, synced_team_id_factory: Callable[[], Awaitable[str]]
+    test_app: FastAPI, client: AsyncClient, synced_team_id_factory: Callable[[], Awaitable[str]]
 ) -> None:
     team_id = await synced_team_id_factory()
     org = (await client.get("/api/organizations")).json()[0]
     second = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
-    assert second.status_code == 200
+    assert second.status_code == 202
+    await settle(test_app)
 
     response = await client.get(f"/api/metrics/snapshots?team_id={team_id}")
 

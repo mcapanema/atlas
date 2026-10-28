@@ -2,11 +2,12 @@ import asyncio
 import dataclasses
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 
 from app.api.deps import get_delivery_data_source
 from app.api.recompute import RecomputeRunner
@@ -51,6 +52,28 @@ def _fake_source() -> FakeDataSource:
     )
 
 
+class _BlockingSource(FakeDataSource):
+    """Holds the sync inside fetch_teams until `release` is set."""
+
+    def __init__(self) -> None:
+        super().__init__(teams=[SourceTeam(external_id="lt1", name="Platform")])
+        self.release = asyncio.Event()
+
+    async def fetch_teams(self) -> list[SourceTeam]:
+        await self.release.wait()
+        return await super().fetch_teams()
+
+
+async def _outcome(app: FastAPI, client: AsyncClient, response: Response) -> dict[str, Any]:
+    """The finished job a sync request started."""
+    assert response.status_code == 202
+    await settle(app)
+    job = await client.get(f"/api/connectors/linear/jobs/{response.json()['id']}")
+    assert job.status_code == 200
+    body: dict[str, Any] = job.json()
+    return body
+
+
 @pytest.fixture
 def linear_configured(settings_env: Callable[..., None]) -> None:
     settings_env(linear_api_key="lin_api_test")
@@ -65,14 +88,14 @@ async def test_status_reports_unconfigured(client: AsyncClient, linear_unconfigu
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False, "auto_syncing": False}
+    assert response.json() == {"configured": False, "running": None}
 
 
 async def test_status_reports_configured(client: AsyncClient, linear_configured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": True, "auto_syncing": False}
+    assert response.json() == {"configured": True, "running": None}
 
 
 async def test_sync_returns_409_when_unconfigured(
@@ -91,10 +114,14 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     test_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
 
-    first = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
+    first = await _outcome(
+        test_app,
+        client,
+        await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]}),
+    )
 
-    assert first.status_code == 200
-    assert first.json() == {
+    assert first["state"] == "succeeded"
+    assert first["summary"] == {
         "teams": 1,
         "projects": 1,
         "work_items": 1,
@@ -107,9 +134,13 @@ async def test_sync_pulls_source_into_domain_and_is_idempotent(
     teams = (await client.get("/api/teams")).json()
     assert teams[0]["external_id"] == "lt1"
 
-    second = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
+    second = await _outcome(
+        test_app,
+        client,
+        await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]}),
+    )
 
-    assert second.json() == {
+    assert second["summary"] == {
         "teams": 0,
         "projects": 0,
         "work_items": 0,
@@ -134,10 +165,13 @@ async def test_resync_with_an_assignee_writes_nothing(
     test_app.dependency_overrides[get_delivery_data_source] = source
     org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
 
-    await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
-    second = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
+    url = "/api/connectors/linear/sync"
+    await _outcome(test_app, client, await client.post(url, json={"organization_id": org["id"]}))
+    second = await _outcome(
+        test_app, client, await client.post(url, json={"organization_id": org["id"]})
+    )
 
-    assert second.json()["work_items"] == 0
+    assert second["summary"]["work_items"] == 0
 
 
 async def test_sync_unknown_organization_is_404(
@@ -163,28 +197,39 @@ class FailingDataSource:
         return []
 
 
-async def test_sync_returns_502_when_source_fails(
+async def test_a_failing_source_ends_the_job_failed_with_its_error(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
     test_app.dependency_overrides[get_delivery_data_source] = FailingDataSource
     org = (await client.post("/api/organizations", json={"name": "Acme"})).json()
 
-    response = await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
+    job = await _outcome(
+        test_app,
+        client,
+        await client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]}),
+    )
 
-    assert response.status_code == 502
-    assert "Linear API returned HTTP 500" in response.json()["detail"]
+    assert job["state"] == "failed"
+    assert job["error"] == "Linear API returned HTTP 500"
+    assert job["summary"] is None
+    assert job["finished_at"] is not None
 
 
-async def test_sync_without_organization_bootstraps_from_source(
+async def test_bootstrap_sync_job_sees_the_new_organization(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
+    # The request creates the organization and commits it before the job,
+    # in its own session, syncs into it.
     test_app.dependency_overrides[get_delivery_data_source] = _fake_source
 
-    response = await client.post("/api/connectors/linear/sync", json={})
+    job = await _outcome(
+        test_app, client, await client.post("/api/connectors/linear/sync", json={})
+    )
 
-    assert response.status_code == 200
+    assert job["state"] == "succeeded"
     orgs = (await client.get("/api/organizations")).json()
     assert [org["name"] for org in orgs] == ["Acme Workspace"]
+    assert job["organization_id"] == orgs[0]["id"]
     teams = (await client.get("/api/teams")).json()
     assert teams[0]["external_id"] == "lt1"
 
@@ -206,16 +251,20 @@ async def test_rebuild_resyncs_events_and_recomputes_history(
 ) -> None:
     rules_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
-    await rules_client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
-
-    response = await rules_client.post(
-        "/api/connectors/linear/sync", json={"organization_id": org["id"], "rebuild": True}
+    url = "/api/connectors/linear/sync"
+    await _outcome(
+        rules_app, rules_client, await rules_client.post(url, json={"organization_id": org["id"]})
     )
-    await settle(rules_app)
+
+    job = await _outcome(
+        rules_app,
+        rules_client,
+        await rules_client.post(url, json={"organization_id": org["id"], "rebuild": True}),
+    )
     rules = (await rules_client.get(f"/api/organizations/{org['id']}/metric-rules")).json()
 
-    assert response.status_code == 200
-    assert (response.json()["rebuilt"], response.json()["events"]) == (1, 1)
+    assert job["rebuild"] is True
+    assert (job["summary"]["rebuilt"], job["summary"]["events"]) == (1, 1)
     assert rules["recompute"]["state"] == "idle"
     assert rules["recompute"]["finished_at"] is not None  # history was rewritten
 
@@ -226,8 +275,11 @@ async def test_a_plain_sync_does_not_recompute_history(
     rules_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
 
-    await rules_client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]})
-    await settle(rules_app)
+    await _outcome(
+        rules_app,
+        rules_client,
+        await rules_client.post("/api/connectors/linear/sync", json={"organization_id": org["id"]}),
+    )
     rules = (await rules_client.get(f"/api/organizations/{org['id']}/metric-rules")).json()
 
     assert rules["recompute"]["finished_at"] is None
@@ -252,7 +304,7 @@ async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_
     assert recompute.status_code == 202
 
 
-async def test_manual_sync_holds_the_auto_sync_lock(
+async def test_manual_sync_job_holds_the_sync_job_lock(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
     runner = SyncJobRunner(
@@ -272,9 +324,11 @@ async def test_manual_sync_holds_the_auto_sync_lock(
         teams=[SourceTeam(external_id="lt1", name="Platform")]
     )
 
-    response = await client.post("/api/connectors/linear/sync", json={})
+    job = await _outcome(
+        test_app, client, await client.post("/api/connectors/linear/sync", json={})
+    )
 
-    assert response.status_code == 200
+    assert job["state"] == "succeeded"
     assert seen == [True]
     assert not runner.lock.locked()
 
@@ -298,9 +352,12 @@ async def test_manual_sync_is_recorded_on_the_schedule(
     )
     assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is None
 
-    response = await client.post("/api/connectors/linear/sync", json={"organization_id": org_id})
+    await _outcome(
+        test_app,
+        client,
+        await client.post("/api/connectors/linear/sync", json={"organization_id": org_id}),
+    )
 
-    assert response.status_code == 200
     assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is not None
 
 
@@ -320,10 +377,12 @@ async def test_team_sync_pulls_only_that_teams_items(
     test_app.dependency_overrides[get_delivery_data_source] = _two_team_source
     _, team_id = await create_org_and_team(client, external_id="lt1")
 
-    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    job = await _outcome(
+        test_app, client, await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    )
 
-    assert response.status_code == 200
-    assert response.json()["work_items"] == 1
+    assert (job["kind"], job["team_id"]) == ("team", team_id)
+    assert job["summary"]["work_items"] == 1
     items = (await client.get("/api/work-items")).json()["items"]
     assert [item["team_id"] for item in items] == [team_id]
 
@@ -334,7 +393,9 @@ async def test_team_sync_captures_the_teams_snapshot(
     test_app.dependency_overrides[get_delivery_data_source] = _fake_source
     _, team_id = await create_org_and_team(client, external_id="lt1")
 
-    await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    await _outcome(
+        test_app, client, await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    )
 
     snapshots = (await client.get(f"/api/metrics/snapshots?team_id={team_id}")).json()
     assert len(snapshots) == 1
@@ -348,7 +409,9 @@ async def test_team_sync_leaves_other_teams_snapshots_to_their_own_sync(
     test_app.dependency_overrides[get_delivery_data_source] = _two_team_source
     _, team_id = await create_org_and_team(client, external_id="lt1")
 
-    await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    await _outcome(
+        test_app, client, await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    )
 
     teams = (await client.get("/api/teams")).json()
     other_id = next(team["id"] for team in teams if team["external_id"] == "lt2")
@@ -385,7 +448,7 @@ async def test_team_sync_returns_409_when_unconfigured(
     assert response.status_code == 409
 
 
-async def test_team_sync_holds_the_auto_sync_lock(
+async def test_team_sync_job_holds_the_sync_job_lock(
     test_app: FastAPI, client: AsyncClient, linear_configured: None
 ) -> None:
     runner = SyncJobRunner(
@@ -404,9 +467,11 @@ async def test_team_sync_holds_the_auto_sync_lock(
     )
     _, team_id = await create_org_and_team(client, external_id="lt1")
 
-    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    job = await _outcome(
+        test_app, client, await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    )
 
-    assert response.status_code == 200
+    assert job["state"] == "succeeded"
     assert seen == [True]
     assert not runner.lock.locked()
 
@@ -430,7 +495,86 @@ async def test_team_sync_is_not_recorded_on_the_schedule(
         },
     )
 
-    response = await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    await _outcome(
+        test_app, client, await client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    )
 
-    assert response.status_code == 200
     assert (await client.get(schedule_url)).json()["last_manual_sync_at"] is None
+
+
+async def test_sync_answers_202_with_a_running_job(
+    test_app: FastAPI, client: AsyncClient, linear_configured: None
+) -> None:
+    test_app.dependency_overrides[get_delivery_data_source] = _fake_source
+
+    response = await client.post("/api/connectors/linear/sync", json={})
+    await settle(test_app)
+
+    assert response.status_code == 202
+    assert response.json()["state"] == "running"
+    assert response.json()["kind"] == "organization"
+    assert (response.json()["trigger"], response.json()["finished_at"]) == ("manual", None)
+
+
+async def test_sync_while_a_covering_job_runs_returns_that_job(
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+) -> None:
+    # "Sync now" clicked while a sync of the same organization runs: the
+    # user sees that sync's result, not an error and not a second sync.
+    source = _BlockingSource()
+    rules_app.dependency_overrides[get_delivery_data_source] = lambda: source
+    _, team_id = await create_org_and_team(rules_client, external_id="lt1")
+
+    first = await rules_client.post("/api/connectors/linear/sync", json={})
+    again = await rules_client.post("/api/connectors/linear/sync", json={})
+    team = await rules_client.post(f"/api/connectors/linear/teams/{team_id}/sync")
+    source.release.set()
+    await settle(rules_app)
+
+    assert (again.status_code, team.status_code) == (202, 202)
+    assert first.json()["id"] == again.json()["id"] == team.json()["id"]
+
+
+async def test_rebuild_while_a_plain_sync_runs_is_409(
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+) -> None:
+    source = _BlockingSource()
+    rules_app.dependency_overrides[get_delivery_data_source] = lambda: source
+    await rules_client.post("/api/organizations", json={"name": "Acme"})
+
+    plain = await rules_client.post("/api/connectors/linear/sync", json={})
+    rebuild = await rules_client.post("/api/connectors/linear/sync", json={"rebuild": True})
+    source.release.set()
+    await settle(rules_app)
+
+    started = datetime.fromisoformat(plain.json()["started_at"])
+    assert rebuild.status_code == 409
+    assert rebuild.json()["detail"] == (
+        f"A organization sync of this organization is running (started {started:%H:%M} UTC); "
+        "try again when it finishes"
+    )
+
+
+async def test_unknown_job_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/connectors/linear/jobs/{uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "Sync job not found; Atlas may have restarted before it finished"
+    )
+
+
+async def test_status_reports_the_running_job(
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+) -> None:
+    source = _BlockingSource()
+    rules_app.dependency_overrides[get_delivery_data_source] = lambda: source
+    await rules_client.post("/api/organizations", json={"name": "Acme"})
+
+    job_id = (await rules_client.post("/api/connectors/linear/sync", json={})).json()["id"]
+    body = (await rules_client.get("/api/connectors/linear")).json()
+    source.release.set()
+    await settle(rules_app)
+
+    assert body["running"]["id"] == job_id
+    assert (await rules_client.get("/api/connectors/linear")).json()["running"] is None

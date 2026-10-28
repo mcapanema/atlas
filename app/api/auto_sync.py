@@ -14,8 +14,8 @@ run whose outcome can't be recorded isn't re-synced every tick; a restart
 retries it once.
 
 Manual and automatic syncs share the job runner's lock. A tick that finds
-a sync running skips and retries next tick; a manual sync waits for a
-running auto sync.
+a sync running skips and retries next tick; a manual sync while an auto
+sync runs gets that job back when it covers the request, a 409 otherwise.
 
 ponytail: one scheduler per process, so run Atlas as a single uvicorn
 worker (the Dockerfile does). Move to a DB lease or a job table if Atlas
@@ -26,14 +26,12 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.deps import LINEAR_NOT_CONFIGURED, linear_data_source, sync_schedule_service_for
-from app.api.sync_jobs import SyncJobRequest, SyncJobRunner, get_sync_job_runner
+from app.api.deps import LINEAR_NOT_CONFIGURED, sync_schedule_service_for
+from app.api.sync_jobs import SyncJobRequest, SyncJobRunner
 from app.application.sync_schedules.service import DueSync
 from app.domain.sync.port import DeliveryDataSource
 
@@ -61,12 +59,6 @@ class AutoSyncRunner:
         self._task: asyncio.Task[None] | None = None
         # The last slot attempted per organization, recorded or not.
         self._attempted: dict[UUID, datetime] = {}
-
-    @property
-    def auto_syncing(self) -> bool:
-        """Whether an automatic sync is running now (a manual one waits for it)."""
-        running = self._jobs.running
-        return running is not None and running.request.trigger == "auto"
 
     @property
     def running(self) -> bool:
@@ -123,18 +115,3 @@ class AutoSyncRunner:
                 await session.commit()
         except Exception:
             logger.exception("Could not record the auto sync of %s", job.organization_id)
-
-
-def get_auto_sync_runner(request: Request) -> AutoSyncRunner:
-    runner: AutoSyncRunner | None = getattr(request.app.state, "auto_sync_runner", None)
-    if runner is None:  # no lifespan ran (tests): create on first use, never started
-        runner = AutoSyncRunner(
-            request.app.state.sessionmaker,
-            linear_data_source,
-            jobs=get_sync_job_runner(request),
-        )
-        request.app.state.auto_sync_runner = runner
-    return runner
-
-
-AutoSyncRunnerDep = Annotated[AutoSyncRunner, Depends(get_auto_sync_runner)]
