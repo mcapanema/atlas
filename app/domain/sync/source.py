@@ -22,7 +22,7 @@ class SourceTeam:
 class SourceProject:
     external_id: str
     name: str
-    team_external_id: str | None
+    team_external_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

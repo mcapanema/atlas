@@ -225,11 +225,11 @@ class SyncService:
             if project.external_id is not None
         }
         for source in sources:
-            if source.team_external_id is None:
-                continue  # a Project requires an owning Team
-            team = teams_by_eid.get(source.team_external_id)
+            team = next(
+                (teams_by_eid[e] for e in source.team_external_ids if e in teams_by_eid), None
+            )
             if team is None:
-                continue
+                continue  # a Project requires an owning Team
             existing = projects_by_eid.get(source.external_id)
             if existing is None:
                 project = Project(team_id=team.id, name=source.name, external_id=source.external_id)

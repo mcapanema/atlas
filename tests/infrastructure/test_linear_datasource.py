@@ -63,7 +63,7 @@ async def test_fetch_projects_maps_nodes() -> None:
     projects = await _datasource(handler).fetch_projects()
 
     assert projects[0].external_id == "p1"
-    assert projects[0].team_external_id == "t1"
+    assert projects[0].team_external_ids == ("t1",)
 
 
 async def test_fetch_work_items_maps_issues_and_history() -> None:

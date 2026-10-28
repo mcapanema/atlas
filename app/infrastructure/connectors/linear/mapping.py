@@ -27,13 +27,13 @@ def map_team(node: dict[str, Any]) -> SourceTeam:
 
 
 def map_project(node: dict[str, Any]) -> SourceProject:
-    # ponytail: Linear projects can span multiple teams; we keep only the
-    # first. Model a many-to-many if cross-team projects ever matter.
-    team_nodes = node["teams"]["nodes"]
+    # Every team is kept in Linear's order: the home team is the first one
+    # Atlas has synced (the sync decides), and a project's teams are derived
+    # from its items.
     return SourceProject(
         external_id=node["id"],
         name=node["name"],
-        team_external_id=team_nodes[0]["id"] if team_nodes else None,
+        team_external_ids=tuple(team["id"] for team in node["teams"]["nodes"]),
     )
 
 

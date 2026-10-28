@@ -44,7 +44,7 @@ CREATED_AT = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
 def full_source() -> FakeDataSource:
     return FakeDataSource(
         teams=[SourceTeam(external_id="lt1", name="Platform")],
-        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt1")],
+        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("lt1",))],
         work_items=[
             SourceWorkItem(
                 external_id="li1",
@@ -283,7 +283,9 @@ async def test_project_reassigned_to_different_team_is_updated() -> None:
     source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Growth")]
     await harness.service.sync(org_id)
 
-    source.projects = [SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt2")]
+    source.projects = [
+        SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("lt2",))
+    ]
     source.work_items = []
 
     summary = await harness.service.sync(org_id)
@@ -358,7 +360,9 @@ async def test_work_item_type_change_is_updated() -> None:
 async def test_project_with_unknown_team_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(
-            projects=[SourceProject(external_id="lp9", name="Orphan", team_external_id="missing")]
+            projects=[
+                SourceProject(external_id="lp9", name="Orphan", team_external_ids=("missing",))
+            ]
         )
     )
     org_id = await seed_org(harness)
@@ -367,6 +371,30 @@ async def test_project_with_unknown_team_is_skipped() -> None:
 
     assert summary.projects == 0
     assert await harness.projects.get_by_external_id("lp9") is None
+
+
+async def test_project_takes_its_first_known_team() -> None:
+    source = full_source()
+    source.teams = [SourceTeam(external_id="lt2", name="Growth")]
+    source.projects = [
+        SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("unknown", "lt2"))
+    ]
+    source.work_items = [
+        dataclasses.replace(_todo("li1", team_external_id="lt2"), project_external_id="lp1")
+    ]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    await harness.service.sync(org_id)
+
+    team_b = await harness.teams.get_by_external_id("lt2")
+    project = await harness.projects.get_by_external_id("lp1")
+    item = await harness.work_items.get_by_external_id("li1")
+    assert team_b is not None
+    assert project is not None
+    assert project.team_id == team_b.id
+    assert item is not None
+    assert item.project_id == project.id
 
 
 async def test_work_item_with_unknown_team_is_skipped() -> None:
@@ -420,7 +448,7 @@ async def test_project_with_null_team_external_id_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(
             teams=[SourceTeam(external_id="lt1", name="Platform")],
-            projects=[SourceProject(external_id="lp9", name="Teamless", team_external_id=None)],
+            projects=[SourceProject(external_id="lp9", name="Teamless")],
         )
     )
     org_id = await seed_org(harness)
@@ -1136,7 +1164,7 @@ async def test_sync_team_creates_the_teams_new_projects() -> None:
     lt1_id = await _synced_two_teams(harness, source)
     source.projects = [
         *source.projects,
-        SourceProject(external_id="lp2", name="Q4 Launch", team_external_id="lt1"),
+        SourceProject(external_id="lp2", name="Q4 Launch", team_external_ids=("lt1",)),
     ]
 
     summary = await harness.service.sync_team(lt1_id)

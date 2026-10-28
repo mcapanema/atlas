@@ -23,19 +23,15 @@ def test_map_team() -> None:
     assert team.name == "Platform"
 
 
-def test_map_project_takes_first_team() -> None:
+def test_map_project_keeps_every_team_in_order() -> None:
     project = map_project(
         {"id": "p1", "name": "Q3 Launch", "teams": {"nodes": [{"id": "t1"}, {"id": "t2"}]}}
     )
+    teamless = map_project({"id": "p2", "name": "Q3 Launch", "teams": {"nodes": []}})
 
     assert project.external_id == "p1"
-    assert project.team_external_id == "t1"
-
-
-def test_map_project_without_teams_has_no_team() -> None:
-    project = map_project({"id": "p1", "name": "Q3 Launch", "teams": {"nodes": []}})
-
-    assert project.team_external_id is None
+    assert project.team_external_ids == ("t1", "t2")
+    assert teamless.team_external_ids == ()
 
 
 def _entry(

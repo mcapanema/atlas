@@ -23,7 +23,7 @@ def _fake_source() -> FakeDataSource:
     occurred = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
     return FakeDataSource(
         teams=[SourceTeam(external_id="lt1", name="Platform")],
-        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt1")],
+        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("lt1",))],
         work_items=[
             SourceWorkItem(
                 external_id="li1",
