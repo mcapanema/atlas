@@ -13,6 +13,7 @@ from app.api.deps import (
 )
 from app.api.recompute import RecomputeRunnerDep
 from app.api.schemas import LinearStatusRead, SyncRequest, SyncSummaryRead
+from app.api.sync_jobs import SyncJobRunnerDep
 from app.application.snapshots.service import SnapshotService
 from app.application.sync.service import (
     SyncService,
@@ -66,13 +67,13 @@ async def sync_linear(
     rules: MetricRulesServiceDep,
     session: SessionDep,
     runner: RecomputeRunnerDep,
-    auto_sync: AutoSyncRunnerDep,
+    jobs: SyncJobRunnerDep,
     schedules: SyncScheduleServiceDep,
 ) -> SyncSummaryRead:
     # One sync at a time (ADR-0014): a scheduled tick skips while this holds
     # the lock, and the commit lands inside it, so the next sync starts
     # from this one's writes.
-    async with auto_sync.lock:
+    async with jobs.lock:
         if not payload.rebuild:
             summary = await _run_sync(service, payload.organization_id, rebuild=False)
             await _after_sync(snapshots, schedules, summary)
@@ -97,12 +98,12 @@ async def sync_linear_team(
     service: SyncServiceDep,
     snapshots: SnapshotServiceDep,
     session: SessionDep,
-    auto_sync: AutoSyncRunnerDep,
+    jobs: SyncJobRunnerDep,
 ) -> SyncSummaryRead:
     # Same lock as every sync (ADR-0014). One team's sync leaves the others
     # stale, so it's not recorded on the schedule (a due slot still runs)
     # and only this team's scopes are snapshotted.
-    async with auto_sync.lock:
+    async with jobs.lock:
         try:
             summary = await service.sync_team(team_id)
         except UnknownTeamError as exc:

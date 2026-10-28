@@ -55,9 +55,10 @@ Presentation is allowed to know a concrete adapter exists).
   commit, then `queue`): a running scope holds SQLite's write lock.
 - **Auto sync** (`auto_sync.py`, ADR-0014): the in-process
   `AutoSyncRunner` ticks every minute and syncs each organization whose
-  schedule has a due slot (own session + commit inside
-  `recompute.paused()`, outcome recorded in a second session). Every sync
-  entry point holds `runner.lock` and commits inside it — the organization
+  schedule has a due slot by running it through `SyncJobRunner` (own
+  session + commit inside `recompute.paused()`; the outcome is recorded in a
+  second session). Every sync entry point holds `SyncJobRunner.lock` and
+  commits inside it — the organization
   sync (`POST /api/connectors/linear/sync`) and the team sync
   (`POST /api/connectors/linear/teams/{team_id}/sync`) both do. A new one
   must too, or two syncs race on the same external ids.

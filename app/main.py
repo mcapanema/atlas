@@ -31,6 +31,7 @@ from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import linear_data_source
 from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
+from app.api.sync_jobs import SyncJobRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
 from app.domain.sync.port import DataSourceError
@@ -77,7 +78,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Finish any history recompute a restart interrupted, without delaying
     # startup; resume() logs and gives up if the DB isn't migrated yet.
     resume = asyncio.create_task(runner.resume())
-    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, recompute=runner)
+    sync_jobs = SyncJobRunner(sessionmaker, recompute=runner)
+    app.state.sync_job_runner = sync_jobs
+    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, jobs=sync_jobs)
     app.state.auto_sync_runner = auto_sync
     # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).
     auto_sync.start()
@@ -95,6 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # a pool connection orphans it, so never let one start just to stop it.
         resume.cancel()
         await auto_sync.close()
+        await sync_jobs.close()
         await asyncio.gather(resume, return_exceptions=True)
         await runner.close()
         engine = sessionmaker.kw["bind"]
