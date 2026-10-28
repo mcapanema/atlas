@@ -1,11 +1,14 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
+from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
@@ -209,23 +212,84 @@ async def test_delete_detaches_children_instead_of_failing(session: AsyncSession
     assert stored.parent_id is None
 
 
-async def test_assignee_roundtrips(session: AsyncSession) -> None:
+async def _person(
+    session: AsyncSession, name: str = "Ada Lovelace", display_name: str | None = None
+) -> Person:
+    person = Person(organization_id=uuid4(), name=name, display_name=display_name)
+    await SqlAlchemyPersonRepository(session).add(person)
+    return person
+
+
+async def test_work_item_assignee_resolves_from_person(session: AsyncSession) -> None:
     repo = SqlAlchemyWorkItemRepository(session)
-    item = WorkItem(team_id=await _team_id(session), title="Add login", assignee="Ada Lovelace")
+    person = await _person(session)
+    item = WorkItem(team_id=await _team_id(session), title="Add login", assignee_id=person.id)
 
     await repo.add(item)
+    session.expire_all()
     fetched = await repo.get(item.id)
 
     assert fetched is not None
     assert fetched.assignee == "Ada Lovelace"
+    assert fetched.assignee_id == person.id
 
 
-async def test_assignee_defaults_to_none(session: AsyncSession) -> None:
+async def test_work_item_assignee_prefers_display_name(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    person = await _person(session, display_name="Ada L.")
+    team_id = await _team_id(session)
+    item = WorkItem(team_id=team_id, title="Add login", assignee_id=person.id)
+
+    await repo.add(item)
+    session.expire_all()
+    fetched = await repo.get(item.id)
+    listed = await repo.list(team_id=team_id)
+
+    assert fetched is not None
+    assert fetched.assignee == "Ada L."
+    assert [i.assignee for i in listed] == ["Ada L."]
+
+
+async def test_reassigning_a_work_item_refreshes_the_resolved_name(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    ada = await _person(session)
+    grace = await _person(session, "Grace Hopper")
+    item = WorkItem(team_id=await _team_id(session), title="Add login", assignee_id=ada.id)
+    await repo.add(item)
+    await repo.get(item.id)
+
+    await repo.update(replace(item, assignee_id=grace.id))
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.assignee == "Grace Hopper"
+
+
+async def test_unassigned_work_item_reads_none(session: AsyncSession) -> None:
     repo = SqlAlchemyWorkItemRepository(session)
     item = WorkItem(team_id=await _team_id(session), title="Add login")
 
     await repo.add(item)
+    session.expire_all()
     fetched = await repo.get(item.id)
 
     assert fetched is not None
     assert fetched.assignee is None
+    assert fetched.assignee_id is None
+
+
+async def test_team_ids_by_project_groups_distinct_teams(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_a, team_b = await _team_id(session), await _team_id(session)
+    project_p = await _project_id(session, team_a)
+    project_q = await _project_id(session, team_a)
+    await repo.add(WorkItem(team_id=team_a, title="1", project_id=project_p))
+    await repo.add(WorkItem(team_id=team_a, title="2", project_id=project_p))
+    await repo.add(WorkItem(team_id=team_b, title="3", project_id=project_p))
+    await repo.add(WorkItem(team_id=team_a, title="4", project_id=project_q))
+    await repo.add(WorkItem(team_id=team_b, title="5"))
+
+    assert await repo.team_ids_by_project() == {
+        project_p: frozenset({team_a, team_b}),
+        project_q: frozenset({team_a}),
+    }

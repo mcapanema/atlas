@@ -25,6 +25,7 @@ from app.domain.snapshots.repository import (
     MetricSnapshotRepository,
 )
 from app.domain.teams.repository import TeamRepository
+from app.domain.work_items.repository import WorkItemRepository
 
 METRICS_WINDOW_DAYS = STATS_WINDOW_DAYS
 
@@ -38,6 +39,7 @@ class SnapshotService:
         forecasts: ForecastService,
         teams: TeamRepository,
         projects: ProjectRepository,
+        work_items: WorkItemRepository,
         metric_snapshots: MetricSnapshotRepository,
         forecast_snapshots: ForecastSnapshotRepository,
     ) -> None:
@@ -45,6 +47,7 @@ class SnapshotService:
         self._forecasts = forecasts
         self._teams = teams
         self._projects = projects
+        self._work_items = work_items
         self._metric_snapshots = metric_snapshots
         self._forecast_snapshots = forecast_snapshots
 
@@ -70,16 +73,19 @@ class SnapshotService:
         return captured
 
     async def capture_team(self, team_id: UUID, *, now: datetime | None = None) -> int:
-        """Snapshot one team and its projects; returns scopes captured.
+        """Snapshot one team and the projects whose items are all its own.
 
         For a team sync: every other scope is still stale, and capturing it
         now would freeze today's point from that stale data (idempotent per
-        day, so the organization sync later today would skip it).
+        day, so the organization sync later today would skip it). A project
+        holding another team's items is such a scope: it waits for the
+        organization sync. A project with no items counts as its home team's.
         """
         at = now if now is not None else datetime.now(UTC)
         captured = await self._capture(at, team_id=team_id)
+        teams_by_project = await self._work_items.team_ids_by_project()
         for project in await self._projects.list():
-            if project.team_id == team_id:
+            if teams_by_project.get(project.id, frozenset({project.team_id})) <= {team_id}:
                 captured += await self._capture(at, project_id=project.id)
         return captured
 

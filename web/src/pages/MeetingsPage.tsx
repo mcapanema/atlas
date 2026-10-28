@@ -15,6 +15,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { useAdvisorStatus } from "../api/advisor";
 import {
+  useGenerateMeetingPrep,
   useMeetingPrep,
   type MeetingPrep,
   type MeetingPrepParams,
@@ -23,6 +24,8 @@ import {
 } from "../api/meetings";
 import { useSendFeedback } from "../api/personas";
 import { useTeams, type Team } from "../api/teams";
+import { runView } from "../api/runs";
+import { RunError, RunGeneratedAt } from "../components/RunNotices";
 import { AdvisorStatusAlerts } from "../components/AdvisorStatusAlerts";
 import { EvidenceList } from "../components/EvidenceList";
 import { FeedbackCard } from "../components/FeedbackCard";
@@ -188,11 +191,11 @@ export function MeetingsPage() {
   });
   const [comment, setComment] = useState("");
   const sprintDefault = teamSprintDays(teams.data, teamId);
-  const prep = useMeetingPrep(
-    { teamId },
-    meeting,
-    prepParams(meeting, inputs, teamId, sprintDefault),
-  );
+  const params = prepParams(meeting, inputs, teamId, sprintDefault);
+  const prep = useMeetingPrep({ teamId }, meeting, params);
+  const generate = useGenerateMeetingPrep({ teamId }, meeting, params);
+  const run = prep.data;
+  const { running, error: errorText } = runView(run, generate, prep.error);
   const feedback = useSendFeedback(meeting);
 
   const setParam = (key: string, value: string) => {
@@ -237,12 +240,12 @@ export function MeetingsPage() {
           />
           <Button
             type="primary"
-            disabled={!teamId || !configured}
-            loading={prep.isFetching}
+            disabled={!teamId || !configured || running}
+            loading={running}
             onClick={() => {
               feedback.reset();
               setComment("");
-              void prep.refetch();
+              generate.mutate();
             }}
           >
             Prepare meeting
@@ -250,20 +253,17 @@ export function MeetingsPage() {
         </Space>
         <PersonaLearningCard persona={meeting} />
         {!teamId && <Alert type="info" message="Select a team to prepare a meeting." />}
-        {prep.isError && (
-          <Alert
-            type="error"
-            message="Failed to generate meeting prep"
-            description={prep.error.message}
-          />
-        )}
-        {prep.data && (
-          <PrepResult
-            prep={prep.data}
-            feedback={feedback}
-            comment={comment}
-            onCommentChange={setComment}
-          />
+        <RunError title="Failed to generate meeting prep" error={errorText} />
+        {run?.prep && (
+          <>
+            <RunGeneratedAt run={run} />
+            <PrepResult
+              prep={run.prep}
+              feedback={feedback}
+              comment={comment}
+              onCommentChange={setComment}
+            />
+          </>
         )}
       </Space>
     </>

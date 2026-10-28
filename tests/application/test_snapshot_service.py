@@ -78,6 +78,7 @@ def _harness() -> tuple[
         ForecastService(work_items, event_repo, resolver),
         teams,
         projects,
+        work_items,
         metric_snapshots,
         forecast_snapshots,
     )
@@ -139,6 +140,7 @@ async def test_capture_team_snapshots_only_that_team_and_its_projects() -> None:
         ForecastService(work_items, events),
         InMemoryTeamRepository([team, other]),
         InMemoryProjectRepository([project, other_project]),
+        work_items,
         metric_snapshots,
         InMemoryForecastSnapshotRepository(),
     )
@@ -206,3 +208,38 @@ async def test_get_forecast_accuracy_reuses_a_given_scope() -> None:
     # forecast; the caller's scope wins, so it stays pending.
     assert accuracy.evaluated == 0
     assert accuracy.pending == 1
+
+
+async def test_capture_team_skips_multi_team_projects() -> None:
+    a = Team(organization_id=uuid4(), name="A")
+    b = Team(organization_id=a.organization_id, name="B")
+    p1 = Project(team_id=a.id, name="P1")
+    p2 = Project(team_id=a.id, name="P2")
+    p3 = Project(team_id=a.id, name="P3")
+    p4 = Project(team_id=b.id, name="P4")
+    work_items = InMemoryWorkItemRepository(
+        [
+            WorkItem(team_id=a.id, title="1", project_id=p1.id),
+            WorkItem(team_id=a.id, title="2a", project_id=p2.id),
+            WorkItem(team_id=b.id, title="2b", project_id=p2.id),
+            WorkItem(team_id=a.id, title="4", project_id=p4.id),
+        ]
+    )
+    events = InMemoryEventRepository()
+    metric_snapshots = InMemoryMetricSnapshotRepository()
+    service = SnapshotService(
+        MetricsService(work_items, events),
+        ForecastService(work_items, events),
+        InMemoryTeamRepository([a, b]),
+        InMemoryProjectRepository([p1, p2, p3, p4]),
+        work_items,
+        metric_snapshots,
+        InMemoryForecastSnapshotRepository(),
+    )
+
+    captured = await service.capture_team(a.id, now=NOW)
+
+    assert captured == 4  # team A, P1, P3, P4
+    assert await metric_snapshots.list(project_id=p2.id) == []
+    for project in (p1, p3, p4):
+        assert len(await metric_snapshots.list(project_id=project.id)) == 1

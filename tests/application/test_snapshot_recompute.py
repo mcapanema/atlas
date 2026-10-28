@@ -50,6 +50,7 @@ def _service(
         ForecastService(work_items, event_repo, resolver),
         teams,
         projects,
+        work_items,
         metric_snapshots,
         forecast_snapshots,
     )
@@ -194,7 +195,7 @@ async def test_recompute_computes_every_value_before_the_first_write() -> None:
     for recorder in (metrics, forecasts, metric_snapshots, forecast_snapshots):
         recorder.log = log
     service = SnapshotService(
-        metrics, forecasts, teams, projects, metric_snapshots, forecast_snapshots
+        metrics, forecasts, teams, projects, work_items, metric_snapshots, forecast_snapshots
     )
     await service.capture_all(now=NOW - timedelta(days=1))
     await service.capture_all(now=NOW)

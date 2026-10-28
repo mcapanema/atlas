@@ -21,14 +21,25 @@ from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import TextContent
+from mcp.types import CallToolResult, TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api import mcp_server
+from app.api.deps import get_delivery_data_source
 from app.api.mcp_server import _aging_from_json
 from app.api.schemas import AgingItemRead, AgingWipRead
 from app.domain.metrics.aging import AgingItem, AgingWip
+from app.domain.sync.port import DataSourceError
+from app.domain.sync.source import SourceTeam
 from app.main import _RedactSecret, create_app
-from tests.api.helpers import create_org_and_team, create_team, days_ago, use_calendar_days
+from tests.api.helpers import (
+    create_org_and_team,
+    create_team,
+    days_ago,
+    settle,
+    use_calendar_days,
+)
+from tests.fakes import FakeDataSource
 
 TOKEN = "test-token-0123456789abcdefghij"
 
@@ -158,6 +169,32 @@ async def test_list_scopes_tool(
             assert "(sprint 14d)" in text  # the team's sprint_length_days rule
 
 
+async def test_list_scopes_names_every_team_of_a_project(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            org_id, home = await create_org_and_team(client)
+            other = (
+                await client.post("/api/teams", json={"organization_id": org_id, "name": "Mobile"})
+            ).json()["id"]
+            project = (
+                await client.post("/api/projects", json={"team_id": home, "name": "Apollo"})
+            ).json()["id"]
+            for team_id in (home, other):
+                await client.post(
+                    "/api/work-items",
+                    json={"team_id": team_id, "title": "x", "project_id": project},
+                )
+
+        async with mcp_session(app) as session:
+            text = tool_text(await session.call_tool("list_scopes", {}))
+
+    assert f"- {project}  Apollo (teams {home}, {other})" in text
+
+
 async def test_meeting_brief_composes_digest(
     sessionmaker: async_sessionmaker[AsyncSession],
     settings_env: Callable[..., None],
@@ -242,6 +279,88 @@ async def test_run_sync_surfaces_unconfigured_connector(
             assert result.is_error
             # The 409-until-configured detail must reach the model verbatim.
             assert "ATLAS_LINEAR_API_KEY" in tool_text(result)
+
+
+class _BlockingSource(FakeDataSource):
+    """Holds the sync inside fetch_teams until `release` is set."""
+
+    def __init__(self) -> None:
+        super().__init__(teams=[SourceTeam(external_id="lt1", name="Platform")])
+        self.release = asyncio.Event()
+
+    async def fetch_teams(self) -> list[SourceTeam]:
+        await self.release.wait()
+        return await super().fetch_teams()
+
+
+class _FailingSource(FakeDataSource):
+    async def fetch_teams(self) -> list[SourceTeam]:
+        raise DataSourceError("Linear API returned HTTP 500")
+
+
+async def _run_sync(app: FastAPI, source: FakeDataSource) -> CallToolResult:
+    app.dependency_overrides[get_delivery_data_source] = lambda: source
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        org_id = (await client.post("/api/organizations", json={"name": "Acme"})).json()["id"]
+    async with mcp_session(app) as session:
+        return await session.call_tool("run_sync", {"organization_id": org_id})
+
+
+async def test_run_sync_waits_for_the_job_and_reports_counts(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
+    async with running_app(sessionmaker, settings_env) as app:
+        settings_env(mcp_token=TOKEN, linear_api_key="lin_api_test")
+        source = FakeDataSource(teams=[SourceTeam(external_id="lt1", name="Platform")])
+
+        result = await _run_sync(app, source)
+
+    assert not result.is_error
+    assert tool_text(result) == (
+        "Sync complete: 1 teams, 0 projects, 0 work items, 0 events, "
+        "0 divergences, 0 deleted. Snapshots captured."
+    )
+
+
+async def test_run_sync_reports_a_failed_job_as_a_tool_error(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
+    async with running_app(sessionmaker, settings_env) as app:
+        settings_env(mcp_token=TOKEN, linear_api_key="lin_api_test")
+
+        result = await _run_sync(app, _FailingSource())
+
+    assert result.is_error
+    # The SDK prefixes "Error executing tool run_sync: ".
+    assert tool_text(result).endswith("Sync failed: Linear API returned HTTP 500")
+
+
+async def test_run_sync_returns_still_running_after_the_wait(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mcp_server, "RUN_SYNC_WAIT_SECONDS", 0.05)
+    monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
+    async with running_app(sessionmaker, settings_env) as app:
+        settings_env(mcp_token=TOKEN, linear_api_key="lin_api_test")
+        source = _BlockingSource()
+
+        result = await _run_sync(app, source)
+        source.release.set()
+        await settle(app)
+
+    assert not result.is_error
+    assert tool_text(result) == (
+        "Sync still running (phase: teams). Call run_sync again in a minute for its outcome."
+    )
 
 
 async def test_meeting_prompts(

@@ -12,9 +12,11 @@ from datetime import date, datetime
 from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
+from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
+from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
@@ -64,6 +66,29 @@ class InMemoryTeamRepository:
         for team_id in team_ids:
             if (team := self._teams.get(team_id)) is not None:
                 self._teams[team_id] = replace(team, last_synced_at=at)
+
+
+class InMemoryPersonRepository:
+    def __init__(self, people: list[Person] | None = None) -> None:
+        self._people: dict[UUID, Person] = {p.id: p for p in people or []}
+
+    async def add(self, person: Person) -> None:
+        self._people[person.id] = person
+
+    async def update(self, person: Person) -> None:
+        self._people[person.id] = person
+
+    async def get(self, person_id: UUID) -> Person | None:
+        return self._people.get(person_id)
+
+    async def list(self, organization_id: UUID | None = None) -> list[Person]:
+        people = [p for p in self._people.values() if organization_id in (None, p.organization_id)]
+        return sorted(people, key=lambda p: (p.shown_name.lower(), p.id))
+
+    async def get_by_external_ids(self, external_ids: Collection[str]) -> dict[str, Person]:
+        return {
+            p.external_id: p for p in self._people.values() if p.external_id in set(external_ids)
+        }
 
 
 class InMemoryProjectRepository:
@@ -121,6 +146,13 @@ class InMemoryWorkItemRepository:
 
     async def parent_ids(self) -> set[UUID]:
         return {item.parent_id for item in self._items.values() if item.parent_id is not None}
+
+    async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
+        teams: dict[UUID, set[UUID]] = {}
+        for item in self._items.values():
+            if item.project_id is not None:
+                teams.setdefault(item.project_id, set()).add(item.team_id)
+        return {project_id: frozenset(ids) for project_id, ids in teams.items()}
 
     async def list(
         self,
@@ -335,6 +367,41 @@ class InMemoryPersonaGuidanceRepository:
             (g for g in self._guidance.values() if g.persona is persona and g.version == version),
             None,
         )
+
+
+class InMemoryAdviceRunRepository:
+    def __init__(self, runs: list[AdviceRun] | None = None) -> None:
+        self._runs: dict[UUID, AdviceRun] = {r.id: r for r in runs or []}
+
+    async def add(self, run: AdviceRun) -> None:
+        self._runs[run.id] = run
+
+    async def get(self, run_id: UUID) -> AdviceRun | None:
+        return self._runs.get(run_id)
+
+    async def update(self, run: AdviceRun) -> None:
+        self._runs[run.id] = run
+
+    async def latest(
+        self,
+        *,
+        team_id: UUID | None,
+        project_id: UUID | None,
+        persona: Persona,
+        params: str,
+    ) -> AdviceRun | None:
+        found = [
+            r
+            for r in self._runs.values()
+            if r.team_id == team_id
+            and r.project_id == project_id
+            and r.persona is persona
+            and r.params == params
+        ]
+        return max(found, key=lambda r: r.requested_at, default=None)
+
+    async def list_running(self) -> list[AdviceRun]:
+        return [r for r in self._runs.values() if r.status is RunStatus.RUNNING]
 
 
 class InMemoryForecastSnapshotRepository:

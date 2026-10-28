@@ -53,9 +53,10 @@ class WorkItem:
     labels: tuple[str, ...] = ()
     # The parent issue, when it is in Atlas too; None otherwise.
     parent_id: UUID | None = None
-    # Name of the person the item is assigned to in the source system, as of
-    # the last sync; None when unassigned or created via the REST API.
+    # The assignee's shown name, resolved on load; write `assignee_id`.
     assignee: str | None = None
+    # The assigned Person, once resolved; None when unassigned.
+    assignee_id: UUID | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)
 

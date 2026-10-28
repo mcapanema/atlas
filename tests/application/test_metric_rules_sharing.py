@@ -18,6 +18,7 @@ from tests.fakes import (
     InMemoryOrganizationRepository,
     InMemoryProjectRepository,
     InMemoryTeamRepository,
+    InMemoryWorkItemRepository,
 )
 
 ORG = Organization(name="Acme")
@@ -34,6 +35,7 @@ def _world() -> tuple[MetricRulesService, InMemoryMetricRuleOverridesRepository,
         InMemoryOrganizationRepository([ORG]),
         InMemoryTeamRepository([ALPHA, BETA, elsewhere]),
         InMemoryProjectRepository([launch]),
+        InMemoryWorkItemRepository(),
     )
     return service, repo, launch
 

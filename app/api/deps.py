@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.advisor.runs import AdviceRunService
 from app.application.advisor.service import AdvisorService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
@@ -11,6 +12,7 @@ from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metric_rules.service import MetricRulesService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
+from app.application.people.service import PeopleService
 from app.application.personas.service import PersonaService
 from app.application.projects.service import ProjectService
 from app.application.snapshots.service import SnapshotService
@@ -24,9 +26,11 @@ from app.domain.sync.port import DeliveryDataSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
+from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
+from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.personas import (
     SqlAlchemyAdviceFeedbackRepository,
     SqlAlchemyPersonaGuidanceRepository,
@@ -85,8 +89,17 @@ def get_team_service(session: SessionDep) -> TeamService:
 TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
 
 
+def get_people_service(session: SessionDep) -> PeopleService:
+    return PeopleService(SqlAlchemyPersonRepository(session))
+
+
+PeopleServiceDep = Annotated[PeopleService, Depends(get_people_service)]
+
+
 def get_project_service(session: SessionDep) -> ProjectService:
-    return ProjectService(SqlAlchemyProjectRepository(session))
+    return ProjectService(
+        SqlAlchemyProjectRepository(session), SqlAlchemyWorkItemRepository(session)
+    )
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
@@ -149,21 +162,41 @@ def get_advisor_port() -> AdvisorPort:
 AdvisorPortDep = Annotated[AdvisorPort, Depends(get_advisor_port)]
 
 
-def get_advisor_service(metrics: MetricsServiceDep, forecast: ForecastServiceDep) -> AdvisorService:
-    return AdvisorService(metrics, forecast)
+def advisor_service_for(session: AsyncSession) -> AdvisorService:
+    """Built outside a request too: the advice runner opens its own sessions."""
+    return AdvisorService(get_metrics_service(session), get_forecast_service(session))
+
+
+def get_advisor_service(session: SessionDep) -> AdvisorService:
+    return advisor_service_for(session)
 
 
 AdvisorServiceDep = Annotated[AdvisorService, Depends(get_advisor_service)]
 
 
-def get_persona_service(session: SessionDep) -> PersonaService:
+def persona_service_for(session: AsyncSession) -> PersonaService:
     return PersonaService(
         SqlAlchemyAdviceFeedbackRepository(session),
         SqlAlchemyPersonaGuidanceRepository(session),
     )
 
 
+def get_persona_service(session: SessionDep) -> PersonaService:
+    return persona_service_for(session)
+
+
 PersonaServiceDep = Annotated[PersonaService, Depends(get_persona_service)]
+
+
+def advice_run_service_for(session: AsyncSession) -> AdviceRunService:
+    return AdviceRunService(SqlAlchemyAdviceRunRepository(session))
+
+
+def get_advice_run_service(session: SessionDep) -> AdviceRunService:
+    return advice_run_service_for(session)
+
+
+AdviceRunServiceDep = Annotated[AdviceRunService, Depends(get_advice_run_service)]
 
 
 LINEAR_NOT_CONFIGURED = "Linear connector is not configured; set ATLAS_LINEAR_API_KEY"
@@ -196,6 +229,7 @@ def sync_service_for(session: AsyncSession, source: DeliveryDataSource) -> SyncS
         SqlAlchemyProjectRepository(session),
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
+        SqlAlchemyPersonRepository(session),
     )
 
 
@@ -216,6 +250,7 @@ def snapshot_service_for(session: AsyncSession) -> SnapshotService:
         ForecastService(work_items, events, rules),
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
+        work_items,
         SqlAlchemyMetricSnapshotRepository(session),
         SqlAlchemyForecastSnapshotRepository(session),
     )
@@ -234,6 +269,7 @@ def metric_rules_service_for(session: AsyncSession) -> MetricRulesService:
         SqlAlchemyOrganizationRepository(session),
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
+        SqlAlchemyWorkItemRepository(session),
     )
 
 

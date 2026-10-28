@@ -20,16 +20,19 @@ from app.api import (
     metric_rules,
     metrics,
     organizations,
+    people,
     personas,
     projects,
     sync_schedules,
     teams,
     work_items,
 )
+from app.api.advice_runner import AdviceRunner
 from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import linear_data_source
 from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
+from app.api.sync_jobs import SyncJobRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
 from app.domain.sync.port import DataSourceError
@@ -76,7 +79,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Finish any history recompute a restart interrupted, without delaying
     # startup; resume() logs and gives up if the DB isn't migrated yet.
     resume = asyncio.create_task(runner.resume())
-    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, recompute=runner)
+    advice_runner = AdviceRunner(sessionmaker)
+    app.state.advice_runner = advice_runner
+    # Fail the advice runs a restart interrupted; same give-up-and-log rule.
+    interrupted = asyncio.create_task(advice_runner.fail_interrupted())
+    sync_jobs = SyncJobRunner(sessionmaker, recompute=runner)
+    app.state.sync_job_runner = sync_jobs
+    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, jobs=sync_jobs)
     app.state.auto_sync_runner = auto_sync
     # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).
     auto_sync.start()
@@ -93,8 +102,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Cancel before the first await: a task cancelled while it checks out
         # a pool connection orphans it, so never let one start just to stop it.
         resume.cancel()
+        interrupted.cancel()
         await auto_sync.close()
-        await asyncio.gather(resume, return_exceptions=True)
+        await sync_jobs.close()
+        await advice_runner.close()
+        await asyncio.gather(resume, interrupted, return_exceptions=True)
         await runner.close()
         engine = sessionmaker.kw["bind"]
         assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
@@ -111,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(organizations.router)
     app.include_router(teams.router)
+    app.include_router(people.router)
     app.include_router(projects.router)
     app.include_router(work_items.router)
     app.include_router(events.router)

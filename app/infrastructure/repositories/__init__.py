@@ -2,9 +2,11 @@
 # so a single `import app.infrastructure.repositories` makes the whole schema
 # visible to Alembic autogenerate and to test table creation.
 from app.infrastructure.repositories import (
+    advice_runs,
     events,
     metric_rules,
     organizations,
+    people,
     personas,
     projects,
     snapshots,
@@ -14,9 +16,11 @@ from app.infrastructure.repositories import (
 )
 
 __all__ = [
+    "advice_runs",
     "events",
     "metric_rules",
     "organizations",
+    "people",
     "personas",
     "projects",
     "snapshots",

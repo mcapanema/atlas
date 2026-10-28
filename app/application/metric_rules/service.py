@@ -28,6 +28,7 @@ from app.domain.organizations.repository import OrganizationRepository
 from app.domain.projects.repository import ProjectRepository
 from app.domain.teams.entities import Team
 from app.domain.teams.repository import TeamRepository
+from app.domain.work_items.repository import WorkItemRepository
 
 logger = logging.getLogger(__name__)
 
@@ -173,11 +174,13 @@ class MetricRulesService:
         organizations: OrganizationRepository,
         teams: TeamRepository,
         projects: ProjectRepository,
+        work_items: WorkItemRepository,
     ) -> None:
         self._overrides = overrides
         self._organizations = organizations
         self._teams = teams
         self._projects = projects
+        self._work_items = work_items
 
     async def organization_view(self, organization_id: UUID) -> RulesView | None:
         if await self._organizations.get(organization_id) is None:
@@ -420,14 +423,15 @@ class MetricRulesService:
         return [t for t in await self._teams.list() if t.organization_id == organization_id]
 
     async def _scopes_for(self, team_ids: list[UUID]) -> tuple[ScopeRef, ...]:
-        # ponytail: a project is recomputed with the team that owns it; a
-        # project holding another team's items isn't refreshed when that
-        # other team's rules change. Recompute every project containing the
-        # team's items if mixed projects ever matter.
         if not team_ids:
             return ()
         wanted = set(team_ids)
-        projects = [p for p in await self._projects.list() if p.team_id in wanted]
+        teams_by_project = await self._work_items.team_ids_by_project()
+        projects = [
+            p
+            for p in await self._projects.list()
+            if p.team_id in wanted or not wanted.isdisjoint(teams_by_project.get(p.id, ()))
+        ]
         return tuple(ScopeRef(team_id=t) for t in team_ids) + tuple(
             ScopeRef(project_id=p.id) for p in projects
         )

@@ -6,7 +6,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-from app.domain.advisor.entities import MeetingType, Persona
+from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
+from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType, Persona
+from app.domain.advisor.runs import AdviceRun
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
@@ -60,6 +62,8 @@ class ProjectRead(BaseModel):
 
     id: UUID
     team_id: UUID
+    # Every team the project spans, home team first; `team_id` is the home team.
+    team_ids: list[UUID]
     name: str
     external_id: str | None
     created_at: datetime
@@ -128,11 +132,6 @@ class IntegrationStatusRead(BaseModel):
     configured: bool
 
 
-class LinearStatusRead(IntegrationStatusRead):
-    # An automatic sync is running now; a manual sync waits for it (ADR-0014).
-    auto_syncing: bool
-
-
 class SyncRequest(BaseModel):
     organization_id: UUID | None = None
     # Re-derive every returned item's source events from the current mapping,
@@ -151,6 +150,49 @@ class SyncSummaryRead(BaseModel):
     deleted: int
     state_types_filled: int
     rebuilt: int
+
+
+class SyncJobRead(BaseModel):
+    """A background Linear sync: running, or one of the last finished ones."""
+
+    id: UUID
+    organization_id: UUID
+    kind: SyncKind
+    team_id: UUID | None
+    rebuild: bool
+    trigger: SyncTrigger
+    state: SyncState
+    phase: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    summary: SyncSummaryRead | None
+
+    @classmethod
+    def of(cls, job: SyncJob) -> "SyncJobRead":
+        request = job.request
+        return cls(
+            id=job.id,
+            organization_id=request.organization_id,
+            kind=request.kind,
+            team_id=request.team_id,
+            rebuild=request.rebuild,
+            trigger=request.trigger,
+            state=job.state,
+            phase=job.phase,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
+            error=job.error,
+            summary=SyncSummaryRead.model_validate(job.summary)
+            if job.summary is not None
+            else None,
+        )
+
+
+class LinearStatusRead(IntegrationStatusRead):
+    # The sync job running now, manual or automatic; a new request either
+    # gets it back (it covers the request) or a 409.
+    running: SyncJobRead | None
 
 
 class SyncScheduleWrite(BaseModel):
@@ -346,6 +388,52 @@ class MeetingPrepRead(BaseModel):
     generated_at: datetime
     headline: str
     talking_points: list[TalkingPointRead]
+
+
+class AdviceRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: Literal["running", "succeeded", "failed"]
+    requested_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    advice: DeliveryAdviceRead | None
+
+    @classmethod
+    def from_run(cls, run: AdviceRun) -> "AdviceRunRead":
+        advice = run.result if isinstance(run.result, DeliveryAdvice) else None
+        return cls(
+            id=run.id,
+            status=run.status.value,
+            requested_at=run.requested_at,
+            finished_at=run.finished_at,
+            error=run.error,
+            advice=DeliveryAdviceRead.model_validate(advice) if advice else None,
+        )
+
+
+class MeetingPrepRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: Literal["running", "succeeded", "failed"]
+    requested_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    prep: MeetingPrepRead | None
+
+    @classmethod
+    def from_run(cls, run: AdviceRun) -> "MeetingPrepRunRead":
+        prep = run.result if isinstance(run.result, MeetingPrep) else None
+        return cls(
+            id=run.id,
+            status=run.status.value,
+            requested_at=run.requested_at,
+            finished_at=run.finished_at,
+            error=run.error,
+            prep=MeetingPrepRead.model_validate(prep) if prep else None,
+        )
 
 
 class MetricSnapshotRead(BaseModel):
@@ -651,3 +739,19 @@ class MetricRulesImportRead(BaseModel):
     skipped_teams: list[str]
     ambiguous_teams: list[str]
     rules: MetricRulesViewRead
+
+
+class PersonRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    name: str
+    display_name: str | None
+    shown_name: str
+    email: str | None
+
+
+class PersonWrite(BaseModel):
+    # Blank clears the override.
+    display_name: str | None = Field(max_length=255)

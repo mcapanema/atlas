@@ -2,8 +2,10 @@
 
 from datetime import datetime
 from typing import Protocol
+from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
+from app.domain.advisor.runs import AdviceRun
 
 
 class AdviceFeedbackRepository(Protocol):
@@ -32,3 +34,26 @@ class PersonaGuidanceRepository(Protocol):
         ...
 
     async def get_version(self, persona: Persona, version: int) -> PersonaGuidance | None: ...
+
+
+class AdviceRunRepository(Protocol):
+    """Port for stored advice / meeting-prep generation runs."""
+
+    async def add(self, run: AdviceRun) -> None: ...
+
+    async def get(self, run_id: UUID) -> AdviceRun | None: ...
+
+    async def update(self, run: AdviceRun) -> None: ...
+
+    async def latest(
+        self,
+        *,
+        team_id: UUID | None,
+        project_id: UUID | None,
+        persona: Persona,
+        params: str,
+    ) -> AdviceRun | None:
+        """The run with the newest requested_at for this scope/persona/params."""
+        ...
+
+    async def list_running(self) -> list[AdviceRun]: ...

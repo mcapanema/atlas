@@ -33,18 +33,26 @@ The slices come in the kinds below.
 `Organization → Team → Project → Work Item → Event`, each with
 `entities.py` + `repository.py` (a `Protocol` port), a SQLAlchemy adapter
 in `app/infrastructure/repositories/`, and a CRUD router. A Team owns
-Projects and Work Items; a Project groups Work Items; each Work Item
-accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). Events
-are the source of truth everything analytical derives from. One pure
+Projects and Work Items; a Project groups Work Items; a Project's teams are
+derived from its items (`WorkItemRepository.team_ids_by_project()`, ADR-0020),
+with `Project.team_id` only its home team; each Work Item
+accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). An Organization
+also owns People (`app/domain/people/`); a Work Item points at its assignee
+Person by `assignee_id`, and the shown name (the manager's display-name
+override, else the source name) resolves on load (ADR-0021). `GET
+/api/people` and `PATCH /api/people/{id}` serve the People table on the
+Organizations page (`/organizations`), where display names are edited.
+Events are the source of truth everything analytical derives from. One pure
 derivation lives beside its aggregate: `derive_timeline`
 (`app/domain/events/timeline.py`) turns an item's events into state periods
 and — under its team's rules (`blocked_periods`) — blocked periods for `GET /api/work-items/{id}/timeline` and the Work
 Item Explorer (`/work-items`).
 
-### Computed-on-read analytics (ADR-0003, amended by ADR-0008)
+### Computed-on-read analytics (ADR-0003, amended by ADR-0008 and ADR-0023)
 
-Metrics, forecasts, and AI advice are recomputed per request from the
-persisted events; these slices have no tables and no migrations.
+Metrics and forecasts are recomputed per request from the persisted
+events; these slices have no tables and no migrations. AI advice is the
+exception: it is generated in the background and stored (ADR-0023).
 
 - **Metrics** (`app/domain/metrics/`): per-item `FlowSample`s
   (`samples.py`) fold into `TeamFlowMetrics` — Lead/Cycle Time
@@ -72,7 +80,11 @@ persisted events; these slices have no tables and no migrations.
   forecast — and returns explainable `DeliveryAdvice` (narrative summary
   plus prioritized `Recommendation`s with root causes and evidence). The
   AI never calculates (ADR-0006).
-  Advice stays computed-on-read, but personas carry learned state:
+  Advice is stored, not computed on read (ADR-0023): `AdviceRun` (table
+  `advice_runs`, managed by `AdviceRunService`) is one generation of advice
+  or meeting prep, keyed by scope + persona + request params; each
+  `POST` starts a run in `AdviceRunner` (`app/api/advice_runner.py`) and
+  each `GET` reads the newest. Personas carry learned state:
   `AdviceFeedback` and `PersonaGuidance` (persisted aggregates in the same
   slice, tables `advice_feedback`/`persona_guidance`) record EM ratings and
   the append-only learned-guidance versions. `PersonaService`
@@ -87,8 +99,10 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 `ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
-`/api/metrics/health`, `/api/forecasts`, and `GET /api/recommendations` (409 until
-`ATLAS_OPENROUTER_API_KEY` is set — ADR-0005). `GET /api/metrics/overview`
+`/api/metrics/health`, `/api/forecasts`, and `/api/recommendations` (`POST` starts a stored
+background run and answers 202 — 409 until `ATLAS_OPENROUTER_API_KEY` is set,
+ADR-0005; `GET` reads the latest stored run for the same scope, persona and
+window, or `null`, with no key needed). `GET /api/metrics/overview`
 is the Executive Dashboard's per-team row: flow metrics, health, forecast
 accuracy and snapshot history from one scope load, identical to the
 standalone endpoints for the same query. The frontend consumes them
@@ -102,7 +116,7 @@ The one write-side projection: `app/domain/snapshots/` holds
 `MetricSnapshot` and `ForecastSnapshot` (one row per scope per UTC day,
 rewritten in place when the scope's metric rules change — ADR-0010) with
 repository ports, `SnapshotService` (`app/application/snapshots/service.py`)
-captures them for every team and project inside the sync request, and
+captures them for every team and project inside the sync job, and
 `evaluate_forecast_accuracy` (`app/domain/forecasting/accuracy.py`) scores
 past forecast snapshots against actual completions. Served from
 `GET /api/metrics/snapshots` (lead-time trend on the dashboards) and
@@ -125,7 +139,10 @@ floor (ADR-0015) and durations counting Monday-to-Friday working days
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace
 ⊕ team, and `ScopeSampleLoader` (`app/application/scope.py`) folds each item
 with its team's rules, so durations count each item's own team's working
-days, while the scope's own rules drive health, calendar and windows.
+days, while the scope's own rules drive health, calendar and windows. A
+project scope reads the rules of its items' team when they share one, the
+workspace rules when they span several, and its home team's when it has none
+(ADR-0020).
 `MetricRulesService` serves `GET/PATCH /api/organizations/{id}/metric-rules`
 and `/api/teams/{id}/metric-rules`; a change rewrites the affected scopes'
 snapshot history through the background `RecomputeRunner` in
@@ -141,7 +158,7 @@ An import replaces the workspace layer and each matched team's layer, skips
 and reports unknown or ambiguous teams, and recomputes history the same way a
 PATCH does.
 One rule changes no metric: `sprint_length_days` (`MEETING_RULES`), the
-retrospective's default window on the Meetings page, `GET /api/meetings/prep`
+retrospective's default window on the Meetings page, `/api/meetings/prep`
 and the MCP `retrospective` prompt (teams carry it in `GET /api/teams`).
 Changing it rewrites no snapshot history and doesn't mark a team's rules as
 custom.
@@ -153,15 +170,25 @@ custom.
   `SourceWorkItem`, `SourceEvent` in `source.py`). `SyncService`
   (`app/application/sync/service.py`) upserts snapshots into the domain
   model idempotently, matching on `external_id` — running sync twice is a
-  no-op (ADR-0004) — and deletes items the source no longer returns (ADR-0009).
+  no-op (ADR-0004) — upserts the people who own items (name and email from
+  the source, never the display-name override; people are never pruned,
+  ADR-0021) — and deletes items the source no longer returns (ADR-0009).
   A rebuild sync (`"rebuild": true`) replaces the returned items'
   source-derived events from the current mapping and rewrites snapshot
   history (ADR-0013) — the upgrade path after a mapping fix.
   A team sync (`POST /api/connectors/linear/teams/{id}/sync`, the Team
   Dashboard's "Sync team" button) fetches only that team's work items,
-  snapshots only that team and its projects, and never prunes — a
+  snapshots only that team, its single-team projects and its home projects
+  with no items (a project holding other teams' items waits for the
+  organization sync), and never prunes — a
   filtered fetch can't tell deleted from moved — so deletions wait for the
   next organization sync.
+  Sync routes start a background job and answer `202` with it
+  (`SyncJobRunner`, `app/api/sync_jobs.py`, ADR-0022): one sync at a time, a
+  request the running job covers gets that job back, any other answers
+  `409`, and the last `HISTORY_SIZE` jobs (`app/api/sync_jobs.py`) are kept
+  in memory (a restart loses them; `GET /api/connectors/linear/jobs/{id}`
+  then answers `404`).
   Each sync stamps `teams.last_synced_at` for the teams it pulled; the flow
   history's `data_as_of` is the later of that stamp and the newest event's
   `recorded_at`.
@@ -170,7 +197,7 @@ custom.
   an IANA zone; slot math in `slots.py`) is served by
   `GET/PUT /api/organizations/{id}/sync-schedule` and run by the in-process
   `AutoSyncRunner` (`app/api/auto_sync.py`). It ticks every minute, syncs
-  each organization with a due slot exactly like the manual route, and
+  each organization with a due slot through the same `SyncJobRunner`, and
   records the outcome on the schedule. Edited on the Connectors page.
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
@@ -188,10 +215,12 @@ that package. The first connector is Linear
 personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
 mapping functions, and a paginating `LinearDataSource`. Exposed as
 `POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
-and the Connectors page in the frontend. The mapper stores raw
+and the Connectors page in the frontend. A project's home team is the first
+of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events, state types on transitions, and each issue's labels, parent and
-current assignee name — an email or handle Linear uses as the name is
+current assignee as a `SourcePerson` (Linear user id, name, email; a blank
+name reads as unassigned) — an email or handle Linear uses as the name is
 turned into "First Last" (ADR-0011); the team's metric rules decide at read
 time what counts as blocked (labels, workflow-state names, relations),
 which items are parents, and which types and states count.
@@ -256,8 +285,8 @@ answers 403 to everything else.
 
 Meeting preparation has two deliberate paths: **external** — the MCP prompts
 (`daily_standup`, `retrospective`, `planning`) instruct a connected chat AI
-(Claude/ChatGPT) to call Atlas's MCP tools; and **internal** — `GET
-/api/meetings/prep` builds the same digest (`MeetingContext` = advisor context
+(Claude/ChatGPT) to call Atlas's MCP tools; and **internal** — `POST
+/api/meetings/prep` starts a stored run (`GET` reads the latest; ADR-0023) that builds the same digest (`MeetingContext` = advisor context
 + delivery health + aging WIP, rendered by `render_meeting_context`) and sends
 it to the OpenRouter advisor (`AdvisorPort.prepare_meeting`), so Atlas works
 stand-alone. Meeting types are backed by learnable personas (`daily_standup`,

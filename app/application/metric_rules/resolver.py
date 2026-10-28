@@ -73,12 +73,26 @@ class MetricRulesResolver:
         self, *, team_id: UUID | None, project_id: UUID | None, item_team_ids: Iterable[UUID]
     ) -> ResolvedRules:
         """Rules for a team or project scope whose items belong to `item_team_ids`."""
-        scope_team = team_id if team_id is not None else await self._project_team(project_id)
-        wanted = set(item_team_ids) | ({scope_team} if scope_team is not None else set())
+        item_teams = set(item_team_ids)
+        home_team = team_id if team_id is not None else await self._project_team(project_id)
+        # A project scope reads its items' team rules (one team), the workspace
+        # rules (several) or its home team's (none); a team scope reads its own.
+        # ponytail: a project that turns multi-team after an item moves keeps the
+        # history written under its earlier rules until the next rules change or
+        # rebuild sync.
+        scope_team = home_team
+        if team_id is None and len(item_teams) == 1:
+            (scope_team,) = item_teams
+        wanted = item_teams | ({home_team} if home_team is not None else set())
         org_rows: dict[UUID, RuleOverrides | None] = {}
         warned: list[Mapping[str, object]] = []
         by_team = {tid: await self._team_rules(tid, org_rows, warned) for tid in wanted}
-        scope = by_team[scope_team] if scope_team is not None else DEFAULT_RULES
+        if scope_team is None:
+            scope = DEFAULT_RULES
+        elif team_id is None and len(item_teams) > 1:
+            scope = await self._workspace_rules(scope_team, org_rows, warned)
+        else:
+            scope = by_team[scope_team]
         return ResolvedRules(scope=scope, by_team=by_team)
 
     async def team_rules(self, team_id: UUID) -> MetricRules:
@@ -102,6 +116,24 @@ class MetricRulesResolver:
         )
         layers = [row.overrides for row in rows if row is not None]
         return resolve_layers(*layers, subject=f"team {team_id}", warned=warned)
+
+    async def _workspace_rules(
+        self,
+        home_team: UUID,
+        org_rows: dict[UUID, RuleOverrides | None],
+        warned: list[Mapping[str, object]],
+    ) -> MetricRules:
+        """The workspace layer alone, for the organization of the project's home team."""
+        team = await self._teams.get(home_team)
+        if team is None:
+            return DEFAULT_RULES
+        if team.organization_id not in org_rows:
+            org_rows[team.organization_id] = await self._overrides.get(team.organization_id)
+        row = org_rows[team.organization_id]
+        layers = [row.overrides] if row is not None else []
+        return resolve_layers(
+            *layers, subject=f"organization {team.organization_id}", warned=warned
+        )
 
     async def _project_team(self, project_id: UUID | None) -> UUID | None:
         if project_id is None:

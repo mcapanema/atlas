@@ -5,16 +5,28 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.application.sync.service import SyncService, UnknownOrganizationError, UnknownTeamError
+from app.application.sync.service import (
+    SyncPhase,
+    SyncService,
+    UnknownOrganizationError,
+    UnknownTeamError,
+)
 from app.domain.events.entities import Event, EventType
 from app.domain.organizations.entities import Organization
-from app.domain.sync.source import SourceEvent, SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync.source import (
+    SourceEvent,
+    SourcePerson,
+    SourceProject,
+    SourceTeam,
+    SourceWorkItem,
+)
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
 from tests.fakes import (
     FakeDataSource,
     InMemoryEventRepository,
     InMemoryOrganizationRepository,
+    InMemoryPersonRepository,
     InMemoryProjectRepository,
     InMemoryTeamRepository,
     InMemoryWorkItemRepository,
@@ -28,6 +40,7 @@ class Harness:
         self.projects = InMemoryProjectRepository()
         self.work_items = InMemoryWorkItemRepository()
         self.events = InMemoryEventRepository()
+        self.people = InMemoryPersonRepository()
         self.service = SyncService(
             source,
             self.organizations,
@@ -35,6 +48,7 @@ class Harness:
             self.projects,
             self.work_items,
             self.events,
+            self.people,
         )
 
 
@@ -44,7 +58,7 @@ CREATED_AT = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
 def full_source() -> FakeDataSource:
     return FakeDataSource(
         teams=[SourceTeam(external_id="lt1", name="Platform")],
-        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt1")],
+        projects=[SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("lt1",))],
         work_items=[
             SourceWorkItem(
                 external_id="li1",
@@ -148,61 +162,140 @@ async def test_changed_url_is_updated() -> None:
     assert item.url == "https://linear.app/b/E-1"
 
 
-async def test_first_sync_stores_assignee() -> None:
+def assigned(source: FakeDataSource, person: SourcePerson | None, index: int = 0) -> None:
+    items = list(source.work_items)
+    items[index] = dataclasses.replace(items[index], assignee=person)
+    source.work_items = items
+
+
+ADA = SourcePerson("u1", "Ada Lovelace", "ada@x.io")
+
+
+async def test_first_sync_stores_assignee_as_person() -> None:
     source = full_source()
-    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    assigned(source, ADA)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    await harness.service.sync(org_id)
+
+    [person] = await harness.people.list()
+    assert person.organization_id == org_id
+    assert person.external_id == "u1"
+    assert (person.name, person.email) == ("Ada Lovelace", "ada@x.io")
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.assignee_id == person.id
+
+
+async def test_one_person_on_many_items_is_stored_once() -> None:
+    source = full_source()
+    source.work_items = [
+        source.work_items[0],
+        dataclasses.replace(source.work_items[0], external_id="li2", events=()),
+    ]
+    assigned(source, ADA, 0)
+    assigned(source, ADA, 1)
     harness = Harness(source)
 
     await harness.service.sync(await seed_org(harness))
 
-    item = await harness.work_items.get_by_external_id("li1")
-    assert item is not None
-    assert item.assignee == "Ada Lovelace"
+    [person] = await harness.people.list()
+    items = [await harness.work_items.get_by_external_id(e) for e in ("li1", "li2")]
+    assert [i.assignee_id for i in items if i is not None] == [person.id, person.id]
+
+
+async def test_resync_updates_name_but_keeps_display_name() -> None:
+    source = full_source()
+    assigned(source, ADA)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    [person] = await harness.people.list()
+    await harness.people.update(dataclasses.replace(person, display_name="Ada L."))
+    assigned(source, SourcePerson("u1", "Ada King", "ada@x.io"))
+
+    await harness.service.sync(org_id)
+
+    [stored] = await harness.people.list()
+    assert stored.name == "Ada King"
+    assert stored.display_name == "Ada L."
 
 
 async def test_resync_backfills_assignee() -> None:
     source = full_source()
     harness = Harness(source)
     org_id = await seed_org(harness)
-    await harness.service.sync(org_id)  # stored with assignee=None, as before this feature
-    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    await harness.service.sync(org_id)  # stored unassigned
+    assigned(source, ADA)
 
     summary = await harness.service.sync(org_id)
 
     assert summary.work_items == 1
+    [person] = await harness.people.list()
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
-    assert item.assignee == "Ada Lovelace"
+    assert item.assignee_id == person.id
 
 
 async def test_changed_assignee_is_updated() -> None:
     source = full_source()
-    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    assigned(source, ADA)
     harness = Harness(source)
     org_id = await seed_org(harness)
     await harness.service.sync(org_id)
-    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Grace Hopper")]
+    assigned(source, SourcePerson("u2", "Grace Hopper"))
 
     await harness.service.sync(org_id)
 
+    people = await harness.people.get_by_external_ids(["u1", "u2"])
+    assert set(people) == {"u1", "u2"}  # the previous assignee is never pruned
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
-    assert item.assignee == "Grace Hopper"
+    assert item.assignee_id == people["u2"].id
 
 
 async def test_cleared_assignee_is_removed() -> None:
     source = full_source()
-    source.work_items = [dataclasses.replace(source.work_items[0], assignee="Ada Lovelace")]
+    assigned(source, ADA)
     harness = Harness(source)
     org_id = await seed_org(harness)
     await harness.service.sync(org_id)
-    source.work_items = [dataclasses.replace(source.work_items[0], assignee=None)]
+    assigned(source, None)
 
     await harness.service.sync(org_id)
 
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
-    assert item.assignee is None
+    assert item.assignee_id is None
+
+
+async def test_team_sync_stores_its_assignees() -> None:
+    source = full_source()
+    assigned(source, ADA)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    await harness.people.update(  # forget the person, keep the team
+        dataclasses.replace((await harness.people.list())[0], external_id="old")
+    )
+    [team] = await harness.teams.list()
+
+    await harness.service.sync_team(team.id)
+
+    assert "u1" in await harness.people.get_by_external_ids(["u1"])
+
+
+async def test_resync_with_an_assignee_writes_nothing() -> None:
+    source = full_source()
+    assigned(source, ADA)
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 0
 
 
 async def test_second_sync_is_a_no_op() -> None:
@@ -283,7 +376,9 @@ async def test_project_reassigned_to_different_team_is_updated() -> None:
     source.teams = [*source.teams, SourceTeam(external_id="lt2", name="Growth")]
     await harness.service.sync(org_id)
 
-    source.projects = [SourceProject(external_id="lp1", name="Q3 Launch", team_external_id="lt2")]
+    source.projects = [
+        SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("lt2",))
+    ]
     source.work_items = []
 
     summary = await harness.service.sync(org_id)
@@ -358,7 +453,9 @@ async def test_work_item_type_change_is_updated() -> None:
 async def test_project_with_unknown_team_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(
-            projects=[SourceProject(external_id="lp9", name="Orphan", team_external_id="missing")]
+            projects=[
+                SourceProject(external_id="lp9", name="Orphan", team_external_ids=("missing",))
+            ]
         )
     )
     org_id = await seed_org(harness)
@@ -367,6 +464,30 @@ async def test_project_with_unknown_team_is_skipped() -> None:
 
     assert summary.projects == 0
     assert await harness.projects.get_by_external_id("lp9") is None
+
+
+async def test_project_takes_its_first_known_team() -> None:
+    source = full_source()
+    source.teams = [SourceTeam(external_id="lt2", name="Growth")]
+    source.projects = [
+        SourceProject(external_id="lp1", name="Q3 Launch", team_external_ids=("unknown", "lt2"))
+    ]
+    source.work_items = [
+        dataclasses.replace(_todo("li1", team_external_id="lt2"), project_external_id="lp1")
+    ]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+
+    await harness.service.sync(org_id)
+
+    team_b = await harness.teams.get_by_external_id("lt2")
+    project = await harness.projects.get_by_external_id("lp1")
+    item = await harness.work_items.get_by_external_id("li1")
+    assert team_b is not None
+    assert project is not None
+    assert project.team_id == team_b.id
+    assert item is not None
+    assert item.project_id == project.id
 
 
 async def test_work_item_with_unknown_team_is_skipped() -> None:
@@ -420,7 +541,7 @@ async def test_project_with_null_team_external_id_is_skipped() -> None:
     harness = Harness(
         FakeDataSource(
             teams=[SourceTeam(external_id="lt1", name="Platform")],
-            projects=[SourceProject(external_id="lp9", name="Teamless", team_external_id=None)],
+            projects=[SourceProject(external_id="lp9", name="Teamless")],
         )
     )
     org_id = await seed_org(harness)
@@ -1136,7 +1257,7 @@ async def test_sync_team_creates_the_teams_new_projects() -> None:
     lt1_id = await _synced_two_teams(harness, source)
     source.projects = [
         *source.projects,
-        SourceProject(external_id="lp2", name="Q4 Launch", team_external_id="lt1"),
+        SourceProject(external_id="lp2", name="Q4 Launch", team_external_ids=("lt1",)),
     ]
 
     summary = await harness.service.sync_team(lt1_id)
@@ -1198,3 +1319,60 @@ async def test_team_sync_stamps_only_that_team() -> None:
     assert mine.last_synced_at is not None
     assert mine.last_synced_at > old_stamp
     assert theirs.last_synced_at == other_stamp
+
+
+async def test_sync_reports_each_phase_in_order() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    phases: list[SyncPhase] = []
+
+    await harness.service.sync(org_id, on_phase=phases.append)
+
+    assert phases == [SyncPhase.TEAMS, SyncPhase.PROJECTS, SyncPhase.WORK_ITEMS]
+
+
+async def test_sync_team_reports_each_phase_in_order() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    phases: list[SyncPhase] = []
+
+    await harness.service.sync_team(lt1_id, on_phase=phases.append)
+
+    assert phases == [SyncPhase.TEAMS, SyncPhase.PROJECTS, SyncPhase.WORK_ITEMS]
+
+
+async def test_resolve_organization_bootstraps_and_rejects_unknown_and_ambiguous() -> None:
+    harness = Harness(full_source())
+    with pytest.raises(UnknownOrganizationError):
+        await harness.service.resolve_organization(uuid4())
+
+    created = await harness.service.resolve_organization(None)
+    assert [o.id for o in await harness.organizations.list()] == [created]
+    assert await harness.service.resolve_organization(None) == created
+
+    await harness.organizations.add(Organization(name="B"))
+    with pytest.raises(ValueError, match="specify organization_id"):
+        await harness.service.resolve_organization(None)
+
+
+async def test_resolve_team_returns_its_organization() -> None:
+    source = full_source()
+    harness = Harness(source)
+    lt1_id = await _synced_two_teams(harness, source)
+    team = await harness.teams.get(lt1_id)
+    assert team is not None
+
+    assert await harness.service.resolve_team(lt1_id) == team.organization_id
+
+
+async def test_resolve_team_rejects_unknown_and_hand_made_teams() -> None:
+    harness = Harness(full_source())
+    org_id = await seed_org(harness)
+    manual = Team(organization_id=org_id, name="Made in Atlas")
+    await harness.teams.add(manual)
+
+    with pytest.raises(UnknownTeamError):
+        await harness.service.resolve_team(uuid4())
+    with pytest.raises(ValueError, match="nothing to sync"):
+        await harness.service.resolve_team(manual.id)

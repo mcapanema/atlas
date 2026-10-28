@@ -4,7 +4,7 @@ Date: 2026-07-11 (backfilled; decided in Phase 3, 2026-07-10)
 
 ## Status
 
-Accepted
+Accepted. Amended by ADR-0023 (advice and meeting prep are stored).
 
 ## Context
 

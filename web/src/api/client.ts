@@ -1,9 +1,19 @@
+/** A non-2xx response; `message` is the server's reason. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    throw new ApiError(await errorDetail(response), response.status);
   }
   return (await response.json()) as T;
 }

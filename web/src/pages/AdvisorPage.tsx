@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 
 import {
   useAdvice,
+  useGenerateAdvice,
   useAdvisorStatus,
   type DeliveryAdvice,
   type Persona,
@@ -11,6 +12,8 @@ import {
 } from "../api/advisor";
 import { useSendFeedback } from "../api/personas";
 import { useTeams } from "../api/teams";
+import { runView } from "../api/runs";
+import { RunError, RunGeneratedAt } from "../components/RunNotices";
 import { AdvisorStatusAlerts } from "../components/AdvisorStatusAlerts";
 import { EvidenceList } from "../components/EvidenceList";
 import { FeedbackCard } from "../components/FeedbackCard";
@@ -96,6 +99,9 @@ export function AdvisorPage() {
   const status = useAdvisorStatus();
   const persona = (searchParams.get("persona") as Persona | null) ?? "agile_coach";
   const advice = useAdvice({ teamId }, persona);
+  const generate = useGenerateAdvice({ teamId }, persona);
+  const run = advice.data;
+  const { running, error: errorText } = runView(run, generate, advice.error);
   const feedback = useSendFeedback(persona);
   const [comment, setComment] = useState("");
 
@@ -134,12 +140,12 @@ export function AdvisorPage() {
           />
           <Button
             type="primary"
-            disabled={!teamId || !configured}
-            loading={advice.isFetching}
+            loading={running}
+            disabled={!teamId || !configured || running}
             onClick={() => {
               feedback.reset();
               setComment("");
-              void advice.refetch();
+              generate.mutate();
             }}
           >
             Get advice
@@ -147,20 +153,17 @@ export function AdvisorPage() {
         </Space>
         <PersonaLearningCard persona={persona} />
         {!teamId && <Alert type="info" message="Select a team to get delivery advice." />}
-        {advice.isError && (
-          <Alert
-            type="error"
-            message="Failed to generate advice"
-            description={advice.error.message}
-          />
-        )}
-        {advice.data && (
-          <AdviceResult
-            advice={advice.data}
-            feedback={feedback}
-            comment={comment}
-            onCommentChange={setComment}
-          />
+        <RunError title="Failed to generate advice" error={errorText} />
+        {run?.advice && (
+          <>
+            <RunGeneratedAt run={run} />
+            <AdviceResult
+              advice={run.advice}
+              feedback={feedback}
+              comment={comment}
+              onCommentChange={setComment}
+            />
+          </>
         )}
       </Space>
     </>

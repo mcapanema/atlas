@@ -21,9 +21,10 @@ the codebase or its tooling rather than one layer. Exemplar:
   instance per test file.
 - `file_sessionmaker` / `rules_app` / `rules_client` — the same app on a
   file-backed SQLite DB with a real connection pool, for code that opens
-  concurrent sessions (the metric-rules recompute runner): the shared
-  in-memory connection can't isolate their transactions. `rules_app`
-  closes the runner on teardown; `helpers.settle(app)` waits for it.
+  concurrent sessions (the advice, sync-job and recompute runners): the
+  shared in-memory connection can't isolate their transactions. Sync-job
+  and advice API tests use `rules_client`. `rules_app` closes all three
+  runners on teardown; `helpers.settle(app)` waits for them to go idle.
 - `settings_env` — the one way to override settings in a test:
   `settings_env(linear_api_key="x")` sets `ATLAS_LINEAR_API_KEY` and clears
   the `get_settings` cache (cleared again on teardown). Pass `""` to

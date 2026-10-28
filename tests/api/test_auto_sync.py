@@ -6,17 +6,16 @@ from unittest import mock
 from uuid import UUID
 
 import pytest
-from fastapi import FastAPI
-from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.auto_sync import AutoSyncRunner
 from app.api.deps import LINEAR_NOT_CONFIGURED
 from app.api.recompute import RecomputeRunner
+from app.api.sync_jobs import SyncJobRunner
 from app.application.sync_schedules.service import SyncScheduleService
 from app.domain._time import utcnow
 from app.domain.organizations.entities import Organization
-from app.domain.sync.port import DataSourceError
+from app.domain.sync.port import DataSourceError, DeliveryDataSource
 from app.domain.sync.source import SourceTeam
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
@@ -25,6 +24,17 @@ from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from tests.fakes import FakeDataSource
 
 LONG_AGO = datetime(2020, 1, 1, tzinfo=UTC)
+
+
+def _auto(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    source_factory: Callable[[], DeliveryDataSource | None],
+    *,
+    recompute: RecomputeRunner | None = None,
+    tick_seconds: float = 60.0,
+) -> AutoSyncRunner:
+    jobs = SyncJobRunner(sessionmaker, recompute=recompute or RecomputeRunner(sessionmaker))
+    return AutoSyncRunner(sessionmaker, source_factory, jobs=jobs, tick_seconds=tick_seconds)
 
 
 def _source() -> FakeDataSource:
@@ -75,7 +85,7 @@ async def test_tick_syncs_a_due_organization_and_records_success(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _source, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, _source)
 
     assert await runner.tick() == 1
 
@@ -92,7 +102,7 @@ async def test_tick_records_failure_and_does_not_retry_the_slot(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _FailingSource, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, _FailingSource)
 
     assert await runner.tick() == 1
 
@@ -106,12 +116,12 @@ async def test_tick_logs_a_data_source_error_without_traceback(
     sessionmaker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _FailingSource, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, _FailingSource)
 
-    with caplog.at_level(logging.WARNING, logger="app.api.auto_sync"):
+    with caplog.at_level(logging.WARNING, logger="app.api.sync_jobs"):
         await runner.tick()
 
-    [record] = [r for r in caplog.records if r.name == "app.api.auto_sync"]
+    [record] = [r for r in caplog.records if r.name == "app.api.sync_jobs"]
     assert record.levelno == logging.WARNING
     assert record.exc_info is None
     assert str(org_id) in record.getMessage()
@@ -127,12 +137,12 @@ async def test_tick_logs_an_unexpected_error_with_traceback(
     sessionmaker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _BuggySource, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, _BuggySource)
 
-    with caplog.at_level(logging.WARNING, logger="app.api.auto_sync"):
+    with caplog.at_level(logging.WARNING, logger="app.api.sync_jobs"):
         await runner.tick()
 
-    [record] = [r for r in caplog.records if r.name == "app.api.auto_sync"]
+    [record] = [r for r in caplog.records if r.name == "app.api.sync_jobs"]
     assert record.levelno == logging.ERROR
     assert record.exc_info is not None
     run = await _last_run(sessionmaker, org_id)
@@ -144,7 +154,7 @@ async def test_tick_records_unconfigured_connector(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, lambda: None, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, lambda: None)
 
     assert await runner.tick() == 1
 
@@ -159,7 +169,7 @@ async def test_tick_skips_disabled_and_just_saved_schedules(
 ) -> None:
     await _seed(sessionmaker, enabled=False)
     await _seed(sessionmaker, updated_at=utcnow())  # latest slot predates the save
-    runner = AutoSyncRunner(sessionmaker, _source, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, _source)
 
     assert await runner.tick() == 0
 
@@ -168,9 +178,9 @@ async def test_tick_skips_while_a_sync_holds_the_lock(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     org_id = await _seed(sessionmaker)
-    runner = AutoSyncRunner(sessionmaker, _source, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, _source)
 
-    async with runner.lock:  # a manual sync is running
+    async with runner._jobs.lock:  # a manual sync is running
         assert await runner.tick() == 0
     assert await _last_run(sessionmaker, org_id) is None  # slot still pending
 
@@ -180,9 +190,7 @@ async def test_tick_skips_while_a_sync_holds_the_lock(
 async def test_start_ticks_at_once_so_a_missed_slot_catches_up(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    runner = AutoSyncRunner(
-        sessionmaker, _source, recompute=RecomputeRunner(sessionmaker), tick_seconds=3600
-    )
+    runner = _auto(sessionmaker, _source, tick_seconds=3600)
     with mock.patch.object(AutoSyncRunner, "tick", autospec=True, return_value=0) as tick:
         runner.start()
         await asyncio.sleep(0)
@@ -197,9 +205,7 @@ async def test_start_ticks_at_once_so_a_missed_slot_catches_up(
 async def test_loop_survives_a_failing_tick(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    runner = AutoSyncRunner(
-        sessionmaker, _source, recompute=RecomputeRunner(sessionmaker), tick_seconds=0
-    )
+    runner = _auto(sessionmaker, _source, tick_seconds=0)
     with mock.patch.object(
         AutoSyncRunner, "tick", autospec=True, side_effect=[RuntimeError("db down"), 0, 0, 0]
     ) as tick:
@@ -222,7 +228,7 @@ async def test_a_failed_record_does_not_rerun_the_slot(
             fetches.append(None)
             return await super().fetch_teams()
 
-    runner = AutoSyncRunner(sessionmaker, CountingSource, recompute=RecomputeRunner(sessionmaker))
+    runner = _auto(sessionmaker, CountingSource)
     with mock.patch.object(
         SyncScheduleService,
         "record_run",
@@ -249,34 +255,8 @@ async def test_sync_runs_with_the_recompute_runner_paused(
             paused.append(recompute._lock.locked())  # held for a paused() body
             return await super().fetch_teams()
 
-    runner = AutoSyncRunner(sessionmaker, Probe, recompute=recompute)
+    runner = _auto(sessionmaker, Probe, recompute=recompute)
 
     assert await runner.tick() == 1
     assert paused == [True]
     assert not recompute._lock.locked()
-
-
-async def test_status_reports_a_running_auto_sync(
-    test_app: FastAPI,
-    client: AsyncClient,
-    sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
-) -> None:
-    # "Sync now" waits for a running auto sync; the page says why.
-    settings_env(linear_api_key="lin_api_test")
-    await _seed(sessionmaker)
-    seen: list[object] = []
-
-    class Probe(FakeDataSource):
-        async def fetch_teams(self) -> list[SourceTeam]:
-            seen.append((await client.get("/api/connectors/linear")).json())
-            return await super().fetch_teams()
-
-    runner = AutoSyncRunner(sessionmaker, Probe, recompute=RecomputeRunner(sessionmaker))
-    test_app.state.auto_sync_runner = runner
-    idle = {"configured": True, "auto_syncing": False}
-
-    assert (await client.get("/api/connectors/linear")).json() == idle
-    assert await runner.tick() == 1
-    assert seen == [{"configured": True, "auto_syncing": True}]
-    assert (await client.get("/api/connectors/linear")).json() == idle

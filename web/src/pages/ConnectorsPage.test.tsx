@@ -16,16 +16,41 @@ const GLOBEX = {
   created_at: "2026-07-02T00:00:00Z",
 };
 
+const job = (state: string, trigger = "manual", extra: object = {}) => ({
+  id: "job1",
+  organization_id: ACME.id,
+  kind: "organization",
+  trigger,
+  state,
+  phase: null,
+  error: null,
+  summary: null,
+  ...extra,
+});
+
+function succeededJob() {
+  return jsonResponse(
+    job("succeeded", "manual", {
+      summary: { teams: 1, projects: 2, work_items: 3, events: 42, divergences: 7, deleted: 9 },
+    }),
+  );
+}
+
+const OUTCOME = "Updated 1 team · 2 projects · 3 work items · 42 events · 9 work items removed";
+
 function mockApi({
   configured,
-  autoSyncing = false,
+  running = false,
+  syncPolls = [],
   organizations = [ACME],
   statusPending = false,
   organizationsAfterSync = organizations,
   scheduleAfterSync = null,
 }: {
   configured: boolean;
-  autoSyncing?: boolean;
+  running?: boolean;
+  /** Job poll answers in order; the last one repeats. Default: succeeded. */
+  syncPolls?: Response[];
   organizations?: (typeof ACME)[];
   statusPending?: boolean;
   /** What the server returns once a Sync now has finished. */
@@ -33,24 +58,22 @@ function mockApi({
   scheduleAfterSync?: object | null;
 }) {
   let synced = false;
+  const polls = syncPolls.length > 0 ? [...syncPolls] : [succeededJob()];
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/linear")
       return statusPending
         ? new Promise<Response>(() => {})
-        : jsonResponse({ configured, auto_syncing: autoSyncing });
+        : jsonResponse({ configured, running: running ? job("running", "auto") : null });
     if (url === "/api/organizations")
       return jsonResponse(synced ? organizationsAfterSync : organizations);
     if (url === "/api/connectors/linear/sync") {
       synced = true;
-      return jsonResponse({
-        teams: 1,
-        projects: 2,
-        work_items: 3,
-        events: 42,
-        divergences: 7,
-        deleted: 9,
-      });
+      return jsonResponse(job("running"), 202);
+    }
+    if (url === "/api/connectors/linear/jobs/job1") {
+      const next = polls.length > 1 ? polls.shift() : polls[0];
+      return (next as Response).clone();
     }
     if (url.endsWith("/sync-schedule") && init?.method === "PUT")
       return jsonResponse({
@@ -82,11 +105,32 @@ describe("ConnectorsPage", () => {
 
     fireEvent.click(button);
 
-    expect(
-      await screen.findByText(
-        "Updated 1 team · 2 projects · 3 work items · 42 events · 9 work items removed",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(OUTCOME)).toBeInTheDocument();
+  });
+
+  it("shows the job's error when the sync fails", async () => {
+    mockApi({
+      configured: true,
+      syncPolls: [jsonResponse(job("failed", "manual", { error: "Linear timed out" }))],
+    });
+
+    renderWithClient(<ConnectorsPage />);
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    expect(await screen.findByText("Linear timed out")).toBeInTheDocument();
+  });
+
+  it("says the sync was interrupted when the job is gone after a restart", async () => {
+    mockApi({ configured: true, syncPolls: [jsonResponse({ detail: "Not found" }, 404)] });
+
+    renderWithClient(<ConnectorsPage />);
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    expect(await screen.findByText(/Sync was interrupted: Atlas restarted/)).toBeInTheDocument();
   });
 
   it("shows the sync status and the auto-sync card for the selected organization", async () => {
@@ -100,14 +144,26 @@ describe("ConnectorsPage", () => {
     expect(await screen.findByRole("button", { name: "Save schedule" })).toBeInTheDocument();
   });
 
-  it("says why Sync now waits while an automatic sync runs", async () => {
-    mockApi({ configured: true, autoSyncing: true });
+  it("says a running sync's result shows on Sync now", async () => {
+    mockApi({ configured: true, running: true });
 
     renderWithClient(<ConnectorsPage />);
 
     expect(
-      await screen.findByText(/An automatic sync is running; Sync now starts when it finishes/),
+      await screen.findByText("A sync is running; Sync now shows its result."),
     ).toBeInTheDocument();
+  });
+
+  it("hides the running-sync hint once this page's own sync has finished", async () => {
+    mockApi({ configured: true, running: true });
+
+    renderWithClient(<ConnectorsPage />);
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+
+    expect(await screen.findByText(OUTCOME)).toBeInTheDocument();
+    expect(screen.queryByText(/A sync is running/)).not.toBeInTheDocument();
   });
 
   it("polls the Linear status so a running auto sync shows up", async () => {
@@ -271,15 +327,21 @@ describe("ConnectorsPage", () => {
       if (url === "/api/organizations") return jsonResponse([]);
       if (url === "/api/connectors/linear/sync") {
         expect(JSON.parse(init?.body as string)).toEqual({ organization_id: null });
-        return jsonResponse({
-          teams: 1,
-          projects: 0,
-          work_items: 0,
-          events: 0,
-          divergences: 0,
-          deleted: 0,
-        });
+        return jsonResponse(job("running"), 202);
       }
+      if (url === "/api/connectors/linear/jobs/job1")
+        return jsonResponse(
+          job("succeeded", "manual", {
+            summary: {
+              teams: 1,
+              projects: 0,
+              work_items: 0,
+              events: 0,
+              divergences: 0,
+              deleted: 0,
+            },
+          }),
+        );
       throw new Error(`Unexpected fetch: ${url}`);
     });
 

@@ -5,6 +5,8 @@ import { apiFetch } from "./client";
 export interface Project {
   id: string;
   team_id: string;
+  /** Every team the project spans, home team first. */
+  team_ids: string[];
   name: string;
   external_id: string | null;
   created_at: string;

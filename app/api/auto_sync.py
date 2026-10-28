@@ -4,8 +4,8 @@ One in-process asyncio task (ADR-0002: no queue, no cron) ticks every
 TICK_SECONDS, starting at once so a slot missed while Atlas was off
 catches up on startup. Each tick asks SyncScheduleService which
 organizations have a slot due and syncs them one at a time. That's the
-same sync + snapshot capture as `POST /api/connectors/linear/sync`, in its
-own session and transaction. The outcome is recorded on the schedule in a
+same sync + snapshot capture as `POST /api/connectors/linear/sync`, run as
+a SyncJobRunner job (its own session and transaction). The outcome is recorded on the schedule in a
 second session, so a failed sync's rollback can't erase its own error.
 An upstream failure (DataSourceError) logs a one-line warning; anything
 else logs a traceback. A failure still consumes its slot: no retry until
@@ -13,9 +13,9 @@ the next one. Each slot is also attempted at most once per process, so a
 run whose outcome can't be recorded isn't re-synced every tick; a restart
 retries it once.
 
-Manual and automatic syncs share `lock`. A tick that finds a sync
-running skips and retries next tick; the manual route waits for a
-running auto sync.
+Manual and automatic syncs share the job runner's lock. A tick that finds
+a sync running skips and retries next tick; a manual sync while an auto
+sync runs gets that job back when it covers the request, a 409 otherwise.
 
 ponytail: one scheduler per process, so run Atlas as a single uvicorn
 worker (the Dockerfile does). Move to a DB lease or a job table if Atlas
@@ -26,22 +26,14 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.deps import (
-    LINEAR_NOT_CONFIGURED,
-    linear_data_source,
-    snapshot_service_for,
-    sync_schedule_service_for,
-    sync_service_for,
-)
-from app.api.recompute import RecomputeRunner, get_recompute_runner
+from app.api.deps import LINEAR_NOT_CONFIGURED, sync_schedule_service_for
+from app.api.sync_jobs import SyncJobRequest, SyncJobRunner
 from app.application.sync_schedules.service import DueSync
-from app.domain.sync.port import DataSourceError, DeliveryDataSource
+from app.domain.sync.port import DeliveryDataSource
 
 logger = logging.getLogger(__name__)
 
@@ -57,25 +49,16 @@ class AutoSyncRunner:
         sessionmaker: async_sessionmaker[AsyncSession],
         source_factory: Callable[[], DeliveryDataSource | None],
         *,
-        recompute: RecomputeRunner,
+        jobs: SyncJobRunner,
         tick_seconds: float = TICK_SECONDS,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._source_factory = source_factory
-        self._recompute = recompute
+        self._jobs = jobs
         self._tick_seconds = tick_seconds
         self._task: asyncio.Task[None] | None = None
-        # The organization an auto sync is running for, if any.
-        self._syncing: UUID | None = None
         # The last slot attempted per organization, recorded or not.
         self._attempted: dict[UUID, datetime] = {}
-        # Held by every sync, manual or automatic: one at a time.
-        self.lock = asyncio.Lock()
-
-    @property
-    def auto_syncing(self) -> bool:
-        """Whether an automatic sync is running now (a manual one waits for it)."""
-        return self._syncing is not None
 
     @property
     def running(self) -> bool:
@@ -93,24 +76,18 @@ class AutoSyncRunner:
 
     async def tick(self) -> int:
         """Sync every organization with a due slot; how many ran (0 while a sync is running)."""
-        if self.lock.locked():
+        if self._jobs.lock.locked():
             return 0
-        async with self.lock:
-            async with self._sessionmaker() as session:
-                due = [
-                    job
-                    for job in await sync_schedule_service_for(session).due()
-                    if job.slot_at > self._attempted.get(job.organization_id, _NEVER)
-                ]
-            for job in due:
-                self._attempted[job.organization_id] = job.slot_at
-                self._syncing = job.organization_id
-                try:
-                    error = await self._sync(job.organization_id)
-                finally:
-                    self._syncing = None
-                await self._record(job, error)
-            return len(due)
+        async with self._sessionmaker() as session:
+            due = [
+                job
+                for job in await sync_schedule_service_for(session).due()
+                if job.slot_at > self._attempted.get(job.organization_id, _NEVER)
+            ]
+        for slot in due:
+            self._attempted[slot.organization_id] = slot.slot_at
+            await self._record(slot, await self._sync(slot.organization_id))
+        return len(due)
 
     async def _loop(self) -> None:
         while True:
@@ -121,28 +98,13 @@ class AutoSyncRunner:
             await asyncio.sleep(self._tick_seconds)
 
     async def _sync(self, organization_id: UUID) -> str | None:
-        """Run one organization's sync; the error message, if it failed."""
+        """Run one organization's sync job; the error message, if it failed."""
         source = self._source_factory()
         if source is None:
             logger.warning("Auto sync skipped for %s: %s", organization_id, LINEAR_NOT_CONFIGURED)
             return LINEAR_NOT_CONFIGURED
-        try:
-            # Paused like every other writer (app/api/CLAUDE.md): a running
-            # scope rewrite holds SQLite's write lock until it commits.
-            async with self._recompute.paused(), self._sessionmaker() as session:
-                await sync_service_for(session, source).sync(organization_id)
-                await snapshot_service_for(session).capture_all()
-                await session.commit()
-        except DataSourceError as exc:
-            # Linear unreachable, an error response, or a malformed payload:
-            # the message says which, so no traceback.
-            logger.warning("Auto sync failed for organization %s: %s", organization_id, exc)
-            return str(exc) or type(exc).__name__
-        except Exception as exc:
-            logger.exception("Auto sync failed for organization %s", organization_id)
-            return str(exc) or type(exc).__name__
-        logger.info("Auto sync finished for organization %s", organization_id)
-        return None
+        job = await self._jobs.run(SyncJobRequest(organization_id, "organization", "auto"), source)
+        return job.error
 
     async def _record(self, job: DueSync, error: str | None) -> None:
         try:
@@ -153,18 +115,3 @@ class AutoSyncRunner:
                 await session.commit()
         except Exception:
             logger.exception("Could not record the auto sync of %s", job.organization_id)
-
-
-def get_auto_sync_runner(request: Request) -> AutoSyncRunner:
-    runner: AutoSyncRunner | None = getattr(request.app.state, "auto_sync_runner", None)
-    if runner is None:  # no lifespan ran (tests): create on first use, never started
-        runner = AutoSyncRunner(
-            request.app.state.sessionmaker,
-            linear_data_source,
-            recompute=get_recompute_runner(request),
-        )
-        request.app.state.auto_sync_runner = runner
-    return runner
-
-
-AutoSyncRunnerDep = Annotated[AutoSyncRunner, Depends(get_auto_sync_runner)]

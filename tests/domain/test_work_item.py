@@ -35,3 +35,7 @@ def test_work_item_type_is_string_valued() -> None:
 def test_new_work_item_defaults_to_the_default_state() -> None:
     item = WorkItem(team_id=uuid4(), title="Ship it")
     assert item.state == DEFAULT_STATE == "backlog"
+
+
+def test_work_item_assignee_id_defaults_to_none() -> None:
+    assert WorkItem(team_id=uuid4(), title="Add login").assignee_id is None

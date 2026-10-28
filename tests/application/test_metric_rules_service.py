@@ -8,11 +8,13 @@ from app.domain.metric_rules.entities import DEFAULT_RULES, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
+from app.domain.work_items.entities import WorkItem
 from tests.fakes import (
     InMemoryMetricRuleOverridesRepository,
     InMemoryOrganizationRepository,
     InMemoryProjectRepository,
     InMemoryTeamRepository,
+    InMemoryWorkItemRepository,
 )
 
 
@@ -30,6 +32,7 @@ def _world() -> tuple[
         InMemoryOrganizationRepository([org]),
         InMemoryTeamRepository([alpha, beta, elsewhere]),
         InMemoryProjectRepository([launch]),
+        InMemoryWorkItemRepository(),
     )
     return service, org, alpha, beta, launch, repo
 
@@ -294,3 +297,42 @@ async def test_workspace_change_still_rejects_a_team_it_would_newly_invalidate()
 
     with pytest.raises(ValueError, match="Alpha"):
         await service.update_organization(org.id, {"warning_min": 65})
+
+
+def _multi_team_world() -> tuple[MetricRulesService, Organization, Team, Team, Project]:
+    org = Organization(name="Acme")
+    alpha = Team(organization_id=org.id, name="Alpha")
+    beta = Team(organization_id=org.id, name="Beta")
+    mixed = Project(team_id=alpha.id, name="Mixed")
+    items = InMemoryWorkItemRepository(
+        [
+            WorkItem(team_id=alpha.id, title="a", project_id=mixed.id),
+            WorkItem(team_id=beta.id, title="b", project_id=mixed.id),
+        ]
+    )
+    service = MetricRulesService(
+        InMemoryMetricRuleOverridesRepository(),
+        InMemoryOrganizationRepository([org]),
+        InMemoryTeamRepository([alpha, beta]),
+        InMemoryProjectRepository([mixed]),
+        items,
+    )
+    return service, org, alpha, beta, mixed
+
+
+async def test_team_rules_change_recomputes_projects_holding_its_items() -> None:
+    service, _, _, beta, mixed = _multi_team_world()
+
+    change = await service.update_team(beta.id, {"restart_clock_after_move_back": True})
+
+    assert change is not None
+    assert set(change.scopes) == {ScopeRef(team_id=beta.id), ScopeRef(project_id=mixed.id)}
+
+
+async def test_workspace_change_recomputes_multi_team_projects() -> None:
+    service, org, _, _, mixed = _multi_team_world()
+
+    change = await service.update_organization(org.id, {"restart_clock_after_move_back": True})
+
+    assert change is not None
+    assert list(change.scopes).count(ScopeRef(project_id=mixed.id)) == 1

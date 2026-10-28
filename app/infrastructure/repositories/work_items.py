@@ -3,13 +3,14 @@ from uuid import UUID
 
 from sqlalchemy import JSON, ForeignKey, String, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
 from app.infrastructure.repositories.batching import chunked
+from app.infrastructure.repositories.people import PersonModel
 
 
 class WorkItemModel(Base):
@@ -35,7 +36,16 @@ class WorkItemModel(Base):
     parent_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("work_items.id", name="fk_work_items_parent_id"), nullable=True, index=True
     )
-    assignee: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    assignee_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("people.id", name="fk_work_items_assignee_id"), nullable=True, index=True
+    )
+    # Read-only: the assignee's shown name, resolved by a correlated subquery on load.
+    assignee_name: Mapped[str | None] = column_property(
+        select(func.coalesce(PersonModel.display_name, PersonModel.name))
+        .where(PersonModel.id == assignee_id)
+        .correlate_except(PersonModel)
+        .scalar_subquery()
+    )
 
     def to_domain(self) -> WorkItem:
         return WorkItem(
@@ -51,7 +61,8 @@ class WorkItemModel(Base):
             state_type=StateType(self.state_type) if self.state_type else None,
             labels=tuple(self.labels),
             parent_id=self.parent_id,
-            assignee=self.assignee,
+            assignee=self.assignee_name,
+            assignee_id=self.assignee_id,
         )
 
     @classmethod
@@ -69,7 +80,7 @@ class WorkItemModel(Base):
             state_type=work_item.state_type.value if work_item.state_type else None,
             labels=list(work_item.labels),
             parent_id=work_item.parent_id,
-            assignee=work_item.assignee,
+            assignee_id=work_item.assignee_id,
         )
 
 
@@ -128,6 +139,18 @@ class SqlAlchemyWorkItemRepository:
             select(WorkItemModel.parent_id).where(WorkItemModel.parent_id.is_not(None)).distinct()
         )
         return {parent_id for parent_id in result.scalars() if parent_id is not None}
+
+    async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
+        result = await self._session.execute(
+            select(WorkItemModel.project_id, WorkItemModel.team_id)
+            .distinct()
+            .where(WorkItemModel.project_id.is_not(None))
+        )
+        teams: dict[UUID, set[UUID]] = {}
+        for project_id, team_id in result.all():
+            if project_id is not None:
+                teams.setdefault(project_id, set()).add(team_id)
+        return {project_id: frozenset(ids) for project_id, ids in teams.items()}
 
     async def list(
         self,

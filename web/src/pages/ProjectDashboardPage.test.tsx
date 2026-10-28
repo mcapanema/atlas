@@ -12,6 +12,7 @@ import { ProjectDashboardPage } from "./ProjectDashboardPage";
 const project = {
   id: "44444444-4444-4444-4444-444444444444",
   team_id: "22222222-2222-2222-2222-222222222222",
+  team_ids: ["22222222-2222-2222-2222-222222222222"],
   name: "Apollo",
   external_id: null,
   created_at: "2026-07-01T00:00:00Z",
@@ -55,7 +56,7 @@ describe("ProjectDashboardPage", () => {
   it("tags the project's own team when it has custom rules", async () => {
     const otherTeam = { ...teamFixture, id: "99999999-9999-9999-9999-999999999999" };
     mockMetricsFetch({
-      "/api/projects": [{ ...project, team_id: teamFixture.id }],
+      "/api/projects": [{ ...project, team_id: teamFixture.id, team_ids: [teamFixture.id] }],
       "/api/teams": [otherTeam, { ...teamFixture, has_custom_rules: true }],
     });
 
@@ -72,7 +73,7 @@ describe("ProjectDashboardPage", () => {
       has_custom_rules: true,
     };
     mockMetricsFetch({
-      "/api/projects": [{ ...project, team_id: teamFixture.id }],
+      "/api/projects": [{ ...project, team_id: teamFixture.id, team_ids: [teamFixture.id] }],
       "/api/teams": [otherTeam, teamFixture],
     });
 
@@ -80,6 +81,46 @@ describe("ProjectDashboardPage", () => {
 
     await screen.findByText("Throughput (30d)");
     expect(screen.queryByRole("link", { name: "Custom rules" })).not.toBeInTheDocument();
+  });
+
+  it("groups the project options under each home team's name", async () => {
+    const other = { ...teamFixture, id: "99999999-9999-9999-9999-999999999999", name: "Mobile" };
+    mockMetricsFetch({
+      "/api/projects": [
+        { ...project, team_id: teamFixture.id, team_ids: [teamFixture.id] },
+        {
+          ...project,
+          id: "55555555-5555-5555-5555-555555555555",
+          name: "Zeus",
+          team_id: other.id,
+          team_ids: [other.id],
+        },
+      ],
+      "/api/teams": [teamFixture, other],
+    });
+
+    renderWithClient(<ProjectDashboardPage />, ["/projects"]);
+    fireEvent.mouseDown(await screen.findByRole("combobox"));
+
+    await screen.findByTitle("Apollo");
+    expect(
+      screen.getByText(teamFixture.name, { selector: ".ant-select-item-group" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Mobile", { selector: ".ant-select-item-group" })).toBeInTheDocument();
+  });
+
+  it("labels a multi-team project with its team count and tags the workspace rules", async () => {
+    const other = "99999999-9999-9999-9999-999999999999";
+    mockMetricsFetch({
+      "/api/projects": [{ ...project, team_id: teamFixture.id, team_ids: [teamFixture.id, other] }],
+      "/api/teams": [{ ...teamFixture, has_custom_rules: true }],
+    });
+
+    renderWithClient(<ProjectDashboardPage />, [`/projects?project=${project.id}`]);
+
+    expect(await screen.findByText("Workspace rules")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Custom rules" })).not.toBeInTheDocument();
+    expect(screen.getByText("Apollo · 2 teams")).toBeInTheDocument();
   });
 
   it("shows an error when projects fail to load", async () => {

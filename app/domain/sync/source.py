@@ -19,10 +19,17 @@ class SourceTeam:
 
 
 @dataclass(frozen=True)
+class SourcePerson:
+    external_id: str
+    name: str
+    email: str | None = None
+
+
+@dataclass(frozen=True)
 class SourceProject:
     external_id: str
     name: str
-    team_external_id: str | None
+    team_external_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -64,5 +71,5 @@ class SourceWorkItem:
     state_type: StateType | None = None
     labels: tuple[str, ...] = ()
     parent_external_id: str | None = None
-    # Name of the person the issue is currently assigned to; None when unassigned.
-    assignee: str | None = None
+    # Person the issue is currently assigned to; None when unassigned.
+    assignee: SourcePerson | None = None

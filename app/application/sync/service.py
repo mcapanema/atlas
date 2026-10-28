@@ -1,5 +1,7 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from uuid import UUID
 
 from app.domain._time import utcnow
@@ -7,10 +9,12 @@ from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.organizations.entities import Organization
 from app.domain.organizations.repository import OrganizationRepository
+from app.domain.people.entities import Person
+from app.domain.people.repository import PersonRepository
 from app.domain.projects.entities import Project
 from app.domain.projects.repository import ProjectRepository
 from app.domain.sync.port import DeliveryDataSource
-from app.domain.sync.source import SourceWorkItem
+from app.domain.sync.source import SourcePerson, SourceWorkItem
 from app.domain.teams.entities import Team
 from app.domain.teams.repository import TeamRepository
 from app.domain.work_items.entities import WorkItem
@@ -29,6 +33,22 @@ class UnknownOrganizationError(Exception):
 
 class UnknownTeamError(Exception):
     """A team sync was requested for a team that doesn't exist (404, not 422)."""
+
+
+class SyncPhase(StrEnum):
+    """Coarse progress of a sync run, reported through `PhaseCallback`.
+
+    SNAPSHOTS follows the sync proper and is reported by the job runner, not
+    the service.
+    """
+
+    TEAMS = "teams"
+    PROJECTS = "projects"
+    WORK_ITEMS = "work_items"
+    SNAPSHOTS = "snapshots"
+
+
+PhaseCallback = Callable[[SyncPhase], None]
 
 
 @dataclass(frozen=True)
@@ -84,6 +104,7 @@ class SyncService:
         projects: ProjectRepository,
         work_items: WorkItemRepository,
         events: EventRepository,
+        people: PersonRepository,
     ) -> None:
         self._source = source
         self._organizations = organizations
@@ -91,21 +112,39 @@ class SyncService:
         self._projects = projects
         self._work_items = work_items
         self._events = events
+        self._people = people
 
     async def sync(
-        self, organization_id: UUID | None = None, *, rebuild: bool = False
+        self,
+        organization_id: UUID | None = None,
+        *,
+        rebuild: bool = False,
+        on_phase: PhaseCallback | None = None,
     ) -> SyncSummary:
-        resolved = await self._resolve_organization(organization_id)
+        resolved = await self.resolve_organization(organization_id)
         logger.info("Sync started for organization %s (rebuild=%s)", resolved, rebuild)
-        return await self._run(resolved, None, rebuild=rebuild)
+        return await self._run(resolved, None, rebuild=rebuild, on_phase=on_phase)
 
-    async def sync_team(self, team_id: UUID) -> SyncSummary:
+    async def sync_team(
+        self, team_id: UUID, *, on_phase: PhaseCallback | None = None
+    ) -> SyncSummary:
         """Sync one team's work items; teams and projects still sync org-wide.
 
         Nothing is pruned: a team-filtered fetch can't tell an item deleted
         upstream from one moved to another team, so deletions wait for the
         next organization sync (manual or scheduled).
         """
+        team = await self._syncable_team(team_id)
+        logger.info("Sync started for team %s (%s)", team.id, team.name)
+        return await self._run(
+            team.organization_id, team.external_id, rebuild=False, on_phase=on_phase
+        )
+
+    async def resolve_team(self, team_id: UUID) -> UUID:
+        """The organization of a team that can be synced; raises as `sync_team` would."""
+        return (await self._syncable_team(team_id)).organization_id
+
+    async def _syncable_team(self, team_id: UUID) -> Team:
         team = await self._teams.get(team_id)
         if team is None:
             raise UnknownTeamError(f"Team {team_id} does not exist")
@@ -114,17 +153,29 @@ class SyncService:
             raise ValueError(
                 f"Team {team.name!r} was not synced from a source; there is nothing to sync"
             )
-        logger.info("Sync started for team %s (%s)", team.id, team.name)
-        return await self._run(team.organization_id, team.external_id, rebuild=False)
+        return team
 
     async def _run(
-        self, organization_id: UUID, team_external_id: str | None, *, rebuild: bool
+        self,
+        organization_id: UUID,
+        team_external_id: str | None,
+        *,
+        rebuild: bool,
+        on_phase: PhaseCallback | None,
     ) -> SyncSummary:
+        def report(phase: SyncPhase) -> None:
+            if on_phase is not None:
+                on_phase(phase)
+
+        report(SyncPhase.TEAMS)
         teams = await self._sync_teams(organization_id)
+        report(SyncPhase.PROJECTS)
         projects = await self._sync_projects()
+        report(SyncPhase.WORK_ITEMS)
         sources = await self._source.fetch_work_items(team_external_id=team_external_id)
+        people_by_eid = await self._sync_people(organization_id, sources)
         work_items, events, divergences, deleted, rebuilt = await self._sync_work_items(
-            sources, rebuild=rebuild, prune=team_external_id is None
+            sources, people_by_eid, rebuild=rebuild, prune=team_external_id is None
         )
         # After the work-item sync: rebuilt and newly inserted events already carry
         # their types, so only stored events left untyped are filled — exact in both
@@ -144,11 +195,12 @@ class SyncService:
         )
         logger.info(
             "Sync finished for organization %s: teams=%d projects=%d work_items=%d "
-            "events=%d divergences=%d deleted=%d state_types_filled=%d rebuilt=%d",
+            "people=%d events=%d divergences=%d deleted=%d state_types_filled=%d rebuilt=%d",
             organization_id,
             summary.teams,
             summary.projects,
             summary.work_items,
+            len(people_by_eid),
             summary.events,
             summary.divergences,
             summary.deleted,
@@ -157,7 +209,7 @@ class SyncService:
         )
         return summary
 
-    async def _resolve_organization(self, organization_id: UUID | None) -> UUID:
+    async def resolve_organization(self, organization_id: UUID | None) -> UUID:
         if organization_id is not None:
             if await self._organizations.get(organization_id) is None:
                 raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
@@ -199,6 +251,40 @@ class SyncService:
                 written += 1
         return written
 
+    async def _sync_people(
+        self, organization_id: UUID, sources: list[SourceWorkItem]
+    ) -> dict[str, UUID]:
+        """Upsert the people the items are assigned to; Linear user id -> person id.
+
+        Never pruned, and `display_name` (the user's own override) is never
+        touched: only the source's name and email are refreshed.
+        """
+        seen: dict[str, SourcePerson] = {
+            source.assignee.external_id: source.assignee
+            for source in sources
+            if source.assignee is not None
+        }
+        existing_by_eid = await self._people.get_by_external_ids(list(seen))
+        ids: dict[str, UUID] = {}
+        for external_id, source_person in seen.items():
+            existing = existing_by_eid.get(external_id)
+            if existing is None:
+                person = Person(
+                    organization_id=organization_id,
+                    name=source_person.name,
+                    email=source_person.email,
+                    external_id=external_id,
+                )
+                await self._people.add(person)
+                ids[external_id] = person.id
+                continue
+            ids[external_id] = existing.id
+            if (existing.name, existing.email) != (source_person.name, source_person.email):
+                await self._people.update(
+                    replace(existing, name=source_person.name, email=source_person.email)
+                )
+        return ids
+
     async def _stamp_synced(self, organization_id: UUID, team_external_id: str | None) -> None:
         """Date the synced teams' data: every source team of the org, or the one team."""
         synced = [
@@ -225,11 +311,11 @@ class SyncService:
             if project.external_id is not None
         }
         for source in sources:
-            if source.team_external_id is None:
-                continue  # a Project requires an owning Team
-            team = teams_by_eid.get(source.team_external_id)
+            team = next(
+                (teams_by_eid[e] for e in source.team_external_ids if e in teams_by_eid), None
+            )
             if team is None:
-                continue
+                continue  # a Project requires an owning Team
             existing = projects_by_eid.get(source.external_id)
             if existing is None:
                 project = Project(team_id=team.id, name=source.name, external_id=source.external_id)
@@ -273,6 +359,7 @@ class SyncService:
         team_id: UUID,
         project_id: UUID | None,
         existing: WorkItem | None,
+        assignee_id: UUID | None,
     ) -> tuple[WorkItem, bool]:
         """Create or update the item from its source; (item, written?). Parents link later."""
         if existing is None:
@@ -286,7 +373,7 @@ class SyncService:
                 url=source.url,
                 state_type=source.state_type,
                 labels=source.labels,
-                assignee=source.assignee,
+                assignee_id=assignee_id,
                 created_at=source.created_at,
             )
             await self._work_items.add(item)
@@ -301,7 +388,7 @@ class SyncService:
             url=source.url,
             state_type=source.state_type,
             labels=source.labels,
-            assignee=source.assignee,
+            assignee_id=assignee_id,
         )
         if item == existing:
             return existing, False
@@ -329,7 +416,12 @@ class SyncService:
         return written
 
     async def _sync_work_items(
-        self, sources: list[SourceWorkItem], *, rebuild: bool = False, prune: bool = True
+        self,
+        sources: list[SourceWorkItem],
+        people_by_eid: dict[str, UUID],
+        *,
+        rebuild: bool = False,
+        prune: bool = True,
     ) -> tuple[int, int, int, int, int]:
         events_written = 0
         divergences = 0
@@ -366,6 +458,7 @@ class SyncService:
                 team.id,
                 project.id if project is not None else None,
                 items_by_eid.get(source.external_id),
+                people_by_eid.get(source.assignee.external_id) if source.assignee else None,
             )
             synced[source.external_id] = item
             if changed:

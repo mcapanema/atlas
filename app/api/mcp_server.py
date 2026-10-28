@@ -12,6 +12,7 @@ authentication (claude.ai and ChatGPT connector UIs cannot send custom
 headers — the secret has to live in the URL).
 """
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -32,6 +33,12 @@ _INSTRUCTIONS = (
     "to resolve a team or project by name, then meeting_brief for the "
     "one-call digest; drill down with the other tools only when asked."
 )
+
+
+# run_sync's wait for the background sync job: long enough for a typical
+# sync, short of a chat client's tool-call timeout.
+RUN_SYNC_WAIT_SECONDS = 45.0
+RUN_SYNC_POLL_SECONDS = 1.0
 
 
 def _params(**kwargs: Any) -> dict[str, Any]:
@@ -98,6 +105,34 @@ async def _api(
         # ToolError is what carries the REST error detail through to the model.
         raise ToolError(f"Atlas API {response.status_code}: {detail}")
     return response.json()
+
+
+async def _wait_for_job(app: FastAPI, job: dict[str, Any]) -> dict[str, Any]:
+    """Poll a sync job until it finishes or RUN_SYNC_WAIT_SECONDS pass; its last read."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + RUN_SYNC_WAIT_SECONDS
+    while job["state"] == "running" and loop.time() < deadline:
+        await asyncio.sleep(RUN_SYNC_POLL_SECONDS)
+        job = await _api(app, "GET", f"/api/connectors/linear/jobs/{job['id']}")
+    return job
+
+
+def _render_sync_job(job: dict[str, Any]) -> str:
+    if job["state"] == "running":
+        # Phase is unset only before the job's first step.
+        phase = job["phase"] or "starting"
+        return (
+            f"Sync still running (phase: {phase}). Call run_sync again in a minute for its outcome."
+        )
+    if job["state"] == "failed":
+        raise ToolError(f"Sync failed: {job['error']}")
+    summary = job["summary"]
+    return (
+        f"Sync complete: {summary['teams']} teams, {summary['projects']} projects, "
+        f"{summary['work_items']} work items, {summary['events']} events, "
+        f"{summary['divergences']} divergences, {summary['deleted']} deleted. "
+        "Snapshots captured."
+    )
 
 
 def _register_prompts(mcp: MCPServer) -> None:
@@ -185,9 +220,9 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
             f"- {t['id']}  {t['name']} (sprint {t['sprint_length_days']}d)" for t in teams
         ] or ["- (none)"]
         lines.append("Projects:")
-        lines += [f"- {p['id']}  {p['name']} (team {p['team_id']})" for p in projects] or [
-            "- (none)"
-        ]
+        lines += [
+            f"- {p['id']}  {p['name']} (teams {', '.join(p['team_ids'])})" for p in projects
+        ] or ["- (none)"]
         return "\n".join(lines)
 
     @mcp.tool()
@@ -307,21 +342,18 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
     async def run_sync(organization_id: str) -> str:
         """Pull fresh data from the connected issue tracker (Linear) for an
         organization (id from list_scopes), then capture analytics
-        snapshots. Run before a standup if the data may be stale. Can take
-        a while on large workspaces.
+        snapshots. Run before a standup if the data may be stale. The sync
+        runs in the background; this waits up to 45 s for its outcome. If
+        it is still running then, call run_sync again later: the second
+        call attaches to the running sync instead of starting another.
         """
-        summary = await _api(
+        job = await _api(
             app,
             "POST",
             "/api/connectors/linear/sync",
             json={"organization_id": organization_id},
         )
-        return (
-            f"Sync complete: {summary['teams']} teams, {summary['projects']} projects, "
-            f"{summary['work_items']} work items, {summary['events']} events, "
-            f"{summary['divergences']} divergences, {summary['deleted']} deleted. "
-            "Snapshots captured."
-        )
+        return _render_sync_job(await _wait_for_job(app, job))
 
     _register_prompts(mcp)
     return mcp

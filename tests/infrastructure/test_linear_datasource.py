@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.domain.events.entities import EventType
+from app.domain.sync.source import SourcePerson
 from app.infrastructure.connectors.linear import client as client_module
 from app.infrastructure.connectors.linear import datasource as datasource_module
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
@@ -63,7 +64,7 @@ async def test_fetch_projects_maps_nodes() -> None:
     projects = await _datasource(handler).fetch_projects()
 
     assert projects[0].external_id == "p1"
-    assert projects[0].team_external_id == "t1"
+    assert projects[0].team_external_ids == ("t1",)
 
 
 async def test_fetch_work_items_maps_issues_and_history() -> None:
@@ -71,7 +72,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
         "id": "i1",
         "title": "Fix login",
         "url": "https://linear.app/acme/issue/ENG-1/fix-login",
-        "assignee": {"name": "Ada Lovelace"},
+        "assignee": {"id": "u1", "name": "Ada Lovelace"},
         "createdAt": "2026-07-01T10:00:00.000Z",
         "state": {"name": "In Progress", "type": "started"},
         "team": {"id": "t1"},
@@ -95,7 +96,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
         if "issueLabels(" in body["query"]:
             return _page("issueLabels", [])
         assert "\n      url\n" in body["query"]
-        assert "\n      assignee { name }\n" in body["query"]
+        assert "\n      assignee { id name email }\n" in body["query"]
         assert "completedAt" in body["query"]
         assert "canceledAt" in body["query"]
         assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
@@ -107,7 +108,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
     assert [e.type for e in items[0].events] == [EventType.CREATED, EventType.STARTED]
     assert items[0].completed_at is None  # node carries no completedAt
     assert items[0].url == "https://linear.app/acme/issue/ENG-1/fix-login"
-    assert items[0].assignee == "Ada Lovelace"
+    assert items[0].assignee == SourcePerson("u1", "Ada Lovelace", None)
 
 
 async def test_fetch_work_items_skips_malformed_nodes(
