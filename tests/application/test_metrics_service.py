@@ -71,6 +71,37 @@ async def test_team_metrics_across_completed_and_in_progress_items() -> None:
     assert metrics.flow_efficiency == 1.0
 
 
+async def test_state_times_load_the_team_scope() -> None:
+    team = Team(organization_id=ORG, name="Platform")
+    item = _item(team.id)
+    moves = [
+        ("Todo", "In Progress", EventType.STARTED, 6),
+        ("In Progress", "Done", EventType.COMPLETED, 2),
+    ]
+    service = MetricsService(
+        InMemoryWorkItemRepository([item]),
+        InMemoryEventRepository(
+            [
+                Event(
+                    work_item_id=item.id,
+                    type=type_,
+                    occurred_at=NOW - timedelta(days=days_ago),
+                    from_state=from_state,
+                    to_state=to_state,
+                )
+                for from_state, to_state, type_, days_ago in moves
+            ]
+        ),
+        _calendar_days(team),
+    )
+
+    result = await service.get_state_times(team_id=team.id, now=NOW)
+
+    assert result.window_end == NOW
+    assert result.measured == 1
+    assert [(s.state, s.total) for s in result.states] == [("In Progress", timedelta(days=4))]
+
+
 async def test_team_metrics_scope_to_the_requested_team() -> None:
     other_teams_item = _item(uuid4())
     service = MetricsService(

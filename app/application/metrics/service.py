@@ -12,6 +12,7 @@ from app.domain.metrics.distribution import (
 )
 from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.history import FlowHistory, compute_flow_history
+from app.domain.metrics.state_time import StateTimes, compute_state_times
 from app.domain.metrics.summary import FlowMetrics, compute_flow_metrics
 from app.domain.metrics.windows import CHART_WINDOW_DAYS, STATS_WINDOW_DAYS
 from app.domain.projects.repository import ProjectRepository
@@ -79,6 +80,27 @@ class MetricsService:
         if scope is None:
             scope = await self._scope.load(team_id=team_id, project_id=project_id)
         return compute_flow_metrics(scope.samples, now=window_end, window_days=window_days)
+
+    async def get_state_times(
+        self,
+        *,
+        team_id: UUID | None = None,
+        project_id: UUID | None = None,
+        window_days: int = STATS_WINDOW_DAYS,
+        now: datetime | None = None,
+        scope: ScopeSamples | None = None,
+    ) -> StateTimes:
+        """Time in each workflow state and the bottleneck over the trailing window."""
+        window_end = now if now is not None else datetime.now(UTC)
+        if scope is None:
+            scope = await self._scope.load(team_id=team_id, project_id=project_id)
+        return compute_state_times(
+            scope.streams,
+            scope.samples,
+            now=window_end,
+            window_days=window_days,
+            rules=scope.rules,
+        )
 
     async def get_flow_history(
         self,
