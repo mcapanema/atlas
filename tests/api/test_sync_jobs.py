@@ -53,13 +53,15 @@ def _source() -> FakeDataSource:
 
 
 class _BlockingSource(FakeDataSource):
-    """Holds the sync inside fetch_work_items until `release` is set."""
+    """Holds the sync inside fetch_work_items until `release`; sets `entered` on arrival."""
 
     def __init__(self) -> None:
         super().__init__(teams=[SourceTeam(external_id="lt1", name="Platform")])
+        self.entered = asyncio.Event()
         self.release = asyncio.Event()
 
     async def fetch_work_items(self, team_external_id: str | None = None) -> list[SourceWorkItem]:
+        self.entered.set()
         await self.release.wait()
         return await super().fetch_work_items(team_external_id)
 
@@ -389,8 +391,9 @@ async def test_close_cancels_the_running_job_and_rolls_it_back(
     runner = _runner(sessionmaker)
     source = _BlockingSource()
     job = runner.start(SyncJobRequest(org_id, "organization", "manual"), source)
-    for _ in range(50):  # let the job reach fetch_work_items
-        await asyncio.sleep(0)
+    # Cancel only once the job waits on the source: a cancel mid-query would break
+    # the fixture's single StaticPool connection and drop the in-memory schema.
+    await source.entered.wait()
 
     await runner.close()
 
