@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.metrics import Period
 from app.application.scope import ScopeData, ScopeSampleLoader
+from app.domain.people.entities import Person
 from app.domain.snapshots.entities import ForecastSnapshot
+from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.snapshots import SqlAlchemyForecastSnapshotRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
 from tests.api.helpers import create_org_and_team, create_team, days_ago, use_calendar_days
@@ -265,10 +267,12 @@ async def test_aging_wip_shows_the_stored_assignee(
         json={"work_item_id": item["id"], "type": "started", "occurred_at": days_ago(3)},
     )
     async with sessionmaker() as session:  # only sync sets it: no REST field to write
+        person = Person(organization_id=uuid4(), name="Ada Lovelace")
+        await SqlAlchemyPersonRepository(session).add(person)
         repo = SqlAlchemyWorkItemRepository(session)
         stored = await repo.get(UUID(item["id"]))
         assert stored is not None
-        await repo.update(replace(stored, assignee="Ada Lovelace"))
+        await repo.update(replace(stored, assignee_id=person.id))
         await session.commit()
 
     body = (await client.get(f"/api/metrics/aging-wip?team_id={team_id}")).json()

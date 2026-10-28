@@ -15,6 +15,7 @@ from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
+from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
@@ -64,6 +65,29 @@ class InMemoryTeamRepository:
         for team_id in team_ids:
             if (team := self._teams.get(team_id)) is not None:
                 self._teams[team_id] = replace(team, last_synced_at=at)
+
+
+class InMemoryPersonRepository:
+    def __init__(self, people: list[Person] | None = None) -> None:
+        self._people: dict[UUID, Person] = {p.id: p for p in people or []}
+
+    async def add(self, person: Person) -> None:
+        self._people[person.id] = person
+
+    async def update(self, person: Person) -> None:
+        self._people[person.id] = person
+
+    async def get(self, person_id: UUID) -> Person | None:
+        return self._people.get(person_id)
+
+    async def list(self, organization_id: UUID | None = None) -> list[Person]:
+        people = [p for p in self._people.values() if organization_id in (None, p.organization_id)]
+        return sorted(people, key=lambda p: p.shown_name.lower())
+
+    async def get_by_external_ids(self, external_ids: Collection[str]) -> dict[str, Person]:
+        return {
+            p.external_id: p for p in self._people.values() if p.external_id in set(external_ids)
+        }
 
 
 class InMemoryProjectRepository:

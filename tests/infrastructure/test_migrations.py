@@ -159,3 +159,46 @@ def test_working_days_migration_schedules_a_history_recompute(
     assert all(state == "running" and started for _, _, state, started in rows)
     inserted = next(row for row in rows if UUID(row[0]) == without_row)
     assert json.loads(inserted[1]) == {}
+
+
+def test_migration_drops_assignee_names_on_populated_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Assignee names have no Person to point at until the next sync, which
+    re-creates them: the migration drops the names and leaves `people` empty."""
+    db_path = tmp_path / "assignee-names.db"
+    monkeypatch.setenv("ATLAS_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    get_settings.cache_clear()
+    config = Config("alembic.ini")
+    engine = create_engine(f"sqlite:///{db_path}")
+    team = uuid4()
+    try:
+        command.upgrade(config, "c4e8a2b7d913")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO teams (id, organization_id, name, created_at)"
+                    " VALUES (:id, :org, 'T', '2026-10-01 00:00:00')"
+                ),
+                {"id": team.hex, "org": uuid4().hex},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO work_items (id, team_id, title, type, state, created_at,"
+                    " assignee) VALUES (:id, :team, 'Fix', 'task', 'Todo',"
+                    " '2026-10-01 00:00:00', 'Ada')"
+                ),
+                {"id": uuid4().hex, "team": team.hex},
+            )
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assignee_ids = list(
+                connection.execute(text("SELECT assignee_id FROM work_items")).scalars()
+            )
+            people = connection.execute(text("SELECT count(*) FROM people")).scalar_one()
+    finally:
+        engine.dispose()
+        get_settings.cache_clear()
+
+    assert assignee_ids == [None]
+    assert people == 0
