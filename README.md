@@ -115,8 +115,9 @@ Atlas reads your Linear workspace and turns its history into these views
 **Intelligence** (needs `ATLAS_OPENROUTER_API_KEY`)
 - **Advisor** (`/advisor`) — AI explanations and prioritized recommendations
   grounded in the computed metrics; your feedback teaches it over time.
+  Advice is generated in the background and kept: it reloads with the page.
 - **Meetings** (`/meetings`) — prep for daily standups, retrospectives and
-  planning. A retro covers the team's sprint length by default.
+  planning, kept the same way. A retro covers the team's sprint length by default.
 
 **Setup**
 - **Organizations** (`/organizations`) — the workspaces Atlas has synced,

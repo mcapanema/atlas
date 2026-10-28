@@ -50,8 +50,9 @@ Item Explorer (`/work-items`).
 
 ### Computed-on-read analytics (ADR-0003, amended by ADR-0008)
 
-Metrics, forecasts, and AI advice are recomputed per request from the
-persisted events; these slices have no tables and no migrations.
+Metrics and forecasts are recomputed per request from the persisted
+events; these slices have no tables and no migrations. AI advice is the
+exception: it is generated in the background and stored (ADR-0023).
 
 - **Metrics** (`app/domain/metrics/`): per-item `FlowSample`s
   (`samples.py`) fold into `TeamFlowMetrics` — Lead/Cycle Time
@@ -79,7 +80,11 @@ persisted events; these slices have no tables and no migrations.
   forecast — and returns explainable `DeliveryAdvice` (narrative summary
   plus prioritized `Recommendation`s with root causes and evidence). The
   AI never calculates (ADR-0006).
-  Advice stays computed-on-read, but personas carry learned state:
+  Advice is stored, not computed on read (ADR-0023): `AdviceRun` (table
+  `advice_runs`, managed by `AdviceRunService`) is one generation of advice
+  or meeting prep, keyed by scope + persona + request params; each
+  `POST` starts a run in `AdviceRunner` (`app/api/advice_runner.py`) and
+  each `GET` reads the newest. Personas carry learned state:
   `AdviceFeedback` and `PersonaGuidance` (persisted aggregates in the same
   slice, tables `advice_feedback`/`persona_guidance`) record EM ratings and
   the append-only learned-guidance versions. `PersonaService`
@@ -280,7 +285,7 @@ answers 403 to everything else.
 Meeting preparation has two deliberate paths: **external** — the MCP prompts
 (`daily_standup`, `retrospective`, `planning`) instruct a connected chat AI
 (Claude/ChatGPT) to call Atlas's MCP tools; and **internal** — `POST
-/api/meetings/prep` starts a stored run (`GET` reads the latest) that builds the same digest (`MeetingContext` = advisor context
+/api/meetings/prep` starts a stored run (`GET` reads the latest; ADR-0023) that builds the same digest (`MeetingContext` = advisor context
 + delivery health + aging WIP, rendered by `render_meeting_context`) and sends
 it to the OpenRouter advisor (`AdvisorPort.prepare_meeting`), so Atlas works
 stand-alone. Meeting types are backed by learnable personas (`daily_standup`,

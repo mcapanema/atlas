@@ -20,7 +20,8 @@ port).
   `ScopeSampleLoader` — extend it rather than re-implementing that loop
   inside a service.
 - `AdvisorService` assembles the advisor's inputs from sibling services;
-  the `AdvisorPort` itself is called in Presentation, not in the service.
+  the `AdvisorPort` itself is called by the `AdviceRunner` in Presentation,
+  not in the service. `AdviceRunService` owns the stored run lifecycle.
 
 ## Testing
 
