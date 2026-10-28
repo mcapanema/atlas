@@ -86,7 +86,9 @@ TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
 
 
 def get_project_service(session: SessionDep) -> ProjectService:
-    return ProjectService(SqlAlchemyProjectRepository(session))
+    return ProjectService(
+        SqlAlchemyProjectRepository(session), SqlAlchemyWorkItemRepository(session)
+    )
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]

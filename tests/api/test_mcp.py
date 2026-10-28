@@ -158,6 +158,32 @@ async def test_list_scopes_tool(
             assert "(sprint 14d)" in text  # the team's sprint_length_days rule
 
 
+async def test_list_scopes_names_every_team_of_a_project(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            org_id, home = await create_org_and_team(client)
+            other = (
+                await client.post("/api/teams", json={"organization_id": org_id, "name": "Mobile"})
+            ).json()["id"]
+            project = (
+                await client.post("/api/projects", json={"team_id": home, "name": "Apollo"})
+            ).json()["id"]
+            for team_id in (home, other):
+                await client.post(
+                    "/api/work-items",
+                    json={"team_id": team_id, "title": "x", "project_id": project},
+                )
+
+        async with mcp_session(app) as session:
+            text = tool_text(await session.call_tool("list_scopes", {}))
+
+    assert f"- {project}  Apollo (teams {home}, {other})" in text
+
+
 async def test_meeting_brief_composes_digest(
     sessionmaker: async_sessionmaker[AsyncSession],
     settings_env: Callable[..., None],

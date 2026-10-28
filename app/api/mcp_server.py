@@ -185,9 +185,9 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
             f"- {t['id']}  {t['name']} (sprint {t['sprint_length_days']}d)" for t in teams
         ] or ["- (none)"]
         lines.append("Projects:")
-        lines += [f"- {p['id']}  {p['name']} (team {p['team_id']})" for p in projects] or [
-            "- (none)"
-        ]
+        lines += [
+            f"- {p['id']}  {p['name']} (teams {', '.join(p['team_ids'])})" for p in projects
+        ] or ["- (none)"]
         return "\n".join(lines)
 
     @mcp.tool()

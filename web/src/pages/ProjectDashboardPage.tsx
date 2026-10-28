@@ -1,14 +1,34 @@
-import { Alert, Flex, Select, Space, Typography } from "antd";
+import { Alert, Flex, Select, Space, Tag, Typography } from "antd";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { useProjects } from "../api/projects";
-import { useTeams } from "../api/teams";
+import { useProjects, type Project } from "../api/projects";
+import { useTeams, type Team } from "../api/teams";
 import { CustomRulesTag } from "../components/CustomRulesTag";
 import { FlowDashboard } from "../components/FlowDashboard";
 import { MetricsFilterBar } from "../components/MetricsFilterBar";
 import { applyFiltersToSearchParams, filtersFromSearchParams } from "../lib/metricsFilters";
 import type { MetricsFilters } from "../api/metrics";
+
+/** Project options grouped under their home team; a multi-team project says how many. */
+function projectOptions(projects: Project[], teams: Team[]) {
+  const groups = new Map<string, { label: string; options: { value: string; label: string }[] }>();
+  for (const p of projects) {
+    const label = p.team_ids.length > 1 ? `${p.name} · ${p.team_ids.length} teams` : p.name;
+    const group = groups.get(p.team_id) ?? {
+      label: teams.find((t) => t.id === p.team_id)?.name ?? "Unknown team",
+      options: [],
+    };
+    group.options.push({ value: p.id, label });
+    groups.set(p.team_id, group);
+  }
+  return [...groups.values()];
+}
+
+function RulesTag({ project, teams }: { project: Project | undefined; teams: Team[] }) {
+  if (project && project.team_ids.length > 1) return <Tag>Workspace rules</Tag>;
+  return <CustomRulesTag team={teams.find((team) => team.id === project?.team_ids[0])} />;
+}
 
 export function ProjectDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,9 +63,9 @@ export function ProjectDashboardPage() {
               setSearchParams(params);
             }}
             loading={projects.isLoading}
-            options={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
+            options={projectOptions(projects.data ?? [], teams.data ?? [])}
           />
-          <CustomRulesTag team={teams.data?.find((team) => team.id === project?.team_id)} />
+          <RulesTag project={project} teams={teams.data ?? []} />
           {projectId && (
             <MetricsFilterBar filters={filters} scope={{ projectId }} onChange={setFilters} />
           )}

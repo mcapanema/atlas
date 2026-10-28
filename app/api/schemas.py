@@ -60,6 +60,8 @@ class ProjectRead(BaseModel):
 
     id: UUID
     team_id: UUID
+    # Every team the project spans, home team first; `team_id` is the home team.
+    team_ids: list[UUID]
     name: str
     external_id: str | None
     created_at: datetime
