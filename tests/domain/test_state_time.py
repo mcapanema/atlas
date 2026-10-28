@@ -210,3 +210,54 @@ def test_wait_states_follow_each_items_team_rules() -> None:
     )
 
     assert result.states[0].wait_state is True
+
+
+def test_same_state_in_two_teams_gives_two_rows() -> None:
+    streams = [_item_a(), _item_a(), _item_b()]
+
+    result = compute_state_times(
+        streams,
+        [_sample(stream) for stream in streams],
+        now=NOW,
+        rules=RULES,
+        stream_teams=["Platform", "Growth", "Platform"],
+    )
+
+    assert [(s.team, s.state, s.total.days) for s in result.states] == [
+        ("Platform", "In Review", 8),
+        ("Growth", "In Review", 5),
+        ("Platform", "In Progress", 3),
+        ("Growth", "In Progress", 2),
+    ]
+    assert result.bottleneck == "In Review"
+    assert result.bottleneck_team == "Platform"
+
+
+def test_wait_states_follow_each_team_when_split() -> None:
+    def waiting() -> list[Event]:
+        item = uuid4()
+        return [
+            _move(item, EventType.STARTED, 1, "Todo", "Waiting on QA"),
+            _move(item, EventType.COMPLETED, 3, "Waiting on QA", "Done"),
+        ]
+
+    streams = [waiting(), waiting()]
+    growth_rules = replace(RULES, wait_state_names=("Waiting on QA",))
+
+    result = compute_state_times(
+        streams,
+        [_sample(stream) for stream in streams],
+        now=NOW,
+        rules=RULES,
+        stream_rules=[RULES, growth_rules],
+        stream_teams=["Platform", "Growth"],
+    )
+
+    assert {s.team: s.wait_state for s in result.states} == {"Platform": False, "Growth": True}
+
+
+def test_unlabelled_rows_have_no_team() -> None:
+    result = _compute(_item_a(), _item_b())
+
+    assert {s.team for s in result.states} == {None}
+    assert result.bottleneck_team is None

@@ -11,10 +11,8 @@ total / window is about the average number of items sitting in that state
 The queue is the items in progress in each state at the window's end, read
 from their events (so a past period replays it).
 
-ponytail: states group by name, so one project spanning teams that share a
-state name merges them (a state is a wait state when any of those teams
-lists it). Upgrade path: key by (team, state) if multi-team projects show a
-misleading bottleneck.
+Rows group by (team, state) when the caller labels each stream with its
+team (a multi-team project), and by state alone otherwise.
 """
 
 from collections import Counter, defaultdict
@@ -36,6 +34,9 @@ _ENDS_WORK = (EventType.STOPPED, EventType.COMPLETED, EventType.CANCELED)
 # (start, end) of a span in progress; end None means still in progress.
 _Span = tuple[datetime, datetime | None]
 
+# A row's identity: (team label, state); the label is None when unsplit.
+_Key = tuple[str | None, str]
+
 
 @dataclass(frozen=True)
 class StateTime:
@@ -51,6 +52,8 @@ class StateTime:
     # Items in progress in this state at the window's end.
     queue: int
     wait_state: bool
+    # The team the row belongs to, in a scope split by team; None otherwise.
+    team: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +62,8 @@ class StateTimes:
 
     `measured` counts completed items with time in at least one state.
     `bottleneck` is the first state, when at least `min_sample` items were
-    measured and it holds any time; None otherwise.
+    measured and it holds any time; None otherwise. `bottleneck_team` is
+    that row's team.
     """
 
     window_start: datetime
@@ -68,6 +72,7 @@ class StateTimes:
     min_sample: int
     states: tuple[StateTime, ...]
     bottleneck: str | None
+    bottleneck_team: str | None = None
 
 
 def _work_spans(events: Sequence[Event]) -> list[_Span]:
@@ -123,31 +128,32 @@ def _median(durations: list[timedelta]) -> timedelta:
 class _Tally:
     """Per-state accumulators while folding the scope's items."""
 
-    stays: dict[str, list[timedelta]] = field(default_factory=lambda: defaultdict(list))
-    queue: Counter[str] = field(default_factory=Counter)
-    wait: set[str] = field(default_factory=set)
+    stays: dict[_Key, list[timedelta]] = field(default_factory=lambda: defaultdict(list))
+    queue: Counter[_Key] = field(default_factory=Counter)
+    wait: set[_Key] = field(default_factory=set)
     measured: int = 0
 
-    def note_wait(self, state: str, rules: MetricRules) -> None:
-        if rules.is_wait_state(state):
-            self.wait.add(state)
+    def note_wait(self, key: _Key, rules: MetricRules) -> None:
+        if rules.is_wait_state(key[1]):
+            self.wait.add(key)
 
     def states(self) -> list[StateTime]:
-        totals = {state: sum(d, timedelta(0)) for state, d in self.stays.items()}
+        totals = {key: sum(d, timedelta(0)) for key, d in self.stays.items()}
         grand = sum(totals.values(), timedelta(0))
         listed = [
             StateTime(
-                state=state,
-                total=totals.get(state, timedelta(0)),
-                share=totals.get(state, timedelta(0)) / grand if grand else 0.0,
-                median=_median(self.stays.get(state, [])),
-                items=len(self.stays.get(state, [])),
-                queue=self.queue[state],
-                wait_state=state in self.wait,
+                state=key[1],
+                total=totals.get(key, timedelta(0)),
+                share=totals.get(key, timedelta(0)) / grand if grand else 0.0,
+                median=_median(self.stays.get(key, [])),
+                items=len(self.stays.get(key, [])),
+                queue=self.queue[key],
+                wait_state=key in self.wait,
+                team=key[0],
             )
-            for state in {*totals, *self.queue}
+            for key in {*totals, *self.queue}
         ]
-        return sorted(listed, key=lambda s: (-s.total, -s.queue, s.state))
+        return sorted(listed, key=lambda s: (-s.total, -s.queue, s.state, s.team or ""))
 
 
 def compute_state_times(
@@ -158,11 +164,13 @@ def compute_state_times(
     window_days: int = STATS_WINDOW_DAYS,
     rules: MetricRules = DEFAULT_RULES,
     stream_rules: Sequence[MetricRules] | None = None,
+    stream_teams: Sequence[str | None] | None = None,
 ) -> StateTimes:
     """Time in each state for samples completed in (now - window_days, now].
 
     `streams[i]` folds into `samples[i]` under `stream_rules[i]` (its team's
-    rules; `rules` when omitted), which name its wait states. A state is
+    rules; `rules` when omitted), which name its wait states, and
+    `stream_teams[i]` labels its rows (no label when omitted). A state is
     listed when it holds time or a queue. `rules` (the scope's) set the
     minimum sample (health_min_sample) a bottleneck needs.
     """
@@ -170,25 +178,27 @@ def compute_state_times(
     tally = _Tally()
     for index, (events, sample) in enumerate(zip(streams, samples, strict=True)):
         item_rules = stream_rules[index] if stream_rules else rules
+        team = stream_teams[index] if stream_teams else None
         completed = sample.completed_at
         if completed is not None and window_start < completed <= now:
             stays = _in_cycle_stays(events, sample)
             tally.measured += bool(stays)
             for state, duration in stays.items():
-                tally.stays[state].append(duration)
-                tally.note_wait(state, item_rules)
+                tally.stays[(team, state)].append(duration)
+                tally.note_wait((team, state), item_rules)
         queued = _queued_in(events, now)
         if queued is not None:
-            tally.queue[queued] += 1
-            tally.note_wait(queued, item_rules)
+            tally.queue[(team, queued)] += 1
+            tally.note_wait((team, queued), item_rules)
     states = tally.states()
     enough = tally.measured >= rules.health_min_sample
-    bottleneck = states[0].state if states and enough and states[0].total else None
+    top = states[0] if states and enough and states[0].total else None
     return StateTimes(
         window_start=window_start,
         window_end=now,
         measured=tally.measured,
         min_sample=rules.health_min_sample,
         states=tuple(states),
-        bottleneck=bottleneck,
+        bottleneck=top.state if top else None,
+        bottleneck_team=top.team if top else None,
     )
