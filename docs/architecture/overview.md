@@ -164,8 +164,9 @@ custom.
   history (ADR-0013) — the upgrade path after a mapping fix.
   A team sync (`POST /api/connectors/linear/teams/{id}/sync`, the Team
   Dashboard's "Sync team" button) fetches only that team's work items,
-  snapshots only that team and its single-team projects (a project holding
-  other teams' items waits for the organization sync), and never prunes — a
+  snapshots only that team, its single-team projects and its home projects
+  with no items (a project holding other teams' items waits for the
+  organization sync), and never prunes — a
   filtered fetch can't tell deleted from moved — so deletions wait for the
   next organization sync.
   Each sync stamps `teams.last_synced_at` for the teams it pulled; the flow
@@ -194,7 +195,8 @@ that package. The first connector is Linear
 personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
 mapping functions, and a paginating `LinearDataSource`. Exposed as
 `POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
-and the Connectors page in the frontend. A project's home team is the first of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
+and the Connectors page in the frontend. A project's home team is the first
+of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events, state types on transitions, and each issue's labels, parent and
 current assignee name — an email or handle Linear uses as the name is
