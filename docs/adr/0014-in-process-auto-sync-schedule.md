@@ -4,7 +4,7 @@ Date: 2026-10-07
 
 ## Status
 
-Accepted.
+Accepted. Amended by ADR-0022: the lock moved to `SyncJobRunner`.
 
 ## Context
 

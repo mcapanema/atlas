@@ -109,7 +109,7 @@ The one write-side projection: `app/domain/snapshots/` holds
 `MetricSnapshot` and `ForecastSnapshot` (one row per scope per UTC day,
 rewritten in place when the scope's metric rules change — ADR-0010) with
 repository ports, `SnapshotService` (`app/application/snapshots/service.py`)
-captures them for every team and project inside the sync request, and
+captures them for every team and project inside the sync job, and
 `evaluate_forecast_accuracy` (`app/domain/forecasting/accuracy.py`) scores
 past forecast snapshots against actual completions. Served from
 `GET /api/metrics/snapshots` (lead-time trend on the dashboards) and
@@ -176,6 +176,11 @@ custom.
   organization sync), and never prunes — a
   filtered fetch can't tell deleted from moved — so deletions wait for the
   next organization sync.
+  Sync routes start a background job and answer `202` with it
+  (`SyncJobRunner`, `app/api/sync_jobs.py`, ADR-0022): one sync at a time, a
+  request the running job covers gets that job back, any other answers
+  `409`, and the last 20 jobs are kept in memory (a restart loses them;
+  `GET /api/connectors/linear/jobs/{id}` then answers `404`).
   Each sync stamps `teams.last_synced_at` for the teams it pulled; the flow
   history's `data_as_of` is the later of that stamp and the newest event's
   `recorded_at`.
@@ -184,7 +189,7 @@ custom.
   an IANA zone; slot math in `slots.py`) is served by
   `GET/PUT /api/organizations/{id}/sync-schedule` and run by the in-process
   `AutoSyncRunner` (`app/api/auto_sync.py`). It ticks every minute, syncs
-  each organization with a due slot exactly like the manual route, and
+  each organization with a due slot through the same `SyncJobRunner`, and
   records the outcome on the schedule. Edited on the Connectors page.
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
