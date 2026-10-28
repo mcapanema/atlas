@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from app.api.deps import get_advisor_port
-from app.domain.advisor.entities import DeliveryAdvice, Persona, Recommendation
+from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
 from tests.api.helpers import create_team, settle
 
@@ -15,6 +15,7 @@ from tests.api.helpers import create_team, settle
 class FakeAdvisor:
     def __init__(self) -> None:
         self.personas: list[Persona] = []
+        self.guidance: list[str | None] = []
         self.gate: asyncio.Event | None = None
 
     async def advise(
@@ -25,6 +26,7 @@ class FakeAdvisor:
         guidance: str | None = None,
     ) -> DeliveryAdvice:
         self.personas.append(persona)
+        self.guidance.append(guidance)
         if self.gate is not None:
             await self.gate.wait()
         return DeliveryAdvice(
@@ -232,3 +234,44 @@ async def test_unknown_persona_is_422(client: AsyncClient, test_app: FastAPI) ->
     response = await client.post(f"/api/recommendations?team_id={team_id}&persona=fortune_teller")
 
     assert response.status_code == 422
+
+
+async def test_learned_guidance_is_forwarded_to_the_advisor(
+    rules_client: AsyncClient, rules_app: FastAPI
+) -> None:
+    class GuidedAdvisor(FakeAdvisor):
+        async def reflect(
+            self,
+            *,
+            persona: Persona,
+            feedback: Sequence[AdviceFeedback],
+            current_guidance: str | None,
+        ) -> str:
+            return "Prefer WIP limits."
+
+    fake = GuidedAdvisor()
+    rules_app.dependency_overrides[get_advisor_port] = lambda: fake
+    team_id = await create_team(rules_client)
+    await rules_client.post(
+        "/api/personas/agile_coach/feedback",
+        json={"rating": "up", "comment": None, "advice_summary": "good"},
+    )
+    reflected = await rules_client.post("/api/personas/agile_coach/reflect")
+    assert reflected.status_code == 201
+
+    response = await rules_client.post(f"/api/recommendations?team_id={team_id}")
+    await settle(rules_app)
+
+    assert response.status_code == 202
+    assert fake.guidance == ["Prefer WIP limits."]
+
+
+async def test_no_guidance_forwards_none(rules_client: AsyncClient, rules_app: FastAPI) -> None:
+    fake = FakeAdvisor()
+    rules_app.dependency_overrides[get_advisor_port] = lambda: fake
+    team_id = await create_team(rules_client)
+
+    await rules_client.post(f"/api/recommendations?team_id={team_id}")
+    await settle(rules_app)
+
+    assert fake.guidance == [None]
