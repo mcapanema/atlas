@@ -81,7 +81,7 @@ async def test_scope_rules_come_from_the_projects_team() -> None:
     owner = Team(organization_id=ORG, name="Owner")
     other = Team(organization_id=ORG, name="Other")
     project = Project(team_id=owner.id, name="Owned")
-    item = WorkItem(team_id=other.id, title="Borrowed", project_id=project.id)
+    item = WorkItem(team_id=owner.id, title="Own", project_id=project.id)
     rows = [
         RuleOverrides(
             organization_id=ORG, team_id=owner.id, overrides={"forecast_history_days": 30}
@@ -96,6 +96,52 @@ async def test_scope_rules_come_from_the_projects_team() -> None:
     scope = await loader.load(project_id=project.id)
 
     assert scope.rules.forecast_history_days == 30
+
+
+def _sample_rows(a: Team, b: Team) -> list[RuleOverrides]:
+    return [
+        RuleOverrides(organization_id=ORG, overrides={"health_min_sample": 3}),
+        RuleOverrides(organization_id=ORG, team_id=a.id, overrides={"health_min_sample": 9}),
+        RuleOverrides(organization_id=ORG, team_id=b.id, overrides={"health_min_sample": 7}),
+    ]
+
+
+async def test_multi_team_project_reads_workspace_rules() -> None:
+    a = Team(organization_id=ORG, name="A")
+    b = Team(organization_id=ORG, name="B")
+    project = Project(team_id=a.id, name="Shared")
+    rows = _sample_rows(a, b)[:2]
+
+    resolved = await _resolver([a, b], [project], rows).resolve(
+        team_id=None, project_id=project.id, item_team_ids=[a.id, b.id]
+    )
+
+    assert resolved.scope.health_min_sample == 3
+    assert resolved.for_team(a.id).health_min_sample == 9
+
+
+async def test_single_team_project_reads_its_items_team_rules() -> None:
+    a = Team(organization_id=ORG, name="A")
+    b = Team(organization_id=ORG, name="B")
+    project = Project(team_id=a.id, name="Borrowed")
+
+    resolved = await _resolver([a, b], [project], _sample_rows(a, b)).resolve(
+        team_id=None, project_id=project.id, item_team_ids=[b.id, b.id]
+    )
+
+    assert resolved.scope.health_min_sample == 7
+
+
+async def test_empty_project_reads_its_home_team_rules() -> None:
+    a = Team(organization_id=ORG, name="A")
+    b = Team(organization_id=ORG, name="B")
+    project = Project(team_id=a.id, name="Empty")
+
+    resolved = await _resolver([a, b], [project], _sample_rows(a, b)).resolve(
+        team_id=None, project_id=project.id, item_team_ids=[]
+    )
+
+    assert resolved.scope.health_min_sample == 9
 
 
 async def test_workspace_default_applies_to_teams_without_overrides() -> None:
