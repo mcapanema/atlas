@@ -12,7 +12,7 @@ const columns = [
 
 function PeopleTable() {
   const { data, isLoading } = usePeople();
-  const { mutate } = useSetDisplayName();
+  const { mutate, isError, error } = useSetDisplayName();
 
   return (
     <>
@@ -20,6 +20,14 @@ function PeopleTable() {
       <Typography.Paragraph type="secondary">
         Shown wherever Atlas names an owner. Leave empty to use the name from Linear.
       </Typography.Paragraph>
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          message="Couldn't save the display name"
+          description={error.message}
+        />
+      )}
       <Table<Person>
         rowKey="id"
         loading={isLoading}
@@ -42,6 +50,7 @@ function PeopleTable() {
               <Typography.Text
                 editable={{
                   text: value ?? "",
+                  maxLength: 255,
                   onChange: (next) => mutate({ id: person.id, displayName: next.trim() || null }),
                 }}
               >

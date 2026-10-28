@@ -106,6 +106,23 @@ describe("OrganizationsPage", () => {
       expect(patchCall(spy)![1]?.body).toBe(JSON.stringify({ display_name: null }));
     });
 
+    it("shows an error when saving fails", async () => {
+      vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+        if (init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse({ detail: "too long" }, 422));
+        }
+        return Promise.resolve(
+          jsonResponse(requestUrl(input).startsWith("/api/people") ? [person] : []),
+        );
+      });
+      renderWithClient(<OrganizationsPage />);
+
+      await editDisplayName("x");
+
+      expect(await screen.findByText("Couldn't save the display name")).toBeInTheDocument();
+      expect(screen.getByText("too long")).toBeInTheDocument();
+    });
+
     it("explains the empty state", async () => {
       mockApi([]);
       renderWithClient(<OrganizationsPage />);
