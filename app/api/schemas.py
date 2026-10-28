@@ -653,3 +653,19 @@ class MetricRulesImportRead(BaseModel):
     skipped_teams: list[str]
     ambiguous_teams: list[str]
     rules: MetricRulesViewRead
+
+
+class PersonRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    name: str
+    display_name: str | None
+    shown_name: str
+    email: str | None
+
+
+class PersonWrite(BaseModel):
+    # Blank clears the override.
+    display_name: str | None = Field(max_length=255)

@@ -11,6 +11,7 @@ from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metric_rules.service import MetricRulesService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
+from app.application.people.service import PeopleService
 from app.application.personas.service import PersonaService
 from app.application.projects.service import ProjectService
 from app.application.snapshots.service import SnapshotService
@@ -84,6 +85,13 @@ def get_team_service(session: SessionDep) -> TeamService:
 
 
 TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
+
+
+def get_people_service(session: SessionDep) -> PeopleService:
+    return PeopleService(SqlAlchemyPersonRepository(session))
+
+
+PeopleServiceDep = Annotated[PeopleService, Depends(get_people_service)]
 
 
 def get_project_service(session: SessionDep) -> ProjectService:

@@ -20,6 +20,7 @@ from app.api import (
     metric_rules,
     metrics,
     organizations,
+    people,
     personas,
     projects,
     sync_schedules,
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(organizations.router)
     app.include_router(teams.router)
+    app.include_router(people.router)
     app.include_router(projects.router)
     app.include_router(work_items.router)
     app.include_router(events.router)

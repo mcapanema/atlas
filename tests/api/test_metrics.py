@@ -280,6 +280,32 @@ async def test_aging_wip_shows_the_stored_assignee(
     assert [i["assignee"] for i in body["items"]] == ["Ada Lovelace"]
 
 
+async def test_aging_wip_shows_display_name_without_sync(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    team_id = await create_team(client)
+    item = (
+        await client.post("/api/work-items", json={"team_id": team_id, "title": "Owned"})
+    ).json()
+    await client.post(
+        "/api/events",
+        json={"work_item_id": item["id"], "type": "started", "occurred_at": days_ago(3)},
+    )
+    async with sessionmaker() as session:
+        person = Person(organization_id=uuid4(), name="Joao")
+        await SqlAlchemyPersonRepository(session).add(person)
+        repo = SqlAlchemyWorkItemRepository(session)
+        stored = await repo.get(UUID(item["id"]))
+        assert stored is not None
+        await repo.update(replace(stored, assignee_id=person.id))
+        await session.commit()
+
+    await client.patch(f"/api/people/{person.id}", json={"display_name": "João"})
+    body = (await client.get(f"/api/metrics/aging-wip?team_id={team_id}")).json()
+
+    assert [i["assignee"] for i in body["items"]] == ["João"]
+
+
 async def test_aging_wip_for_unknown_team_is_404(client: AsyncClient) -> None:
     response = await client.get(f"/api/metrics/aging-wip?team_id={uuid4()}")
     assert response.status_code == 404
