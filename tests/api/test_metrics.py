@@ -351,7 +351,9 @@ async def test_state_times_end_to_end(
     assert review["items"] == 1
     assert review["queue"] == 0
     assert review["wait_state"] is False
+    assert review["team"] is None  # a team scope is never split by team
     assert body["bottleneck"] is None  # 1 measured item < min_sample 5
+    assert body["bottleneck_team"] is None
 
 
 async def test_state_times_for_unknown_team_is_404(client: AsyncClient) -> None:

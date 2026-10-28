@@ -489,6 +489,7 @@ class StateTimeRead(BaseModel):
     items: int
     queue: int
     wait_state: bool
+    team: str | None
 
 
 class StateTimesRead(BaseModel):
@@ -498,6 +499,7 @@ class StateTimesRead(BaseModel):
     min_sample: int
     states: list[StateTimeRead]
     bottleneck: str | None
+    bottleneck_team: str | None
 
 
 class HealthComponentRead(BaseModel):

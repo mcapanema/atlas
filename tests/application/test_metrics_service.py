@@ -102,6 +102,73 @@ async def test_state_times_load_the_team_scope() -> None:
     assert [(s.state, s.total) for s in result.states] == [("In Progress", timedelta(days=4))]
 
 
+def _reviewed(item: WorkItem) -> list[Event]:
+    """Started into In Review 6 days ago, completed 2 days ago."""
+    return [
+        Event(
+            work_item_id=item.id,
+            type=type_,
+            occurred_at=NOW - timedelta(days=days_ago),
+            from_state=from_state,
+            to_state=to_state,
+        )
+        for from_state, to_state, type_, days_ago in (
+            ("Todo", "In Review", EventType.STARTED, 6),
+            ("In Review", "Done", EventType.COMPLETED, 2),
+        )
+    ]
+
+
+async def _project_state_times(
+    item_teams: list[Team], known: list[Team] | None
+) -> list[tuple[str | None, str]]:
+    """(team, state) rows of a project whose items belong to `item_teams`."""
+    project_id = uuid4()
+    items = [WorkItem(team_id=t.id, title="Item", project_id=project_id) for t in item_teams]
+    service = MetricsService(
+        InMemoryWorkItemRepository(items),
+        InMemoryEventRepository([e for item in items for e in _reviewed(item)]),
+        teams=InMemoryTeamRepository(known) if known is not None else None,
+    )
+    result = await service.get_state_times(project_id=project_id, now=NOW)
+    return sorted(((s.team, s.state) for s in result.states), key=str)
+
+
+async def test_state_times_split_a_multi_team_project_by_team() -> None:
+    platform = Team(organization_id=ORG, name="Platform")
+    growth = Team(organization_id=ORG, name="Growth")
+
+    rows = await _project_state_times([platform, growth], [platform, growth])
+
+    assert set(rows) == {("Platform", "In Review"), ("Growth", "In Review")}
+
+
+async def test_state_times_of_a_single_team_project_have_no_team() -> None:
+    platform = Team(organization_id=ORG, name="Platform")
+
+    rows = await _project_state_times([platform, platform], [platform])
+
+    assert rows == [(None, "In Review")]
+
+
+async def test_state_times_label_a_missing_team_by_its_id() -> None:
+    platform = Team(organization_id=ORG, name="Platform")
+    growth = Team(organization_id=ORG, name="Growth")
+
+    rows = await _project_state_times([platform, growth], [platform])
+
+    assert set(rows) == {("Platform", "In Review"), (str(growth.id), "In Review")}
+
+
+async def test_state_times_without_a_team_repository_have_no_team() -> None:
+    platform = Team(organization_id=ORG, name="Platform")
+    growth = Team(organization_id=ORG, name="Growth")
+
+    rows = await _project_state_times([platform, growth], None)
+
+    assert rows == [(None, "In Review")]
+
+
 async def test_team_metrics_scope_to_the_requested_team() -> None:
     other_teams_item = _item(uuid4())
     service = MetricsService(

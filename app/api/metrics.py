@@ -170,10 +170,12 @@ async def get_state_times(
                 items=s.items,
                 queue=s.queue,
                 wait_state=s.wait_state,
+                team=s.team,
             )
             for s in result.states
         ],
         bottleneck=result.bottleneck,
+        bottleneck_team=result.bottleneck_team,
     )
 
 

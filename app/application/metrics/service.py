@@ -101,7 +101,22 @@ class MetricsService:
             window_days=window_days,
             rules=scope.rules,
             stream_rules=scope.stream_rules,
+            stream_teams=await self._stream_teams(scope),
         )
+
+    async def _stream_teams(self, scope: ScopeSamples) -> list[str | None] | None:
+        """Each stream's team name when the scope spans teams; None for one team.
+
+        A team the repository no longer knows is labelled by its id.
+        """
+        team_ids = [item.team_id for item, _ in scope.items_with_samples]
+        if self._teams is None or len(set(team_ids)) < 2:
+            return None
+        names: dict[UUID, str] = {}
+        for team_id in set(team_ids):
+            team = await self._teams.get(team_id)
+            names[team_id] = team.name if team is not None else str(team_id)
+        return [names[team_id] for team_id in team_ids]
 
     async def get_flow_history(
         self,
