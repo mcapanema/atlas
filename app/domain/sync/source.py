@@ -8,6 +8,7 @@ resolved during sync.
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.domain._time import require_aware
 from app.domain.codebases.entities import DeploymentStatus
 from app.domain.events.entities import EventType
 from app.domain.work_items.entities import StateType, WorkItemType
@@ -48,8 +49,7 @@ class SourceEvent:
     detail: str | None = None
 
     def __post_init__(self) -> None:
-        if self.occurred_at.tzinfo is None:
-            raise ValueError("SourceEvent.occurred_at must be timezone-aware")
+        require_aware("SourceEvent", occurred_at=self.occurred_at)
 
 
 @dataclass(frozen=True)
@@ -78,12 +78,6 @@ class SourceWorkItem:
     key: str | None = None
 
 
-def _require_aware(owner: str, **values: datetime | None) -> None:
-    for name, value in values.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
-
-
 @dataclass(frozen=True)
 class SourceCodebase:
     external_id: str
@@ -106,7 +100,7 @@ class SourcePullRequest:
     work_item_keys: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "SourcePullRequest",
             opened_at=self.opened_at,
             first_commit_at=self.first_commit_at,
@@ -125,4 +119,4 @@ class SourceDeployment:
     finished_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        _require_aware("SourceDeployment", started_at=self.started_at, finished_at=self.finished_at)
+        require_aware("SourceDeployment", started_at=self.started_at, finished_at=self.finished_at)

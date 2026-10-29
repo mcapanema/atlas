@@ -10,14 +10,14 @@ NAIVE = datetime(2026, 10, 1)  # noqa: DTZ001 — naive on purpose
 
 
 def test_codebase_rejects_blank_production_environment() -> None:
-    with pytest.raises(ValueError, match="must"):
+    with pytest.raises(ValueError, match="production_environment must not be empty"):
         Codebase(
             organization_id=uuid4(), name="acme/api", external_id="R1", production_environment="  "
         )
 
 
 def test_codebase_rejects_blank_name() -> None:
-    with pytest.raises(ValueError, match="must"):
+    with pytest.raises(ValueError, match="name must not be empty"):
         Codebase(organization_id=uuid4(), name=" ", external_id="R1")
 
 
@@ -29,7 +29,7 @@ def test_codebase_strips_and_defaults_to_unmapped() -> None:
 
 
 def test_codebase_rejects_naive_last_synced_at() -> None:
-    with pytest.raises(ValueError, match="must"):
+    with pytest.raises(ValueError, match="must be timezone-aware"):
         Codebase(
             organization_id=uuid4(),
             name="acme/api",
@@ -39,7 +39,7 @@ def test_codebase_rejects_naive_last_synced_at() -> None:
 
 
 def test_pull_request_rejects_naive_opened_at() -> None:
-    with pytest.raises(ValueError, match="must"):
+    with pytest.raises(ValueError, match="must be timezone-aware"):
         PullRequest(
             codebase_id=uuid4(),
             external_id="P1",
@@ -50,7 +50,7 @@ def test_pull_request_rejects_naive_opened_at() -> None:
 
 
 def test_pull_request_rejects_naive_merged_at() -> None:
-    with pytest.raises(ValueError, match="must"):
+    with pytest.raises(ValueError, match="must be timezone-aware"):
         PullRequest(
             codebase_id=uuid4(),
             external_id="P1",
@@ -69,7 +69,7 @@ def test_deployment_defaults_to_pending() -> None:
 
 
 def test_deployment_rejects_naive_finished_at() -> None:
-    with pytest.raises(ValueError, match="must"):
+    with pytest.raises(ValueError, match="must be timezone-aware"):
         Deployment(
             codebase_id=uuid4(),
             external_id="D1",

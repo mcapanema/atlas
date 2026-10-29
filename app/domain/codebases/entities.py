@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from app.domain._time import utcnow
+from app.domain._time import require_aware, utcnow
 
 
 class DeploymentStatus(StrEnum):
@@ -14,12 +14,6 @@ class DeploymentStatus(StrEnum):
     SUCCESS = "success"
     # Failed or errored.
     FAILURE = "failure"
-
-
-def _require_aware(owner: str, **values: datetime | None) -> None:
-    for name, value in values.items():
-        if value is not None and value.tzinfo is None:
-            raise ValueError(f"{owner}.{name} must be timezone-aware")
 
 
 @dataclass
@@ -43,7 +37,7 @@ class Codebase:
         self.production_environment = self.production_environment.strip()
         if not self.production_environment:
             raise ValueError("Codebase production_environment must not be empty")
-        _require_aware("Codebase", last_synced_at=self.last_synced_at)
+        require_aware("Codebase", last_synced_at=self.last_synced_at)
 
 
 @dataclass
@@ -64,7 +58,7 @@ class PullRequest:
     id: UUID = field(default_factory=uuid4)
 
     def __post_init__(self) -> None:
-        _require_aware(
+        require_aware(
             "PullRequest",
             opened_at=self.opened_at,
             first_commit_at=self.first_commit_at,
@@ -88,4 +82,4 @@ class Deployment:
     id: UUID = field(default_factory=uuid4)
 
     def __post_init__(self) -> None:
-        _require_aware("Deployment", started_at=self.started_at, finished_at=self.finished_at)
+        require_aware("Deployment", started_at=self.started_at, finished_at=self.finished_at)
