@@ -25,7 +25,10 @@ logger = logging.getLogger(__name__)
 # OVERLAP before the last sync, or at its oldest pending deployment started within
 # PENDING_REFRESH, whichever is earlier. A pending deployment is re-read until it
 # settles or turns PENDING_REFRESH old, then it is treated as abandoned. If one
-# ever matters, fetch the abandoned deployment by id.
+# ever matters, fetch the abandoned deployment by id. A repository whose deploy tool
+# never posts deployment statuses (or whose deployments are superseded before a final
+# status) keeps deployments PENDING, so each of its syncs fetches up to PENDING_REFRESH
+# of deployments instead of about OVERLAP. That cost is expected and bounded, not a bug.
 BACKFILL = timedelta(days=180)
 OVERLAP = timedelta(days=1)
 PENDING_REFRESH = timedelta(days=7)
