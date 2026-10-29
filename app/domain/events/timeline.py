@@ -132,7 +132,8 @@ def blocked_periods(
     Sources: explicit BLOCKED/UNBLOCKED events (always), stays in workflow
     states the rules call blocked (one source, so moving between two blocked
     states keeps it open), label events whose label the rules call blocked
-    (each label its own source), and — with blocked_by_relations — "blocked
+    (each label its own source; listed labels by default, the name pattern
+    on opt-in), and — with blocked_by_relations, off by default — "blocked
     by" relations (each blocker its own source). Overlapping sources form one
     period, never a double count; a close for a source that isn't open is
     ignored (truncated history).

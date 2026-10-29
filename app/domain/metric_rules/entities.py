@@ -117,10 +117,14 @@ class MetricRules:
     canceled_then_reopened: CanceledThenReopened = "canceled"
     # Blocked signal: label names and workflow-state names (each by the
     # built-in pattern and/or a list), and Linear "blocked by" relations
-    # (history only — ADR-0011). Every source is on by default (ADR-0015).
-    blocked_label_pattern: bool = True
+    # (history only — ADR-0011). Only explicit sources count by default
+    # (ADR-0025, amends ADR-0015): blocked-named states and listed labels.
+    # The label pattern is opt-in (words like "Bloqueante" also name billing
+    # rules), and so are relations (teams add them to record planned order
+    # and start the work anyway).
+    blocked_label_pattern: bool = False
     blocked_label_names: tuple[str, ...] = ()
-    blocked_by_relations: bool = True
+    blocked_by_relations: bool = False
     blocked_state_pattern: bool = True
     blocked_state_names: tuple[str, ...] = ()
     # Wait signal: workflow-state names (exact, any case) where work waits

@@ -11,7 +11,8 @@ from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from tests.fakes import CALENDAR_DAYS
 
 ITEM = uuid4()
-WAIT = replace(CALENDAR_DAYS, wait_state_names=("In Review",))
+# "Blocked" is listed: the wait tests overlap a blocked label with review.
+WAIT = replace(CALENDAR_DAYS, wait_state_names=("In Review",), blocked_label_names=("Blocked",))
 
 
 def test_no_wait_states_by_default() -> None:

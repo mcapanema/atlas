@@ -19,10 +19,10 @@ def test_new_rule_defaults_reproduce_todays_behavior() -> None:
     assert DEFAULT_RULES.lead_time_start == "created"
     assert DEFAULT_RULES.done_then_reopened == "delivered"
     assert DEFAULT_RULES.canceled_then_reopened == "canceled"
-    assert DEFAULT_RULES.blocked_label_pattern is True
+    assert DEFAULT_RULES.blocked_label_pattern is False
     assert DEFAULT_RULES.blocked_label_names == ()
-    # ADR-0015: relations count by default (all three blocked sources on).
-    assert DEFAULT_RULES.blocked_by_relations is True
+    # ADR-0025: only explicit sources (states, listed labels) count by default.
+    assert DEFAULT_RULES.blocked_by_relations is False
     assert DEFAULT_RULES.remaining_state_types == OPEN_STATE_TYPES
     assert DEFAULT_RULES.type_labels == ()
 
@@ -88,8 +88,10 @@ def test_builtin_pattern_matches_whole_words_only() -> None:
     blocked = ["Blocked", "blocker: external", "Blocking", "block", "blocked_by", "Blockers"]
     not_blocked = ["regras-blockly", "unblock-me-later", "blocks", "unblocked", "bug"]
 
-    assert all(DEFAULT_RULES.is_blocked_label(name) for name in blocked)
-    assert not any(DEFAULT_RULES.is_blocked_label(name) for name in not_blocked)
+    pattern = MetricRules(blocked_label_pattern=True)
+
+    assert all(pattern.is_blocked_label(name) for name in blocked)
+    assert not any(pattern.is_blocked_label(name) for name in not_blocked)
 
 
 def test_builtin_pattern_matches_portuguese_blocked_words() -> None:
@@ -97,12 +99,13 @@ def test_builtin_pattern_matches_portuguese_blocked_words() -> None:
     # 2026-10-08 data) or a "Bloqueado" column; "Desbloqueado" is the opposite.
     blocked = ["Bloqueante", "bloqueado", "BLOQUEADA", "Bloqueados", "Bloqueio", "Bloqueado:"]
     not_blocked = ["Desbloqueado", "desbloqueio", "bloquear", "Bloqueador-x"]
+    pattern = MetricRules(blocked_label_pattern=True)
 
     for name in blocked:
-        assert DEFAULT_RULES.is_blocked_label(name), name
+        assert pattern.is_blocked_label(name), name
         assert DEFAULT_RULES.is_blocked_state(name), name
     for name in not_blocked:
-        assert not DEFAULT_RULES.is_blocked_label(name), name
+        assert not pattern.is_blocked_label(name), name
         assert not DEFAULT_RULES.is_blocked_state(name), name
 
 
