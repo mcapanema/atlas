@@ -20,7 +20,14 @@ from app.domain.organizations.entities import Organization
 from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
-from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync.source import (
+    SourceCodebase,
+    SourceDeployment,
+    SourceProject,
+    SourcePullRequest,
+    SourceTeam,
+    SourceWorkItem,
+)
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem
@@ -300,6 +307,45 @@ class FakeDataSource:
 
     async def fetch_organization_name(self) -> str:
         return self.organization_name
+
+
+class InMemoryCodeHostSource:
+    """Configurable CodeHostSource. Attributes are mutable between syncs.
+
+    `pull_requests` / `deployments` map a codebase external id to its rows;
+    fetches return only rows at or after `since` (a PR counts by its latest
+    timestamp) and record `(kind, codebase_external_id, since)` in `calls`.
+    """
+
+    def __init__(
+        self,
+        codebases: list[SourceCodebase] | None = None,
+        pull_requests: dict[str, list[SourcePullRequest]] | None = None,
+        deployments: dict[str, list[SourceDeployment]] | None = None,
+    ) -> None:
+        self.codebases = codebases or []
+        self.pull_requests = pull_requests or {}
+        self.deployments = deployments or {}
+        self.calls: list[tuple[str, str, datetime]] = []
+
+    async def fetch_codebases(self) -> list[SourceCodebase]:
+        return self.codebases
+
+    async def fetch_pull_requests(
+        self, codebase_external_id: str, since: datetime
+    ) -> list[SourcePullRequest]:
+        self.calls.append(("pull_requests", codebase_external_id, since))
+        return [
+            p
+            for p in self.pull_requests.get(codebase_external_id, [])
+            if max(t for t in (p.opened_at, p.merged_at, p.closed_at) if t is not None) >= since
+        ]
+
+    async def fetch_deployments(
+        self, codebase_external_id: str, since: datetime
+    ) -> list[SourceDeployment]:
+        self.calls.append(("deployments", codebase_external_id, since))
+        return [d for d in self.deployments.get(codebase_external_id, []) if d.started_at >= since]
 
 
 class InMemoryMetricSnapshotRepository:

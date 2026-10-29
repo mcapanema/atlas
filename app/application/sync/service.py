@@ -45,6 +45,10 @@ class SyncPhase(StrEnum):
     TEAMS = "teams"
     PROJECTS = "projects"
     WORK_ITEMS = "work_items"
+    # The code sync's phases (`CodeSyncService`).
+    CODEBASES = "codebases"
+    PULL_REQUESTS = "pull_requests"
+    DEPLOYMENTS = "deployments"
     SNAPSHOTS = "snapshots"
 
 

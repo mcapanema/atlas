@@ -1,0 +1,247 @@
+import logging
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
+from uuid import UUID
+
+from app.application.sync.service import PhaseCallback, SyncPhase, UnknownOrganizationError
+from app.domain._time import utcnow
+from app.domain.codebases.entities import Codebase, Deployment, PullRequest
+from app.domain.codebases.repository import (
+    CodebaseRepository,
+    DeploymentRepository,
+    PullRequestRepository,
+)
+from app.domain.events.entities import Event, EventType
+from app.domain.events.repository import EventRepository
+from app.domain.organizations.repository import OrganizationRepository
+from app.domain.sync.port import CodeHostSource
+from app.domain.work_items.repository import WorkItemRepository
+
+logger = logging.getLogger(__name__)
+
+# ponytail: a codebase's first fetch reaches back BACKFILL; later fetches start
+# OVERLAP before the last sync. The overlap assumes a deployment's status settles
+# within a day; widen it (or re-read open deployments) if pending deployments stay stale.
+BACKFILL = timedelta(days=180)
+OVERLAP = timedelta(days=1)
+
+
+@dataclass(frozen=True)
+class CodeSyncSummary:
+    """Counts of rows written by one code sync run."""
+
+    organization_id: UUID
+    # Created or renamed.
+    codebases: int
+    # Created or changed.
+    pull_requests: int
+    deployments: int
+    # REVIEW/MERGED events inserted.
+    events: int
+
+
+class CodeSyncService:
+    """Pulls a CodeHostSource into the codebases slice, idempotently.
+
+    Codebases are matched by external_id and never pruned; new ones start
+    unmapped and are never fetched until a team is set. Pull requests and
+    deployments of mapped codebases are upserted by external_id (written only
+    when changed). A final link pass turns stored pull requests into REVIEW and
+    MERGED events of the work items their keys name, so items synced after the
+    pull request, or rebuilt, are still linked. Running it twice is a no-op.
+    """
+
+    def __init__(
+        self,
+        source: CodeHostSource,
+        organizations: OrganizationRepository,
+        codebases: CodebaseRepository,
+        pull_requests: PullRequestRepository,
+        deployments: DeploymentRepository,
+        work_items: WorkItemRepository,
+        events: EventRepository,
+    ) -> None:
+        self._source = source
+        self._organizations = organizations
+        self._codebases = codebases
+        self._pull_requests = pull_requests
+        self._deployments = deployments
+        self._work_items = work_items
+        self._events = events
+
+    async def resolve_organization(self, organization_id: UUID | None) -> UUID:
+        if organization_id is not None:
+            if await self._organizations.get(organization_id) is None:
+                raise UnknownOrganizationError(f"Organization {organization_id} does not exist")
+            return organization_id
+        existing = await self._organizations.list()
+        if len(existing) == 1:
+            return existing[0].id
+        if len(existing) > 1:
+            # ValueError on purpose: the global handler answers 422.
+            raise ValueError("Multiple organizations exist; specify organization_id")
+        raise ValueError("No organization yet; run a Linear sync first")
+
+    async def sync(
+        self,
+        organization_id: UUID,
+        *,
+        now: datetime | None = None,
+        on_phase: PhaseCallback | None = None,
+    ) -> CodeSyncSummary:
+        await self.resolve_organization(organization_id)
+        now = now or utcnow()
+
+        def report(phase: SyncPhase) -> None:
+            if on_phase is not None:
+                on_phase(phase)
+
+        logger.info("Code sync started for organization %s", organization_id)
+        report(SyncPhase.CODEBASES)
+        written = await self._sync_codebases(organization_id)
+        mapped = [c for c in await self._codebases.list(organization_id) if c.team_id is not None]
+        report(SyncPhase.PULL_REQUESTS)
+        pull_requests = sum([await self._fetch_pull_requests(c, now) for c in mapped])
+        report(SyncPhase.DEPLOYMENTS)
+        deployments = sum([await self._fetch_deployments(c, now) for c in mapped])
+        events = await self._link(mapped)
+        for codebase in mapped:
+            await self._codebases.update(replace(codebase, last_synced_at=now))
+        summary = CodeSyncSummary(organization_id, written, pull_requests, deployments, events)
+        logger.info(
+            "Code sync finished for organization %s: codebases=%d pull_requests=%d "
+            "deployments=%d events=%d",
+            organization_id,
+            summary.codebases,
+            summary.pull_requests,
+            summary.deployments,
+            summary.events,
+        )
+        return summary
+
+    async def _sync_codebases(self, organization_id: UUID) -> int:
+        existing = {c.external_id: c for c in await self._codebases.list(organization_id)}
+        written = 0
+        for source in await self._source.fetch_codebases():
+            stored = existing.get(source.external_id)
+            if stored is None:
+                await self._codebases.add(
+                    Codebase(
+                        organization_id=organization_id,
+                        name=source.name,
+                        external_id=source.external_id,
+                        url=source.url,
+                    )
+                )
+            elif (stored.name, stored.url) != (source.name.strip(), source.url):
+                await self._codebases.update(replace(stored, name=source.name, url=source.url))
+            else:
+                continue
+            written += 1
+        return written
+
+    @staticmethod
+    def _since(codebase: Codebase, now: datetime) -> datetime:
+        if codebase.last_synced_at is None:
+            return now - BACKFILL
+        return codebase.last_synced_at - OVERLAP
+
+    async def _fetch_pull_requests(self, codebase: Codebase, now: datetime) -> int:
+        sources = await self._source.fetch_pull_requests(
+            codebase.external_id, self._since(codebase, now)
+        )
+        stored = await self._pull_requests.get_by_external_ids([s.external_id for s in sources])
+        written = 0
+        for source in sources:
+            existing = stored.get(source.external_id)
+            row = PullRequest(
+                codebase_id=codebase.id,
+                external_id=source.external_id,
+                number=source.number,
+                title=source.title,
+                opened_at=source.opened_at,
+                url=source.url,
+                first_commit_at=source.first_commit_at,
+                merged_at=source.merged_at,
+                closed_at=source.closed_at,
+                merge_commit_sha=source.merge_commit_sha,
+                work_item_keys=source.work_item_keys,
+            )
+            if existing is None:
+                await self._pull_requests.add(row)
+            elif replace(row, id=existing.id) != existing:
+                await self._pull_requests.update(replace(row, id=existing.id))
+            else:
+                continue
+            written += 1
+        return written
+
+    async def _fetch_deployments(self, codebase: Codebase, now: datetime) -> int:
+        sources = await self._source.fetch_deployments(
+            codebase.external_id, self._since(codebase, now)
+        )
+        stored = await self._deployments.get_by_external_ids([s.external_id for s in sources])
+        written = 0
+        for source in sources:
+            existing = stored.get(source.external_id)
+            row = Deployment(
+                codebase_id=codebase.id,
+                external_id=source.external_id,
+                environment=source.environment,
+                sha=source.sha,
+                started_at=source.started_at,
+                status=source.status,
+                finished_at=source.finished_at,
+            )
+            if existing is None:
+                await self._deployments.add(row)
+            elif replace(row, id=existing.id) != existing:
+                await self._deployments.update(replace(row, id=existing.id))
+            else:
+                continue
+            written += 1
+        return written
+
+    async def _link(self, mapped: list[Codebase]) -> int:
+        """Insert the REVIEW/MERGED events of every stored pull request that names a work item."""
+        names = {c.id: c.name for c in mapped}
+        pull_requests = await self._pull_requests.list_for_codebases(list(names))
+        keys = sorted({key for pr in pull_requests for key in pr.work_item_keys})
+        items = await self._work_items.get_by_keys(keys) if keys else {}
+        candidates = [
+            event
+            for pr in pull_requests
+            for item in {items[k].id: items[k] for k in pr.work_item_keys if k in items}.values()
+            for event in _events_for(pr, names[pr.codebase_id], item.id)
+        ]
+        existing = await self._events.existing_external_ids(
+            [e.external_id for e in candidates if e.external_id is not None]
+        )
+        fresh = [e for e in candidates if e.external_id not in existing]
+        for event in fresh:
+            await self._events.add(event)
+        return len(fresh)
+
+
+def _events_for(pr: PullRequest, codebase_name: str, work_item_id: UUID) -> list[Event]:
+    detail = f"{codebase_name}#{pr.number}"
+    events = [
+        Event(
+            work_item_id=work_item_id,
+            type=EventType.REVIEW,
+            occurred_at=pr.opened_at,
+            external_id=f"{pr.external_id}:review:{work_item_id}",
+            detail=detail,
+        )
+    ]
+    if pr.merged_at is not None:
+        events.append(
+            Event(
+                work_item_id=work_item_id,
+                type=EventType.MERGED,
+                occurred_at=pr.merged_at,
+                external_id=f"{pr.external_id}:merged:{work_item_id}",
+                detail=detail,
+            )
+        )
+    return events
