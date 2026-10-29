@@ -14,6 +14,7 @@ from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType
 from app.domain.advisor.runs import AdviceRun
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
+from app.domain.metrics.dora import DoraBand, DoraMetrics
 from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
 
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -567,6 +568,49 @@ class StateTimesRead(BaseModel):
     bottleneck_team: str | None
 
 
+class DoraMetricsRead(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    codebases: int
+    min_sample: int
+    deployments: int
+    deploys_per_week: float
+    deploy_frequency_band: DoraBand | None
+    lead_time_median_seconds: float | None
+    lead_time_changes: int
+    lead_time_band: DoraBand | None
+    change_failure_rate: float | None
+    failed_deployments: int
+    finished_deployments: int
+    change_failure_band: DoraBand | None
+    restore_median_seconds: float | None
+    restores: int
+    restore_band: DoraBand | None
+
+    @classmethod
+    def of(cls, metrics: DoraMetrics) -> "DoraMetricsRead":
+        lead, restore = metrics.lead_time_median, metrics.restore_median
+        return cls(
+            window_start=metrics.window_start,
+            window_end=metrics.window_end,
+            codebases=metrics.codebases,
+            min_sample=metrics.min_sample,
+            deployments=metrics.deployments,
+            deploys_per_week=metrics.deploys_per_week,
+            deploy_frequency_band=metrics.deploy_frequency_band,
+            lead_time_median_seconds=lead.total_seconds() if lead is not None else None,
+            lead_time_changes=metrics.lead_time_changes,
+            lead_time_band=metrics.lead_time_band,
+            change_failure_rate=metrics.change_failure_rate,
+            failed_deployments=metrics.failed_deployments,
+            finished_deployments=metrics.finished_deployments,
+            change_failure_band=metrics.change_failure_band,
+            restore_median_seconds=restore.total_seconds() if restore is not None else None,
+            restores=metrics.restores,
+            restore_band=metrics.restore_band,
+        )
+
+
 class HealthComponentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -593,6 +637,7 @@ class ScopeOverviewRead(BaseModel):
     health: DeliveryHealthRead
     accuracy: ForecastAccuracyRead
     snapshots: list[MetricSnapshotRead]
+    dora: DoraMetricsRead | None = None
 
 
 class AdviceFeedbackCreate(BaseModel):

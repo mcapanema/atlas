@@ -12,6 +12,7 @@ from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metric_rules.service import MetricRulesService
+from app.application.metrics.dora import DoraService
 from app.application.metrics.service import MetricsService
 from app.application.organizations.service import OrganizationService
 from app.application.people.service import PeopleService
@@ -139,6 +140,18 @@ def get_metrics_service(session: SessionDep) -> MetricsService:
 
 
 MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
+
+
+def get_dora_service(session: SessionDep) -> DoraService:
+    return DoraService(
+        SqlAlchemyCodebaseRepository(session),
+        SqlAlchemyDeploymentRepository(session),
+        SqlAlchemyPullRequestRepository(session),
+        SqlAlchemyTeamRepository(session),
+    )
+
+
+DoraServiceDep = Annotated[DoraService, Depends(get_dora_service)]
 
 
 def get_forecast_service(session: SessionDep) -> ForecastService:

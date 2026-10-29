@@ -87,7 +87,10 @@ exception: it is generated in the background and stored (ADR-0023).
   DORA (`dora.py`, ADR-0025) computes a team's deploy frequency, change
   lead time, change failure rate and time to restore from its codebases'
   production deployments, pull requests and incidents, each banded by the
-  DORA report thresholds (no band below `health_min_sample`).
+  DORA report thresholds (deploy frequency has a band with any mapped
+  codebase; lead time, change failure rate and restore wait for
+  `health_min_sample` values). `DoraService` (`app/application/metrics/dora.py`)
+  feeds it a team's codebases and the scope's incident-labelled items.
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
@@ -117,12 +120,12 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 `ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
-`/api/metrics/health`, `/api/forecasts`, and `/api/recommendations` (`POST` starts a stored
+`/api/metrics/health`, `/api/metrics/dora` (team scope only; 422 for a project), `/api/forecasts`, and `/api/recommendations` (`POST` starts a stored
 background run and answers 202 — 409 until `ATLAS_OPENROUTER_API_KEY` is set,
 ADR-0005; `GET` reads the latest stored run for the same scope, persona and
 window, or `null`, with no key needed). `GET /api/metrics/overview`
 is the Executive Dashboard's per-team row: flow metrics, health, forecast
-accuracy and snapshot history from one scope load, identical to the
+accuracy, snapshot history and, for a team, `dora` from one scope load, identical to the
 standalone endpoints for the same query. The frontend consumes them
 on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
 dashboards — charted with Apache ECharts (ADR-0007) — plus the Advisor

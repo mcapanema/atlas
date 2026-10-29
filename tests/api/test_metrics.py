@@ -9,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.metrics import Period
 from app.application.scope import ScopeData, ScopeSampleLoader
+from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus
 from app.domain.people.entities import Person
 from app.domain.snapshots.entities import ForecastSnapshot
+from app.infrastructure.repositories.codebases import (
+    SqlAlchemyCodebaseRepository,
+    SqlAlchemyDeploymentRepository,
+)
 from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.snapshots import SqlAlchemyForecastSnapshotRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
@@ -829,3 +834,72 @@ async def test_overview_window_days_floors_at_health_minimum(client: AsyncClient
     response = await client.get(f"/api/metrics/overview?team_id={team_id}&window_days=6")
 
     assert response.status_code == 422
+
+
+async def _seed_dora_deployment(
+    sessionmaker: async_sessionmaker[AsyncSession], org_id: str, team_id: str
+) -> None:
+    codebase = Codebase(
+        organization_id=UUID(org_id), name="atlas", external_id="r1", team_id=UUID(team_id)
+    )
+    finished = datetime.now(UTC) - timedelta(days=1)
+    deployment = Deployment(
+        codebase_id=codebase.id,
+        external_id="d1",
+        environment="production",
+        sha="abc",
+        started_at=finished,
+        status=DeploymentStatus.SUCCESS,
+        finished_at=finished,
+    )
+    async with sessionmaker() as session:
+        await SqlAlchemyCodebaseRepository(session).add(codebase)
+        await SqlAlchemyDeploymentRepository(session).add(deployment)
+        await session.commit()
+
+
+async def test_dora_for_a_team(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    org_id, team_id = await create_org_and_team(client)
+    await _seed_dora_deployment(sessionmaker, org_id, team_id)
+
+    response = await client.get(f"/api/metrics/dora?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deployments"] == 1
+    assert body["codebases"] == 1
+    assert "lead_time_median_seconds" in body
+
+
+async def test_dora_rejects_a_project_scope(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    project = await client.post("/api/projects", json={"team_id": team_id, "name": "P"})
+    assert project.status_code in (200, 201)
+
+    response = await client.get(f"/api/metrics/dora?project_id={project.json()['id']}")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "DORA metrics are per team; provide team_id"
+
+
+async def test_dora_unknown_team_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/metrics/dora?team_id={uuid4()}")
+
+    assert response.status_code == 404
+
+
+async def test_overview_carries_dora_for_a_team_and_null_for_a_project(
+    client: AsyncClient,
+) -> None:
+    team_id = await create_team(client)
+    project = await client.post("/api/projects", json={"team_id": team_id, "name": "P"})
+
+    team_body = (await client.get(f"/api/metrics/overview?team_id={team_id}")).json()
+    project_body = (
+        await client.get(f"/api/metrics/overview?project_id={project.json()['id']}")
+    ).json()
+
+    assert team_body["dora"]["codebases"] == 0
+    assert project_body["dora"] is None
