@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -161,3 +161,25 @@ async def test_list_for_codebases_returns_only_those_codebases(session: AsyncSes
     assert await prs.list_for_codebases([a.id]) == [pr_a]
     assert await deployments.list_for_codebases([a.id]) == [d_a]
     assert await prs.list_for_codebases([]) == []
+
+
+async def test_oldest_pending_started_at(session: AsyncSession) -> None:
+    a = await _codebase(session, "a")
+    b = await _codebase(session, "b")
+    repo = SqlAlchemyDeploymentRepository(session)
+    t = datetime(2026, 10, 28, tzinfo=UTC)
+    for codebase, ext, age, status in [
+        (a, "a1", 10, DeploymentStatus.PENDING),
+        (a, "a2", 3, DeploymentStatus.PENDING),
+        (a, "a3", 5, DeploymentStatus.SUCCESS),
+        (b, "b1", 4, DeploymentStatus.PENDING),
+    ]:
+        row = _deployment(codebase, ext)
+        row.started_at = t - timedelta(days=age)
+        row.status = status
+        await repo.add(row)
+
+    assert await repo.oldest_pending_started_at(a.id, since=t - timedelta(days=7)) == t - timedelta(
+        days=3
+    )
+    assert await repo.oldest_pending_started_at(a.id, since=t - timedelta(days=1)) is None

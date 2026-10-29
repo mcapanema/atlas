@@ -280,3 +280,15 @@ class SqlAlchemyDeploymentRepository:
             )
             counts.update(dict(result.all()))
         return counts
+
+    async def oldest_pending_started_at(
+        self, codebase_id: UUID, *, since: datetime
+    ) -> datetime | None:
+        result = await self._session.execute(
+            select(func.min(DeploymentModel.started_at)).where(
+                DeploymentModel.codebase_id == codebase_id,
+                DeploymentModel.status == DeploymentStatus.PENDING.value,
+                DeploymentModel.started_at >= since,
+            )
+        )
+        return result.scalar_one()

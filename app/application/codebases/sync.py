@@ -22,10 +22,13 @@ from app.domain.work_items.repository import WorkItemRepository
 logger = logging.getLogger(__name__)
 
 # ponytail: a codebase's first fetch reaches back BACKFILL; later fetches start
-# OVERLAP before the last sync. The overlap assumes a deployment's status settles
-# within a day; widen it (or re-read open deployments) if pending deployments stay stale.
+# OVERLAP before the last sync, or at its oldest pending deployment started within
+# PENDING_REFRESH, whichever is earlier. A pending deployment is re-read until it
+# settles or turns PENDING_REFRESH old, then it is treated as abandoned. If one
+# ever matters, fetch the abandoned deployment by id.
 BACKFILL = timedelta(days=180)
 OVERLAP = timedelta(days=1)
+PENDING_REFRESH = timedelta(days=7)
 
 
 @dataclass(frozen=True)
@@ -186,9 +189,13 @@ class CodeSyncService:
         return await _upsert(self._pull_requests, rows)
 
     async def _fetch_deployments(self, codebase: Codebase, now: datetime) -> int:
-        sources = await self._source.fetch_deployments(
-            codebase.external_id, self._since(codebase, now)
+        since = self._since(codebase, now)
+        pending = await self._deployments.oldest_pending_started_at(
+            codebase.id, since=now - PENDING_REFRESH
         )
+        if pending is not None:
+            since = min(since, pending)
+        sources = await self._source.fetch_deployments(codebase.external_id, since)
         rows = [
             Deployment(
                 codebase_id=codebase.id,

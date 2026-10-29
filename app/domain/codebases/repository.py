@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -46,3 +47,9 @@ class DeploymentRepository(Protocol):
     async def list_for_codebases(self, codebase_ids: list[UUID]) -> list[Deployment]: ...
 
     async def count_by_codebase(self, codebase_ids: list[UUID]) -> dict[UUID, int]: ...
+
+    async def oldest_pending_started_at(
+        self, codebase_id: UUID, *, since: datetime
+    ) -> datetime | None:
+        """Earliest started_at of the codebase's PENDING deployments at or after `since`."""
+        ...

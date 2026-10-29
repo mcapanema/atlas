@@ -13,7 +13,7 @@ from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
-from app.domain.codebases.entities import Codebase, Deployment, PullRequest
+from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
@@ -643,3 +643,15 @@ class InMemoryDeploymentRepository:
             if d.codebase_id in wanted:
                 counts[d.codebase_id] = counts.get(d.codebase_id, 0) + 1
         return counts
+
+    async def oldest_pending_started_at(
+        self, codebase_id: UUID, *, since: datetime
+    ) -> datetime | None:
+        starts = [
+            d.started_at
+            for d in self._rows.values()
+            if d.codebase_id == codebase_id
+            and d.status == DeploymentStatus.PENDING
+            and d.started_at >= since
+        ]
+        return min(starts, default=None)

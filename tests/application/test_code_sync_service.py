@@ -6,7 +6,7 @@ import pytest
 
 from app.application.codebases.sync import CodeSyncService, CodeSyncSummary
 from app.application.sync.service import SyncPhase, UnknownOrganizationError
-from app.domain.codebases.entities import DeploymentStatus
+from app.domain.codebases.entities import Deployment, DeploymentStatus
 from app.domain.events.entities import EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceCodebase, SourceDeployment, SourcePullRequest
@@ -434,3 +434,80 @@ async def test_a_pull_request_returned_twice_is_stored_once_as_its_first_copy() 
     stored = await h.pull_requests.list_for_codebases([codebase.id])
     assert [p.title for p in stored] == ["Newest"]
     assert summary.pull_requests == 1
+
+
+async def _pending_harness(
+    started: timedelta | None, last_synced: timedelta | None
+) -> tuple[Harness, InMemoryCodeHostSource]:
+    """A mapped codebase, optionally synced `last_synced` ago, with a stored PENDING d1."""
+    source = api_source(
+        pull_requests={"r1": []},
+        deployments={
+            "r1": [deployment(status=DeploymentStatus.SUCCESS, finished_at=NOW - timedelta(days=2))]
+        },
+    )
+    h = await seeded(source)
+    codebase = (await h.codebases.list(h.org.id))[0]
+    if last_synced is not None:
+        await h.codebases.update(replace(codebase, last_synced_at=NOW - last_synced))
+    if started is not None:
+        await h.deployments.add(_stored_deployment(codebase.id, NOW - started))
+    return h, source
+
+
+def _stored_deployment(codebase_id: UUID, started_at: datetime) -> Deployment:
+    return Deployment(
+        codebase_id=codebase_id,
+        external_id="d1",
+        environment="production",
+        sha="abc",
+        started_at=started_at,
+        status=DeploymentStatus.PENDING,
+    )
+
+
+def _since(source: InMemoryCodeHostSource, kind: str) -> datetime:
+    return next(since for k, _, since in source.calls if k == kind)
+
+
+async def test_pending_deployment_is_refreshed_after_the_overlap() -> None:
+    started = timedelta(days=3, hours=1)
+    h, source = await _pending_harness(started, timedelta(days=1))
+    source.deployments["r1"] = [
+        deployment(
+            started_at=NOW - started,
+            status=DeploymentStatus.SUCCESS,
+            finished_at=NOW - timedelta(days=2),
+        )
+    ]
+
+    await h.sync()
+
+    assert _since(source, "deployments") == NOW - started
+    stored = (await h.deployments.get_by_external_ids(["d1"]))["d1"]
+    assert stored.status == DeploymentStatus.SUCCESS
+    assert stored.finished_at == NOW - timedelta(days=2)
+
+
+async def test_abandoned_pending_deployment_stops_widening_the_fetch() -> None:
+    h, source = await _pending_harness(timedelta(days=30), timedelta(days=1))
+
+    await h.sync()
+
+    assert _since(source, "deployments") == NOW - timedelta(days=2)
+
+
+async def test_recent_pending_deployment_does_not_narrow_the_window() -> None:
+    h, source = await _pending_harness(timedelta(days=1), None)
+
+    await h.sync()
+
+    assert _since(source, "deployments") == NOW - timedelta(days=180)
+
+
+async def test_pull_requests_keep_the_normal_window() -> None:
+    h, source = await _pending_harness(timedelta(days=3, hours=1), timedelta(days=1))
+
+    await h.sync()
+
+    assert _since(source, "pull_requests") == NOW - timedelta(days=2)

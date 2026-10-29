@@ -84,9 +84,10 @@ class GitHubDataSource:
         )
         return map_tolerantly(nodes, map_pull_request, "pull request", vendor="GitHub")
 
-    # ponytail: deployments are filtered by createdAt, so an old deployment
-    # whose status changes after `since` is not refreshed; the 1-day sync
-    # overlap is the ceiling. Fetch statuses by update time if that matters.
+    # ponytail: deployments are filtered by createdAt, so one whose status
+    # changes after `since` is refreshed only while the sync window reaches its
+    # start: the overlap, or back to the oldest pending deployment (PENDING_REFRESH
+    # in the sync service). Fetch statuses by update time if that matters.
     async def fetch_deployments(
         self, codebase_external_id: str, since: datetime
     ) -> list[SourceDeployment]:
