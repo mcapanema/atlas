@@ -476,5 +476,5 @@ def test_busy_error_names_a_code_job_a_github_sync() -> None:
     code = SyncJob(SyncJobRequest(uuid4(), "code", "manual"))
     linear = SyncJob(SyncJobRequest(uuid4(), "organization", "manual"))
 
-    assert str(SyncBusyError(code)).startswith("A GitHub sync is already running")
-    assert str(SyncBusyError(linear)).startswith("A organization sync is already running")
+    assert str(SyncBusyError(code)).startswith("Another GitHub sync is already running")
+    assert str(SyncBusyError(linear)).startswith("Another organization sync is already running")

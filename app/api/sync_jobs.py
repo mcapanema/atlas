@@ -110,7 +110,7 @@ class SyncBusyError(Exception):
 
     def __init__(self, job: SyncJob) -> None:
         super().__init__(
-            f"A {kind_label(job.request.kind)} sync is already running (job {job.id}); "
+            f"Another {kind_label(job.request.kind)} sync is already running (job {job.id}); "
             "try again when it ends"
         )
         self.job = job
