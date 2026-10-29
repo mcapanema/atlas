@@ -160,6 +160,37 @@ export const agingWipFixture = {
   ],
 };
 
+export const stateTimesFixture = {
+  window_start: "2026-06-10T00:00:00Z",
+  window_end: "2026-07-10T00:00:00Z",
+  measured: 6,
+  min_sample: 5,
+  states: [
+    {
+      state: "In Review",
+      total_seconds: 691200,
+      share: 0.73,
+      median_seconds: 172800,
+      items: 6,
+      queue: 4,
+      wait_state: true,
+      team: null,
+    },
+    {
+      state: "In Progress",
+      total_seconds: 259200,
+      share: 0.27,
+      median_seconds: 43200,
+      items: 6,
+      queue: 2,
+      wait_state: false,
+      team: null,
+    },
+  ],
+  bottleneck: "In Review",
+  bottleneck_team: null,
+};
+
 export const healthFixture = {
   window_start: "2026-06-10T00:00:00Z",
   window_end: "2026-07-10T00:00:00Z",
@@ -221,6 +252,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/metrics/aging-wip")) {
       return Promise.resolve(jsonResponse(agingWipFixture));
+    }
+    if (url.startsWith("/api/metrics/state-times")) {
+      return Promise.resolve(jsonResponse(stateTimesFixture));
     }
     if (url.startsWith("/api/metrics/health")) {
       return Promise.resolve(jsonResponse(healthFixture));

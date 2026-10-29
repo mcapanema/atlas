@@ -211,6 +211,7 @@ async def test_meeting_brief_composes_digest(
             assert "Flow metrics" in text
             assert "Delivery health" in text
             assert "Aging WIP" in text
+            assert "Time in state" in text
 
 
 async def test_meeting_brief_scope_errors_surface(

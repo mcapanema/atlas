@@ -481,6 +481,27 @@ class AgingWipRead(BaseModel):
     history_days: int
 
 
+class StateTimeRead(BaseModel):
+    state: str
+    total_seconds: float
+    share: float
+    median_seconds: float
+    items: int
+    queue: int
+    wait_state: bool
+    team: str | None
+
+
+class StateTimesRead(BaseModel):
+    window_start: datetime
+    window_end: datetime
+    measured: int
+    min_sample: int
+    states: list[StateTimeRead]
+    bottleneck: str | None
+    bottleneck_team: str | None
+
+
 class HealthComponentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

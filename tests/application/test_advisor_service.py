@@ -37,6 +37,10 @@ async def test_build_context_assembles_scope_metrics() -> None:
     assert context.distribution.window_start == now - timedelta(days=90)
     assert context.forecast.window_end == now
     assert context.forecast.remaining == 0
+    # time in state reads the same window as the flow summary
+    assert context.state_times is not None
+    assert context.state_times.window_start == now - timedelta(days=7)
+    assert context.state_times.window_end == now
 
 
 class CountingWorkItems(InMemoryWorkItemRepository):
@@ -92,6 +96,8 @@ async def test_build_meeting_context_assembles_the_full_picture() -> None:
     # distribution and forecast keep their 90-day dashboard defaults
     assert context.delivery.distribution.window_start == now - timedelta(days=90)
     assert context.delivery.forecast.window_end == now
+    assert context.delivery.state_times is not None
+    assert context.delivery.state_times.window_start == now - timedelta(days=14)
 
 
 async def test_build_meeting_context_forwards_planning_what_ifs() -> None:

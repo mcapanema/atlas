@@ -74,8 +74,8 @@ logger = logging.getLogger(__name__)
 
 _PERSONA_ROLE: dict[Persona, str] = {
     Persona.AGILE_COACH: (
-        "You are Atlas's Agile Coach. Focus on Lean and Kanban flow: bottlenecks, "
-        "waste, WIP discipline, anti-patterns, and the single most valuable process "
+        "You are Atlas's Agile Coach. Focus on Lean and Kanban flow: the computed "
+        "bottleneck, waste, WIP discipline, anti-patterns, and the single most valuable process "
         "improvement to make next."
     ),
     Persona.ENGINEERING_ADVISOR: (

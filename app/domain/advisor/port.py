@@ -15,6 +15,7 @@ from app.domain.forecasting.monte_carlo import DeliveryForecast
 from app.domain.metrics.aging import AgingWip
 from app.domain.metrics.distribution import LeadTimeDistribution
 from app.domain.metrics.health import DeliveryHealth
+from app.domain.metrics.state_time import StateTimes
 from app.domain.metrics.summary import FlowMetrics
 
 
@@ -33,6 +34,8 @@ class DeliveryContext:
     flow: FlowMetrics
     distribution: LeadTimeDistribution
     forecast: DeliveryForecast
+    # Time in each state over the flow window, with the computed bottleneck.
+    state_times: StateTimes | None = None
 
 
 @dataclass(frozen=True)

@@ -52,7 +52,12 @@ class AdvisorService:
         )
         distribution = await self._metrics.get_lead_time_distribution(now=window_end, scope=scope)
         forecast = await self._forecasts.get_forecast(now=window_end, scope=scope)
-        return DeliveryContext(flow=flow, distribution=distribution, forecast=forecast)
+        state_times = await self._metrics.get_state_times(
+            window_days=window_days, now=window_end, scope=scope
+        )
+        return DeliveryContext(
+            flow=flow, distribution=distribution, forecast=forecast, state_times=state_times
+        )
 
     async def build_meeting_context(
         self,
@@ -72,7 +77,7 @@ class AdvisorService:
         retrospective and to the stats window otherwise.
         `remaining`/`target_date` are the planning-session what-ifs,
         forwarded to the forecast. The scope's items and events are loaded
-        once and shared by all five computations.
+        once and shared by all six computations.
         """
         window_end = now if now is not None else datetime.now(UTC)
         scope = await self._metrics.load_scope(team_id=team_id, project_id=project_id)
@@ -86,8 +91,13 @@ class AdvisorService:
             window_days=window, now=window_end, scope=scope
         )
         aging = await self._metrics.get_aging_wip(now=window_end, scope=scope)
+        state_times = await self._metrics.get_state_times(
+            window_days=window, now=window_end, scope=scope
+        )
         return MeetingContext(
-            delivery=DeliveryContext(flow=flow, distribution=distribution, forecast=forecast),
+            delivery=DeliveryContext(
+                flow=flow, distribution=distribution, forecast=forecast, state_times=state_times
+            ),
             health=health,
             aging=aging,
         )

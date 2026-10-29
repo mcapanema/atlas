@@ -18,6 +18,7 @@ import {
   mockMetricsFetch,
   requestUrl,
   snapshotsFixture,
+  stateTimesFixture,
 } from "../test/fixtures";
 import { renderWithClient } from "../test/render";
 import { FlowDashboard } from "./FlowDashboard";
@@ -169,6 +170,26 @@ describe("FlowDashboard", () => {
     ]);
   });
 
+  it("shows the Time in state card with the bottleneck", async () => {
+    mockMetricsFetch();
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("Time in state")).toBeInTheDocument();
+    expect(screen.getByText("Bottleneck")).toBeInTheDocument();
+  });
+
+  it("hides the Time in state card without state history", async () => {
+    mockMetricsFetch({
+      "/api/metrics/state-times": { ...stateTimesFixture, states: [], bottleneck: null },
+    });
+
+    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+
+    await screen.findByText("Aging WIP");
+    expect(screen.queryByText("Time in state")).toBeNull();
+  });
+
   it("renders the aging WIP table", async () => {
     mockMetricsFetch();
 
@@ -188,7 +209,9 @@ describe("FlowDashboard", () => {
     expect(screen.getByRole("columnheader", { name: "Owner" })).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "Blocked" })).toBeNull();
-    expect(screen.getAllByRole("columnheader")).toHaveLength(4);
+    const agingCard = screen.getByText("Aging WIP").closest(".ant-card");
+    if (!(agingCard instanceof HTMLElement)) throw new Error("no Aging WIP card");
+    expect(within(agingCard).getAllByRole("columnheader")).toHaveLength(4);
   });
 
   it("names the percentile threshold on the Age header", async () => {

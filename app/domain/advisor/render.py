@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from app.domain.advisor.port import DeliveryContext, MeetingContext
 from app.domain.metrics.aging import AgingWip
+from app.domain.metrics.state_time import StateTime, StateTimes
 
 
 def _days(delta: timedelta) -> str:
@@ -70,7 +71,56 @@ def render_context(context: DeliveryContext) -> str:
         lines.append("- no forecast (no historical throughput)")
     if forecast.confidence is not None:
         lines.append(f"- delivery confidence vs target date={forecast.confidence:.2f}")
+    if context.state_times is not None:
+        lines += _render_state_times(context.state_times)
     return "\n".join(lines)
+
+
+_STATE_LIMIT = 8
+
+
+def _state_name(state: StateTime) -> str:
+    """The quoted state, and its quoted team in a scope split by team."""
+    team = f" (team {quote_title(state.team)})" if state.team is not None else ""
+    return f"{quote_title(state.state)}{team}"
+
+
+def _render_state_times(state_times: StateTimes) -> list[str]:
+    """Time in each state, most first, and the computed bottleneck (state_time.py).
+
+    State and team names come from the issue tracker, so they are quoted
+    like titles.
+    """
+    if not state_times.states:
+        return ["Time in state: no state history in the flow window."]
+    lines = [
+        f"Time in state (in-cycle time of the {state_times.measured} items "
+        "completed in the flow window):"
+    ]
+    by_key = {(s.team, s.state): s for s in state_times.states}
+    if state_times.bottleneck is not None:
+        top = by_key[(state_times.bottleneck_team, state_times.bottleneck)]
+        kind = " (wait state)" if top.wait_state else ""
+        lines.append(
+            f"- bottleneck={_state_name(top)}{kind}: share={top.share:.0%}, queue now={top.queue}"
+        )
+    elif state_times.measured < state_times.min_sample:
+        lines.append(
+            f"- bottleneck: none ({state_times.measured} measured items, "
+            f"fewer than {state_times.min_sample})"
+        )
+    else:
+        lines.append("- bottleneck: none (no in-cycle time measured)")
+    for s in state_times.states[:_STATE_LIMIT]:
+        kind = " [wait state]" if s.wait_state else ""
+        lines.append(
+            f"- {_state_name(s)}{kind}: total={_days(s.total)}, share={s.share:.0%}, "
+            f"median={_days(s.median)}, items={s.items}, queue now={s.queue}"
+        )
+    hidden = len(state_times.states) - _STATE_LIMIT
+    if hidden > 0:
+        lines.append(f"... and {hidden} more states")
+    return lines
 
 
 _AGING_LIMIT = 10
