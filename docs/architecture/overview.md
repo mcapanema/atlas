@@ -84,6 +84,10 @@ exception: it is generated in the background and stored (ADR-0023).
   state with the most total time as the bottleneck (none below
   `health_min_sample` measured items) — the advisor explains it, never
   finds it.
+  DORA (`dora.py`, ADR-0025) computes a team's deploy frequency, change
+  lead time, change failure rate and time to restore from its codebases'
+  production deployments, pull requests and incidents, each banded by the
+  DORA report thresholds (no band below `health_min_sample`).
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
