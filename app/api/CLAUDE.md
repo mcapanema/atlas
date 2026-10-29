@@ -67,7 +67,8 @@ Presentation is allowed to know a concrete adapter exists).
   `AutoSyncRunner` ticks every minute and syncs each organization whose
   schedule has a due slot by running it through `SyncJobRunner` (own
   session + commit inside `recompute.paused()`; the outcome is recorded in a
-  second session). Every sync entry point runs as a `SyncJobRunner` job,
+  second session; when GitHub is configured, a successful Linear sync is
+  followed by a `code` job whose failure only logs). Every sync entry point runs as a `SyncJobRunner` job,
   which holds `SyncJobRunner.lock` and commits inside it — the
   organization sync (`POST /api/connectors/linear/sync`), the team sync
   (`POST /api/connectors/linear/teams/{team_id}/sync`) and the code sync

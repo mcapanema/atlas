@@ -15,13 +15,13 @@ from app.api.sync_jobs import SyncJobRunner
 from app.application.sync_schedules.service import SyncScheduleService
 from app.domain._time import utcnow
 from app.domain.organizations.entities import Organization
-from app.domain.sync.port import DataSourceError, DeliveryDataSource
-from app.domain.sync.source import SourceTeam
+from app.domain.sync.port import CodeHostSource, DataSourceError, DeliveryDataSource
+from app.domain.sync.source import SourceCodebase, SourceTeam
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
-from tests.fakes import FakeDataSource
+from tests.fakes import FakeDataSource, InMemoryCodeHostSource
 
 LONG_AGO = datetime(2020, 1, 1, tzinfo=UTC)
 
@@ -32,9 +32,25 @@ def _auto(
     *,
     recompute: RecomputeRunner | None = None,
     tick_seconds: float = 60.0,
+    code_source_factory: Callable[[], CodeHostSource | None] = lambda: None,
 ) -> AutoSyncRunner:
     jobs = SyncJobRunner(sessionmaker, recompute=recompute or RecomputeRunner(sessionmaker))
-    return AutoSyncRunner(sessionmaker, source_factory, jobs=jobs, tick_seconds=tick_seconds)
+    return AutoSyncRunner(
+        sessionmaker,
+        source_factory,
+        jobs=jobs,
+        code_source_factory=code_source_factory,
+        tick_seconds=tick_seconds,
+    )
+
+
+def _job_kinds(runner: AutoSyncRunner) -> list[str]:
+    return [job.request.kind for job in runner._jobs._jobs.values()]
+
+
+class _FailingCodeSource(InMemoryCodeHostSource):
+    async def fetch_codebases(self) -> list[SourceCodebase]:
+        raise DataSourceError("github down")
 
 
 def _source() -> FakeDataSource:
@@ -260,3 +276,51 @@ async def test_sync_runs_with_the_recompute_runner_paused(
     assert await runner.tick() == 1
     assert paused == [True]
     assert not recompute._lock.locked()
+
+
+async def test_tick_runs_code_sync_after_linear_sync(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed(sessionmaker)
+    runner = _auto(sessionmaker, _source, code_source_factory=InMemoryCodeHostSource)
+
+    assert await runner.tick() == 1
+
+    assert _job_kinds(runner) == ["organization", "code"]
+
+
+async def test_tick_skips_code_sync_when_github_unconfigured(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed(sessionmaker)
+    runner = _auto(sessionmaker, _source)
+
+    await runner.tick()
+
+    assert _job_kinds(runner) == ["organization"]
+
+
+async def test_tick_skips_code_sync_after_failed_linear_sync(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed(sessionmaker)
+    runner = _auto(sessionmaker, _FailingSource, code_source_factory=InMemoryCodeHostSource)
+
+    await runner.tick()
+
+    assert _job_kinds(runner) == ["organization"]
+
+
+async def test_failed_code_sync_does_not_fail_the_recorded_run(
+    sessionmaker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
+) -> None:
+    org_id = await _seed(sessionmaker)
+    runner = _auto(sessionmaker, _source, code_source_factory=_FailingCodeSource)
+
+    with caplog.at_level(logging.WARNING):
+        await runner.tick()
+
+    run = await _last_run(sessionmaker, org_id)
+    assert run is not None
+    assert run.error is None
+    assert any("github down" in r.getMessage() for r in caplog.records)

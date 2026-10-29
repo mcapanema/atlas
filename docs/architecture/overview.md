@@ -212,7 +212,9 @@ custom.
   `GET/PUT /api/organizations/{id}/sync-schedule` and run by the in-process
   `AutoSyncRunner` (`app/api/auto_sync.py`). It ticks every minute, syncs
   each organization with a due slot through the same `SyncJobRunner`, and
-  records the outcome on the schedule. Edited on the Connectors page.
+  records the outcome on the schedule. When GitHub is configured, a
+  successful Linear sync is followed by a code sync, whose failure only logs.
+  Edited on the Connectors page.
 - **Code host** (`app/domain/sync/port.py`): the `CodeHostSource` port plus
   vendor-neutral `SourceCodebase`, `SourcePullRequest` and
   `SourceDeployment` (`source.py`). `CodeSyncService` upserts codebases by
