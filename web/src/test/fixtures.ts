@@ -221,6 +221,26 @@ export const healthFixture = {
   ],
 };
 
+export const doraFixture = {
+  window_start: "2026-06-10T00:00:00Z",
+  window_end: "2026-07-10T00:00:00Z",
+  codebases: 1,
+  min_sample: 5,
+  deployments: 6,
+  deploys_per_week: 1.4,
+  deploy_frequency_band: "high",
+  lead_time_median_seconds: 64800,
+  lead_time_changes: 8,
+  lead_time_band: "high",
+  change_failure_rate: 0.25,
+  failed_deployments: 2,
+  finished_deployments: 8,
+  change_failure_band: "low",
+  restore_median_seconds: 7200,
+  restores: 3,
+  restore_band: "high",
+};
+
 /** A `/api/metrics/overview` body built from the per-concept fixtures. */
 export function overviewFixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -255,6 +275,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/metrics/state-times")) {
       return Promise.resolve(jsonResponse(stateTimesFixture));
+    }
+    if (url.startsWith("/api/metrics/dora")) {
+      return Promise.resolve(jsonResponse(doraFixture));
     }
     if (url.startsWith("/api/metrics/health")) {
       return Promise.resolve(jsonResponse(healthFixture));
