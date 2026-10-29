@@ -90,13 +90,17 @@ def test_listed_label_blocks_with_the_pattern_off() -> None:
 
 
 def test_overrides_turn_the_old_sources_back_on() -> None:
-    rules = resolve_rules({"blocked_by_relations": True, "blocked_label_pattern": True})
-    events = [
-        _on(EventType.BLOCKER_ADDED, 1, "DEP-1"),
-        _on(EventType.LABEL_ADDED, 2, "Bloqueante"),
-    ]
+    """Each source on its own, so one override can't hide the other's effect."""
+    relation = [_on(EventType.BLOCKER_ADDED, 1, "DEP-1")]
+    label = [_on(EventType.LABEL_ADDED, 2, "Bloqueante")]
 
-    assert blocked_periods(events, rules) == (BlockedPeriod(_day(1), None),)
+    relations_on = resolve_rules({"blocked_by_relations": True})
+    pattern_on = resolve_rules({"blocked_label_pattern": True})
+
+    assert blocked_periods(relation, relations_on) == (BlockedPeriod(_day(1), None),)
+    assert blocked_periods(label, pattern_on) == (BlockedPeriod(_day(2), None),)
+    assert blocked_periods(label, relations_on) == ()
+    assert blocked_periods(relation, pattern_on) == ()
 
 
 def test_overlapping_sources_form_one_period() -> None:

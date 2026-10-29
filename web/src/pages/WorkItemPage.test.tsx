@@ -173,7 +173,7 @@ describe("WorkItemPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText(/Blocked by DEP-1309/)).toBeInTheDocument();
+    expect(await screen.findByText(/'Blocked by' relation added: DEP-1309/)).toBeInTheDocument();
     expect(screen.getByText(/Label added: Blocked/)).toBeInTheDocument();
   });
 
@@ -220,6 +220,6 @@ describe("WorkItemPage", () => {
     renderPage();
 
     expect(await screen.findByText(/Label removed: Bug/)).toBeInTheDocument();
-    expect(screen.getByText(/Blocker cleared: DEP-7/)).toBeInTheDocument();
+    expect(screen.getByText(/'Blocked by' relation cleared: DEP-7/)).toBeInTheDocument();
   });
 });
