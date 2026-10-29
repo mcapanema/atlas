@@ -95,8 +95,8 @@ async def test_timeline_blocked_periods_follow_the_rules() -> None:
     )
     service = EventService(repo)
 
-    off = await service.get_timeline(item_id, MetricRules(blocked_by_relations=False))
+    on = await service.get_timeline(item_id, MetricRules(blocked_by_relations=True))
     default = await service.get_timeline(item_id)
 
-    assert off.blocked_periods == ()
-    assert [p.started_at for p in default.blocked_periods] == [at]
+    assert [p.started_at for p in on.blocked_periods] == [at]
+    assert default.blocked_periods == ()

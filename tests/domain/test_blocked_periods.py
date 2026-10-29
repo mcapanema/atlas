@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from app.domain.events.entities import Event, EventType
 from app.domain.events.timeline import BlockedPeriod, blocked_periods
-from app.domain.metric_rules.entities import MetricRules
+from app.domain.metric_rules.entities import MetricRules, resolve_rules
 from app.domain.metrics.health import DeliveryHealth, compute_delivery_health
 from app.domain.metrics.samples import derive_flow_sample
 from tests.fakes import CALENDAR_DAYS
@@ -40,15 +40,67 @@ def test_label_events_block_only_when_the_rules_call_the_label_blocked() -> None
         _on(EventType.LABEL_REMOVED, 5, "Blocked"),
     ]
 
-    assert blocked_periods(events) == (BlockedPeriod(_day(1), _day(5)),)
-    assert blocked_periods(events, MetricRules(blocked_label_pattern=False)) == ()
+    pattern = MetricRules(blocked_label_pattern=True)
+
+    assert blocked_periods(events, pattern) == (BlockedPeriod(_day(1), _day(5)),)
+    assert blocked_periods(events) == ()
 
 
-def test_blocker_events_count_by_default_and_the_relations_rule_turns_them_off() -> None:
+def test_blocker_events_count_only_when_the_relations_rule_is_on() -> None:
     events = [_on(EventType.BLOCKER_ADDED, 1, "DEP-1"), _on(EventType.BLOCKER_CLEARED, 4, "DEP-1")]
 
-    assert blocked_periods(events) == (BlockedPeriod(_day(1), _day(4)),)
-    assert blocked_periods(events, NO_RELATIONS) == ()
+    assert blocked_periods(events, RELATIONS) == (BlockedPeriod(_day(1), _day(4)),)
+    assert blocked_periods(events) == ()
+
+
+def test_default_rules_block_only_on_explicit_signals() -> None:
+    """The 2026-10-29 false positives: a planned "blocked by" relation and a
+    billing-rule label ("Bloqueante") no longer block; the Blocked state does."""
+    relation = [_on(EventType.BLOCKER_ADDED, 1, "FNG-905")]
+    rule_labels = [
+        _on(EventType.LABEL_ADDED, 1, "Bloqueante"),
+        _on(EventType.LABEL_ADDED, 1, "Bloqueada"),
+    ]
+    state = [
+        Event(
+            work_item_id=ITEM,
+            type=EventType.STATE_CHANGED,
+            occurred_at=_day(2),
+            from_state="In Progress",
+            to_state="Blocked",
+        )
+    ]
+
+    assert blocked_periods(relation, CALENDAR_DAYS) == ()
+    assert blocked_periods(rule_labels, CALENDAR_DAYS) == ()
+    assert blocked_periods(state, CALENDAR_DAYS) == (BlockedPeriod(_day(2), None),)
+
+
+def test_listed_label_blocks_with_the_pattern_off() -> None:
+    """Faturamento & Glosa's real blocked label (FNG-652): listed, it still
+    blocks in any case; an unlisted pattern word ("Bloqueante") does not."""
+    events = [
+        _on(EventType.LABEL_ADDED, 1, "bloqueada"),
+        _on(EventType.LABEL_ADDED, 2, "Bloqueante"),
+        _on(EventType.LABEL_REMOVED, 3, "Bloqueada"),
+    ]
+    rules = replace(CALENDAR_DAYS, blocked_label_names=("Bloqueada",))
+
+    assert blocked_periods(events, rules) == (BlockedPeriod(_day(1), _day(3)),)
+
+
+def test_overrides_turn_the_old_sources_back_on() -> None:
+    """Each source on its own, so one override can't hide the other's effect."""
+    relation = [_on(EventType.BLOCKER_ADDED, 1, "DEP-1")]
+    label = [_on(EventType.LABEL_ADDED, 2, "Bloqueante")]
+
+    relations_on = resolve_rules({"blocked_by_relations": True})
+    pattern_on = resolve_rules({"blocked_label_pattern": True})
+
+    assert blocked_periods(relation, relations_on) == (BlockedPeriod(_day(1), None),)
+    assert blocked_periods(label, pattern_on) == (BlockedPeriod(_day(2), None),)
+    assert blocked_periods(label, relations_on) == ()
+    assert blocked_periods(relation, pattern_on) == ()
 
 
 def test_overlapping_sources_form_one_period() -> None:

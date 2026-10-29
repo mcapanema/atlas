@@ -69,7 +69,8 @@ def test_multi_team_projects_mark_only_their_organization_for_recompute(
                 ),
                 {"id": uuid4().hex, "org": o2.hex, "ov": json.dumps({"healthy_min": 75}), "at": AT},
             )
-        command.upgrade(config, "head")
+        # Its own revision: a later recompute migration marks every organization.
+        command.upgrade(config, "c4e8a2b7d913")
         with engine.connect() as connection:
             rows = {
                 UUID(org): (state, json.loads(overrides))

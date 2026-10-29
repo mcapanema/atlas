@@ -153,8 +153,8 @@ wait states flow efficiency and queue/touch time count as wait (ADR-0018), healt
 scales, weights and evidence floor, timezone, working days, holidays, chart
 bucketing, forecast history and remaining, label → type mapping — is a field
 of `MetricRules` (`app/domain/metric_rules/entities.py`). Defaults are the
-previous built-in behavior, except the blocked sources (all on), the health
-floor (ADR-0015) and durations counting Monday-to-Friday working days
+previous built-in behavior, except the blocked sources (blocked-named
+states and listed labels only, ADR-0026), the health floor (ADR-0015) and durations counting Monday-to-Friday working days
 (ADR-0017).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`

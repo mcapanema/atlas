@@ -108,8 +108,9 @@ def test_a_state_block_overlapping_a_label_block_is_one_period() -> None:
         _move(EventType.STATE_CHANGED, 4, "Blocked", "In Progress"),
         _at(EventType.LABEL_REMOVED, 5, "Blocked"),
     ]
+    rules = MetricRules(blocked_label_names=("Blocked",))
 
-    assert blocked_periods(events) == (BlockedPeriod(_day(2), _day(5)),)
+    assert blocked_periods(events, rules) == (BlockedPeriod(_day(2), _day(5)),)
 
 
 def test_an_item_created_in_a_blocked_state_is_blocked_from_creation() -> None:

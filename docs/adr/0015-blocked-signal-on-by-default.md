@@ -6,6 +6,7 @@ Date: 2026-10-08
 
 Accepted. Amends ADR-0010 ("defaults reproduce the previous numbers") and
 ADR-0011 (relations opt-in) for the blocked rules and the health floor.
+The label pattern and relation defaults are superseded by ADR-0026.
 
 ## Context
 

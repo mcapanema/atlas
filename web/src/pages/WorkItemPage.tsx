@@ -56,8 +56,9 @@ const blockedColumns: ColumnsType<BlockedPeriod> = [
 const DETAIL_LABELS: Record<string, (detail: string) => string> = {
   label_added: (detail) => `Label added: ${detail}`,
   label_removed: (detail) => `Label removed: ${detail}`,
-  blocker_added: (detail) => `Blocked by ${detail}`,
-  blocker_cleared: (detail) => `Blocker cleared: ${detail}`,
+  // Facts, not status: whether a relation blocks is a metric rule (ADR-0026).
+  blocker_added: (detail) => `'Blocked by' relation added: ${detail}`,
+  blocker_cleared: (detail) => `'Blocked by' relation cleared: ${detail}`,
   review: (detail) => `PR opened: ${detail}`,
   merged: (detail) => `PR merged: ${detail}`,
 };
