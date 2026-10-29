@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.domain.sync.port import DataSourceError
-from app.infrastructure.connectors.linear import client as client_module
+from app.infrastructure.connectors import graphql as graphql_module
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 
 
@@ -71,7 +71,7 @@ def recorded_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     async def fake_sleep(delay: float) -> None:
         sleeps.append(delay)
 
-    monkeypatch.setattr(client_module, "_sleep", fake_sleep)
+    monkeypatch.setattr(graphql_module, "_sleep", fake_sleep)
     return sleeps
 
 

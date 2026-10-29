@@ -9,7 +9,7 @@ import pytest
 
 from app.domain.events.entities import EventType
 from app.domain.sync.source import SourcePerson
-from app.infrastructure.connectors.linear import client as client_module
+from app.infrastructure.connectors import graphql as graphql_module
 from app.infrastructure.connectors.linear import datasource as datasource_module
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
@@ -208,7 +208,7 @@ async def test_pagination_recovers_from_a_dropped_connection_mid_way(
     async def no_sleep(delay: float) -> None:
         pass
 
-    monkeypatch.setattr(client_module, "_sleep", no_sleep)
+    monkeypatch.setattr(graphql_module, "_sleep", no_sleep)
     second_page_calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
