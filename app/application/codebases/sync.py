@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from typing import Protocol
 from uuid import UUID
 
 from app.application.sync.service import PhaseCallback, SyncPhase, UnknownOrganizationError
@@ -15,6 +16,7 @@ from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.organizations.repository import OrganizationRepository
 from app.domain.sync.port import CodeHostSource
+from app.domain.teams.repository import TeamRepository
 from app.domain.work_items.repository import WorkItemRepository
 
 logger = logging.getLogger(__name__)
@@ -51,10 +53,11 @@ class CodeSyncService:
     pull request, or rebuilt, are still linked. Running it twice is a no-op.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — one port per repository the sync reads or writes
         self,
         source: CodeHostSource,
         organizations: OrganizationRepository,
+        teams: TeamRepository,
         codebases: CodebaseRepository,
         pull_requests: PullRequestRepository,
         deployments: DeploymentRepository,
@@ -63,6 +66,7 @@ class CodeSyncService:
     ) -> None:
         self._source = source
         self._organizations = organizations
+        self._teams = teams
         self._codebases = codebases
         self._pull_requests = pull_requests
         self._deployments = deployments
@@ -104,9 +108,8 @@ class CodeSyncService:
         pull_requests = sum([await self._fetch_pull_requests(c, now) for c in mapped])
         report(SyncPhase.DEPLOYMENTS)
         deployments = sum([await self._fetch_deployments(c, now) for c in mapped])
-        events = await self._link(mapped)
-        for codebase in mapped:
-            await self._codebases.update(replace(codebase, last_synced_at=now))
+        events = await self._link(organization_id, mapped)
+        await self._stamp(mapped, now)
         summary = CodeSyncSummary(organization_id, written, pull_requests, deployments, events)
         logger.info(
             "Code sync finished for organization %s: codebases=%d pull_requests=%d "
@@ -118,6 +121,13 @@ class CodeSyncService:
             summary.events,
         )
         return summary
+
+    async def _stamp(self, fetched: list[Codebase], now: datetime) -> None:
+        """Set last_synced_at on the fetched codebases, re-read so a concurrent edit survives."""
+        for codebase in fetched:
+            current = await self._codebases.get(codebase.id)
+            if current is not None:
+                await self._codebases.update(replace(current, last_synced_at=now))
 
     async def _sync_codebases(self, organization_id: UUID) -> int:
         existing = {c.external_id: c for c in await self._codebases.list(organization_id)}
@@ -150,69 +160,66 @@ class CodeSyncService:
         sources = await self._source.fetch_pull_requests(
             codebase.external_id, self._since(codebase, now)
         )
-        stored = await self._pull_requests.get_by_external_ids([s.external_id for s in sources])
-        written = 0
-        for source in sources:
-            existing = stored.get(source.external_id)
-            row = PullRequest(
+        rows = [
+            PullRequest(
                 codebase_id=codebase.id,
-                external_id=source.external_id,
-                number=source.number,
-                title=source.title,
-                opened_at=source.opened_at,
-                url=source.url,
-                first_commit_at=source.first_commit_at,
-                merged_at=source.merged_at,
-                closed_at=source.closed_at,
-                merge_commit_sha=source.merge_commit_sha,
-                work_item_keys=source.work_item_keys,
+                external_id=s.external_id,
+                number=s.number,
+                title=s.title,
+                opened_at=s.opened_at,
+                url=s.url,
+                first_commit_at=s.first_commit_at,
+                merged_at=s.merged_at,
+                closed_at=s.closed_at,
+                merge_commit_sha=s.merge_commit_sha,
+                work_item_keys=s.work_item_keys,
             )
-            if existing is None:
-                await self._pull_requests.add(row)
-            elif replace(row, id=existing.id) != existing:
-                await self._pull_requests.update(replace(row, id=existing.id))
-            else:
-                continue
-            written += 1
-        return written
+            for s in sources
+        ]
+        return await _upsert(self._pull_requests, rows)
 
     async def _fetch_deployments(self, codebase: Codebase, now: datetime) -> int:
         sources = await self._source.fetch_deployments(
             codebase.external_id, self._since(codebase, now)
         )
-        stored = await self._deployments.get_by_external_ids([s.external_id for s in sources])
-        written = 0
-        for source in sources:
-            existing = stored.get(source.external_id)
-            row = Deployment(
+        rows = [
+            Deployment(
                 codebase_id=codebase.id,
-                external_id=source.external_id,
-                environment=source.environment,
-                sha=source.sha,
-                started_at=source.started_at,
-                status=source.status,
-                finished_at=source.finished_at,
+                external_id=s.external_id,
+                environment=s.environment,
+                sha=s.sha,
+                started_at=s.started_at,
+                status=s.status,
+                finished_at=s.finished_at,
             )
-            if existing is None:
-                await self._deployments.add(row)
-            elif replace(row, id=existing.id) != existing:
-                await self._deployments.update(replace(row, id=existing.id))
-            else:
-                continue
-            written += 1
-        return written
+            for s in sources
+        ]
+        return await _upsert(self._deployments, rows)
 
-    async def _link(self, mapped: list[Codebase]) -> int:
-        """Insert the REVIEW/MERGED events of every stored pull request that names a work item."""
+    async def _link(self, organization_id: UUID, mapped: list[Codebase]) -> int:
+        """Insert the REVIEW/MERGED events of every stored pull request that names a work item.
+
+        Only work items of the syncing organization's teams are linked.
+        """
+        # ponytail: loads every stored pull request of the mapped codebases and
+        # re-checks their events on each sync. Fine to tens of thousands of rows;
+        # past that, link only pull requests changed since the last sync plus
+        # those naming keys of newly synced items.
         names = {c.id: c.name for c in mapped}
         pull_requests = await self._pull_requests.list_for_codebases(list(names))
         keys = sorted({key for pr in pull_requests for key in pr.work_item_keys})
-        items = await self._work_items.get_by_keys(keys) if keys else {}
+        team_ids = {t.id for t in await self._teams.list() if t.organization_id == organization_id}
+        items = {
+            key: item
+            for key, item in (await self._work_items.get_by_keys(keys) if keys else {}).items()
+            if item.team_id in team_ids
+        }
         candidates = [
             event
             for pr in pull_requests
-            for item in {items[k].id: items[k] for k in pr.work_item_keys if k in items}.values()
-            for event in _events_for(pr, names[pr.codebase_id], item.id)
+            for key in pr.work_item_keys
+            if key in items
+            for event in _events_for(pr, names[pr.codebase_id], items[key].id)
         ]
         existing = await self._events.existing_external_ids(
             [e.external_id for e in candidates if e.external_id is not None]
@@ -221,6 +228,31 @@ class CodeSyncService:
         for event in fresh:
             await self._events.add(event)
         return len(fresh)
+
+
+class _Upsertable[T: (PullRequest, Deployment)](Protocol):
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, T]: ...
+
+    async def add(self, row: T, /) -> None: ...
+
+    async def update(self, row: T, /) -> None: ...
+
+
+async def _upsert[T: (PullRequest, Deployment)](repository: _Upsertable[T], rows: list[T]) -> int:
+    """Add new rows and update changed ones (matched by external_id); returns rows written."""
+    stored = await repository.get_by_external_ids([r.external_id for r in rows])
+    written = 0
+    for row in rows:
+        existing = stored.get(row.external_id)
+        if existing is None:
+            await repository.add(row)
+        else:
+            row = replace(row, id=existing.id)
+            if row == existing:
+                continue
+            await repository.update(row)
+        written += 1
+    return written
 
 
 def _events_for(pr: PullRequest, codebase_name: str, work_item_id: UUID) -> list[Event]:

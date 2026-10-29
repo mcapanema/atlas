@@ -1,6 +1,6 @@
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -19,6 +19,7 @@ from tests.fakes import (
     InMemoryEventRepository,
     InMemoryOrganizationRepository,
     InMemoryPullRequestRepository,
+    InMemoryTeamRepository,
     InMemoryWorkItemRepository,
 )
 
@@ -32,8 +33,9 @@ RECENT = NOW - timedelta(hours=2)
 class Harness:
     def __init__(self, source: InMemoryCodeHostSource) -> None:
         self.org = Organization(name="Acme")
-        self.team_id = Team(organization_id=self.org.id, name="Platform").id
+        self.team_id = uuid4()
         self.organizations = InMemoryOrganizationRepository()
+        self.teams = InMemoryTeamRepository()
         self.codebases = InMemoryCodebaseRepository()
         self.pull_requests = InMemoryPullRequestRepository()
         self.deployments = InMemoryDeploymentRepository()
@@ -43,6 +45,7 @@ class Harness:
         self.service = CodeSyncService(
             source,
             self.organizations,
+            self.teams,
             self.codebases,
             self.pull_requests,
             self.deployments,
@@ -52,6 +55,7 @@ class Harness:
 
     async def start(self) -> UUID:
         await self.organizations.add(self.org)
+        await self.teams.add(Team(organization_id=self.org.id, name="Platform", id=self.team_id))
         return self.org.id
 
     async def map_all(self) -> None:
@@ -337,3 +341,46 @@ async def test_resolve_organization_without_any_asks_for_linear_first() -> None:
     h = Harness(api_source())
     with pytest.raises(ValueError, match="run a Linear sync first"):
         await h.service.resolve_organization(None)
+
+
+async def test_link_pass_ignores_work_items_of_other_organizations() -> None:
+    h = await seeded(api_source(pull_requests={"r1": [pr()]}))
+    other_org = Organization(name="Other")
+    other_team = Team(organization_id=other_org.id, name="Elsewhere")
+    await h.organizations.add(other_org)
+    await h.teams.add(other_team)
+    foreign = WorkItem(team_id=other_team.id, title="Dep", key="DEP-1")
+    await h.work_items.add(foreign)
+
+    summary = await h.sync()
+
+    assert summary.events == 0
+    assert await h.item_events(foreign) == []
+
+
+async def test_stamp_keeps_edits_made_during_the_fetch() -> None:
+    class EditingSource(InMemoryCodeHostSource):
+        harness: Harness
+
+        async def fetch_deployments(
+            self, codebase_external_id: str, since: datetime
+        ) -> list[SourceDeployment]:
+            codebase = (await self.harness.codebases.list(self.harness.org.id))[0]
+            edited = replace(codebase, team_id=uuid4(), production_environment="prod")
+            await self.harness.codebases.update(edited)
+            return await super().fetch_deployments(codebase_external_id, since)
+
+    source = EditingSource(codebases=[SourceCodebase(external_id="r1", name="acme/api")])
+    h = Harness(source)
+    source.harness = h
+    await h.start()
+    await h.sync()
+    await h.map_all()
+    original = (await h.codebases.list(h.org.id))[0]
+
+    await h.sync()
+
+    stored = (await h.codebases.list(h.org.id))[0]
+    assert stored.team_id != original.team_id
+    assert stored.production_environment == "prod"
+    assert stored.last_synced_at == NOW
