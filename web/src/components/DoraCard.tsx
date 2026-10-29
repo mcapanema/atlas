@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { useDora, type DoraBand, type DoraMetrics, type MetricsFilters } from "../api/metrics";
+import { windowLabel } from "../lib/metricsFilters";
+import { formatSeconds } from "../lib/duration";
+import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { ChartCard } from "./ChartCard";
 import { StatCard } from "./StatCard";
 
@@ -16,12 +19,6 @@ const BAND_WORD: Record<DoraBand, string> = {
 /** The band as a word with a tint (never color alone); styles in index.css. */
 export function DoraBandTag({ band }: { band: DoraBand }) {
   return <span className={`dora-band dora-band--${band}`}>{BAND_WORD[band]}</span>;
-}
-
-/** Whole hours under 48 hours, days past that; one decimal either way. */
-function formatSpan(seconds: number): string {
-  const hours = seconds / 3600;
-  return hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} d`;
 }
 
 function plural(count: number, noun: string): string {
@@ -53,14 +50,15 @@ function Detail({
 }
 
 const CARD_HELP =
-  "DORA's four keys from the team's mapped repositories over the stats window. Failed changes include deployments that errored and incidents (issues with an incident label).";
+  "DORA's four keys from the team's mapped repositories over the selected window. Failed changes include deployments that errored and incidents (issues with an incident label).";
 
 /** DORA delivery performance: four tiles, each a value, its band and its sample. */
-export function DoraCard({ data }: { data: DoraMetrics }) {
+export function DoraCard({ data, window }: { data: DoraMetrics; window?: string }) {
   const min = data.min_sample;
+  const label = window ? `Delivery performance (DORA, ${window})` : "Delivery performance (DORA)";
   if (data.codebases === 0) {
     return (
-      <ChartCard label="Delivery performance (DORA)" help={CARD_HELP}>
+      <ChartCard label={label} help={CARD_HELP}>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           No repositories are mapped to this team yet.{" "}
           <Link to="/connectors">Map a repository to this team on the Connectors page</Link> to
@@ -73,12 +71,12 @@ export function DoraCard({ data }: { data: DoraMetrics }) {
   const rate = data.change_failure_rate;
   const restore = data.restore_median_seconds;
   return (
-    <ChartCard label="Delivery performance (DORA)" help={CARD_HELP}>
+    <ChartCard label={label} help={CARD_HELP}>
       <div className="stat-grid">
         <StatCard
           title="Deploy frequency"
           value={`${data.deploys_per_week.toFixed(1)} / week`}
-          help="Deployments to production per week over the window."
+          help="Successful deployments to production per week over the selected window."
         >
           <Detail
             band={data.deploy_frequency_band}
@@ -91,7 +89,7 @@ export function DoraCard({ data }: { data: DoraMetrics }) {
         </StatCard>
         <StatCard
           title="Change lead time"
-          value={lead === null || data.lead_time_changes === 0 ? "—" : formatSpan(lead)}
+          value={lead === null || data.lead_time_changes === 0 ? "—" : formatSeconds(lead)}
           help="Median time from a change's first commit to its deployment."
         >
           <Detail
@@ -121,8 +119,8 @@ export function DoraCard({ data }: { data: DoraMetrics }) {
         </StatCard>
         <StatCard
           title="Time to restore"
-          value={restore === null || data.restores === 0 ? "—" : formatSpan(restore)}
-          help="Median time from an incident opening to its resolution."
+          value={restore === null || data.restores === 0 ? "—" : formatSeconds(restore)}
+          help="Median time to recover: from an incident opening to its resolution, or from a failed deployment to the next successful one."
         >
           <Detail band={data.restore_band} sample={data.restores} tooFew="restores" min={min}>
             {plural(data.restores, "restore")}
@@ -142,5 +140,7 @@ export function TeamDoraCard({
   filters: MetricsFilters;
 }) {
   const dora = useDora(teamId, filters);
-  return dora.data ? <DoraCard data={dora.data} /> : null;
+  return dora.data ? (
+    <DoraCard data={dora.data} window={windowLabel(filters, STATS_WINDOW_DAYS)} />
+  ) : null;
 }

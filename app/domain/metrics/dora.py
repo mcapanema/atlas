@@ -231,16 +231,16 @@ def _failures(
 
 
 def _failure_restores(deployments: Sequence[_Run], window: _Window) -> list[timedelta]:
-    """From each run's first failure to the codebase's next success."""
+    """From each run's first failure to the codebase's next success after it."""
     restores: list[timedelta] = []
     first_failure: _Run | None = None
     for deploy in deployments:
         if deploy.status is DeploymentStatus.FAILURE:
             first_failure = first_failure or deploy
-            continue
-        if first_failure is not None and window.holds(deploy.finished_at):
-            restores.append(deploy.finished_at - first_failure.finished_at)
-        first_failure = None
+        elif first_failure is not None and deploy.finished_at > first_failure.finished_at:
+            if window.holds(deploy.finished_at):
+                restores.append(deploy.finished_at - first_failure.finished_at)
+            first_failure = None
     return restores
 
 

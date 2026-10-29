@@ -349,7 +349,7 @@ describe("ExecutiveDashboardPage", () => {
     // Failed cells say so — never the "—" that means "no data".
     const growthRow = screen.getByText("Growth").closest("tr");
     if (!growthRow) throw new Error("Expected Growth row to render");
-    // Health + 5 metrics columns + accuracy, all fed by the failed overview.
+    // Health + 5 metrics columns + 2 DORA columns + accuracy, all fed by the failed overview.
     expect(within(growthRow).getAllByText("unavailable")).toHaveLength(9);
     expect(within(growthRow).queryByText("—")).not.toBeInTheDocument();
   });

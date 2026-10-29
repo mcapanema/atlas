@@ -35,7 +35,7 @@ describe("FlowDashboard", () => {
   it("shows DORA for a team and not for a project", async () => {
     mockMetricsFetch();
     const team = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-    expect(await screen.findByText("Delivery performance (DORA)")).toBeInTheDocument();
+    expect(await screen.findByText("Delivery performance (DORA, 30d)")).toBeInTheDocument();
     const urls = vi.mocked(fetch).mock.calls.map(([input]) => requestUrl(input));
     expect(urls).toContain("/api/metrics/dora?team_id=team-1");
     team.unmount();
@@ -43,7 +43,7 @@ describe("FlowDashboard", () => {
     vi.mocked(fetch).mockClear();
     renderWithClient(<FlowDashboard scope={{ projectId: "project-1" }} />);
     expect(await screen.findByText("Throughput (30d)")).toBeInTheDocument();
-    expect(screen.queryByText("Delivery performance (DORA)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delivery performance (DORA, 30d)")).not.toBeInTheDocument();
     const projectUrls = vi.mocked(fetch).mock.calls.map(([input]) => requestUrl(input));
     expect(projectUrls.some((url) => url.startsWith("/api/metrics/dora"))).toBe(false);
   });

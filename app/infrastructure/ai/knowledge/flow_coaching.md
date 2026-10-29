@@ -53,8 +53,8 @@ everything else to it, and elevate it. Improving anywhere else is waste.
 
 ## DORA metrics
 Atlas computes four DORA metrics per team from deployments, pull requests and
-incident-labelled items: deploy frequency, change lead time (merge to
-production), change failure rate and time to restore. Each carries a band
+incident-labelled items: deploy frequency, change lead time (first
+commit to production deployment), change failure rate and time to restore. Each carries a band
 (elite, high, medium, low) from the DORA report thresholds. Use the computed
 bands; never recompute them and never infer DORA performance from flow
 metrics such as lead time or throughput, which measure other things. A metric

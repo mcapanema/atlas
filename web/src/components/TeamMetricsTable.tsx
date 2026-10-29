@@ -194,7 +194,7 @@ const CHANGE_FAILURE_COLUMN: ColumnsType<TeamRow>[number] = {
   key: "change-failure-rate",
   title: columnHelp(
     "Change failure rate",
-    "Share of production deployments that failed or caused an incident (DORA). “—” means none finished in the window.",
+    "Share of production deployments that failed or caused an incident (DORA). “—” means no repository is mapped to the team or none finished in the window.",
   ),
   align: "right",
   sorter: (a, b, order) => {

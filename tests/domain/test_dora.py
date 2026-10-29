@@ -263,3 +263,76 @@ def test_change_failure_band_thresholds(rate: float, band: DoraBand) -> None:
 )
 def test_restore_band_thresholds(median: timedelta, band: DoraBand) -> None:
     assert restore_band(median) == band
+
+
+def _run(
+    codebase: Codebase, start_h: float, hours: float, status: DeploymentStatus = S
+) -> Deployment:
+    started = NOW - timedelta(hours=start_h)
+    return Deployment(
+        codebase_id=codebase.id,
+        external_id=str(uuid4()),
+        environment="production",
+        sha="abc",
+        started_at=started,
+        status=status,
+        finished_at=started + timedelta(hours=hours),
+    )
+
+
+def test_a_success_finishing_before_the_failure_does_not_restore_it() -> None:
+    failure = _run(API, 10, 1, F)
+    overlapping = _run(API, 9.9, 0.1)
+
+    result = _dora([failure, overlapping])
+    assert result.restores == 0
+    assert result.restore_median is None
+
+    later = _run(API, 5, 1)
+    result = _dora([failure, overlapping, later])
+    assert failure.finished_at is not None
+    assert later.finished_at is not None
+    assert result.restores == 1
+    assert result.restore_median == later.finished_at - failure.finished_at
+
+
+def test_codebases_do_not_mix_in_lead_time_failures_and_mapping() -> None:
+    other = Codebase(
+        organization_id=API.organization_id,
+        name="Web",
+        external_id="2",
+        production_environment="production",
+    )
+    unmapped = Codebase(organization_id=API.organization_id, name="Gone", external_id="3")
+    deploy_a = _deploy(10)
+    deploy_b = _run(other, 2 * 24, 1)
+    pr_b = PullRequest(
+        codebase_id=other.id,
+        external_id="pr-b",
+        number=2,
+        title="web change",
+        opened_at=_at(15),
+        merged_at=_at(14),
+    )
+    incident = Incident(_at(5), _at(5) + timedelta(hours=1))
+
+    result = compute_dora(
+        [API, other],
+        [deploy_a, deploy_b, _run(unmapped, 1, 1)],
+        [pr_b],
+        [incident],
+        now=NOW,
+        window_days=30,
+        min_sample=1,
+    )
+
+    # (a) B's pull request merged before A's deployment never ships with it.
+    assert result.lead_time_changes == 1
+    assert deploy_b.finished_at is not None
+    assert result.lead_time_median == deploy_b.finished_at - pr_b.opened_at
+    # (b) the incident blames the latest success across both codebases: A's (day 10)
+    # is the only one finished before it; B's (day 2) comes later.
+    assert result.failed_deployments == 1
+    assert result.finished_deployments == 2
+    # (c) the deployment of an unknown codebase is dropped.
+    assert result.deployments == 2

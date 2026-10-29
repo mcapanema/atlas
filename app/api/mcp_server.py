@@ -255,8 +255,8 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         window_days: int = STATS_WINDOW_DAYS,
     ) -> str:
         """One-call delivery brief for a team or project — flow metrics,
-        lead-time distribution, Monte Carlo forecast, delivery health, and
-        aging WIP. Provide exactly one of team_id/project_id (from
+        lead-time distribution, Monte Carlo forecast, DORA metrics (team only),
+        delivery health, and aging WIP. Provide exactly one of team_id/project_id (from
         list_scopes). Use this for daily standups, retros, reviews, and
         planning before reaching for any drill-down tool. For a retrospective,
         pass the team's sprint length (shown by list_scopes) as window_days.

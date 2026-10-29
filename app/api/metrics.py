@@ -260,10 +260,12 @@ async def get_scope_overview(
     """Flow metrics, health, forecast accuracy and snapshot history from one scope load.
 
     The Executive Dashboard's per-team row. Each standalone endpoint loads
-    the scope's items and events itself; this loads them once and folds at
-    most twice: filtered and as of the period end for metrics + health,
-    current and unfiltered for accuracy (its forecasts were captured
-    unfiltered). window_days floors at health's minimum, 7.
+    the scope's items and events itself; this loads them once. It folds the
+    current unfiltered samples (accuracy: its forecasts were captured
+    unfiltered), plus one fold filtered and as of the period end for metrics
+    + health when a filter or a period end is set. DORA, which ignores item
+    filters, reuses those samples when no filter is set, and otherwise folds
+    once more as of the period end. window_days floors at health's minimum, 7.
     """
     data = await service.load_scope_data(team_id=scope.team_id, project_id=scope.project_id)
     now, period_days = period.resolve(data.rules.scope.tz)
@@ -278,10 +280,13 @@ async def get_scope_overview(
     )
     history = await snapshots.get_metric_history(team_id=scope.team_id, project_id=scope.project_id)
     # Item filters do not apply to DORA: a type filter must not hide incidents.
+    dora_scope = (
+        samples if narrowed is data else (current if now is None else data.samples(as_of=now))
+    )
     dora_metrics = (
         await dora.get_dora(
             team_id=scope.team_id,
-            scope=current if now is None else data.samples(as_of=now),
+            scope=dora_scope,
             window_days=window,
             now=now,
         )

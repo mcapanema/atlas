@@ -14,16 +14,21 @@ describe("DoraCard", () => {
     expect(screen.getByText("Delivery performance (DORA)")).toBeInTheDocument();
     expect(screen.getByText("Deploy frequency")).toBeInTheDocument();
     expect(screen.getByText("1.4 / week")).toBeInTheDocument();
-    expect(screen.getByText("18.0 h")).toBeInTheDocument();
-    expect(screen.getByText("2.0 h")).toBeInTheDocument();
+    expect(screen.getByText("18h")).toBeInTheDocument();
+    expect(screen.getByText("2h")).toBeInTheDocument();
     expect(screen.getAllByText("High")).toHaveLength(3);
     expect(screen.getByText("Low")).toBeInTheDocument();
     expect(screen.getByText("25%")).toBeInTheDocument();
   });
 
+  it("shows the card's window in its title", () => {
+    renderWithClient(<DoraCard data={data} window="90d" />);
+    expect(screen.getByText("Delivery performance (DORA, 90d)")).toBeInTheDocument();
+  });
+
   it("shows long durations in days", () => {
     renderWithClient(<DoraCard data={{ ...data, lead_time_median_seconds: 4 * 86400 }} />);
-    expect(screen.getByText("4.0 d")).toBeInTheDocument();
+    expect(screen.getByText("4d")).toBeInTheDocument();
   });
 
   it("says why a band is missing", () => {
