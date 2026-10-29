@@ -216,11 +216,7 @@ class CodeSyncService:
         pull_requests = await self._pull_requests.list_for_codebases(list(names))
         keys = sorted({key for pr in pull_requests for key in pr.work_item_keys})
         team_ids = {t.id for t in await self._teams.list() if t.organization_id == organization_id}
-        items = {
-            key: item
-            for key, item in (await self._work_items.get_by_keys(keys) if keys else {}).items()
-            if item.team_id in team_ids
-        }
+        items = await self._work_items.get_by_keys(keys, team_ids=team_ids)
         candidates = [
             event
             for pr in pull_requests

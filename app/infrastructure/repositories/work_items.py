@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from datetime import datetime
 from uuid import UUID
 
@@ -111,14 +112,20 @@ class SqlAlchemyWorkItemRepository:
             )
             await self._session.execute(delete(WorkItemModel).where(WorkItemModel.id.in_(chunk)))
 
-    async def get_by_keys(self, keys: list[str]) -> dict[str, WorkItem]:
+    async def get_by_keys(
+        self, keys: list[str], *, team_ids: Collection[UUID]
+    ) -> dict[str, WorkItem]:
         found: dict[str, WorkItem] = {}
+        if not team_ids:
+            return found
         for chunk in chunked(keys):
             result = await self._session.execute(
-                select(WorkItemModel).where(WorkItemModel.key.in_(chunk))
+                select(WorkItemModel).where(
+                    WorkItemModel.key.in_(chunk), WorkItemModel.team_id.in_(team_ids)
+                )
             )
             for model in result.scalars():
-                # key is not unique: a stale duplicate may exist; the last row wins.
+                # A stale duplicate may exist inside the teams; one row is kept.
                 if model.key is not None:
                     found[model.key] = model.to_domain()
         return found

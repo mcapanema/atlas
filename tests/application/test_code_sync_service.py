@@ -358,6 +358,27 @@ async def test_link_pass_ignores_work_items_of_other_organizations() -> None:
     assert await h.item_events(foreign) == []
 
 
+async def test_link_pass_picks_the_syncing_organizations_item_when_keys_collide() -> None:
+    h = await seeded(api_source(pull_requests={"r1": [pr(merged_at=T2)]}))
+    mine = WorkItem(team_id=h.team_id, title="Dep", key="DEP-1")
+    await h.work_items.add(mine)
+    other_org = Organization(name="Other")
+    other_team = Team(organization_id=other_org.id, name="Elsewhere")
+    await h.organizations.add(other_org)
+    await h.teams.add(other_team)
+    foreign = WorkItem(team_id=other_team.id, title="Dep", key="DEP-1")
+    await h.work_items.add(foreign)
+
+    summary = await h.sync()
+
+    assert summary.events == 2
+    assert await h.item_events(mine) == [
+        (EventType.REVIEW, T1, "acme/api#12"),
+        (EventType.MERGED, T2, "acme/api#12"),
+    ]
+    assert await h.item_events(foreign) == []
+
+
 async def test_stamp_keeps_edits_made_during_the_fetch() -> None:
     class EditingSource(InMemoryCodeHostSource):
         harness: Harness

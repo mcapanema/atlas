@@ -138,9 +138,15 @@ class InMemoryWorkItemRepository:
             if item.parent_id in doomed:
                 self._items[item_id] = replace(item, parent_id=None)
 
-    async def get_by_keys(self, keys: list[str]) -> dict[str, WorkItem]:
+    async def get_by_keys(
+        self, keys: list[str], *, team_ids: Collection[UUID]
+    ) -> dict[str, WorkItem]:
         wanted = set(keys)
-        return {item.key: item for item in self._items.values() if item.key in wanted and item.key}
+        return {
+            item.key: item
+            for item in self._items.values()
+            if item.key in wanted and item.key and item.team_id in team_ids
+        }
 
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
