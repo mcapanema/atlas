@@ -84,16 +84,23 @@ exception: it is generated in the background and stored (ADR-0023).
   state with the most total time as the bottleneck (none below
   `health_min_sample` measured items) — the advisor explains it, never
   finds it.
+  DORA (`dora.py`, ADR-0025) computes a team's deploy frequency, change
+  lead time, change failure rate and time to restore from its codebases'
+  production deployments, pull requests and incidents, each banded by the
+  DORA report thresholds (deploy frequency has a band with any mapped
+  codebase; lead time, change failure rate and restore wait for
+  `health_min_sample` values). `DoraService` (`app/application/metrics/dora.py`)
+  feeds it a team's codebases and the scope's incident-labelled items.
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
   simulation of the scope's open work by resampling its historical daily
   throughput — seeded `random.Random`, deterministic by construction.
 - **Advisor** (`app/domain/advisor/`): `AdvisorPort` takes a
-  `DeliveryContext` — the already-computed metrics, distribution, and
-  forecast — and returns explainable `DeliveryAdvice` (narrative summary
-  plus prioritized `Recommendation`s with root causes and evidence). The
-  AI never calculates (ADR-0006).
+  `DeliveryContext` — the already-computed metrics, distribution,
+  forecast, and (team scopes) DORA metrics — and returns explainable
+  `DeliveryAdvice` (narrative summary plus prioritized `Recommendation`s
+  with root causes and evidence). The AI never calculates (ADR-0006).
   Advice is stored, not computed on read (ADR-0023): `AdviceRun` (table
   `advice_runs`, managed by `AdviceRunService`) is one generation of advice
   or meeting prep, keyed by scope + persona + request params; each
@@ -113,13 +120,14 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 `ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
-`/api/metrics/health`, `/api/forecasts`, and `/api/recommendations` (`POST` starts a stored
-background run and answers 202 — 409 until `ATLAS_OPENROUTER_API_KEY` is set,
+`/api/metrics/health`, `/api/metrics/dora` (team scope only; 422 for a
+project), `/api/forecasts`, and `/api/recommendations` (`POST` starts a
+stored background run and answers 202 — 409 until `ATLAS_OPENROUTER_API_KEY` is set,
 ADR-0005; `GET` reads the latest stored run for the same scope, persona and
 window, or `null`, with no key needed). `GET /api/metrics/overview`
 is the Executive Dashboard's per-team row: flow metrics, health, forecast
-accuracy and snapshot history from one scope load, identical to the
-standalone endpoints for the same query. The frontend consumes them
+accuracy, snapshot history and, for a team, `dora` from one scope load,
+identical to the standalone endpoints for the same query. The frontend consumes them
 on the Executive (`/`), Team (`/teams`), and Project (`/projects`)
 dashboards — charted with Apache ECharts (ADR-0007) — plus the Advisor
 (`/advisor`) page; the retired `/metrics` route redirects to `/teams`.
@@ -327,6 +335,8 @@ Meeting preparation has two deliberate paths: **external** — the MCP prompts
 /api/meetings/prep` starts a stored run (`GET` reads the latest; ADR-0023) that builds the same digest (`MeetingContext` = advisor context
 + delivery health + aging WIP, rendered by `render_meeting_context`) and sends
 it to the OpenRouter advisor (`AdvisorPort.prepare_meeting`), so Atlas works
-stand-alone. Meeting types are backed by learnable personas (`daily_standup`,
-`retrospective`, `planning` in the `Persona` enum) that reuse the persona
-feedback/reflect/guidance machinery unchanged.
+stand-alone. The `dora` MCP tool and the advisor digest render DORA
+through the same `render_dora`. Meeting types are backed by learnable
+personas (`daily_standup`, `retrospective`, `planning` in the `Persona`
+enum) that reuse the persona feedback/reflect/guidance machinery
+unchanged.

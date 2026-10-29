@@ -196,3 +196,42 @@ export function useDeliveryHealth(scope: MetricsScope, filters: MetricsFilters =
     queryFn: () => apiFetch<DeliveryHealth>(`/api/metrics/health?${params}`),
   });
 }
+
+export type DoraBand = "elite" | "high" | "medium" | "low";
+
+/** DORA's four keys for one team; a null band means too few samples to rate. */
+export interface DoraMetrics {
+  window_start: string;
+  window_end: string;
+  /** Repositories mapped to the team; 0 means nothing can be measured. */
+  codebases: number;
+  min_sample: number;
+  deployments: number;
+  deploys_per_week: number;
+  deploy_frequency_band: DoraBand | null;
+  lead_time_median_seconds: number | null;
+  lead_time_changes: number;
+  lead_time_band: DoraBand | null;
+  change_failure_rate: number | null;
+  failed_deployments: number;
+  finished_deployments: number;
+  change_failure_band: DoraBand | null;
+  restore_median_seconds: number | null;
+  restores: number;
+  restore_band: DoraBand | null;
+}
+
+/** Team scope only: a project answers 422, so no team means no request. */
+export function useDora(teamId: string | undefined, filters: MetricsFilters = {}) {
+  const params = teamId
+    ? metricsParams(
+        { teamId },
+        { windowDays: filters.windowDays, start: filters.start, end: filters.end },
+      )
+    : null;
+  return useQuery({
+    queryKey: ["metrics", "dora", teamId, filters],
+    enabled: params !== null,
+    queryFn: () => apiFetch<DoraMetrics>(`/api/metrics/dora?${params}`),
+  });
+}

@@ -4,11 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import MetricsServiceDep, SnapshotServiceDep
+from app.api.deps import DoraServiceDep, MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
     AgingItemRead,
     AgingWipRead,
     DeliveryHealthRead,
+    DoraMetricsRead,
     DurationStatsRead,
     FlowHistoryRead,
     FlowMetricsRead,
@@ -179,6 +180,29 @@ async def get_state_times(
     )
 
 
+@router.get("/dora", response_model=DoraMetricsRead)
+async def get_dora_metrics(
+    service: MetricsServiceDep,
+    dora: DoraServiceDep,
+    scope: ScopeDep,
+    period: PeriodDep,
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=1, le=365),
+) -> DoraMetricsRead:
+    """A team's DORA metrics. Item filters do not apply: a type filter must not hide incidents."""
+    if scope.team_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="DORA metrics are per team; provide team_id",
+        )
+    samples, now, period_days = await _period_samples(
+        service, scope, ItemFilters(None, None), period
+    )
+    result = await dora.get_dora(
+        team_id=scope.team_id, scope=samples, window_days=period_days or window_days, now=now
+    )
+    return DoraMetricsRead.of(result)
+
+
 @router.get("/history", response_model=FlowHistoryRead)
 async def get_flow_history(
     service: MetricsServiceDep,
@@ -226,6 +250,7 @@ async def get_metric_snapshots(
 @router.get("/overview", response_model=ScopeOverviewRead)
 async def get_scope_overview(
     service: MetricsServiceDep,
+    dora: DoraServiceDep,
     snapshots: SnapshotServiceDep,
     scope: ScopeDep,
     filters: ItemFiltersDep,
@@ -235,10 +260,12 @@ async def get_scope_overview(
     """Flow metrics, health, forecast accuracy and snapshot history from one scope load.
 
     The Executive Dashboard's per-team row. Each standalone endpoint loads
-    the scope's items and events itself; this loads them once and folds at
-    most twice: filtered and as of the period end for metrics + health,
-    current and unfiltered for accuracy (its forecasts were captured
-    unfiltered). window_days floors at health's minimum, 7.
+    the scope's items and events itself; this loads them once. It folds the
+    current unfiltered samples (accuracy: its forecasts were captured
+    unfiltered), plus one fold filtered and as of the period end for metrics
+    + health when a filter or a period end is set. DORA, which ignores item
+    filters, reuses those samples when no filter is set, and otherwise folds
+    once more as of the period end. window_days floors at health's minimum, 7.
     """
     data = await service.load_scope_data(team_id=scope.team_id, project_id=scope.project_id)
     now, period_days = period.resolve(data.rules.scope.tz)
@@ -252,7 +279,22 @@ async def get_scope_overview(
         team_id=scope.team_id, project_id=scope.project_id, scope=current
     )
     history = await snapshots.get_metric_history(team_id=scope.team_id, project_id=scope.project_id)
+    # Item filters do not apply to DORA: a type filter must not hide incidents.
+    dora_scope = (
+        samples if narrowed is data else (current if now is None else data.samples(as_of=now))
+    )
+    dora_metrics = (
+        await dora.get_dora(
+            team_id=scope.team_id,
+            scope=dora_scope,
+            window_days=window,
+            now=now,
+        )
+        if scope.team_id is not None
+        else None
+    )
     return ScopeOverviewRead(
+        dora=DoraMetricsRead.of(dora_metrics) if dora_metrics is not None else None,
         metrics=_flow_metrics_read(metrics),
         health=DeliveryHealthRead.model_validate(health),
         accuracy=ForecastAccuracyRead.model_validate(accuracy),

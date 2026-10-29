@@ -34,6 +34,7 @@ import { CHART_WINDOW_DAYS, STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
 import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
+import { TeamDoraCard } from "./DoraCard";
 import { ForecastCard } from "./ForecastCard";
 import { HealthPanel } from "./HealthPanel";
 import { HelpLabel } from "./HelpLabel";
@@ -387,6 +388,7 @@ export function FlowDashboard({
       {health.data && (
         <HealthPanel health={health.data} periodText={periodText(filters, metrics.data)} />
       )}
+      <TeamDoraCard teamId={scope.teamId} filters={filters} />
       <FlowStats
         data={metrics.data}
         statLabel={windowLabel(filters, STATS_WINDOW_DAYS)}

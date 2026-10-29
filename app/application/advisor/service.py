@@ -2,10 +2,13 @@ from datetime import UTC, date, datetime
 from uuid import UUID
 
 from app.application.forecasting.service import ForecastService
+from app.application.metrics.dora import DoraService
 from app.application.metrics.service import MetricsService
+from app.application.scope import ScopeSamples
 from app.domain.advisor.entities import MeetingType
 from app.domain.advisor.port import DeliveryContext, MeetingContext
 from app.domain.metric_rules.entities import MetricRules
+from app.domain.metrics.dora import DoraMetrics
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 
@@ -26,9 +29,25 @@ class AdvisorService:
     transaction there blocks every other writer for the duration.
     """
 
-    def __init__(self, metrics: MetricsService, forecasts: ForecastService) -> None:
+    def __init__(
+        self,
+        metrics: MetricsService,
+        forecasts: ForecastService,
+        dora: DoraService | None = None,
+    ) -> None:
         self._metrics = metrics
         self._forecasts = forecasts
+        self._dora = dora
+
+    async def _dora_for(
+        self, team_id: UUID | None, scope: ScopeSamples, window_days: int, now: datetime
+    ) -> DoraMetrics | None:
+        """DORA for a team scope; a project scope (or no service) has none."""
+        if self._dora is None or team_id is None:
+            return None
+        return await self._dora.get_dora(
+            team_id=team_id, scope=scope, window_days=window_days, now=now
+        )
 
     async def build_context(
         self,
@@ -55,8 +74,13 @@ class AdvisorService:
         state_times = await self._metrics.get_state_times(
             window_days=window_days, now=window_end, scope=scope
         )
+        dora = await self._dora_for(team_id, scope, window_days, window_end)
         return DeliveryContext(
-            flow=flow, distribution=distribution, forecast=forecast, state_times=state_times
+            flow=flow,
+            distribution=distribution,
+            forecast=forecast,
+            state_times=state_times,
+            dora=dora,
         )
 
     async def build_meeting_context(
@@ -94,9 +118,14 @@ class AdvisorService:
         state_times = await self._metrics.get_state_times(
             window_days=window, now=window_end, scope=scope
         )
+        dora = await self._dora_for(team_id, scope, window, window_end)
         return MeetingContext(
             delivery=DeliveryContext(
-                flow=flow, distribution=distribution, forecast=forecast, state_times=state_times
+                flow=flow,
+                distribution=distribution,
+                forecast=forecast,
+                state_times=state_times,
+                dora=dora,
             ),
             health=health,
             aging=aging,

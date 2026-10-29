@@ -350,7 +350,7 @@ credential — treat the full URL like a password.
 
 Tools: `list_scopes`, `meeting_brief` (the one-call digest), `aging_wip`,
 `list_work_items`, `forecast` (supports what-if `remaining`/`target_date`),
-`run_sync`. Prompts: `daily_standup`, `retrospective`, `planning` — pick one
+`dora` (a team's four DORA metrics with their bands), `run_sync`. Prompts: `daily_standup`, `retrospective`, `planning` — pick one
 from the client's prompt menu and it orchestrates the tools for you.
 Everything is computed by Atlas; the chat model explains, it never invents
 numbers it wasn't given.

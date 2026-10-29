@@ -26,9 +26,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api import mcp_server
 from app.api.deps import get_delivery_data_source
-from app.api.mcp_server import _aging_from_json
-from app.api.schemas import AgingItemRead, AgingWipRead
+from app.api.mcp_server import _aging_from_json, _dora_from_json
+from app.api.schemas import AgingItemRead, AgingWipRead, DoraMetricsRead
 from app.domain.metrics.aging import AgingItem, AgingWip
+from app.domain.metrics.dora import DoraMetrics
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceTeam
 from app.main import _RedactSecret, create_app
@@ -525,3 +526,46 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
     ).model_dump(mode="json")
 
     assert _aging_from_json(wire) == domain
+
+
+async def test_dora_tool_renders_the_endpoint(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker, settings_env) as app:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+            team_id = await create_team(client)
+
+        async with mcp_session(app) as session:
+            result = await session.call_tool("dora", {"team_id": team_id})
+            assert not result.is_error
+            # a team without a mapped codebase: the one-line mapping hint, not a 500
+            assert tool_text(result).startswith("DORA: no codebase is mapped")
+
+
+def test_dora_json_rebuilds_the_domain_value() -> None:
+    now = datetime(2026, 10, 9, 12, tzinfo=UTC)
+    domain = DoraMetrics(
+        window_start=now - timedelta(days=30),
+        window_end=now,
+        codebases=2,
+        min_sample=5,
+        deployments=6,
+        deploys_per_week=1.4,
+        deploy_frequency_band="high",
+        lead_time_median=timedelta(hours=30, seconds=0.5),
+        lead_time_changes=2,
+        lead_time_band=None,
+        change_failure_rate=0.25,
+        failed_deployments=2,
+        finished_deployments=8,
+        change_failure_band="low",
+        restore_median=None,
+        restores=0,
+        restore_band=None,
+    )
+
+    wire = DoraMetricsRead.of(domain).model_dump(mode="json")
+
+    assert _dora_from_json(wire) == domain

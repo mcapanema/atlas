@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { HelpLabel } from "./HelpLabel";
 
 /**
@@ -10,16 +12,20 @@ export function StatCard({
   title,
   value,
   help,
+  children,
 }: {
   title: string;
   value: string | number;
   /** How the figure is computed — surfaced on hover/focus of the label. */
   help?: string;
+  /** Evidence line under the figure (band, sample). */
+  children?: ReactNode;
 }) {
   return (
     <div className="stat">
       <div className="stat__label">{help ? <HelpLabel label={title} help={help} /> : title}</div>
       <div className="stat__value fig">{value}</div>
+      {children}
     </div>
   );
 }

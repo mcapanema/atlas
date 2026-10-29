@@ -4,6 +4,7 @@ import { apiFetch } from "./client";
 import {
   metricsParams,
   type DeliveryHealth,
+  type DoraMetrics,
   type FlowMetrics,
   type MetricsFilters,
 } from "./metrics";
@@ -16,6 +17,8 @@ export interface ScopeOverview {
   health: DeliveryHealth;
   accuracy: ForecastAccuracy;
   snapshots: MetricSnapshot[];
+  /** Null for a project scope; a team always gets an object. */
+  dora: DoraMetrics | null;
 }
 
 export function useAllTeamsOverviews(teams: Team[], filters: MetricsFilters = {}) {

@@ -196,6 +196,12 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "names" },
       },
       {
+        name: "incident_label_names",
+        label: "Incident labels",
+        help: "Labels that mark an issue as a production incident (any case). Incidents count as failed changes and their open-to-done time is the time to restore in DORA metrics.",
+        control: { kind: "names" },
+      },
+      {
         name: "blocked_by_relations",
         label: "Count Linear 'blocked by' relations",
         help: "An item is blocked from when a 'blocked by' relation is added until it is removed or the blocker is done or canceled, and again if the blocker reopens. Linear records relation history from about mid-2026; older relations don't count.",

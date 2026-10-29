@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from app.domain.advisor.port import DeliveryContext, MeetingContext
 from app.domain.metrics.aging import AgingWip
+from app.domain.metrics.dora import DoraBand, DoraMetrics
 from app.domain.metrics.state_time import StateTime, StateTimes
 
 
@@ -71,9 +72,75 @@ def render_context(context: DeliveryContext) -> str:
         lines.append("- no forecast (no historical throughput)")
     if forecast.confidence is not None:
         lines.append(f"- delivery confidence vs target date={forecast.confidence:.2f}")
+    lines += _render_optional_blocks(context)
+    return "\n".join(lines)
+
+
+def _render_optional_blocks(context: DeliveryContext) -> list[str]:
+    """Time in state and DORA, each only when the context carries it."""
+    lines: list[str] = []
     if context.state_times is not None:
         lines += _render_state_times(context.state_times)
-    return "\n".join(lines)
+    if context.dora is not None:
+        lines.append(render_dora(context.dora))
+    return lines
+
+
+def _hours(delta: timedelta) -> str:
+    return f"{delta / timedelta(hours=1):.1f} hours"
+
+
+def _dora_line(
+    name: str, value: str | None, band: DoraBand | None, sample: str, min_sample: int
+) -> str:
+    """One metric: its value, then its band, or why there is no band."""
+    shown = value if value is not None else "none in window"
+    if band is not None:
+        return f"- {name}={shown} ({band}, {sample})"
+    return f"- {name}={shown} (no band: {sample}, fewer than {min_sample})"
+
+
+def render_dora(dora: DoraMetrics) -> str:
+    """DORA metrics as text: value, computed band and sample size per metric.
+
+    The bands are computed (metrics/dora.py); the advisor only explains them.
+    A metric without a band has too few samples. Without a mapped codebase
+    there is nothing to report, so only the mapping hint is returned.
+    """
+    if dora.codebases == 0:
+        return "DORA: no codebase is mapped to this team; map one on the Connectors page."
+    days = (dora.window_end - dora.window_start).days
+    lead, restore = dora.lead_time_median, dora.restore_median
+    rate = dora.change_failure_rate
+    failed = f"{dora.failed_deployments} of {dora.finished_deployments} deployments"
+    return "\n".join(
+        [
+            f"DORA (trailing {days} calendar days, ending {dora.window_end.date()}):",
+            f"- deploy frequency={dora.deploys_per_week:.1f}/week "
+            f"({dora.deploy_frequency_band}, {dora.deployments} deployments)",
+            _dora_line(
+                "change lead time median",
+                _hours(lead) if lead is not None else None,
+                dora.lead_time_band,
+                f"{dora.lead_time_changes} changes",
+                dora.min_sample,
+            ),
+            _dora_line(
+                "change failure rate",
+                f"{rate:.0%}" if rate is not None else None,
+                dora.change_failure_band,
+                failed if dora.change_failure_band else f"{dora.finished_deployments} deployments",
+                dora.min_sample,
+            ),
+            _dora_line(
+                "time to restore median",
+                _hours(restore) if restore is not None else None,
+                dora.restore_band,
+                f"{dora.restores} restores",
+                dora.min_sample,
+            ),
+        ]
+    )
 
 
 _STATE_LIMIT = 8

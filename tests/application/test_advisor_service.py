@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from app.application.advisor.service import AdvisorService
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
+from app.application.metrics.dora import DoraService
 from app.application.metrics.service import MetricsService
 from app.domain.advisor.entities import MeetingType
 from app.domain.metric_rules.entities import RuleOverrides
@@ -12,9 +13,12 @@ from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItem
 from tests.fakes import (
+    InMemoryCodebaseRepository,
+    InMemoryDeploymentRepository,
     InMemoryEventRepository,
     InMemoryMetricRuleOverridesRepository,
     InMemoryProjectRepository,
+    InMemoryPullRequestRepository,
     InMemoryTeamRepository,
     InMemoryWorkItemRepository,
 )
@@ -190,3 +194,38 @@ async def test_an_explicit_window_wins_and_other_meetings_ignore_the_sprint() ->
     assert asked.delivery.flow.window_start == now - timedelta(days=21)
     for context in (standup, planning):
         assert context.delivery.flow.window_start == now - timedelta(days=STATS_WINDOW_DAYS)
+
+
+async def test_build_context_has_dora_for_a_team_and_none_for_a_project() -> None:
+    now = datetime(2026, 7, 10, tzinfo=UTC)
+    team = Team(organization_id=uuid4(), name="Platform")
+    project = Project(team_id=team.id, name="Launch")
+    teams = InMemoryTeamRepository([team])
+    rules = MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository(), teams, InMemoryProjectRepository([project])
+    )
+    work_items = InMemoryWorkItemRepository()
+    events = InMemoryEventRepository()
+    dora = DoraService(
+        InMemoryCodebaseRepository(),
+        InMemoryDeploymentRepository(),
+        InMemoryPullRequestRepository(),
+        teams,
+    )
+    service = AdvisorService(
+        MetricsService(work_items, events, rules),
+        ForecastService(work_items, events, rules),
+        dora,
+    )
+
+    for_team = await service.build_context(team_id=team.id, now=now)
+    for_project = await service.build_context(project_id=project.id, now=now)
+    meeting = await service.build_meeting_context(
+        meeting=MeetingType.DAILY_STANDUP, team_id=team.id, now=now
+    )
+
+    assert for_team.dora is not None
+    assert for_team.dora.codebases == 0
+    assert for_team.dora.window_end == now
+    assert for_project.dora is None
+    assert meeting.delivery.dora is not None
