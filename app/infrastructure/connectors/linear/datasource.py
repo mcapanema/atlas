@@ -1,10 +1,9 @@
 """DeliveryDataSource adapter backed by Linear's GraphQL API."""
 
-import logging
-from collections.abc import Callable
 from typing import Any
 
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
+from app.infrastructure.connectors.graphql import map_tolerantly
 from app.infrastructure.connectors.linear.client import LinearAPIError, LinearGraphQLClient
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
@@ -13,33 +12,9 @@ from app.infrastructure.connectors.linear.mapping import (
     map_team,
 )
 
-logger = logging.getLogger(__name__)
-
 # ponytail: 1000 pages ≈ 50k issues (archived included) per sync — 5x the
 # largest workspace seen. Raise it (or paginate per-team) if one exceeds it.
 _MAX_PAGES = 1000
-
-
-def _map_tolerantly[T](
-    nodes: list[dict[str, Any]], mapper: Callable[[dict[str, Any]], T], kind: str
-) -> list[T]:
-    """Map nodes one by one; a malformed node is skipped and logged, not fatal."""
-    mapped: list[T] = []
-    skipped = 0
-    for node in nodes:
-        try:
-            mapped.append(mapper(node))
-        except (KeyError, IndexError, TypeError, ValueError):
-            skipped += 1
-            logger.warning(
-                "Skipping malformed Linear %s node %s",
-                kind,
-                node.get("id", "<no id>"),
-                exc_info=True,
-            )
-    if skipped:
-        logger.warning("Skipped %d malformed Linear %s node(s)", skipped, kind)
-    return mapped
 
 
 _ORGANIZATION_QUERY = """
@@ -138,11 +113,13 @@ class LinearDataSource:
         return name
 
     async def fetch_teams(self) -> list[SourceTeam]:
-        return _map_tolerantly(await self._nodes(_TEAMS_QUERY, "teams"), map_team, "team")
+        return map_tolerantly(
+            await self._nodes(_TEAMS_QUERY, "teams"), map_team, "team", vendor="Linear"
+        )
 
     async def fetch_projects(self) -> list[SourceProject]:
-        return _map_tolerantly(
-            await self._nodes(_PROJECTS_QUERY, "projects"), map_project, "project"
+        return map_tolerantly(
+            await self._nodes(_PROJECTS_QUERY, "projects"), map_project, "project", vendor="Linear"
         )
 
     async def fetch_work_items(self, team_external_id: str | None = None) -> list[SourceWorkItem]:
@@ -160,7 +137,9 @@ class LinearDataSource:
             for node in await self._nodes(_ISSUES_QUERY, "issues", variables)
             if not node.get("trashed")
         ]
-        return _map_tolerantly(issues, lambda node: map_issue(node, label_names), "issue")
+        return map_tolerantly(
+            issues, lambda node: map_issue(node, label_names), "issue", vendor="Linear"
+        )
 
     async def _nodes(
         self, query: str, root: str, variables: dict[str, Any] | None = None

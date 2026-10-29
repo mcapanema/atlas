@@ -6,7 +6,7 @@ messages, and the `DataSourceError` subclass to raise.
 
 import asyncio
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import httpx
@@ -134,3 +134,30 @@ class GraphQLClient:
             return exc
         except httpx.HTTPError as exc:
             raise self._error(f"{self._vendor} API request failed: {exc}") from exc
+
+
+def map_tolerantly[T](
+    nodes: list[dict[str, Any]],
+    mapper: Callable[[dict[str, Any]], T],
+    kind: str,
+    *,
+    vendor: str,
+) -> list[T]:
+    """Map nodes one by one; a malformed node is skipped and logged, not fatal."""
+    mapped: list[T] = []
+    skipped = 0
+    for node in nodes:
+        try:
+            mapped.append(mapper(node))
+        except (KeyError, IndexError, TypeError, ValueError):
+            skipped += 1
+            logger.warning(
+                "Skipping malformed %s %s node %s",
+                vendor,
+                kind,
+                node.get("id", "<no id>"),
+                exc_info=True,
+            )
+    if skipped:
+        logger.warning("Skipped %d malformed %s %s node(s)", skipped, vendor, kind)
+    return mapped
