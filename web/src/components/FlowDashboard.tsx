@@ -10,6 +10,7 @@ import {
   useFlowHistory,
   useFlowMetrics,
   useLeadTimeDistribution,
+  useStateTimes,
   type AgingItem,
   type DurationStats,
   type FlowHistory,
@@ -39,6 +40,7 @@ import { HelpLabel } from "./HelpLabel";
 import { SlottedTitle } from "./SlottedTitle";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
+import { StateTimeCard } from "./StateTimeCard";
 
 /** "the last day" / "the last 90 days" — the aging history window, in prose. */
 function lastDays(days: number): string {
@@ -368,6 +370,7 @@ export function FlowDashboard({
   const snapshots = useMetricSnapshots(scope); // persisted trend: deliberately unfiltered
   const aging = useAgingWip(scope, filters);
   const health = useDeliveryHealth(scope, filters);
+  const stateTimes = useStateTimes(scope, filters);
 
   if (metrics.isError || history.isError || distribution.isError) {
     return <Alert type="error" title="Failed to load metrics" />;
@@ -395,6 +398,9 @@ export function FlowDashboard({
         snapshots={snapshots.data}
         chartLabel={windowLabel(filters, CHART_WINDOW_DAYS)}
       />
+      {stateTimes.data && stateTimes.data.states.length > 0 && (
+        <StateTimeCard data={stateTimes.data} />
+      )}
       {aging.data && aging.data.items.length > 0 && (
         <AgingWipCard
           items={aging.data.items}

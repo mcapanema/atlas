@@ -315,6 +315,56 @@ async def test_aging_wip_requires_exactly_one_scope(client: AsyncClient) -> None
     assert (await client.get("/api/metrics/aging-wip")).status_code == 422
 
 
+async def test_state_times_end_to_end(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    org_id, team_id = await create_org_and_team(client)
+    await use_calendar_days(sessionmaker, org_id)
+    item = (await client.post("/api/work-items", json={"team_id": team_id, "title": "Ship"})).json()
+    for type_, days, from_state, to_state in (
+        ("started", 6, "Todo", "In Progress"),
+        ("state_changed", 4, "In Progress", "In Review"),
+        ("completed", 1, "In Review", "Done"),
+    ):
+        await client.post(
+            "/api/events",
+            json={
+                "work_item_id": item["id"],
+                "type": type_,
+                "occurred_at": days_ago(days),
+                "from_state": from_state,
+                "to_state": to_state,
+            },
+        )
+
+    response = await client.get(f"/api/metrics/state-times?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["measured"] == 1
+    assert body["min_sample"] == 5
+    review = body["states"][0]
+    assert review["state"] == "In Review"
+    assert review["total_seconds"] == pytest.approx(3 * 86400)
+    assert review["median_seconds"] == pytest.approx(3 * 86400)
+    assert review["share"] == pytest.approx(0.6)
+    assert review["items"] == 1
+    assert review["queue"] == 0
+    assert review["wait_state"] is False
+    assert review["team"] is None  # a team scope is never split by team
+    assert body["bottleneck"] is None  # 1 measured item < min_sample 5
+    assert body["bottleneck_team"] is None
+
+
+async def test_state_times_for_unknown_team_is_404(client: AsyncClient) -> None:
+    response = await client.get(f"/api/metrics/state-times?team_id={uuid4()}")
+    assert response.status_code == 404
+
+
+async def test_state_times_requires_exactly_one_scope(client: AsyncClient) -> None:
+    assert (await client.get("/api/metrics/state-times")).status_code == 422
+
+
 async def test_delivery_health_end_to_end(client: AsyncClient) -> None:
     team_id = await create_team(client)
     for title in ("Ship", "Ship again", "Ship more", "Ship four", "Ship five"):

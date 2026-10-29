@@ -16,6 +16,8 @@ from app.api.schemas import (
     LeadTimeDistributionRead,
     MetricSnapshotRead,
     ScopeOverviewRead,
+    StateTimeRead,
+    StateTimesRead,
 )
 from app.api.scope import ItemFilters, ItemFiltersDep, Scope, ScopeDep
 from app.application.metrics.service import MetricsService
@@ -140,6 +142,41 @@ async def get_flow_metrics(
         now=now,
     )
     return _flow_metrics_read(metrics)
+
+
+@router.get("/state-times", response_model=StateTimesRead)
+async def get_state_times(
+    service: MetricsServiceDep,
+    scope: ScopeDep,
+    filters: ItemFiltersDep,
+    period: PeriodDep,
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=1, le=365),
+) -> StateTimesRead:
+    samples, now, period_days = await _period_samples(service, scope, filters, period)
+    result = await service.get_state_times(
+        scope=samples, window_days=period_days or window_days, now=now
+    )
+    return StateTimesRead(
+        window_start=result.window_start,
+        window_end=result.window_end,
+        measured=result.measured,
+        min_sample=result.min_sample,
+        states=[
+            StateTimeRead(
+                state=s.state,
+                total_seconds=s.total.total_seconds(),
+                share=s.share,
+                median_seconds=s.median.total_seconds(),
+                items=s.items,
+                queue=s.queue,
+                wait_state=s.wait_state,
+                team=s.team,
+            )
+            for s in result.states
+        ],
+        bottleneck=result.bottleneck,
+        bottleneck_team=result.bottleneck_team,
+    )
 
 
 @router.get("/history", response_model=FlowHistoryRead)

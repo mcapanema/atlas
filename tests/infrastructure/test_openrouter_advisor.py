@@ -187,6 +187,11 @@ def test_knowledge_file_is_read_once() -> None:
     assert _knowledge.cache_info().misses == 1
 
 
+def test_agile_coach_uses_the_computed_bottleneck() -> None:
+    assert "the computed bottleneck" in _system_prompt(Persona.AGILE_COACH)
+    assert "Atlas computes the bottleneck" in _knowledge()
+
+
 def test_system_prompt_appends_learned_guidance() -> None:
     base = _system_prompt(Persona.AGILE_COACH)
     grown = _system_prompt(Persona.AGILE_COACH, "Prefer WIP actions over staffing advice.")

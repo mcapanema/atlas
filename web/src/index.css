@@ -172,7 +172,10 @@ h5 {
 }
 /* Aging WIP: the Blocked icon leads the state it qualifies, and the pair
    never wraps. */
-.aging-state {
+/* The Time in state name cell lays out its Bottleneck flag and wait marker
+   the same way, after the name. */
+.aging-state,
+.state-time-name {
   display: inline-flex;
   align-items: center;
   gap: 6px;

@@ -135,6 +135,43 @@ export function useAgingWip(scope: MetricsScope, filters: MetricsFilters = {}) {
   });
 }
 
+/** In-cycle time items completed in the window spent in one workflow state. */
+export interface StateTime {
+  state: string;
+  total_seconds: number;
+  /** total over every state's total, 0–1. */
+  share: number;
+  median_seconds: number;
+  items: number;
+  /** Items in progress in this state at the window's end. */
+  queue: number;
+  wait_state: boolean;
+  /** The row's team in a project that spans teams; null otherwise. */
+  team: string | null;
+}
+
+export interface StateTimes {
+  window_start: string;
+  window_end: string;
+  measured: number;
+  min_sample: number;
+  /** Most total time first. */
+  states: StateTime[];
+  /** The state with the most total time; null below min_sample measured items. */
+  bottleneck: string | null;
+  /** The bottleneck row's team; null when the scope isn't split by team. */
+  bottleneck_team: string | null;
+}
+
+export function useStateTimes(scope: MetricsScope, filters: MetricsFilters = {}) {
+  const params = metricsParams(scope, filters);
+  return useQuery({
+    queryKey: ["metrics", "state-times", scope, filters],
+    enabled: params !== null,
+    queryFn: () => apiFetch<StateTimes>(`/api/metrics/state-times?${params}`),
+  });
+}
+
 export interface HealthComponent {
   name: string;
   score: number;
