@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api import (
     advisor,
+    codebases,
     connectors,
     events,
     forecasts,
@@ -130,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(forecasts.router)
     app.include_router(connectors.router)
+    app.include_router(codebases.router)
     app.include_router(advisor.router)
     app.include_router(personas.router)
     app.include_router(meetings.router)

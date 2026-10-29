@@ -48,6 +48,15 @@ derivation lives beside its aggregate: `derive_timeline`
 and — under its team's rules (`blocked_periods`) — blocked periods for `GET /api/work-items/{id}/timeline` and the Work
 Item Explorer (`/work-items`).
 
+An Organization also owns Codebases (`app/domain/codebases/`, ADR-0024): a
+repository from a code host, mapped to at most one Team and holding its Pull
+Requests and Deployments. Codebases arrive unmapped from a code sync, and an
+unmapped codebase is never fetched; `GET /api/codebases?organization_id=`
+lists them with their stored counts, and `PUT /api/codebases/{id}` sets the
+team and the production environment. The code sync links a pull request to
+the work items whose keys it names by REVIEW and MERGED events
+(`CodeSyncService`, `app/application/codebases/sync.py`).
+
 ### Computed-on-read analytics (ADR-0003, amended by ADR-0008 and ADR-0023)
 
 Metrics and forecasts are recomputed per request from the persisted
@@ -204,11 +213,21 @@ custom.
   `AutoSyncRunner` (`app/api/auto_sync.py`). It ticks every minute, syncs
   each organization with a due slot through the same `SyncJobRunner`, and
   records the outcome on the schedule. Edited on the Connectors page.
+- **Code host** (`app/domain/sync/port.py`): the `CodeHostSource` port plus
+  vendor-neutral `SourceCodebase`, `SourcePullRequest` and
+  `SourceDeployment` (`source.py`). `CodeSyncService` upserts codebases by
+  `external_id` (never pruned), then the pull requests and deployments of
+  mapped codebases, idempotently (ADR-0004): a codebase's first fetch
+  reaches back 180 days, later fetches start one day before its
+  `last_synced_at`. `POST /api/connectors/github/sync` runs it as a `code`
+  job on the same `SyncJobRunner` (`GET /api/connectors/github/jobs/{id}`);
+  it captures no snapshots, because the REVIEW and MERGED events change no
+  metric.
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
 
-Each port defines its failure type beside it (`DataSourceError`,
-`AdvisorError`); adapters translate vendor errors into them, and
+Each port defines its failure type beside it (`DataSourceError` — also
+for `CodeHostSource` — and `AdvisorError`); adapters translate vendor errors into them, and
 `create_app()`'s exception handlers turn them into 502s.
 
 ## Connectors
@@ -241,6 +260,15 @@ Linear's `duplicate` state type reads as `canceled`. Archived issues are synced
 and trashed ones skipped; already-synced issues that are trashed or deleted
 upstream are pruned (ADR-0009). All of these use derived external ids,
 so a re-sync backfills existing data.
+
+The GitHub connector (`app/infrastructure/connectors/github/`) implements
+`CodeHostSource` on GitHub's GraphQL API with the GraphQL client shared
+between vendors (`app/infrastructure/connectors/graphql.py`): a token via
+`ATLAS_GITHUB_TOKEN` and the organization or user login via
+`ATLAS_GITHUB_OWNER`. Its codebases are that owner's repositories; GitHub
+errors raise `GitHubAPIError` (a `DataSourceError`). Exposed as `GET
+/api/connectors/github` and `POST /api/connectors/github/sync` (409 until
+both variables are set — ADR-0005).
 
 ## AI adapter
 

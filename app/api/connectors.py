@@ -1,13 +1,31 @@
+from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import DeliveryDataSourceDep, SessionDep, SyncServiceDep
-from app.api.schemas import LinearStatusRead, SyncJobRead, SyncRequest
-from app.api.sync_jobs import SyncBusyError, SyncJobRequest, SyncJobRunner, SyncJobRunnerDep
+from app.api.deps import (
+    CodeHostSourceDep,
+    DeliveryDataSourceDep,
+    SessionDep,
+    SyncServiceDep,
+    code_sync_service_for,
+)
+from app.api.schemas import (
+    CodeSyncRequest,
+    GitHubStatusRead,
+    LinearStatusRead,
+    SyncJobRead,
+    SyncRequest,
+)
+from app.api.sync_jobs import (
+    SyncBusyError,
+    SyncJob,
+    SyncJobRequest,
+    SyncJobRunner,
+    SyncJobRunnerDep,
+)
 from app.application.sync.service import UnknownOrganizationError, UnknownTeamError
 from app.config import get_settings
-from app.domain.sync.port import DeliveryDataSource
 
 router = APIRouter(prefix="/api/connectors", tags=["connectors"])
 
@@ -21,9 +39,10 @@ async def linear_status(jobs: SyncJobRunnerDep) -> LinearStatusRead:
     )
 
 
-def _start(jobs: SyncJobRunner, request: SyncJobRequest, source: DeliveryDataSource) -> SyncJobRead:
+def _start(start: Callable[[], SyncJob]) -> SyncJobRead:
+    """Run a runner `start*` call; a busy runner answers 409."""
     try:
-        return SyncJobRead.of(jobs.start(request, source))
+        return SyncJobRead.of(start())
     except SyncBusyError as exc:
         running = exc.job
         raise HTTPException(
@@ -53,7 +72,7 @@ async def sync_linear(
     # visible to the job's own session.
     await session.commit()
     request = SyncJobRequest(organization_id, "organization", "manual", rebuild=payload.rebuild)
-    return _start(jobs, request, source)
+    return _start(lambda: jobs.start(request, source))
 
 
 @router.post(
@@ -75,11 +94,10 @@ async def sync_linear_team(
     # Ends the request's read transaction before the job writes.
     await session.commit()
     request = SyncJobRequest(organization_id, "team", "manual", team_id=team_id)
-    return _start(jobs, request, source)
+    return _start(lambda: jobs.start(request, source))
 
 
-@router.get("/linear/jobs/{job_id}", response_model=SyncJobRead)
-async def linear_sync_job(job_id: UUID, jobs: SyncJobRunnerDep) -> SyncJobRead:
+def _job(jobs: SyncJobRunner, job_id: UUID) -> SyncJobRead:
     job = jobs.get(job_id)
     if job is None:
         raise HTTPException(
@@ -87,3 +105,44 @@ async def linear_sync_job(job_id: UUID, jobs: SyncJobRunnerDep) -> SyncJobRead:
             detail="Sync job not found; Atlas may have restarted before it finished",
         )
     return SyncJobRead.of(job)
+
+
+@router.get("/linear/jobs/{job_id}", response_model=SyncJobRead)
+async def linear_sync_job(job_id: UUID, jobs: SyncJobRunnerDep) -> SyncJobRead:
+    return _job(jobs, job_id)
+
+
+@router.get("/github", response_model=GitHubStatusRead)
+async def github_status(jobs: SyncJobRunnerDep) -> GitHubStatusRead:
+    settings = get_settings()
+    owner = settings.github_owner or None
+    running = jobs.running
+    return GitHubStatusRead(
+        configured=bool(settings.github_token and owner),
+        owner=owner,
+        running=SyncJobRead.of(running) if running is not None else None,
+    )
+
+
+# Same job model as the Linear sync: 202 now, then poll GET /github/jobs/{job_id}.
+@router.post("/github/sync", response_model=SyncJobRead, status_code=status.HTTP_202_ACCEPTED)
+async def sync_github(
+    payload: CodeSyncRequest,
+    source: CodeHostSourceDep,
+    session: SessionDep,
+    jobs: SyncJobRunnerDep,
+) -> SyncJobRead:
+    service = code_sync_service_for(session, source)
+    try:
+        organization_id = await service.resolve_organization(payload.organization_id)
+    except UnknownOrganizationError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    # Ends the request's read transaction before the job writes.
+    await session.commit()
+    request = SyncJobRequest(organization_id, "code", "manual")
+    return _start(lambda: jobs.start_code(request, source))
+
+
+@router.get("/github/jobs/{job_id}", response_model=SyncJobRead)
+async def github_sync_job(job_id: UUID, jobs: SyncJobRunnerDep) -> SyncJobRead:
+    return _job(jobs, job_id)

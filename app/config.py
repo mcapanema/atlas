@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # Linear personal API key; None/empty disables the Linear connector.
     linear_api_key: str | None = None
 
+    # GitHub token and the organization or user login whose repositories Atlas
+    # reads; the GitHub connector stays disabled until both are set.
+    github_token: str | None = None
+    github_owner: str | None = None
+
     # OpenRouter API key; None/empty disables the AI advisor.
     openrouter_api_key: str | None = None
     # OpenRouter model slug the advisor uses.
