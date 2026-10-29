@@ -96,4 +96,57 @@ describe("StateTimeCard", () => {
 
     expect(screen.queryByText("Platform")).toBeNull();
   });
+
+  it("flags the bottleneck after the state name, in the shared delta style", () => {
+    renderWithClient(<StateTimeCard data={stateTimesFixture} />);
+
+    const marker = screen.getByText("Bottleneck");
+    // The house flag style (as Aging WIP's > P85), AA-tuned in both themes —
+    // not a stock AntD Tag chip.
+    expect(marker.closest(".delta")).toHaveClass("delta--bad");
+    expect(marker.closest(".ant-tag")).toBeNull();
+    // After the name, so every state name starts at one x.
+    const text = row("In Review").textContent ?? "";
+    expect(text.indexOf("In Review")).toBeLessThan(text.indexOf("Bottleneck"));
+    // "wait" is a flag too: the 11px delta style at full text contrast.
+    const wait = within(row("In Review")).getByText("wait");
+    expect(wait).toHaveClass("delta");
+    expect(wait.closest(".ant-typography-secondary")).toBeNull();
+  });
+
+  it("gives teams their own column only when the scope is split", () => {
+    renderWithClient(<StateTimeCard data={twoTeams} />);
+
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "State",
+      "Team",
+      "Share",
+      "Total",
+      "Median",
+      "Queue",
+    ]);
+    const growth = screen.getByText("Growth");
+    expect(growth.closest("td")).not.toHaveTextContent("In Review");
+    // A team is data, like Aging WIP's owner: plain text, not the gray hint
+    // style (2.8:1 in light mode, under AA).
+    expect(growth.closest(".ant-typography-secondary")).toBeNull();
+  });
+
+  it("shows a share under 1% as <1%, and none as 0%", () => {
+    const [first, second] = stateTimesFixture.states;
+    renderWithClient(
+      <StateTimeCard
+        data={{
+          ...stateTimesFixture,
+          states: [
+            { ...first, share: 0.004 },
+            { ...second, share: 0 },
+          ],
+        }}
+      />,
+    );
+
+    expect(within(row("In Review")).getByText("<1%")).toBeInTheDocument();
+    expect(within(row("In Progress")).getByText("0%")).toBeInTheDocument();
+  });
 });

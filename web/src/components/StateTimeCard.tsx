@@ -1,5 +1,5 @@
 import { AimOutlined } from "@ant-design/icons";
-import { Table, Tag, Typography } from "antd";
+import { Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import type { StateTime, StateTimes } from "../api/metrics";
@@ -11,49 +11,64 @@ function rowKey(row: StateTime): string {
   return `${row.team ?? ""}\u0000${row.state}`;
 }
 
+/** "<1%" for a share that rounds to zero but isn't: a few days still count. */
+function formatShare(share: number): string {
+  return share > 0 && share < 0.005 ? "<1%" : `${Math.round(share * 100)}%`;
+}
+
+function figure(text: string | number) {
+  return <span className="fig">{text}</span>;
+}
+
+/** The state, then its flags; the name leads so every row's name starts at one x. */
+function StateName({ row, bottleneck }: { row: StateTime; bottleneck: boolean }) {
+  return (
+    <span className="state-time-name">
+      {row.state}
+      {bottleneck && (
+        <span className="delta delta--bad">
+          <AimOutlined aria-hidden /> Bottleneck
+        </span>
+      )}
+      {row.wait_state && <span className="delta">wait</span>}
+    </span>
+  );
+}
+
 function columns(data: StateTimes): ColumnsType<StateTime> {
   const isBottleneck = (row: StateTime) =>
     row.state === data.bottleneck && row.team === data.bottleneck_team;
+  const split = data.states.some((row) => row.team !== null);
   return [
     {
       title: "State",
       dataIndex: "state",
-      render: (state: string, row) => (
-        <span className="state-time-name">
-          {isBottleneck(row) && (
-            <Tag icon={<AimOutlined />} color="error">
-              Bottleneck
-            </Tag>
-          )}
-          {state}
-          {row.team !== null && <Typography.Text type="secondary">{row.team}</Typography.Text>}
-          {row.wait_state && <Typography.Text type="secondary">wait</Typography.Text>}
-        </span>
-      ),
+      render: (_, row) => <StateName row={row} bottleneck={isBottleneck(row)} />,
     },
+    ...(split ? [{ title: "Team", dataIndex: "team" }] : []),
     {
       title: "Share",
       dataIndex: "share",
       align: "right",
-      render: (share: number) => <span className="fig">{Math.round(share * 100)}%</span>,
+      render: (share: number) => figure(formatShare(share)),
     },
     {
       title: "Total",
       dataIndex: "total_seconds",
       align: "right",
-      render: (seconds: number) => <span className="fig">{formatSeconds(seconds)}</span>,
+      render: (seconds: number) => figure(formatSeconds(seconds)),
     },
     {
       title: "Median",
       dataIndex: "median_seconds",
       align: "right",
-      render: (seconds: number) => <span className="fig">{formatSeconds(seconds)}</span>,
+      render: (seconds: number) => figure(formatSeconds(seconds)),
     },
     {
       title: "Queue",
       dataIndex: "queue",
       align: "right",
-      render: (queue: number) => <span className="fig">{queue}</span>,
+      render: (queue: number) => figure(queue),
     },
   ];
 }
