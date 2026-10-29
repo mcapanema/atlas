@@ -58,11 +58,7 @@ describe("FlowDashboard", () => {
     // Wait for the full render (all 6 charts), not just the stat tiles: FlowDashboard's
     // loading skeleton gates ForecastCard's mount on metrics/history, so ForecastCard's
     // own forecast fetch only starts once they resolve — it lags behind metrics text.
-    // That multi-hop chain can exceed the default 1000ms waitFor timeout under CI load
-    // (same class of flake as App.test.tsx's lazy-route findByText).
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6), {
-      timeout: 5000,
-    });
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
     expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument(); // flow efficiency
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
@@ -480,7 +476,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const forecast = await screen.findByText("Completion forecast", {}, { timeout: 5000 });
+    const forecast = await screen.findByText("Completion forecast");
     expect(
       inDocumentOrder([
         screen.getByText("Flow efficiency"),
@@ -502,7 +498,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    const forecast = await screen.findByText("Completion forecast", {}, { timeout: 5000 });
+    const forecast = await screen.findByText("Completion forecast");
     expect(screen.queryByText("Aging WIP")).not.toBeInTheDocument();
     expect(inDocumentOrder([screen.getByText("Lead time trend"), forecast])).toBe(true);
   });
@@ -523,9 +519,7 @@ describe("FlowDashboard", () => {
     expect(await screen.findByText("No items completed in this window.")).toBeInTheDocument();
     expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
     // CFD, throughput, WIP, trend, forecast — no distribution chart.
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5), {
-      timeout: 5000,
-    });
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
   });
 
   it("waits for two snapshots with a lead time before drawing the trend", async () => {

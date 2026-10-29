@@ -17,6 +17,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/test/setup.ts",
+    // AntD + jsdom tests take 1–4 s each under parallel load, so the 5 s
+    // default timed tests out on busy machines (2026-10-28: up to 8 tests per run
+    // at the default worker count; earlier CI run 37612629650 and PR #106).
+    // The global value replaces per-test timeout patches.
+    testTimeout: 15_000,
     coverage: {
       provider: "v8",
       // text for the terminal, html for humans, cobertura for diff-cover.

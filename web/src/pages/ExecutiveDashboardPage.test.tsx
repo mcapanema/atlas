@@ -213,9 +213,8 @@ describe("ExecutiveDashboardPage", () => {
     });
     renderWithClient(<ExecutiveDashboardPage />);
 
-    await waitFor(
-      () => expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
-      { timeout: 5000 },
+    await waitFor(() =>
+      expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: /risk reasons/i })).toBeNull();
   });
@@ -311,9 +310,8 @@ describe("ExecutiveDashboardPage", () => {
 
     renderWithClient(<ExecutiveDashboardPage />);
 
-    await waitFor(
-      () => expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
-      { timeout: 5000 },
+    await waitFor(() =>
+      expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
@@ -343,9 +341,8 @@ describe("ExecutiveDashboardPage", () => {
         ).length;
 
     renderWithClient(<ExecutiveDashboardPage />);
-    await waitFor(
-      () => expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
-      { timeout: 5000 },
+    await waitFor(() =>
+      expect(screen.getByText("Data failed to load for Growth")).toBeInTheDocument(),
     );
     const platformBefore = overviewCalls(teams[0].id);
     const growthBefore = overviewCalls(teams[1].id);
