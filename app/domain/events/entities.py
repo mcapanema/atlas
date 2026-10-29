@@ -15,7 +15,10 @@ class EventType(StrEnum):
     STARTED = "started"
     BLOCKED = "blocked"
     UNBLOCKED = "unblocked"
+    # A change for the item was opened for review (a pull request);
+    # detail = "<codebase>#<number>".
     REVIEW = "review"
+    # That change merged; detail as for REVIEW.
     MERGED = "merged"
     COMPLETED = "completed"
     # Left a started state without completing (moved back, or canceled from

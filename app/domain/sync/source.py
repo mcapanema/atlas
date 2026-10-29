@@ -8,6 +8,7 @@ resolved during sync.
 from dataclasses import dataclass
 from datetime import datetime
 
+from app.domain.codebases.entities import DeploymentStatus
 from app.domain.events.entities import EventType
 from app.domain.work_items.entities import StateType, WorkItemType
 
@@ -75,3 +76,53 @@ class SourceWorkItem:
     assignee: SourcePerson | None = None
     # The item's human-readable key in the source, e.g. "DEP-123".
     key: str | None = None
+
+
+def _require_aware(owner: str, **values: datetime | None) -> None:
+    for name, value in values.items():
+        if value is not None and value.tzinfo is None:
+            raise ValueError(f"{owner}.{name} must be timezone-aware")
+
+
+@dataclass(frozen=True)
+class SourceCodebase:
+    external_id: str
+    name: str
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class SourcePullRequest:
+    external_id: str
+    number: int
+    title: str
+    opened_at: datetime
+    url: str | None = None
+    first_commit_at: datetime | None = None
+    merged_at: datetime | None = None
+    closed_at: datetime | None = None
+    merge_commit_sha: str | None = None
+    # Work-item keys found in the branch name, title and body (upper-case).
+    work_item_keys: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_aware(
+            "SourcePullRequest",
+            opened_at=self.opened_at,
+            first_commit_at=self.first_commit_at,
+            merged_at=self.merged_at,
+            closed_at=self.closed_at,
+        )
+
+
+@dataclass(frozen=True)
+class SourceDeployment:
+    external_id: str
+    environment: str
+    sha: str
+    started_at: datetime
+    status: DeploymentStatus
+    finished_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        _require_aware("SourceDeployment", started_at=self.started_at, finished_at=self.finished_at)
