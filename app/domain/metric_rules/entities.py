@@ -128,6 +128,13 @@ class MetricRules:
     # in-cycle time counts as wait in flow efficiency and queue/touch time;
     # blocked time is unchanged. None by default (ADR-0018).
     wait_state_names: tuple[str, ...] = ()
+    # Incident signal: label names (exact, any case) that mark an item as an
+    # incident for DORA's change failure rate and time to restore.
+    # ponytail: an ordinary rule, so a change marks the team's rules custom and
+    # queues the snapshot recompute, which rewrites identical snapshots
+    # (DORA is not snapshotted). Upgrade path: a non-snapshot rule set beside
+    # MEETING_RULES.
+    incident_label_names: tuple[str, ...] = ("incident", "incidente")
     # Delivery-health scoring. Calibrated on live data (review 2026-10-09):
     # flow efficiency read 92-100% everywhere with blocked periods as its
     # only wait signal. Wait states (ADR-0018) are a per-team list, empty by
@@ -219,6 +226,10 @@ class MetricRules:
         """Whether time in a workflow state named `name` counts as wait under these rules."""
         return _named(name, pattern=False, listed=self.wait_state_names)
 
+    def is_incident_label(self, name: str) -> bool:
+        """Whether a label named `name` marks an incident under these rules."""
+        return _named(name, pattern=False, listed=self.incident_label_names)
+
     def type_of(self, item: WorkItem) -> WorkItemType:
         """The item's type: its first type_labels hit among its labels, else its stored type.
 
@@ -251,6 +262,9 @@ def _normalize_collections(rules: MetricRules) -> None:
     )
     object.__setattr__(
         rules, "wait_state_names", _names("wait_state_names", rules.wait_state_names)
+    )
+    object.__setattr__(
+        rules, "incident_label_names", _names("incident_label_names", rules.incident_label_names)
     )
     object.__setattr__(rules, "remaining_state_types", _state_types(rules.remaining_state_types))
     object.__setattr__(rules, "type_labels", _type_labels(rules.type_labels))

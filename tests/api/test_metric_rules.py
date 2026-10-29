@@ -260,6 +260,20 @@ async def test_a_save_that_changes_no_rule_commits_before_the_run_restarts(
     assert log[:2] == ["commit", "run"]
 
 
+async def test_patch_incident_label_names_trims_and_reads_back(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"incident_label_names": [" Sev1 "]}
+    )
+    await settle(rules_app)
+
+    assert response.status_code == 200
+    assert response.json()["effective"]["incident_label_names"] == ["Sev1"]
+
+
 async def test_collection_rules_round_trip_normalized(
     rules_app: FastAPI, rules_client: AsyncClient
 ) -> None:

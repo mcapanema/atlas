@@ -74,6 +74,7 @@ describe("list-valued rules", () => {
     expect(formatRuleValue(ruleSpec("wait_state_names"), ["In Review", "Waiting for Deploy"])).toBe(
       "In Review, Waiting for Deploy",
     );
+    expect(formatRuleValue(ruleSpec("incident_label_names"), ["incident"])).toBe("incident");
     expect(formatRuleValue(ruleSpec("health_min_sample"), 3)).toBe("3 items");
     expect(formatRuleValue(ruleSpec("sprint_length_days"), 14)).toBe("14 days");
     expect(formatRuleValue(ruleSpec("working_days"), [1, 2, 3, 4, 5])).toBe(

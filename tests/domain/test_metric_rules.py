@@ -17,6 +17,14 @@ from app.domain.metric_rules.entities import (
 )
 
 
+def test_incident_labels_match_listed_names_in_any_case() -> None:
+    rules = MetricRules()
+    assert rules.is_incident_label("Incident")
+    assert rules.is_incident_label(" INCIDENTE ")
+    assert not rules.is_incident_label("incident-review")
+    assert not replace(rules, incident_label_names=()).is_incident_label("incident")
+
+
 def test_defaults_reproduce_the_built_in_behavior() -> None:
     rules = DEFAULT_RULES
 
