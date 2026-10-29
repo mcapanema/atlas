@@ -51,6 +51,20 @@ bottleneck the data is too sparse: say so instead of guessing. Then
 exploit the constraint (keep it busy on the right work), subordinate
 everything else to it, and elevate it. Improving anywhere else is waste.
 
+## DORA metrics
+Atlas computes four DORA metrics per team from deployments, pull requests and
+incident-labelled items: deploy frequency, change lead time (merge to
+production), change failure rate and time to restore. Each carries a band
+(elite, high, medium, low) from the DORA report thresholds. Use the computed
+bands; never recompute them and never infer DORA performance from flow
+metrics such as lead time or throughput, which measure other things. A metric
+with no band has too few samples: say "too few deployments" (or changes, or
+restores) instead of judging it. Deploy frequency and lead time describe
+speed; change failure rate and time to restore describe stability. Balance
+the two: a fast team with a low stability band needs smaller batches, tests
+and rollback, not more speed. With no mapped codebase, ask the EM to map one
+on the Connectors page.
+
 ## Forecasting discipline
 - Monte Carlo percentiles are commitments-with-confidence: quote p85, not
   p50, for dates that matter.

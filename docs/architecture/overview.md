@@ -97,8 +97,8 @@ exception: it is generated in the background and stored (ADR-0023).
   simulation of the scope's open work by resampling its historical daily
   throughput — seeded `random.Random`, deterministic by construction.
 - **Advisor** (`app/domain/advisor/`): `AdvisorPort` takes a
-  `DeliveryContext` — the already-computed metrics, distribution, and
-  forecast — and returns explainable `DeliveryAdvice` (narrative summary
+  `DeliveryContext` — the already-computed metrics, distribution,
+  forecast, and (team scopes) DORA metrics — and returns explainable `DeliveryAdvice` (narrative summary
   plus prioritized `Recommendation`s with root causes and evidence). The
   AI never calculates (ADR-0006).
   Advice is stored, not computed on read (ADR-0023): `AdviceRun` (table
@@ -334,6 +334,7 @@ Meeting preparation has two deliberate paths: **external** — the MCP prompts
 /api/meetings/prep` starts a stored run (`GET` reads the latest; ADR-0023) that builds the same digest (`MeetingContext` = advisor context
 + delivery health + aging WIP, rendered by `render_meeting_context`) and sends
 it to the OpenRouter advisor (`AdvisorPort.prepare_meeting`), so Atlas works
-stand-alone. Meeting types are backed by learnable personas (`daily_standup`,
+stand-alone. The `dora` MCP tool and the advisor digest render DORA through
+the same `render_dora`. Meeting types are backed by learnable personas (`daily_standup`,
 `retrospective`, `planning` in the `Persona` enum) that reuse the persona
 feedback/reflect/guidance machinery unchanged.

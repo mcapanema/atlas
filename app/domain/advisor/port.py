@@ -14,6 +14,7 @@ from app.domain.advisor.entities import (
 from app.domain.forecasting.monte_carlo import DeliveryForecast
 from app.domain.metrics.aging import AgingWip
 from app.domain.metrics.distribution import LeadTimeDistribution
+from app.domain.metrics.dora import DoraMetrics
 from app.domain.metrics.health import DeliveryHealth
 from app.domain.metrics.state_time import StateTimes
 from app.domain.metrics.summary import FlowMetrics
@@ -36,6 +37,8 @@ class DeliveryContext:
     forecast: DeliveryForecast
     # Time in each state over the flow window, with the computed bottleneck.
     state_times: StateTimes | None = None
+    # DORA metrics; team scopes only (a project has no codebases of its own).
+    dora: DoraMetrics | None = None
 
 
 @dataclass(frozen=True)

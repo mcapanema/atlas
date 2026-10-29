@@ -7,6 +7,7 @@ from app.domain.advisor.render import (
     quote_title,
     render_aging,
     render_context,
+    render_dora,
     render_meeting_context,
 )
 from app.domain.forecasting.monte_carlo import (
@@ -16,6 +17,7 @@ from app.domain.forecasting.monte_carlo import (
 )
 from app.domain.metrics.aging import AgingItem, AgingWip
 from app.domain.metrics.distribution import DurationBin, LeadTimeDistribution
+from app.domain.metrics.dora import DoraMetrics
 from app.domain.metrics.health import DeliveryHealth, HealthComponent
 from app.domain.metrics.state_time import StateTime, StateTimes
 from app.domain.metrics.summary import DurationStats, FlowMetrics
@@ -442,3 +444,87 @@ def test_render_context_quotes_team_names() -> None:
 
     assert name not in text
     assert quote_title(name) in text
+
+
+DORA = DoraMetrics(
+    window_start=_START,
+    window_end=_NOW,
+    codebases=1,
+    min_sample=5,
+    deployments=6,
+    deploys_per_week=6 / (30 / 7),
+    deploy_frequency_band="high",
+    lead_time_median=timedelta(days=2),
+    lead_time_changes=7,
+    lead_time_band="high",
+    change_failure_rate=0.25,
+    failed_deployments=2,
+    finished_deployments=8,
+    change_failure_band="low",
+    restore_median=timedelta(hours=3),
+    restores=2,
+    restore_band="high",
+)
+
+
+def test_render_dora_states_values_bands_and_samples() -> None:
+    text = render_dora(DORA)
+
+    assert "DORA (trailing 30 calendar days, ending 2026-07-10)" in text
+    assert "deploy frequency=1.4/week (high, 6 deployments)" in text
+    assert "change lead time median=48.0 hours (high, 7 changes)" in text
+    assert "change failure rate=25% (low, 2 of 8 deployments)" in text
+    assert "time to restore median=3.0 hours (high, 2 restores)" in text
+
+
+def test_render_dora_without_band_says_too_few() -> None:
+    text = render_dora(
+        replace(DORA, lead_time_band=None, lead_time_changes=2, change_failure_band=None)
+    )
+
+    assert "change lead time median=48.0 hours (no band: 2 changes, fewer than 5)" in text
+    assert "change failure rate=25% (no band: 8 deployments, fewer than 5)" in text
+
+
+def test_render_dora_without_values_says_none_in_window() -> None:
+    text = render_dora(
+        replace(
+            DORA,
+            lead_time_median=None,
+            lead_time_changes=0,
+            lead_time_band=None,
+            change_failure_rate=None,
+            finished_deployments=0,
+            failed_deployments=0,
+            change_failure_band=None,
+            restore_median=None,
+            restores=0,
+            restore_band=None,
+        )
+    )
+
+    assert "change lead time median=none in window (no band: 0 changes, fewer than 5)" in text
+    assert "change failure rate=none in window (no band: 0 deployments, fewer than 5)" in text
+    assert "time to restore median=none in window (no band: 0 restores, fewer than 5)" in text
+
+
+def test_render_dora_without_codebases() -> None:
+    text = render_dora(
+        replace(
+            DORA,
+            codebases=0,
+            deploy_frequency_band=None,
+            lead_time_band=None,
+            change_failure_band=None,
+            restore_band=None,
+        )
+    )
+
+    assert text == "DORA: no codebase is mapped to this team; map one on the Connectors page."
+
+
+def test_render_context_includes_dora_when_present() -> None:
+    context = replace(_context(), dora=DORA)
+
+    assert "DORA (trailing 30 calendar days" in render_context(context)
+    assert "DORA" not in render_context(_context())

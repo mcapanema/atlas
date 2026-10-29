@@ -21,9 +21,10 @@ from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app.api.schemas import AgingWipRead
-from app.domain.advisor.render import quote_title, render_aging
+from app.api.schemas import AgingWipRead, DoraMetricsRead
+from app.domain.advisor.render import quote_title, render_aging, render_dora
 from app.domain.metrics.aging import AgingItem, AgingWip
+from app.domain.metrics.dora import DoraMetrics
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 _INSTRUCTIONS = (
@@ -51,6 +52,17 @@ def _render_health(health: dict[str, Any]) -> str:
     lines = [f"Delivery health: {health['score']}/100 ({health['band']})"]
     lines += [f"- {c['name']} {c['score']}: {c['reason']}" for c in health["components"]]
     return "\n".join(lines)
+
+
+def _dora_from_json(data: dict[str, Any]) -> DoraMetrics:
+    """GET /api/metrics/dora's JSON back as the domain value, for render_dora."""
+    dto = DoraMetricsRead.model_validate(data)
+    lead, restore = dto.lead_time_median_seconds, dto.restore_median_seconds
+    return DoraMetrics(
+        **dto.model_dump(exclude={"lead_time_median_seconds", "restore_median_seconds"}),
+        lead_time_median=timedelta(seconds=lead) if lead is not None else None,
+        restore_median=timedelta(seconds=restore) if restore is not None else None,
+    )
 
 
 def _aging_from_json(data: dict[str, Any]) -> AgingWip:
@@ -181,6 +193,16 @@ def _register_prompts(mcp: MCPServer) -> None:
 4. Recommend committing at p85, not p50 — explain why in one sentence if asked."""
 
 
+def _add_dora_tool(mcp: MCPServer, app: FastAPI) -> None:
+    @mcp.tool()
+    async def dora(team_id: str) -> str:
+        """The team's DORA metrics — deploy frequency, change lead time, change
+        failure rate and time to restore — with their DORA bands. Team only.
+        """
+        data = await _api(app, "GET", "/api/metrics/dora", params={"team_id": team_id})
+        return render_dora(_dora_from_json(data))
+
+
 def build_mcp_server(app: FastAPI) -> MCPServer:
     """The MCP server, its tools closing over the FastAPI app they front."""
     # mcp 2.x: FastMCP was renamed to MCPServer, and the transport-mode
@@ -202,6 +224,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         name="Atlas",
         instructions=_INSTRUCTIONS,
     )
+    _add_dora_tool(mcp, app)
 
     @mcp.tool()
     async def list_scopes() -> str:

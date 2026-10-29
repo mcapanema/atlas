@@ -142,13 +142,17 @@ def get_metrics_service(session: SessionDep) -> MetricsService:
 MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
 
 
-def get_dora_service(session: SessionDep) -> DoraService:
+def dora_service_for(session: AsyncSession) -> DoraService:
     return DoraService(
         SqlAlchemyCodebaseRepository(session),
         SqlAlchemyDeploymentRepository(session),
         SqlAlchemyPullRequestRepository(session),
         SqlAlchemyTeamRepository(session),
     )
+
+
+def get_dora_service(session: SessionDep) -> DoraService:
+    return dora_service_for(session)
 
 
 DoraServiceDep = Annotated[DoraService, Depends(get_dora_service)]
@@ -186,7 +190,9 @@ AdvisorPortDep = Annotated[AdvisorPort, Depends(get_advisor_port)]
 
 def advisor_service_for(session: AsyncSession) -> AdvisorService:
     """Built outside a request too: the advice runner opens its own sessions."""
-    return AdvisorService(get_metrics_service(session), get_forecast_service(session))
+    return AdvisorService(
+        get_metrics_service(session), get_forecast_service(session), dora_service_for(session)
+    )
 
 
 def get_advisor_service(session: SessionDep) -> AdvisorService:
