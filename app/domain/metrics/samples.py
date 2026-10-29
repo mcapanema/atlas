@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from app.domain.events.entities import Event, EventType, event_order
+from app.domain.events.entities import Event, EventType, event_order, first_flow_event
 from app.domain.events.timeline import BlockedPeriod, blocked_periods, state_periods
 from app.domain.metric_rules.calendar import EVERY_DAY, WorkCalendar
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
@@ -58,12 +58,13 @@ def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
 
     Connectors stamp an item logged straight into a done state that way (the
     Linear mapping's `:created-done`). It's a record of work, not flow Atlas
-    observed. The first event must be a CREATED: a completion with no recorded
+    observed. The first flow event must be a CREATED (code events never
+    anchor, see CODE_EVENT_TYPES): a completion with no recorded
     creation means "creation unknown", not "created done". Later completions
     don't matter: a re-sync backfills the creation-instant one beside sync's
     completedAt-stamped one.
     """
-    created = ordered[0]
+    created = first_flow_event(ordered)
     return (
         created.type is EventType.CREATED
         and started_at is None
@@ -279,8 +280,9 @@ def derive_flow_sample(
     """Fold one work item's events into a FlowSample; None if it has no events.
 
     `rules` are the item's team's lifecycle rules (built-in by default):
-    created_at is the first event; started_at the first STARTED (or, with
-    restart_clock_after_move_back, the restart after the latest move-back);
+    created_at is the first flow event (code events never anchor);
+    started_at the first STARTED (or, with restart_clock_after_move_back,
+    the restart after the latest move-back);
     completed_at the last COMPLETED (or the first since the clock started,
     with reopen_completion="first"), voided if a later STARTED reopened the
     item. stopped_at is when an uncompleted item first left progress: its
@@ -317,7 +319,7 @@ def derive_flow_sample(
     blocked_time = _in_cycle(periods, started_at, completed_at, calendar)
 
     return FlowSample(
-        created_at=ordered[0].occurred_at,
+        created_at=first_flow_event(ordered).occurred_at,
         started_at=started_at,
         completed_at=completed_at,
         blocked_time=blocked_time,

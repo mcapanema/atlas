@@ -224,7 +224,8 @@ custom.
   `last_synced_at`. `POST /api/connectors/github/sync` runs it as a `code`
   job on the same `SyncJobRunner` (`GET /api/connectors/github/jobs/{id}`);
   it captures no snapshots, because the REVIEW and MERGED events change no
-  metric.
+  metric: the flow derivations never anchor on `CODE_EVENT_TYPES`
+  (`app/domain/events/entities.py`).
 - **Advisor** (`app/domain/advisor/port.py`): implemented by the
   OpenRouter adapter (ADR-0006).
 

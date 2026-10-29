@@ -24,7 +24,10 @@ work items. A code host has repositories, pull requests and deployments.
 - A pull request links to a work item when a work-item key (for example
   `DEP-123`) appears in its branch name, title or body. A link adds `REVIEW`
   (opened) and `MERGED` events to that item. Every pull request is stored,
-  linked or not.
+  linked or not. These code events (`CODE_EVENT_TYPES`) change no flow
+  metric: they never anchor an item's creation, born-done, first state or
+  blocked period, or its place on the CFD, so a pull request opened before
+  its ticket leaves the metrics (and stored snapshots) unchanged.
 - Failures come from both deployment status (failure or error) and Linear
   incident issues. Sync stores each deployment's normalized status and finish
   time. The incident rule belongs to the second plan.

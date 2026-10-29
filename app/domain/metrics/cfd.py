@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 
-from app.domain.events.entities import Event, EventType, event_order
+from app.domain.events.entities import CODE_EVENT_TYPES, Event, EventType, event_order
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.samples import reopens
 from app.domain.work_items.entities import StateType
@@ -100,6 +100,7 @@ def daily_flow_counts(
             (event.occurred_at, item_index, event)
             for item_index, stream in enumerate(event_streams)
             for event in stream
+            if event.type not in CODE_EVENT_TYPES
         ),
         key=lambda entry: (event_order(entry[2]), entry[1]),
     )

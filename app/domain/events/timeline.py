@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
 
-from app.domain.events.entities import Event, EventType, event_order
+from app.domain.events.entities import Event, EventType, event_order, first_flow_event
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 
 
@@ -117,11 +117,11 @@ def creation_state(events: list[Event], current_state: str | None = None) -> str
 
 
 def _born_blocked(ordered: list[Event], rules: MetricRules, born_in: str | None) -> bool:
-    """The item sat in a blocked state from its first event to its first transition."""
+    """The item sat in a blocked state from its first flow event to its first transition."""
     if not ordered or born_in is None or not rules.is_blocked_state(born_in):
         return False
     first = next((e for e in ordered if e.to_state is not None), None)
-    return first is None or ordered[0].occurred_at < first.occurred_at
+    return first is None or first_flow_event(ordered).occurred_at < first.occurred_at
 
 
 def blocked_periods(
@@ -146,7 +146,7 @@ def blocked_periods(
     open_sources: set[str] = set()
     if _born_blocked(ordered, rules, born_in or creation_state(ordered)):
         open_sources.add("state")
-        periods.append(BlockedPeriod(started_at=ordered[0].occurred_at))
+        periods.append(BlockedPeriod(started_at=first_flow_event(ordered).occurred_at))
     for event in ordered:
         source = _blocked_source(event, rules)
         if source is None:
@@ -177,12 +177,13 @@ def state_periods(events: list[Event]) -> tuple[StatePeriod, ...]:
     """Contiguous stays in each workflow state, from the events carrying to_state.
 
     Events are put in `chain_order` defensively. If the first such event also
-    names a from_state and an earlier event exists (usually CREATED), the gap
-    becomes the initial period — the time the item waited in its starting
-    state.
+    names a from_state and an earlier flow event exists (usually CREATED; code
+    events never anchor), the gap becomes the initial period — the time the
+    item waited in its starting state.
     """
     ordered = chain_order(events)
     periods: list[StatePeriod] = []
+    born_at = first_flow_event(ordered).occurred_at if ordered else None
     for event in ordered:
         if event.to_state is None:
             continue
@@ -193,11 +194,11 @@ def state_periods(events: list[Event]) -> tuple[StatePeriod, ...]:
                 entered_at=previous.entered_at,
                 exited_at=event.occurred_at,
             )
-        elif event.from_state is not None and ordered[0].occurred_at < event.occurred_at:
+        elif event.from_state is not None and born_at is not None and born_at < event.occurred_at:
             periods.append(
                 StatePeriod(
                     state=event.from_state,
-                    entered_at=ordered[0].occurred_at,
+                    entered_at=born_at,
                     exited_at=event.occurred_at,
                 )
             )
