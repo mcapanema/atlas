@@ -13,13 +13,21 @@ from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
+from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
 from app.domain.events.entities import Event
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
-from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync.source import (
+    SourceCodebase,
+    SourceDeployment,
+    SourceProject,
+    SourcePullRequest,
+    SourceTeam,
+    SourceWorkItem,
+)
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import StateType, WorkItem
@@ -129,6 +137,16 @@ class InMemoryWorkItemRepository:
         for item_id, item in list(self._items.items()):
             if item.parent_id in doomed:
                 self._items[item_id] = replace(item, parent_id=None)
+
+    async def get_by_keys(
+        self, keys: list[str], *, team_ids: Collection[UUID]
+    ) -> dict[str, WorkItem]:
+        wanted = set(keys)
+        return {
+            item.key: item
+            for item in self._items.values()
+            if item.key in wanted and item.key and item.team_id in team_ids
+        }
 
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
@@ -295,6 +313,45 @@ class FakeDataSource:
 
     async def fetch_organization_name(self) -> str:
         return self.organization_name
+
+
+class InMemoryCodeHostSource:
+    """Configurable CodeHostSource. Attributes are mutable between syncs.
+
+    `pull_requests` / `deployments` map a codebase external id to its rows;
+    fetches return only rows at or after `since` (a PR counts by its latest
+    timestamp) and record `(kind, codebase_external_id, since)` in `calls`.
+    """
+
+    def __init__(
+        self,
+        codebases: list[SourceCodebase] | None = None,
+        pull_requests: dict[str, list[SourcePullRequest]] | None = None,
+        deployments: dict[str, list[SourceDeployment]] | None = None,
+    ) -> None:
+        self.codebases = codebases or []
+        self.pull_requests = pull_requests or {}
+        self.deployments = deployments or {}
+        self.calls: list[tuple[str, str, datetime]] = []
+
+    async def fetch_codebases(self) -> list[SourceCodebase]:
+        return self.codebases
+
+    async def fetch_pull_requests(
+        self, codebase_external_id: str, since: datetime
+    ) -> list[SourcePullRequest]:
+        self.calls.append(("pull_requests", codebase_external_id, since))
+        return [
+            p
+            for p in self.pull_requests.get(codebase_external_id, [])
+            if max(t for t in (p.opened_at, p.merged_at, p.closed_at) if t is not None) >= since
+        ]
+
+    async def fetch_deployments(
+        self, codebase_external_id: str, since: datetime
+    ) -> list[SourceDeployment]:
+        self.calls.append(("deployments", codebase_external_id, since))
+        return [d for d in self.deployments.get(codebase_external_id, []) if d.started_at >= since]
 
 
 class InMemoryMetricSnapshotRepository:
@@ -505,3 +562,96 @@ class InMemorySyncScheduleRepository:
         existing = self._rows.get(organization_id)
         if existing is not None:
             self._rows[organization_id] = replace(existing, last_manual_sync_at=at)
+
+
+class InMemoryCodebaseRepository:
+    def __init__(self, codebases: list[Codebase] | None = None) -> None:
+        self._rows: dict[UUID, Codebase] = {c.id: c for c in codebases or []}
+
+    async def add(self, codebase: Codebase) -> None:
+        self._rows[codebase.id] = codebase
+
+    async def update(self, codebase: Codebase) -> None:
+        self._rows[codebase.id] = codebase
+
+    async def get(self, codebase_id: UUID) -> Codebase | None:
+        return self._rows.get(codebase_id)
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Codebase]:
+        wanted = set(external_ids)
+        return {c.external_id: c for c in self._rows.values() if c.external_id in wanted}
+
+    async def list(self, organization_id: UUID) -> list[Codebase]:
+        return [c for c in self._rows.values() if c.organization_id == organization_id]
+
+
+class InMemoryPullRequestRepository:
+    def __init__(self, pull_requests: list[PullRequest] | None = None) -> None:
+        self._rows: dict[UUID, PullRequest] = {p.id: p for p in pull_requests or []}
+
+    async def add(self, pull_request: PullRequest) -> None:
+        self._rows[pull_request.id] = pull_request
+
+    async def update(self, pull_request: PullRequest) -> None:
+        self._rows[pull_request.id] = pull_request
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, PullRequest]:
+        wanted = set(external_ids)
+        return {p.external_id: p for p in self._rows.values() if p.external_id in wanted}
+
+    async def list_for_codebases(self, codebase_ids: list[UUID]) -> list[PullRequest]:
+        wanted = set(codebase_ids)
+        return sorted(
+            (p for p in self._rows.values() if p.codebase_id in wanted),
+            key=lambda p: p.opened_at,
+        )
+
+    async def count_by_codebase(self, codebase_ids: list[UUID]) -> dict[UUID, int]:
+        wanted = set(codebase_ids)
+        counts: dict[UUID, int] = {}
+        for p in self._rows.values():
+            if p.codebase_id in wanted:
+                counts[p.codebase_id] = counts.get(p.codebase_id, 0) + 1
+        return counts
+
+
+class InMemoryDeploymentRepository:
+    def __init__(self, deployments: list[Deployment] | None = None) -> None:
+        self._rows: dict[UUID, Deployment] = {d.id: d for d in deployments or []}
+
+    async def add(self, deployment: Deployment) -> None:
+        self._rows[deployment.id] = deployment
+
+    async def update(self, deployment: Deployment) -> None:
+        self._rows[deployment.id] = deployment
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Deployment]:
+        wanted = set(external_ids)
+        return {d.external_id: d for d in self._rows.values() if d.external_id in wanted}
+
+    async def list_for_codebases(self, codebase_ids: list[UUID]) -> list[Deployment]:
+        wanted = set(codebase_ids)
+        return sorted(
+            (d for d in self._rows.values() if d.codebase_id in wanted),
+            key=lambda d: d.started_at,
+        )
+
+    async def count_by_codebase(self, codebase_ids: list[UUID]) -> dict[UUID, int]:
+        wanted = set(codebase_ids)
+        counts: dict[UUID, int] = {}
+        for d in self._rows.values():
+            if d.codebase_id in wanted:
+                counts[d.codebase_id] = counts.get(d.codebase_id, 0) + 1
+        return counts
+
+    async def oldest_pending_started_at(
+        self, codebase_id: UUID, *, since: datetime
+    ) -> datetime | None:
+        starts = [
+            d.started_at
+            for d in self._rows.values()
+            if d.codebase_id == codebase_id
+            and d.status == DeploymentStatus.PENDING
+            and d.started_at >= since
+        ]
+        return min(starts, default=None)

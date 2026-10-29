@@ -58,6 +58,8 @@ const DETAIL_LABELS: Record<string, (detail: string) => string> = {
   label_removed: (detail) => `Label removed: ${detail}`,
   blocker_added: (detail) => `Blocked by ${detail}`,
   blocker_cleared: (detail) => `Blocker cleared: ${detail}`,
+  review: (detail) => `PR opened: ${detail}`,
+  merged: (detail) => `PR merged: ${detail}`,
 };
 
 function eventLabel(event: WorkItemEvent): string {

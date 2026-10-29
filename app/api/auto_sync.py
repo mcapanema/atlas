@@ -1,4 +1,4 @@
-"""Automatic Linear sync on each organization's schedule (ADR-0014).
+"""Automatic Linear and GitHub sync on each organization's schedule (ADR-0014).
 
 One in-process asyncio task (ADR-0002: no queue, no cron) ticks every
 TICK_SECONDS, starting at once so a slot missed while Atlas was off
@@ -7,6 +7,9 @@ organizations have a slot due and syncs them one at a time. That's the
 same sync + snapshot capture as `POST /api/connectors/linear/sync`, run as
 a SyncJobRunner job (its own session and transaction). The outcome is recorded on the schedule in a
 second session, so a failed sync's rollback can't erase its own error.
+When GitHub is configured, a Linear sync that succeeds is followed by a code
+sync (a `code` job); its failure logs a warning and does not change the
+recorded outcome, which is the Linear one.
 An upstream failure (DataSourceError) logs a one-line warning; anything
 else logs a traceback. A failure still consumes its slot: no retry until
 the next one. Each slot is also attempted at most once per process, so a
@@ -33,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.deps import LINEAR_NOT_CONFIGURED, sync_schedule_service_for
 from app.api.sync_jobs import SyncJobRequest, SyncJobRunner
 from app.application.sync_schedules.service import DueSync
-from app.domain.sync.port import DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DeliveryDataSource
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +53,13 @@ class AutoSyncRunner:
         source_factory: Callable[[], DeliveryDataSource | None],
         *,
         jobs: SyncJobRunner,
+        code_source_factory: Callable[[], CodeHostSource | None] = lambda: None,
         tick_seconds: float = TICK_SECONDS,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._source_factory = source_factory
         self._jobs = jobs
+        self._code_source_factory = code_source_factory
         self._tick_seconds = tick_seconds
         self._task: asyncio.Task[None] | None = None
         # The last slot attempted per organization, recorded or not.
@@ -104,7 +109,20 @@ class AutoSyncRunner:
             logger.warning("Auto sync skipped for %s: %s", organization_id, LINEAR_NOT_CONFIGURED)
             return LINEAR_NOT_CONFIGURED
         job = await self._jobs.run(SyncJobRequest(organization_id, "organization", "auto"), source)
+        if job.error is None:
+            await self._sync_code(organization_id)
         return job.error
+
+    async def _sync_code(self, organization_id: UUID) -> None:
+        """Pull GitHub after a good Linear sync; a failure only logs."""
+        code_source = self._code_source_factory()
+        if code_source is None:
+            return
+        job = await self._jobs.run_code(
+            SyncJobRequest(organization_id, "code", "auto"), code_source
+        )
+        if job.error is not None:
+            logger.warning("Auto code sync of %s failed: %s", organization_id, job.error)
 
     async def _record(self, job: DueSync, error: str | None) -> None:
         try:

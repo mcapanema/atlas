@@ -10,6 +10,7 @@ import {
 } from "../api/connectors";
 import { useOrganizations, type Organization } from "../api/organizations";
 import { AutoSyncCard } from "../components/AutoSyncCard";
+import { GitHubConnectorCard } from "../components/GitHubConnectorCard";
 import { SyncStatus } from "../components/SyncStatus";
 import { syncOutcome } from "../lib/syncOutcome";
 
@@ -99,6 +100,12 @@ function SyncNow({
   );
 }
 
+/** Another sync is running that this page's Sync now can show: not a GitHub ("code") job. */
+function otherSyncRunning(status: ConnectorStatus | undefined, sync: SyncAction): boolean {
+  const running = status?.running;
+  return !!running && running.kind !== "code" && !sync.running && !sync.outcome && !sync.error;
+}
+
 function LinearCard({
   status,
   sync,
@@ -125,9 +132,7 @@ function LinearCard({
           sync={sync}
           organizationId={organizationId}
           configured={configured}
-          otherRunning={
-            (status?.running ?? null) !== null && !sync.running && !sync.outcome && !sync.error
-          }
+          otherRunning={otherSyncRunning(status, sync)}
         />
       </Flex>
     </Card>
@@ -171,6 +176,8 @@ function ConnectorsWorkspace({
         organizationId={selectedOrgId}
         loading={loading}
       />
+      {/* Keyed: another organization's outcome must not carry over. */}
+      <GitHubConnectorCard key={selectedOrgId} organizationId={selectedOrgId} />
       {selectedOrgId && (
         // Keyed: another organization's save result must not carry over.
         <AutoSyncCard key={selectedOrgId} organizationId={selectedOrgId} />
@@ -187,8 +194,9 @@ export function ConnectorsPage() {
     <div className="page-settings">
       <Typography.Title level={3}>Connectors</Typography.Title>
       <Typography.Paragraph type="secondary">
-        Where Atlas gets its delivery data. Sync now pulls the latest from Linear; auto sync keeps
-        it fresh on a schedule.
+        Where Atlas gets its delivery data. Sync now pulls the latest from Linear, Sync GitHub pulls
+        pull requests and deployments; auto sync keeps both fresh on a schedule (GitHub after each
+        successful Linear sync, when it is configured).
       </Typography.Paragraph>
       {loadError ? (
         <Alert

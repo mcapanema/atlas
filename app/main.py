@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api import (
     advisor,
+    codebases,
     connectors,
     events,
     forecasts,
@@ -29,7 +30,7 @@ from app.api import (
 )
 from app.api.advice_runner import AdviceRunner
 from app.api.auto_sync import AutoSyncRunner
-from app.api.deps import linear_data_source
+from app.api.deps import github_code_source, linear_data_source
 from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
@@ -85,7 +86,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     interrupted = asyncio.create_task(advice_runner.fail_interrupted())
     sync_jobs = SyncJobRunner(sessionmaker, recompute=runner)
     app.state.sync_job_runner = sync_jobs
-    auto_sync = AutoSyncRunner(sessionmaker, linear_data_source, jobs=sync_jobs)
+    auto_sync = AutoSyncRunner(
+        sessionmaker, linear_data_source, jobs=sync_jobs, code_source_factory=github_code_source
+    )
     app.state.auto_sync_runner = auto_sync
     # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).
     auto_sync.start()
@@ -130,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(forecasts.router)
     app.include_router(connectors.router)
+    app.include_router(codebases.router)
     app.include_router(advisor.router)
     app.include_router(personas.router)
     app.include_router(meetings.router)

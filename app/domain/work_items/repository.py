@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from typing import Protocol
 from uuid import UUID
 
@@ -16,6 +17,12 @@ class WorkItemRepository(Protocol):
 
         Delete their events first.
         """
+        ...
+
+    async def get_by_keys(
+        self, keys: list[str], *, team_ids: Collection[UUID]
+    ) -> dict[str, WorkItem]:
+        """Items of the given teams by exact source key; unknown keys are absent."""
         ...
 
     # Must stay above `list` — that method shadows the `list` builtin for every

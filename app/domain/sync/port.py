@@ -1,6 +1,14 @@
+from datetime import datetime
 from typing import Protocol
 
-from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
+from app.domain.sync.source import (
+    SourceCodebase,
+    SourceDeployment,
+    SourceProject,
+    SourcePullRequest,
+    SourceTeam,
+    SourceWorkItem,
+)
 
 
 class DataSourceError(Exception):
@@ -25,4 +33,22 @@ class DeliveryDataSource(Protocol):
 
     async def fetch_organization_name(self) -> str:
         """Name of the workspace the credentials are scoped to."""
+        ...
+
+
+class CodeHostSource(Protocol):
+    """Port for an external code host (repositories, pull requests, deployments)."""
+
+    async def fetch_codebases(self) -> list[SourceCodebase]: ...
+
+    async def fetch_pull_requests(
+        self, codebase_external_id: str, since: datetime
+    ) -> list[SourcePullRequest]:
+        """Every pull request updated at or after `since`."""
+        ...
+
+    async def fetch_deployments(
+        self, codebase_external_id: str, since: datetime
+    ) -> list[SourceDeployment]:
+        """Every deployment created at or after `since`, in any environment."""
         ...

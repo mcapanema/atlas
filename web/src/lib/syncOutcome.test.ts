@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { syncOutcome } from "./syncOutcome";
+import { codeSyncOutcome, syncOutcome } from "./syncOutcome";
 
 const nothing = { teams: 0, projects: 0, work_items: 0, events: 0, divergences: 0, deleted: 0 };
 
@@ -37,5 +37,19 @@ describe("syncOutcome", () => {
 
   it("reports a sync that only removed items", () => {
     expect(syncOutcome({ ...nothing, deleted: 1 })).toBe("1 work item removed");
+  });
+});
+
+describe("codeSyncOutcome", () => {
+  it("pluralises each count", () => {
+    expect(codeSyncOutcome({ codebases: 2, pull_requests: 5, deployments: 0, events: 7 })).toBe(
+      "Updated 2 codebases · 5 pull requests · 0 deployments · 7 work item events",
+    );
+  });
+
+  it("keeps a count of one singular", () => {
+    expect(codeSyncOutcome({ codebases: 1, pull_requests: 1, deployments: 1, events: 1 })).toBe(
+      "Updated 1 codebase · 1 pull request · 1 deployment · 1 work item event",
+    );
   });
 });

@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.advisor.runs import AdviceRunService
 from app.application.advisor.service import AdvisorService
+from app.application.codebases.service import CodebaseService
+from app.application.codebases.sync import CodeSyncService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
@@ -22,11 +24,18 @@ from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorPort
-from app.domain.sync.port import DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DeliveryDataSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
+from app.infrastructure.connectors.github.client import GitHubGraphQLClient
+from app.infrastructure.connectors.github.datasource import GitHubDataSource
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
+from app.infrastructure.repositories.codebases import (
+    SqlAlchemyCodebaseRepository,
+    SqlAlchemyDeploymentRepository,
+    SqlAlchemyPullRequestRepository,
+)
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
@@ -238,6 +247,55 @@ def get_sync_service(session: SessionDep, source: DeliveryDataSourceDep) -> Sync
 
 
 SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
+
+
+GITHUB_NOT_CONFIGURED = (
+    "GitHub connector is not configured; set ATLAS_GITHUB_TOKEN and ATLAS_GITHUB_OWNER"
+)
+
+
+def github_code_source() -> CodeHostSource | None:
+    """The GitHub adapter, or None until ATLAS_GITHUB_TOKEN and ATLAS_GITHUB_OWNER are set."""
+    settings = get_settings()
+    if not (settings.github_token and settings.github_owner):
+        return None
+    return GitHubDataSource(GitHubGraphQLClient(settings.github_token), settings.github_owner)
+
+
+def get_code_host_source() -> CodeHostSource:
+    source = github_code_source()
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=GITHUB_NOT_CONFIGURED)
+    return source
+
+
+CodeHostSourceDep = Annotated[CodeHostSource, Depends(get_code_host_source)]
+
+
+def code_sync_service_for(session: AsyncSession, source: CodeHostSource) -> CodeSyncService:
+    """Built outside a request too: the sync job runner opens its own sessions."""
+    return CodeSyncService(
+        source,
+        SqlAlchemyOrganizationRepository(session),
+        SqlAlchemyTeamRepository(session),
+        SqlAlchemyCodebaseRepository(session),
+        SqlAlchemyPullRequestRepository(session),
+        SqlAlchemyDeploymentRepository(session),
+        SqlAlchemyWorkItemRepository(session),
+        SqlAlchemyEventRepository(session),
+    )
+
+
+def get_codebase_service(session: SessionDep) -> CodebaseService:
+    return CodebaseService(
+        SqlAlchemyCodebaseRepository(session),
+        SqlAlchemyTeamRepository(session),
+        SqlAlchemyPullRequestRepository(session),
+        SqlAlchemyDeploymentRepository(session),
+    )
+
+
+CodebaseServiceDep = Annotated[CodebaseService, Depends(get_codebase_service)]
 
 
 def snapshot_service_for(session: AsyncSession) -> SnapshotService:

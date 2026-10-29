@@ -10,22 +10,24 @@ from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import (
     HISTORY_SIZE,
     SyncBusyError,
+    SyncJob,
     SyncJobRequest,
     SyncJobRunner,
     covers,
 )
-from app.application.sync.service import SyncPhase
+from app.application.codebases.sync import CodeSyncSummary
+from app.application.sync.service import SyncPhase, SyncSummary
 from app.domain.events.entities import EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.port import DataSourceError
-from app.domain.sync.source import SourceEvent, SourceTeam, SourceWorkItem
+from app.domain.sync.source import SourceCodebase, SourceEvent, SourceTeam, SourceWorkItem
 from app.domain.sync_schedules.entities import SyncSchedule
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import WorkItemType
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
-from tests.fakes import FakeDataSource
+from tests.fakes import FakeDataSource, InMemoryCodeHostSource
 
 OCCURRED = datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
 
@@ -153,7 +155,7 @@ async def test_start_returns_at_once_and_the_job_succeeds_with_a_summary(
     assert runner.get(job.id) is job
     await runner.wait_idle()
     assert job.state == "succeeded"
-    assert job.summary is not None
+    assert isinstance(job.summary, SyncSummary)
     assert job.summary.work_items == 1
     assert job.phase == SyncPhase.SNAPSHOTS
     assert job.finished_at is not None
@@ -174,7 +176,7 @@ async def test_team_job_runs_the_team_sync(
     await runner.wait_idle()
 
     assert job.state == "succeeded"
-    assert job.summary is not None
+    assert isinstance(job.summary, SyncSummary)
     assert job.summary.organization_id == org_id
     assert job.summary.teams == 0  # a team sync doesn't sync the team list
     assert job.phase == SyncPhase.SNAPSHOTS
@@ -436,3 +438,43 @@ async def test_history_keeps_the_last_twenty_jobs(
     assert runner.get(jobs[0].id) is None
     assert runner.get(jobs[1].id) is jobs[1]
     assert runner.get(jobs[-1].id) is jobs[-1]
+
+
+def test_code_job_covers_only_code_requests_of_its_organization() -> None:
+    org = uuid4()
+    code = SyncJobRequest(org, "code", "manual")
+    assert covers(code, SyncJobRequest(org, "code", "auto"))
+    assert not covers(code, SyncJobRequest(uuid4(), "code", "manual"))
+    assert not covers(code, SyncJobRequest(org, "organization", "manual"))
+    assert not covers(code, SyncJobRequest(org, "team", "manual", team_id=uuid4()))
+    assert not covers(SyncJobRequest(org, "organization", "manual"), code)
+    assert not covers(SyncJobRequest(org, "team", "manual", team_id=uuid4()), code)
+
+
+def test_code_request_rejects_rebuild() -> None:
+    with pytest.raises(ValueError, match="rebuild"):
+        SyncJobRequest(uuid4(), "code", "manual", rebuild=True)
+
+
+async def test_run_code_runs_a_code_job_to_completion(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    org_id = await _seed_org(sessionmaker)
+    runner = _runner(sessionmaker)
+    source = InMemoryCodeHostSource(codebases=[SourceCodebase(external_id="r1", name="atlas")])
+
+    job = await runner.run_code(SyncJobRequest(org_id, "code", "auto"), source)
+
+    assert job.state == "succeeded"
+    assert isinstance(job.summary, CodeSyncSummary)
+    assert job.summary.codebases == 1
+    assert job.phase == SyncPhase.DEPLOYMENTS
+    assert runner.running is None
+
+
+def test_busy_error_names_a_code_job_a_github_sync() -> None:
+    code = SyncJob(SyncJobRequest(uuid4(), "code", "manual"))
+    linear = SyncJob(SyncJobRequest(uuid4(), "organization", "manual"))
+
+    assert str(SyncBusyError(code)).startswith("Another GitHub sync is already running")
+    assert str(SyncBusyError(linear)).startswith("Another organization sync is already running")

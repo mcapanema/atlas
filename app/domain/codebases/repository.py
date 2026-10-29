@@ -1,0 +1,55 @@
+from datetime import datetime
+from typing import Protocol
+from uuid import UUID
+
+from app.domain.codebases.entities import Codebase, Deployment, PullRequest
+
+
+class CodebaseRepository(Protocol):
+    """Port for persisting Codebases. Implemented in Infrastructure."""
+
+    async def add(self, codebase: Codebase) -> None: ...
+
+    async def update(self, codebase: Codebase) -> None: ...
+
+    async def get(self, codebase_id: UUID) -> Codebase | None: ...
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Codebase]:
+        """The stored codebases with these external ids, across all organizations."""
+        ...
+
+    async def list(self, organization_id: UUID) -> list[Codebase]: ...
+
+
+class PullRequestRepository(Protocol):
+    """Port for persisting PullRequests. Implemented in Infrastructure."""
+
+    async def add(self, pull_request: PullRequest) -> None: ...
+
+    async def update(self, pull_request: PullRequest) -> None: ...
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, PullRequest]: ...
+
+    async def list_for_codebases(self, codebase_ids: list[UUID]) -> list[PullRequest]: ...
+
+    async def count_by_codebase(self, codebase_ids: list[UUID]) -> dict[UUID, int]: ...
+
+
+class DeploymentRepository(Protocol):
+    """Port for persisting Deployments. Implemented in Infrastructure."""
+
+    async def add(self, deployment: Deployment) -> None: ...
+
+    async def update(self, deployment: Deployment) -> None: ...
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Deployment]: ...
+
+    async def list_for_codebases(self, codebase_ids: list[UUID]) -> list[Deployment]: ...
+
+    async def count_by_codebase(self, codebase_ids: list[UUID]) -> dict[UUID, int]: ...
+
+    async def oldest_pending_started_at(
+        self, codebase_id: UUID, *, since: datetime
+    ) -> datetime | None:
+        """Earliest started_at of the codebase's PENDING deployments at or after `since`."""
+        ...

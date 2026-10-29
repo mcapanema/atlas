@@ -21,8 +21,9 @@ Presentation is allowed to know a concrete adapter exists).
   adapters). See the `ponytail:` comment on `get_session` for the
   deliberate transaction-scope boundary — read it before "fixing" it.
 - **409-until-configured**: a dependency backed by an external integration
-  (`get_delivery_data_source`, `get_advisor_port`) raises `409 Conflict`
-  with a human-readable detail while its `ATLAS_*` key is unset
+  (`get_delivery_data_source`, `get_code_host_source`, `get_advisor_port`)
+  raises `409 Conflict` with a human-readable detail while its `ATLAS_*`
+  keys are unset
   (ADR-0005). A new integration follows the same pattern — never a 500,
   never a silent fallback.
 - **Analytics scope**: metrics/forecasts/recommendations endpoints take
@@ -41,7 +42,7 @@ Presentation is allowed to know a concrete adapter exists).
   `app/main.py`'s `create_app()`. Deliberate exceptions: `health.py`
   serves bare `/health`; `advisor.py` mounts at `/api/recommendations`
   (named for what it returns); `connectors.py` nests actions per vendor
-  (`POST /api/connectors/linear/sync`); `metric_rules.py` is prefix-less
+  (`POST /api/connectors/linear/sync`, `POST /api/connectors/github/sync`); `metric_rules.py` is prefix-less
   because it serves both `/api/organizations/{id}/metric-rules` and
   `/api/teams/{id}/metric-rules`; `sync_schedules.py` mounts at
   `/api/organizations` and serves `/{id}/sync-schedule`, nested under the
@@ -66,12 +67,16 @@ Presentation is allowed to know a concrete adapter exists).
   `AutoSyncRunner` ticks every minute and syncs each organization whose
   schedule has a due slot by running it through `SyncJobRunner` (own
   session + commit inside `recompute.paused()`; the outcome is recorded in a
-  second session). Every sync entry point runs as a `SyncJobRunner` job,
+  second session; when GitHub is configured, a successful Linear sync is
+  followed by a `code` job whose failure only logs). Every sync entry point runs as a `SyncJobRunner` job,
   which holds `SyncJobRunner.lock` and commits inside it — the
-  organization sync (`POST /api/connectors/linear/sync`) and the team sync
-  (`POST /api/connectors/linear/teams/{team_id}/sync`) start one and
-  answer `202` with it (`GET /api/connectors/linear/jobs/{job_id}` reads
-  it). A new one must too, or two syncs race on the same external ids.
+  organization sync (`POST /api/connectors/linear/sync`), the team sync
+  (`POST /api/connectors/linear/teams/{team_id}/sync`) and the code sync
+  (`POST /api/connectors/github/sync`, `start_code`) start one and
+  answer `202` with it (`GET /api/connectors/<vendor>/jobs/{job_id}` reads
+  it). The runner takes the job's body (`JobBody`); a new sync kind adds a
+  `start_*`/`run_*` pair and a `SyncKind` value, never a second runner, or
+  two syncs race on the same rows.
 - `mount_spa()` must be registered last in `create_app()` — the rule and
   its reason are owned by `app/infrastructure/CLAUDE.md`.
 - **MCP facade** (`mcp_server.py`): the MCP server's tools call Atlas's own

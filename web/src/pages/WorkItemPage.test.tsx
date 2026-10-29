@@ -177,6 +177,24 @@ describe("WorkItemPage", () => {
     expect(screen.getByText(/Label added: Blocked/)).toBeInTheDocument();
   });
 
+  it("labels pull request events on the timeline", async () => {
+    const prEvents = [
+      { ...events[0], id: "f1", type: "review", detail: "acme/api#12" },
+      { ...events[0], id: "f2", type: "merged", detail: "acme/api#12" },
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
+      if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(prEvents));
+      return Promise.resolve(jsonResponse(workItem));
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/PR opened: acme\/api#12/)).toBeInTheDocument();
+    expect(screen.getByText(/PR merged: acme\/api#12/)).toBeInTheDocument();
+  });
+
   it("labels label-removed and blocker-cleared events with their detail", async () => {
     const detailEvents = [
       {

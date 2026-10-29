@@ -45,6 +45,10 @@ class SyncPhase(StrEnum):
     TEAMS = "teams"
     PROJECTS = "projects"
     WORK_ITEMS = "work_items"
+    # The code sync's phases (`CodeSyncService`).
+    CODEBASES = "codebases"
+    PULL_REQUESTS = "pull_requests"
+    DEPLOYMENTS = "deployments"
     SNAPSHOTS = "snapshots"
 
 
@@ -370,6 +374,7 @@ class SyncService:
                 state=source.state,
                 project_id=project_id,
                 external_id=source.external_id,
+                key=source.key,
                 url=source.url,
                 state_type=source.state_type,
                 labels=source.labels,
@@ -385,6 +390,7 @@ class SyncService:
             type=source.type,
             state=source.state,
             project_id=project_id,
+            key=source.key,
             url=source.url,
             state_type=source.state_type,
             labels=source.labels,

@@ -1,4 +1,4 @@
-"""Linear syncs as in-process background jobs, one at a time.
+"""Linear and code-host syncs as in-process background jobs, one at a time.
 
 One asyncio task (ADR-0002: no queue) runs the job. A request while a job
 runs gets that job back when it covers the request (`covers`), or
@@ -7,7 +7,9 @@ manual or automatic, holds `lock` and commits inside it, so the next sync
 starts from this one's writes. A job is one session and one transaction
 inside `recompute.paused()` (a running scope rewrite holds SQLite's write
 lock): a failure or cancel rolls everything back. A cancelled job never
-writes a finish state (CancelledError is not an Exception).
+writes a finish state (CancelledError is not an Exception). A code job
+(`start_code` / `run_code`) runs `CodeSyncService.sync` and captures no
+snapshots: the REVIEW/MERGED events it adds change no metric.
 
 ponytail: job history lives in memory — the last HISTORY_SIZE finished
 jobs, lost on restart (a client polling a lost job gets 404). Move to a
@@ -16,6 +18,7 @@ jobs, lost on restart (a client polling a lost job gets 404). Move to a
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Literal
@@ -25,22 +28,24 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import (
+    code_sync_service_for,
     metric_rules_service_for,
     snapshot_service_for,
     sync_schedule_service_for,
     sync_service_for,
 )
 from app.api.recompute import RecomputeRunner, get_recompute_runner
+from app.application.codebases.sync import CodeSyncSummary
 from app.application.metric_rules.service import ScopeRef
 from app.application.sync.service import SyncPhase, SyncSummary
 from app.domain._time import utcnow
-from app.domain.sync.port import DataSourceError, DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DataSourceError, DeliveryDataSource
 
 logger = logging.getLogger(__name__)
 
 HISTORY_SIZE = 20
 
-SyncKind = Literal["organization", "team"]
+SyncKind = Literal["organization", "team", "code"]
 SyncTrigger = Literal["manual", "auto"]
 SyncState = Literal["running", "succeeded", "failed"]
 
@@ -56,6 +61,8 @@ class SyncJobRequest:
     def __post_init__(self) -> None:
         if (self.kind == "team") != (self.team_id is not None):
             raise ValueError("a team sync needs a team_id; an organization sync takes none")
+        if self.kind == "code" and self.rebuild:
+            raise ValueError("a code sync has no rebuild")
 
 
 @dataclass
@@ -67,18 +74,25 @@ class SyncJob:
     started_at: datetime = field(default_factory=utcnow)
     finished_at: datetime | None = None
     error: str | None = None
-    summary: SyncSummary | None = None
+    summary: SyncSummary | CodeSyncSummary | None = None
+
+
+# What a job runs inside its session; the runner commits after it.
+JobBody = Callable[[AsyncSession, SyncJob], Awaitable[SyncSummary | CodeSyncSummary]]
 
 
 def covers(running: SyncJobRequest, wanted: SyncJobRequest) -> bool:
     """Whether `running` already does everything `wanted` asks for.
 
-    Same organization, and: an organization sync covers a plain organization
+    Same organization, and: a code sync covers only a code sync, and only a
+    code sync covers one; an organization sync covers a plain organization
     sync and any of its team syncs; a rebuild only by a rebuild; a team sync
     covers only the same team.
     """
     if running.organization_id != wanted.organization_id:
         return False
+    if "code" in (running.kind, wanted.kind):
+        return running.kind == wanted.kind
     if wanted.rebuild:
         return running.rebuild
     if running.kind == "organization":
@@ -86,18 +100,24 @@ def covers(running: SyncJobRequest, wanted: SyncJobRequest) -> bool:
     return wanted.kind == "team" and wanted.team_id == running.team_id
 
 
+def kind_label(kind: SyncKind) -> str:
+    """How user-facing text names a job's kind: a code job is the GitHub sync."""
+    return "GitHub" if kind == "code" else kind
+
+
 class SyncBusyError(Exception):
     """A job is running that does not cover the request."""
 
     def __init__(self, job: SyncJob) -> None:
         super().__init__(
-            f"A {job.request.kind} sync is already running (job {job.id}); try again when it ends"
+            f"Another {kind_label(job.request.kind)} sync is already running (job {job.id}); "
+            "try again when it ends"
         )
         self.job = job
 
 
 class SyncJobRunner:
-    """Runs Linear syncs one background job at a time."""
+    """Runs Linear and code-host syncs one background job at a time."""
 
     def __init__(
         self, sessionmaker: async_sessionmaker[AsyncSession], *, recompute: RecomputeRunner
@@ -119,31 +139,58 @@ class SyncJobRunner:
         return self._jobs.get(job_id)
 
     def start(self, request: SyncJobRequest, source: DeliveryDataSource) -> SyncJob:
-        """Start a job and return it at once; or the running job, if it covers `request`."""
+        """Start a Linear job and return it at once; or the running job, if it covers `request`."""
+        return self._start(request, self._linear_body(source))
+
+    def start_code(self, request: SyncJobRequest, source: CodeHostSource) -> SyncJob:
+        """`start` for a code sync (`request.kind == "code"`)."""
+        return self._start(request, self._code_body(source))
+
+    async def run(self, request: SyncJobRequest, source: DeliveryDataSource) -> SyncJob:
+        """Wait for any running job, then run a Linear one to the end (a failure is its state)."""
+        return await self._run(request, self._linear_body(source))
+
+    async def run_code(self, request: SyncJobRequest, source: CodeHostSource) -> SyncJob:
+        """`run` for a code sync (`request.kind == "code"`)."""
+        return await self._run(request, self._code_body(source))
+
+    def _linear_body(self, source: DeliveryDataSource) -> JobBody:
+        return lambda session, job: self._sync(session, job, source)
+
+    @staticmethod
+    def _code_body(source: CodeHostSource) -> JobBody:
+        async def body(session: AsyncSession, job: SyncJob) -> CodeSyncSummary:
+            def on_phase(phase: SyncPhase) -> None:
+                job.phase = phase
+
+            return await code_sync_service_for(session, source).sync(
+                job.request.organization_id, on_phase=on_phase
+            )
+
+        return body
+
+    def _start(self, request: SyncJobRequest, body: JobBody) -> SyncJob:
         running = self._running
         if running is not None:
             if covers(running.request, request):
                 return running
             raise SyncBusyError(running)
-        job, self._task = self._spawn(request, source)
+        job, self._task = self._spawn(request, body)
         return job
 
-    async def run(self, request: SyncJobRequest, source: DeliveryDataSource) -> SyncJob:
-        """Wait for any running job, then run one to completion (a failure is in its state)."""
+    async def _run(self, request: SyncJobRequest, body: JobBody) -> SyncJob:
         while self._running is not None:
             await self.wait_idle()
         # No await since the check: nothing else can have claimed the runner.
-        job, self._task = self._spawn(request, source)
+        job, self._task = self._spawn(request, body)
         await self._task  # cancelling the caller cancels the job
         return job
 
-    def _spawn(
-        self, request: SyncJobRequest, source: DeliveryDataSource
-    ) -> tuple[SyncJob, asyncio.Task[None]]:
+    def _spawn(self, request: SyncJobRequest, body: JobBody) -> tuple[SyncJob, asyncio.Task[None]]:
         job = SyncJob(request)
         self._running = job
         self._jobs[job.id] = job
-        task = asyncio.create_task(self._hold(job, source))
+        task = asyncio.create_task(self._hold(job, body))
         # A done callback, not a `finally`: it also runs for a task cancelled
         # before its first step. Added first, so it runs before any awaiter wakes.
         task.add_done_callback(lambda _: self._release(job))
@@ -170,21 +217,21 @@ class SyncJobRunner:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    async def _hold(self, job: SyncJob, source: DeliveryDataSource) -> None:
+    async def _hold(self, job: SyncJob, body: JobBody) -> None:
         async with self.lock:
-            await self._execute(job, source)
+            await self._execute(job, body)
 
-    async def _execute(self, job: SyncJob, source: DeliveryDataSource) -> None:
+    async def _execute(self, job: SyncJob, body: JobBody) -> None:
         request = job.request
         try:
             async with self._recompute.paused() as queue, self._sessionmaker() as session:
-                job.summary = await self._sync(session, job, source)
+                job.summary = await body(session, job)
                 scopes = await self._start_recompute(session, request)
                 await session.commit()
                 if request.rebuild:
                     queue(request.organization_id, scopes)
         except DataSourceError as exc:
-            # Linear unreachable, an error response, or a malformed payload:
+            # The source unreachable, an error response, or a malformed payload:
             # the message says which, so no traceback.
             logger.warning("Sync job %s failed for %s: %s", job.id, request.organization_id, exc)
             self._finish(job, error=str(exc) or type(exc).__name__)

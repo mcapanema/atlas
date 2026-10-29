@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic_core import PydanticCustomError
 
 from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
+from app.application.codebases.service import CodebaseOverview
+from app.application.codebases.sync import CodeSyncSummary
+from app.application.sync.service import SyncSummary
 from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType, Persona
 from app.domain.advisor.runs import AdviceRun
 from app.domain.events.entities import EventType
@@ -152,8 +155,21 @@ class SyncSummaryRead(BaseModel):
     rebuilt: int
 
 
+class CodeSyncRequest(BaseModel):
+    organization_id: UUID | None = None
+
+
+class CodeSyncSummaryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    codebases: int
+    pull_requests: int
+    deployments: int
+    events: int
+
+
 class SyncJobRead(BaseModel):
-    """A background Linear sync: running, or one of the last finished ones."""
+    """A background sync, Linear or code: running, or one of the last finished ones."""
 
     id: UUID
     organization_id: UUID
@@ -166,7 +182,10 @@ class SyncJobRead(BaseModel):
     started_at: datetime
     finished_at: datetime | None
     error: str | None
+    # The Linear counts (an organization or team job).
     summary: SyncSummaryRead | None
+    # The code-host counts (a code job).
+    code_summary: CodeSyncSummaryRead | None
 
     @classmethod
     def of(cls, job: SyncJob) -> "SyncJobRead":
@@ -184,7 +203,10 @@ class SyncJobRead(BaseModel):
             finished_at=job.finished_at,
             error=job.error,
             summary=SyncSummaryRead.model_validate(job.summary)
-            if job.summary is not None
+            if isinstance(job.summary, SyncSummary)
+            else None,
+            code_summary=CodeSyncSummaryRead.model_validate(job.summary)
+            if isinstance(job.summary, CodeSyncSummary)
             else None,
         )
 
@@ -193,6 +215,49 @@ class LinearStatusRead(IntegrationStatusRead):
     # The sync job running now, manual or automatic; a new request either
     # gets it back (it covers the request) or a 409.
     running: SyncJobRead | None
+
+
+class GitHubStatusRead(IntegrationStatusRead):
+    # The configured organization or user login; None while unset.
+    owner: str | None
+    # The sync job running now, of any kind; as on LinearStatusRead.
+    running: SyncJobRead | None
+
+
+class CodebaseRead(BaseModel):
+    """A codebase with how many pull requests and deployments are stored for it."""
+
+    id: UUID
+    organization_id: UUID
+    name: str
+    url: str | None
+    team_id: UUID | None
+    production_environment: str
+    last_synced_at: datetime | None
+    pull_requests: int
+    deployments: int
+
+    @classmethod
+    def of(cls, overview: CodebaseOverview) -> "CodebaseRead":
+        codebase = overview.codebase
+        return cls(
+            id=codebase.id,
+            organization_id=codebase.organization_id,
+            name=codebase.name,
+            url=codebase.url,
+            team_id=codebase.team_id,
+            production_environment=codebase.production_environment,
+            last_synced_at=codebase.last_synced_at,
+            pull_requests=overview.pull_requests,
+            deployments=overview.deployments,
+        )
+
+
+class CodebaseWrite(BaseModel):
+    """PUT body for a codebase: its team (None unmaps it) and production environment."""
+
+    team_id: UUID | None
+    production_environment: str = Field(min_length=1, max_length=255)
 
 
 class SyncScheduleWrite(BaseModel):
