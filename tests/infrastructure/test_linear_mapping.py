@@ -607,3 +607,15 @@ def test_map_issue_not_archived_emits_no_archive_cancel() -> None:
     # ISSUE_NODE has no archivedAt key at all: it must still map, not be skipped.
     for node in (ISSUE_NODE, {**ISSUE_NODE, "archivedAt": None}):
         assert _archive_cancels(node) == []
+
+
+def test_map_issue_carries_identifier_as_key() -> None:
+    node = {**ISSUE_NODE, "identifier": "DEP-123"}
+
+    assert map_issue(node, {}).key == "DEP-123"
+
+
+def test_map_issue_without_identifier_has_no_key() -> None:
+    node = {k: v for k, v in ISSUE_NODE.items() if k != "identifier"}
+
+    assert map_issue(node, {}).key is None

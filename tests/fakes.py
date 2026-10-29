@@ -130,6 +130,10 @@ class InMemoryWorkItemRepository:
             if item.parent_id in doomed:
                 self._items[item_id] = replace(item, parent_id=None)
 
+    async def get_by_keys(self, keys: list[str]) -> dict[str, WorkItem]:
+        wanted = set(keys)
+        return {item.key: item for item in self._items.values() if item.key in wanted and item.key}
+
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
     async def list_states(

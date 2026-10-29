@@ -162,6 +162,7 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
     completed_at = node.get("completedAt")
     return SourceWorkItem(
         external_id=node["id"],
+        key=node.get("identifier"),
         title=node["title"],
         # Linear has no story/task/bug field: every item is TASK, and the team's
         # type_labels rule classifies at read time (MetricRules.type_of).

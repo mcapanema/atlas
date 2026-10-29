@@ -293,3 +293,13 @@ async def test_team_ids_by_project_groups_distinct_teams(session: AsyncSession) 
         project_p: frozenset({team_a, team_b}),
         project_q: frozenset({team_a}),
     }
+
+
+async def test_get_by_keys_returns_items_by_key(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    for key in ("DEP-1", "DEP-2", None):
+        await repo.add(WorkItem(team_id=team_id, title="t", key=key))
+
+    assert set(await repo.get_by_keys(["DEP-1", "DEP-9"])) == {"DEP-1"}
+    assert await repo.get_by_keys([]) == {}

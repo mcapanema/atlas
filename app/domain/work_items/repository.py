@@ -18,6 +18,10 @@ class WorkItemRepository(Protocol):
         """
         ...
 
+    async def get_by_keys(self, keys: list[str]) -> dict[str, WorkItem]:
+        """Items by exact (upper-case) source key; unknown keys are absent."""
+        ...
+
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
     async def list_states(

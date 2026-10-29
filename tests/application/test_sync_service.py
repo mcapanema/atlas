@@ -146,6 +146,21 @@ async def test_resync_backfills_url_on_item_synced_without_one() -> None:
     assert item.url == "https://linear.app/acme/issue/ENG-1"
 
 
+async def test_sync_backfills_key_on_existing_item() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # stored with key=None
+    source.work_items = [dataclasses.replace(source.work_items[0], key="DEP-1")]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.key == "DEP-1"
+
+
 async def test_changed_url_is_updated() -> None:
     source = full_source()
     source.work_items = [dataclasses.replace(source.work_items[0], url="https://linear.app/a/E-1")]

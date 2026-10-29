@@ -187,6 +187,7 @@ async def test_fetch_work_items_maps_label_history_with_names() -> None:
         assert "addedLabelIds" in body["query"]
         assert "labelIds" in body["query"]
         assert "parent { id }" in body["query"]
+        assert "identifier" in body["query"]
         assert "relationChanges { identifier type }" in body["query"]
         return _page("issues", [issue_node])
 

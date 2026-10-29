@@ -91,6 +91,7 @@ query Issues($after: String, $filter: IssueFilter) {{
   issues(first: 50, after: $after, filter: $filter, includeArchived: true) {{
     nodes {{
       id
+      identifier
       title
       url
       assignee {{ id name email }}

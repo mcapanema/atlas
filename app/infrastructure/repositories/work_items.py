@@ -28,6 +28,7 @@ class WorkItemModel(Base):
         String(255), nullable=True, unique=True, index=True
     )
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     state_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     labels: Mapped[list[str]] = mapped_column(
@@ -57,6 +58,7 @@ class WorkItemModel(Base):
             state=self.state,
             external_id=self.external_id,
             url=self.url,
+            key=self.key,
             created_at=self.created_at,
             state_type=StateType(self.state_type) if self.state_type else None,
             labels=tuple(self.labels),
@@ -76,6 +78,7 @@ class WorkItemModel(Base):
             state=work_item.state,
             external_id=work_item.external_id,
             url=work_item.url,
+            key=work_item.key,
             created_at=work_item.created_at,
             state_type=work_item.state_type.value if work_item.state_type else None,
             labels=list(work_item.labels),
@@ -107,6 +110,18 @@ class SqlAlchemyWorkItemRepository:
                 .values(parent_id=None)
             )
             await self._session.execute(delete(WorkItemModel).where(WorkItemModel.id.in_(chunk)))
+
+    async def get_by_keys(self, keys: list[str]) -> dict[str, WorkItem]:
+        found: dict[str, WorkItem] = {}
+        for chunk in chunked(keys):
+            result = await self._session.execute(
+                select(WorkItemModel).where(WorkItemModel.key.in_(chunk))
+            )
+            for model in result.scalars():
+                # key is not unique: a stale duplicate may exist; the last row wins.
+                if model.key is not None:
+                    found[model.key] = model.to_domain()
+        return found
 
     # Must stay above `list` — that method shadows the `list` builtin for every
     # annotation below it in this class body, so `-> list[str]` would fail.
