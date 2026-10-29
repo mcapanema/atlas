@@ -39,7 +39,9 @@ function SyncGitHub({
   status: GitHubStatus | undefined;
 }) {
   const sync = useGitHubSync();
-  const note = runningNote(status, sync.running || sync.codeOutcome !== undefined);
+  // This card's own job, running or just ended, never shows as someone else's.
+  const own = sync.running || sync.codeOutcome !== undefined || sync.error !== undefined;
+  const note = runningNote(status, own);
   // One sync at a time server-side: any running job, GitHub's or Linear's, blocks a start.
   const busy = status?.running != null && !sync.running;
   return (

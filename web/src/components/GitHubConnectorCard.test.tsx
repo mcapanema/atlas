@@ -1,3 +1,4 @@
+import { focusManager } from "@tanstack/react-query";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,7 +46,10 @@ function mockApi({
   });
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  focusManager.setFocused(undefined);
+});
 
 describe("GitHubConnectorCard", () => {
   it("shows the setup alert while GitHub is unconfigured", async () => {
@@ -104,5 +108,48 @@ describe("GitHubConnectorCard", () => {
     fireEvent.click(button);
 
     expect(await screen.findByText("bad token")).toBeInTheDocument();
+  });
+
+  it("clears the running note and enables the button after its own sync fails", async () => {
+    // The status poll caught this card's job running; the job then failed.
+    let serverRunning: object | null = null;
+    let polls = 0;
+    let failed = false;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = requestUrl(input);
+      if (url === "/api/connectors/github")
+        return jsonResponse({ configured: true, owner: "acme", running: serverRunning });
+      if (url === "/api/connectors/github/sync") {
+        serverRunning = job("running");
+        return jsonResponse(job("running"), 202);
+      }
+      if (url === "/api/connectors/github/jobs/job1") {
+        polls += 1;
+        if (!failed) return jsonResponse(job("running"));
+        serverRunning = null;
+        return jsonResponse(job("failed", { error: "bad token" }));
+      }
+      if (url.startsWith("/api/codebases")) return jsonResponse([]);
+      if (url === "/api/teams") return jsonResponse([]);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const statusCalls = () =>
+      fetchMock.mock.calls.filter(([input]) => requestUrl(input) === "/api/connectors/github")
+        .length;
+
+    renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
+    const button = await screen.findByRole("button", { name: /Sync GitHub/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(polls).toBe(1));
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await waitFor(() => expect(statusCalls()).toBe(2));
+    failed = true;
+
+    expect(await screen.findByText("bad token", {}, { timeout: 3000 })).toBeInTheDocument();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByText("A GitHub sync is running.")).not.toBeInTheDocument();
+    expect(statusCalls()).toBe(3);
   });
 });

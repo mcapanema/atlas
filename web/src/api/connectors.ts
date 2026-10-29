@@ -84,13 +84,15 @@ function useOncePerJob(succeeded: boolean, jobId: string | undefined, run: () =>
 
 /**
  * Starts a sync job (the POST answers 202 at once), then polls it until it
- * leaves "running". `onSucceeded` runs once per job that succeeds.
+ * leaves "running". `onSucceeded` runs once per job that succeeds; the
+ * connector statuses refetch once per job that ends, however it ends.
  */
 function useSyncAction(
   post: (organizationId?: string) => Promise<SyncJob>,
   onSucceeded: () => unknown,
   jobsPath: string,
 ): SyncAction {
+  const queryClient = useQueryClient();
   const start = useMutation({ mutationFn: post });
   const jobId = start.data?.id;
   const poll = useQuery({
@@ -106,6 +108,9 @@ function useSyncAction(
 
   const succeeded = job?.state === "succeeded";
   useOncePerJob(succeeded, jobId, onSucceeded);
+  // Any end, failure included: the connector statuses still show the job running.
+  const finished = (job !== undefined && job.state !== "running") || poll.error !== null;
+  useOncePerJob(finished, jobId, () => queryClient.invalidateQueries({ queryKey: ["connectors"] }));
 
   return {
     start: (organizationId) => start.mutate(organizationId),
