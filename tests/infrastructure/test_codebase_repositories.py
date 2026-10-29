@@ -70,6 +70,15 @@ async def test_codebase_round_trip_and_list_by_organization(session: AsyncSessio
     assert await repo.get(uuid4()) is None
 
 
+async def test_codebase_get_by_external_ids_spans_organizations(session: AsyncSession) -> None:
+    repo = SqlAlchemyCodebaseRepository(session)
+    a, b = await _codebase(session, "a"), await _codebase(session, "b")
+    session.expire_all()
+    assert a.organization_id != b.organization_id
+    assert await repo.get_by_external_ids(["a", "b", "missing"]) == {"a": a, "b": b}
+    assert await repo.get_by_external_ids([]) == {}
+
+
 async def test_codebase_update_maps_team(session: AsyncSession) -> None:
     repo = SqlAlchemyCodebaseRepository(session)
     codebase = await _codebase(session)

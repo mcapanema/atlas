@@ -571,6 +571,10 @@ class InMemoryCodebaseRepository:
     async def get(self, codebase_id: UUID) -> Codebase | None:
         return self._rows.get(codebase_id)
 
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Codebase]:
+        wanted = set(external_ids)
+        return {c.external_id: c for c in self._rows.values() if c.external_id in wanted}
+
     async def list(self, organization_id: UUID) -> list[Codebase]:
         return [c for c in self._rows.values() if c.organization_id == organization_id]
 

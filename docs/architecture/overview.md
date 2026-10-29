@@ -218,7 +218,8 @@ custom.
 - **Code host** (`app/domain/sync/port.py`): the `CodeHostSource` port plus
   vendor-neutral `SourceCodebase`, `SourcePullRequest` and
   `SourceDeployment` (`source.py`). `CodeSyncService` upserts codebases by
-  `external_id` (never pruned), then the pull requests and deployments of
+  `external_id` across organizations (never pruned; the first owner keeps
+  one, ADR-0024), then the pull requests and deployments of
   mapped codebases, idempotently (ADR-0004): a codebase's first fetch
   reaches back 180 days, later fetches start one day before its
   `last_synced_at`. `POST /api/connectors/github/sync` runs it as a `code`

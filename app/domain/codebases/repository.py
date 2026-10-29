@@ -13,6 +13,10 @@ class CodebaseRepository(Protocol):
 
     async def get(self, codebase_id: UUID) -> Codebase | None: ...
 
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Codebase]:
+        """The stored codebases with these external ids, across all organizations."""
+        ...
+
     async def list(self, organization_id: UUID) -> list[Codebase]: ...
 
 

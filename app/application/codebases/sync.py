@@ -45,8 +45,8 @@ class CodeSyncSummary:
 class CodeSyncService:
     """Pulls a CodeHostSource into the codebases slice, idempotently.
 
-    Codebases are matched by external_id and never pruned; new ones start
-    unmapped and are never fetched until a team is set. Pull requests and
+    Codebases are matched by external_id across organizations and never
+    pruned; new ones start unmapped and are never fetched until a team is set. Pull requests and
     deployments of mapped codebases are upserted by external_id (written only
     when changed). A final link pass turns stored pull requests into REVIEW and
     MERGED events of the work items their keys name, so items synced after the
@@ -130,9 +130,16 @@ class CodeSyncService:
                 await self._codebases.update(replace(current, last_synced_at=now))
 
     async def _sync_codebases(self, organization_id: UUID) -> int:
-        existing = {c.external_id: c for c in await self._codebases.list(organization_id)}
+        """Add new codebases to this organization; rename stored ones, whoever owns them.
+
+        Matched by external_id across all organizations (as the Linear sync
+        matches teams): a codebase another organization already owns keeps its
+        owner, so a second organization's sync never re-inserts it.
+        """
+        sources = await self._source.fetch_codebases()
+        existing = await self._codebases.get_by_external_ids([s.external_id for s in sources])
         written = 0
-        for source in await self._source.fetch_codebases():
+        for source in sources:
             stored = existing.get(source.external_id)
             if stored is None:
                 await self._codebases.add(
@@ -239,7 +246,12 @@ class _Upsertable[T: (PullRequest, Deployment)](Protocol):
 
 
 async def _upsert[T: (PullRequest, Deployment)](repository: _Upsertable[T], rows: list[T]) -> int:
-    """Add new rows and update changed ones (matched by external_id); returns rows written."""
+    """Add new rows and update changed ones (matched by external_id); returns rows written.
+
+    A row the source returned twice (updated mid-pagination) is written once,
+    as its first, newest copy.
+    """
+    rows = list({row.external_id: row for row in reversed(rows)}.values())[::-1]
     stored = await repository.get_by_external_ids([r.external_id for r in rows])
     written = 0
     for row in rows:

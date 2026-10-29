@@ -171,6 +171,16 @@ class SqlAlchemyCodebaseRepository:
         model = await self._session.get(CodebaseModel, codebase_id)
         return model.to_domain() if model is not None else None
 
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, Codebase]:
+        found: dict[str, Codebase] = {}
+        for chunk in chunked(external_ids):
+            result = await self._session.execute(
+                select(CodebaseModel).where(CodebaseModel.external_id.in_(chunk))
+            )
+            for model in result.scalars():
+                found[model.external_id] = model.to_domain()
+        return found
+
     async def list(self, organization_id: UUID) -> list[Codebase]:
         result = await self._session.execute(
             select(CodebaseModel)

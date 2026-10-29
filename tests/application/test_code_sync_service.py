@@ -384,3 +384,32 @@ async def test_stamp_keeps_edits_made_during_the_fetch() -> None:
     assert stored.team_id != original.team_id
     assert stored.production_environment == "prod"
     assert stored.last_synced_at == NOW
+
+
+async def test_a_second_organization_leaves_codebases_another_one_owns() -> None:
+    source = api_source({"r1": [pr()]})
+    h = await seeded(source)
+    org_a_codebase = (await h.codebases.list(h.org.id))[0]
+    org_b = Organization(name="Beta")
+    await h.organizations.add(org_b)
+    source.codebases = [SourceCodebase(external_id="r1", name="acme/api-v2")]
+
+    summary = await h.service.sync(org_b.id, now=NOW)
+
+    assert await h.codebases.list(org_b.id) == []
+    assert await h.codebases.list(h.org.id) == [replace(org_a_codebase, name="acme/api-v2")]
+    assert summary.codebases == 1  # the rename
+    assert (summary.pull_requests, summary.deployments, summary.events) == (0, 0, 0)
+    assert source.calls == []  # org B fetches only its own mapped codebases
+
+
+async def test_a_pull_request_returned_twice_is_stored_once_as_its_first_copy() -> None:
+    # Updated mid-pagination: it shows up on two pages, the newest copy first.
+    h = await seeded(api_source({"r1": [pr(title="Newest"), pr(title="Older")]}))
+
+    summary = await h.sync()
+
+    codebase = (await h.codebases.list(h.org.id))[0]
+    stored = await h.pull_requests.list_for_codebases([codebase.id])
+    assert [p.title for p in stored] == ["Newest"]
+    assert summary.pull_requests == 1

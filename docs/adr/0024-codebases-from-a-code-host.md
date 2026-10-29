@@ -21,6 +21,10 @@ work items. A code host has repositories, pull requests and deployments.
   computes DORA and shows it.
 - A repository (a `Codebase`) maps to one Atlas team manually, on the
   Connectors page. An unmapped codebase is listed but never fetched.
+- Codebases are matched by external id across all organizations, as the
+  Linear sync matches teams. The first organization to sync a repository owns
+  it; another organization's sync renames it but never re-inserts it, and
+  fetches pull requests and deployments only for its own mapped codebases.
 - A pull request links to a work item when a work-item key (for example
   `DEP-123`) appears in its branch name, title or body. A link adds `REVIEW`
   (opened) and `MERGED` events to that item. Every pull request is stored,
