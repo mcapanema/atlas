@@ -84,6 +84,9 @@ class GitHubDataSource:
         )
         return map_tolerantly(nodes, map_pull_request, "pull request", vendor="GitHub")
 
+    # ponytail: deployments are filtered by createdAt, so an old deployment
+    # whose status changes after `since` is not refreshed; the 1-day sync
+    # overlap is the ceiling. Fetch statuses by update time if that matters.
     async def fetch_deployments(
         self, codebase_external_id: str, since: datetime
     ) -> list[SourceDeployment]:
@@ -98,19 +101,24 @@ class GitHubDataSource:
         """Newest-first pages up to the first page that reaches back before `since`.
 
         Keeps nodes stamped at or after `since`. A node whose stamp is missing
-        or unreadable is kept (and stops nothing) so the tolerant mapper can
+        or unreadable counts as in the window (and stops nothing) so the tolerant mapper can
         log it instead of a bad stamp aborting the sync.
         """
         kept: list[dict[str, Any]] = []
         cursor: str | None = None
         for _ in range(_MAX_PAGES):
             data = await self._client.execute(query, {"id": repo_id, "after": cursor})
-            connection = data["node"][root]
+            try:
+                connection = data["node"][root]
+            except (KeyError, TypeError) as exc:
+                raise GitHubAPIError(
+                    f"GitHub repository {repo_id!r} not found or not a repository"
+                ) from exc
             page = connection["nodes"]
-            kept.extend(n for n in page if _stamp_ok(n, stamp_field, since, keep=True))
+            kept.extend(n for n in page if _in_window(n, stamp_field, since))
             page_info = connection["pageInfo"]
             exhausted = not page_info["hasNextPage"]
-            if exhausted or (page and not _stamp_ok(page[-1], stamp_field, since, keep=False)):
+            if exhausted or (page and not _in_window(page[-1], stamp_field, since)):
                 return kept
             cursor = page_info["endCursor"]
         raise self._too_many_pages(root)
@@ -122,9 +130,9 @@ class GitHubDataSource:
         )
 
 
-def _stamp_ok(node: dict[str, Any], field: str, since: datetime, *, keep: bool) -> bool:
-    """True if the node's stamp is at/after `since`; `keep` decides the unreadable case."""
+def _in_window(node: dict[str, Any], field: str, since: datetime) -> bool:
+    """True if the node's stamp is at/after `since`; an unreadable stamp counts as in."""
     try:
         return datetime.fromisoformat(node[field]) >= since
     except (KeyError, TypeError, ValueError):
-        return keep
+        return True

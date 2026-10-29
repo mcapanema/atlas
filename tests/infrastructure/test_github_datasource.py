@@ -114,7 +114,7 @@ async def test_fetch_pull_requests_keeps_node_stamped_exactly_at_since() -> None
     assert [p.external_id for p in prs] == ["p3"]
 
 
-async def test_fetch_deployments_stops_at_since_and_maps() -> None:
+async def test_fetch_deployments_stops_at_since() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         nodes = [_deployment("d5", _day(5)), _deployment("d1", _day(1))]
         return _ok({"node": {"deployments": _connection(nodes)}})
@@ -162,3 +162,28 @@ async def test_sends_bearer_token() -> None:
     await _datasource(handler).fetch_codebases()
 
     assert seen == ["Bearer ghp_test"]
+
+
+async def test_unreadable_stamp_on_last_node_keeps_paging() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["variables"]["after"] is None:
+            bad = {**_pr("p-bad", _day(5)), "updatedAt": "garbage"}
+            return _ok({"node": {"pullRequests": _connection([bad], end_cursor="c1")}})
+        return _ok({"node": {"pullRequests": _connection([_pr("p4", _day(4))])}})
+
+    prs = await _datasource(handler).fetch_pull_requests("r1", datetime(2026, 7, 3, tzinfo=UTC))
+
+    assert [p.external_id for p in prs] == ["p-bad", "p4"]
+
+
+@pytest.mark.parametrize("data", [{"node": None}, {"node": {}}])
+async def test_missing_repository_node_raises(data: dict[str, Any]) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _ok(data)
+
+    ds = _datasource(handler)
+    since = datetime(2026, 7, 1, tzinfo=UTC)
+    with pytest.raises(GitHubAPIError, match="'r1' not found"):
+        await ds.fetch_pull_requests("r1", since)
+    with pytest.raises(GitHubAPIError, match="'r1' not found"):
+        await ds.fetch_deployments("r1", since)
