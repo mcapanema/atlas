@@ -6,7 +6,7 @@
 
 import type { UseQueryResult } from "@tanstack/react-query";
 
-import type { DeliveryHealth, FlowMetrics } from "../api/metrics";
+import type { DeliveryHealth, DoraMetrics, FlowMetrics } from "../api/metrics";
 import type { ScopeOverview } from "../api/overview";
 import type { ForecastAccuracy, MetricSnapshot } from "../api/snapshots";
 import type { Team } from "../api/teams";
@@ -27,6 +27,7 @@ export interface TeamRow {
   metrics: FlowMetrics | undefined;
   accuracy: ForecastAccuracy | undefined;
   health: DeliveryHealth | undefined;
+  dora: DoraMetrics | null;
   /** One request feeds the whole row, so every cell shares its state. */
   state: CellState;
   throughputDelta: Delta | null;
@@ -81,6 +82,7 @@ export function buildTeamRows(
       metrics: data?.metrics,
       accuracy: data?.accuracy,
       health: data?.health,
+      dora: data?.dora ?? null,
       state: queryState(overview),
       ...trends(data?.metrics, data?.snapshots ?? [], deltasEnabled),
     };

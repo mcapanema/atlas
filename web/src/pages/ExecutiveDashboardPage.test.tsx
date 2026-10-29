@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  doraFixture,
   healthFixture,
   jsonResponse,
   metricsFixture,
@@ -88,6 +89,36 @@ describe("ExecutiveDashboardPage", () => {
     expect(
       await screen.findByRole("table", { name: "Delivery metrics by team" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows deploys per week and change failure rate per team", async () => {
+    mockMetricsFetch({
+      "/api/teams": [teamFixture],
+      "/api/metrics/overview": overviewFixture({ dora: doraFixture }),
+    });
+
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    expect(await screen.findByText("1.4")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("Low")).toBeInTheDocument();
+  });
+
+  it("shows a dash without codebases", async () => {
+    mockMetricsFetch({
+      "/api/teams": [teamFixture],
+      "/api/metrics/overview": overviewFixture({ dora: { ...doraFixture, codebases: 0 } }),
+    });
+
+    renderWithClient(<ExecutiveDashboardPage />);
+
+    const row = (await screen.findByText("Platform")).closest("tr");
+    if (!row) throw new Error("Expected the team row to render");
+    await waitFor(() => expect(within(row).getByText("4")).toBeInTheDocument());
+    expect(within(row).queryByText("1.4")).not.toBeInTheDocument();
+    expect(row.querySelector(".dora-band")).toBeNull();
+    expect(within(row).getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 
   it("lists every team with its flow metrics, linking to its dashboard", async () => {
@@ -319,7 +350,7 @@ describe("ExecutiveDashboardPage", () => {
     const growthRow = screen.getByText("Growth").closest("tr");
     if (!growthRow) throw new Error("Expected Growth row to render");
     // Health + 5 metrics columns + accuracy, all fed by the failed overview.
-    expect(within(growthRow).getAllByText("unavailable")).toHaveLength(7);
+    expect(within(growthRow).getAllByText("unavailable")).toHaveLength(9);
     expect(within(growthRow).queryByText("—")).not.toBeInTheDocument();
   });
 

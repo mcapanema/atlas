@@ -3,12 +3,14 @@ import type { ColumnsType } from "antd/es/table";
 import { useState, type HTMLAttributes, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import type { DoraBand } from "../api/metrics";
 import { formatDay } from "../lib/dates";
 import type { Delta } from "../lib/deltas";
 import { formatSeconds } from "../lib/duration";
 import { isAtRisk, weakestComponents } from "../lib/health";
 import type { CellState, TeamRow } from "../lib/teamRows";
 import { STATS_WINDOW_DAYS } from "../lib/windows";
+import { DoraBandTag } from "./DoraCard";
 import { HealthBadge } from "./HealthBadge";
 import { HelpLabel } from "./HelpLabel";
 import { SlottedTitle } from "./SlottedTitle";
@@ -137,6 +139,82 @@ const ACCURACY_COLUMN: ColumnsType<TeamRow>[number] = {
     ),
 };
 
+/** The row's DORA numbers, or null when no repository is mapped to the team. */
+function measuredDora(row: TeamRow) {
+  return row.dora && row.dora.codebases > 0 ? row.dora : null;
+}
+
+function doraDeploys(row: TeamRow, missing: number): number {
+  return measuredDora(row)?.deploys_per_week ?? missing;
+}
+
+function doraFailureRate(row: TeamRow, missing: number): number {
+  return measuredDora(row)?.change_failure_rate ?? missing;
+}
+
+/** A figure with its DORA band word beside it; the band is absent when too few samples rate it. */
+function DoraFigure({ figure, band }: { figure: string; band: DoraBand | null }) {
+  return (
+    <>
+      <span className="fig">{figure}</span>
+      {band && (
+        <>
+          {" "}
+          <DoraBandTag band={band} />
+        </>
+      )}
+    </>
+  );
+}
+
+const DEPLOY_FREQUENCY_COLUMN: ColumnsType<TeamRow>[number] = {
+  key: "deploys-per-week",
+  title: columnHelp(
+    "Deploys / week",
+    "Successful production deployments per week in the window (DORA deploy frequency). “—” means no repository is mapped to the team.",
+  ),
+  align: "right",
+  // Unmeasured teams sort last in both directions.
+  sorter: (a, b, order) => {
+    const missing = order === "ascend" ? Number.MAX_VALUE : -Number.MAX_VALUE;
+    return doraDeploys(a, missing) - doraDeploys(b, missing);
+  },
+  render: (_, row) =>
+    cell(row.state, () => {
+      const dora = measuredDora(row);
+      return dora ? (
+        <DoraFigure figure={dora.deploys_per_week.toFixed(1)} band={dora.deploy_frequency_band} />
+      ) : (
+        "—"
+      );
+    }),
+};
+
+const CHANGE_FAILURE_COLUMN: ColumnsType<TeamRow>[number] = {
+  key: "change-failure-rate",
+  title: columnHelp(
+    "Change failure rate",
+    "Share of production deployments that failed or caused an incident (DORA). “—” means none finished in the window.",
+  ),
+  align: "right",
+  sorter: (a, b, order) => {
+    const missing = order === "ascend" ? Number.MAX_VALUE : -Number.MAX_VALUE;
+    return doraFailureRate(a, missing) - doraFailureRate(b, missing);
+  },
+  render: (_, row) =>
+    cell(row.state, () => {
+      const dora = measuredDora(row);
+      return dora?.change_failure_rate != null ? (
+        <DoraFigure
+          figure={`${Math.round(dora.change_failure_rate * 100)}%`}
+          band={dora.change_failure_band}
+        />
+      ) : (
+        "—"
+      );
+    }),
+};
+
 function buildColumns(
   periodLabel: string,
   ranged: boolean,
@@ -232,6 +310,8 @@ function buildColumns(
         ),
     },
     ACCURACY_COLUMN,
+    DEPLOY_FREQUENCY_COLUMN,
+    CHANGE_FAILURE_COLUMN,
   ];
 }
 
