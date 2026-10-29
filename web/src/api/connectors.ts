@@ -18,15 +18,27 @@ export interface SyncSummary {
   deleted: number;
 }
 
+export interface CodeSummary {
+  codebases: number;
+  pull_requests: number;
+  deployments: number;
+  events: number;
+}
+
+export interface GitHubStatus extends ConnectorStatus {
+  owner: string | null;
+}
+
 export interface SyncJob {
   id: string;
   organization_id: string;
-  kind: "organization" | "team";
+  kind: "organization" | "team" | "code";
   trigger: "manual" | "auto";
   state: "running" | "succeeded" | "failed";
   phase: string | null;
   error: string | null;
   summary: SyncSummary | null;
+  code_summary?: CodeSummary | null;
 }
 
 export interface SyncAction {
@@ -34,11 +46,22 @@ export interface SyncAction {
   /** The start request is in flight or its job is still running. */
   running: boolean;
   outcome: SyncSummary | undefined;
+  /** What a GitHub sync wrote; undefined for Linear syncs. */
+  codeOutcome: CodeSummary | undefined;
   error: string | undefined;
   reset: () => void;
 }
 
+const LINEAR_JOBS = "/api/connectors/linear/jobs";
 const INTERRUPTED = "Sync was interrupted: Atlas restarted before it finished. Run it again.";
+
+export function useGitHubStatus() {
+  return useQuery({
+    queryKey: ["connectors", "github"],
+    queryFn: () => apiFetch<GitHubStatus>("/api/connectors/github"),
+    refetchInterval: 15_000,
+  });
+}
 
 export function useLinearStatus() {
   return useQuery({
@@ -66,12 +89,13 @@ function useOncePerJob(succeeded: boolean, jobId: string | undefined, run: () =>
 function useSyncAction(
   post: (organizationId?: string) => Promise<SyncJob>,
   onSucceeded: () => unknown,
+  jobsPath: string,
 ): SyncAction {
   const start = useMutation({ mutationFn: post });
   const jobId = start.data?.id;
   const poll = useQuery({
     queryKey: ["sync-job", jobId],
-    queryFn: () => apiFetch<SyncJob>(`/api/connectors/linear/jobs/${jobId}`),
+    queryFn: () => apiFetch<SyncJob>(`${jobsPath}/${jobId}`),
     enabled: jobId !== undefined,
     // Stop on an error too: data still holds the last "running" poll.
     refetchInterval: (query) =>
@@ -95,12 +119,17 @@ function syncView(
   starting: boolean,
   startError: Error | null,
   pollError: Error | null,
-): Pick<SyncAction, "running" | "outcome" | "error"> {
+): Pick<SyncAction, "running" | "outcome" | "codeOutcome" | "error"> {
   return {
+    ...summaries(job),
     running: starting || (job?.state === "running" && !pollError),
-    outcome: job?.state === "succeeded" ? (job.summary ?? undefined) : undefined,
     error: startError?.message ?? job?.error ?? pollErrorMessage(pollError),
   };
+}
+
+function summaries(job: SyncJob | undefined): Pick<SyncAction, "outcome" | "codeOutcome"> {
+  if (job?.state !== "succeeded") return { outcome: undefined, codeOutcome: undefined };
+  return { outcome: job.summary ?? undefined, codeOutcome: job.code_summary ?? undefined };
 }
 
 // A 404 means the job is gone (restart): retrying cannot bring it back.
@@ -132,6 +161,7 @@ export function useLinearSync(): SyncAction {
         body: JSON.stringify({ organization_id: organizationId ?? null }),
       }),
     onSucceeded,
+    LINEAR_JOBS,
   );
 }
 
@@ -141,5 +171,20 @@ export function useTeamSync(teamId: string): SyncAction {
     () => apiFetch<SyncJob>(`/api/connectors/linear/teams/${teamId}/sync`, { method: "POST" }),
     // Any of the team's numbers may have moved: refetch whatever is on screen.
     () => queryClient.invalidateQueries(),
+    LINEAR_JOBS,
+  );
+}
+
+export function useGitHubSync(): SyncAction {
+  const queryClient = useQueryClient();
+  return useSyncAction(
+    (organizationId) =>
+      apiFetch<SyncJob>("/api/connectors/github/sync", {
+        method: "POST",
+        body: JSON.stringify({ organization_id: organizationId ?? null }),
+      }),
+    // Codebase counts, the status and work item timelines may all have moved.
+    () => queryClient.invalidateQueries(),
+    "/api/connectors/github/jobs",
   );
 }

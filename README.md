@@ -124,7 +124,8 @@ Atlas reads your Linear workspace and turns its history into these views
   and the people who own work items. Click a person's **Display name** to
   override how their name shows; syncs never overwrite it.
 - **Connectors** (`/connectors`) — Linear status, **Sync now**, and the
-  **Auto sync** schedule.
+  **Auto sync** schedule. For GitHub, set `ATLAS_GITHUB_TOKEN` and
+  `ATLAS_GITHUB_OWNER`, then map repositories to teams in the GitHub card.
 - **Metric rules** (`/metric-rules`) — how metrics are computed (what counts as blocked,
   lifecycle, health scales and weights, sprint length…), set for the whole
   workspace or overridden per team. Changing a metric rule recomputes

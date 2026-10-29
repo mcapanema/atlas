@@ -1,7 +1,15 @@
-import type { SyncSummary } from "../api/connectors";
+import type { CodeSummary, SyncSummary } from "../api/connectors";
 
 function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/** One line on what a GitHub sync wrote. */
+export function codeSyncOutcome(summary: CodeSummary): string {
+  return (
+    `Updated ${summary.codebases} codebases · ${summary.pull_requests} pull requests · ` +
+    `${summary.deployments} deployments · ${summary.events} work item events`
+  );
 }
 
 /** One line on what a sync wrote: non-zero counts, then removals, or "Already up to date". */

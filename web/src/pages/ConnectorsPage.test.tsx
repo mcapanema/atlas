@@ -46,7 +46,9 @@ function mockApi({
   statusPending = false,
   organizationsAfterSync = organizations,
   scheduleAfterSync = null,
+  githubRunning = null,
 }: {
+  githubRunning?: object | null;
   configured: boolean;
   running?: boolean;
   /** Job poll answers in order; the last one repeats. Default: succeeded. */
@@ -64,7 +66,9 @@ function mockApi({
     if (url === "/api/connectors/linear")
       return statusPending
         ? new Promise<Response>(() => {})
-        : jsonResponse({ configured, running: running ? job("running", "auto") : null });
+        : jsonResponse({ configured, running: running ? job("running", "auto") : githubRunning });
+    if (url === "/api/connectors/github")
+      return jsonResponse({ configured: false, owner: null, running: githubRunning });
     if (url === "/api/organizations")
       return jsonResponse(synced ? organizationsAfterSync : organizations);
     if (url === "/api/connectors/linear/sync") {
@@ -152,6 +156,18 @@ describe("ConnectorsPage", () => {
     expect(
       await screen.findByText("A sync is running; Sync now shows its result."),
     ).toBeInTheDocument();
+  });
+
+  it("shows the GitHub card and keeps a running GitHub job off the Linear card", async () => {
+    mockApi({ configured: true, githubRunning: job("running", "manual", { kind: "code" }) });
+
+    renderWithClient(<ConnectorsPage />);
+
+    // The card remounts once the organization list loads (its key changes).
+    await screen.findByRole("combobox", { name: "Organization" });
+    expect(await screen.findByText("A GitHub sync is running.")).toBeInTheDocument();
+    expect(screen.getByText("GitHub")).toBeInTheDocument();
+    expect(screen.queryByText(/Sync now shows its result/)).not.toBeInTheDocument();
   });
 
   it("hides the running-sync hint once this page's own sync has finished", async () => {
