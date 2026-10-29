@@ -121,6 +121,65 @@ describe("ExecutiveDashboardPage", () => {
     expect(within(row).getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 
+  describe("DORA column sorting", () => {
+    const [alpha, bravo, charlie] = ["Alpha", "Bravo", "Charlie"].map((name, i) => ({
+      ...teamFixture,
+      id: `${i + 1}0000000-0000-0000-0000-000000000000`,
+      name,
+    }));
+
+    function routeDora(
+      doras: [Record<string, unknown>, Record<string, unknown>, Record<string, unknown>],
+    ) {
+      mockMetricsFetch({
+        "/api/teams": [alpha, bravo, charlie],
+        [`/api/metrics/overview?team_id=${alpha.id}`]: overviewFixture({ dora: doras[0] }),
+        [`/api/metrics/overview?team_id=${bravo.id}`]: overviewFixture({ dora: doras[1] }),
+        [`/api/metrics/overview?team_id=${charlie.id}`]: overviewFixture({ dora: doras[2] }),
+      });
+    }
+
+    function teamOrder() {
+      return screen
+        .getAllByRole("row")
+        .map((row) => /Alpha|Bravo|Charlie/.exec(row.textContent ?? "")?.[0])
+        .filter(Boolean);
+    }
+
+    it("sorts deploys per week with unmeasured teams last both ways", async () => {
+      routeDora([
+        { ...doraFixture, deploys_per_week: 1.0 },
+        { ...doraFixture, deploys_per_week: 3.0 },
+        { ...doraFixture, codebases: 0 },
+      ]);
+      renderWithClient(<ExecutiveDashboardPage />);
+      await screen.findByText("3.0");
+
+      fireEvent.click(screen.getAllByText("Deploys / week")[0]);
+      await waitFor(() => expect(teamOrder()).toEqual(["Alpha", "Bravo", "Charlie"]));
+      fireEvent.click(screen.getAllByText("Deploys / week")[0]);
+      await waitFor(() => expect(teamOrder()).toEqual(["Bravo", "Alpha", "Charlie"]));
+    });
+
+    it("sorts change failure rate with a missing rate last both ways", async () => {
+      routeDora([
+        { ...doraFixture, change_failure_rate: 0.1 },
+        { ...doraFixture, change_failure_rate: 0.4 },
+        { ...doraFixture, change_failure_rate: null, change_failure_band: null },
+      ]);
+      renderWithClient(<ExecutiveDashboardPage />);
+      await screen.findByText("40%");
+      const charlieRow = screen.getByText("Charlie").closest("tr");
+      if (!charlieRow) throw new Error("Expected the team row to render");
+      expect(within(charlieRow).getAllByText("—").length).toBeGreaterThanOrEqual(1);
+
+      fireEvent.click(screen.getAllByText("Change failure rate")[0]);
+      await waitFor(() => expect(teamOrder()).toEqual(["Alpha", "Bravo", "Charlie"]));
+      fireEvent.click(screen.getAllByText("Change failure rate")[0]);
+      await waitFor(() => expect(teamOrder()).toEqual(["Bravo", "Alpha", "Charlie"]));
+    });
+  });
+
   it("lists every team with its flow metrics, linking to its dashboard", async () => {
     const platformMetrics = { ...metricsFixture, completed: 4 };
     const growthMetrics = { ...metricsFixture, completed: 9 };
