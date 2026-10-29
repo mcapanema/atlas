@@ -6,10 +6,13 @@ function count(n: number, noun: string): string {
 
 /** One line on what a GitHub sync wrote. */
 export function codeSyncOutcome(summary: CodeSummary): string {
-  return (
-    `Updated ${summary.codebases} codebases · ${summary.pull_requests} pull requests · ` +
-    `${summary.deployments} deployments · ${summary.events} work item events`
-  );
+  const parts = [
+    count(summary.codebases, "codebase"),
+    count(summary.pull_requests, "pull request"),
+    count(summary.deployments, "deployment"),
+    count(summary.events, "work item event"),
+  ];
+  return `Updated ${parts.join(" · ")}`;
 }
 
 /** One line on what a sync wrote: non-zero counts, then removals, or "Already up to date". */

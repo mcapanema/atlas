@@ -1,8 +1,10 @@
 from uuid import UUID, uuid4
 
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.deps import get_codebase_service
 from app.domain.codebases.entities import Codebase
 from app.infrastructure.repositories.codebases import SqlAlchemyCodebaseRepository
 from tests.api.helpers import create_org_and_team
@@ -110,3 +112,29 @@ async def test_put_team_of_another_organization_answers_422(
     )
 
     assert response.status_code == 422
+
+
+class _VanishingCodebaseService:
+    """Updates a codebase, then lists none: the row went away in between."""
+
+    async def update(
+        self, codebase_id: UUID, *, team_id: UUID | None, production_environment: str
+    ) -> Codebase:
+        return Codebase(organization_id=uuid4(), name="atlas", external_id="r1", id=codebase_id)
+
+    async def list(self, organization_id: UUID) -> list[object]:
+        return []
+
+
+async def test_put_answers_404_when_the_updated_codebase_is_gone(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    test_app.dependency_overrides[get_codebase_service] = _VanishingCodebaseService
+    codebase_id = uuid4()
+
+    response = await client.put(
+        f"/api/codebases/{codebase_id}", json={"team_id": None, "production_environment": "prod"}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"Codebase {codebase_id} does not exist"

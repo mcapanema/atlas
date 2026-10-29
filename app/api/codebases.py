@@ -29,4 +29,10 @@ async def update_codebase(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     # The list carries the stored counts; one organization's codebases are few.
     overviews = await service.list(updated.organization_id)
-    return next(CodebaseRead.of(o) for o in overviews if o.codebase.id == codebase_id)
+    overview = next((o for o in overviews if o.codebase.id == codebase_id), None)
+    if overview is None:
+        # Gone between the update and the list.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Codebase {codebase_id} does not exist"
+        )
+    return CodebaseRead.of(overview)

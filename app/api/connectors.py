@@ -23,6 +23,7 @@ from app.api.sync_jobs import (
     SyncJobRequest,
     SyncJobRunner,
     SyncJobRunnerDep,
+    kind_label,
 )
 from app.application.sync.service import UnknownOrganizationError, UnknownTeamError
 from app.config import get_settings
@@ -48,7 +49,7 @@ def _start(start: Callable[[], SyncJob]) -> SyncJobRead:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"Another {running.request.kind} sync is running "
+                f"Another {kind_label(running.request.kind)} sync is running "
                 f"(started {running.started_at:%H:%M} UTC); try again when it finishes"
             ),
         ) from exc

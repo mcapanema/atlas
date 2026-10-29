@@ -73,7 +73,7 @@ describe("GitHubConnectorCard", () => {
 
     expect(
       await screen.findByText(
-        "Updated 2 codebases · 5 pull requests · 1 deployments · 7 work item events",
+        "Updated 2 codebases · 5 pull requests · 1 deployment · 7 work item events",
       ),
     ).toBeInTheDocument();
     const urls = fetchMock.mock.calls.map(([input]) => requestUrl(input));

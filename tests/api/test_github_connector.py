@@ -159,6 +159,43 @@ async def test_sync_while_linear_job_runs_answers_409(
     assert status["running"]["kind"] == "organization"
 
 
+class _BlockingCodeSource(InMemoryCodeHostSource):
+    """Holds the code sync inside fetch_codebases until `release` is set."""
+
+    def __init__(self) -> None:
+        super().__init__(codebases=[SourceCodebase(external_id="r1", name="atlas")])
+        self.release = asyncio.Event()
+
+    async def fetch_codebases(self) -> list[SourceCodebase]:
+        await self.release.wait()
+        return await super().fetch_codebases()
+
+
+async def test_linear_sync_while_a_code_job_runs_names_it_a_github_sync(
+    rules_app: FastAPI,
+    rules_client: AsyncClient,
+    settings_env: Callable[..., None],
+) -> None:
+    settings_env(linear_api_key="lin_api_test", github_token="ghp_test", github_owner="acme")
+    code = _BlockingCodeSource()
+    rules_app.dependency_overrides[get_delivery_data_source] = FakeDataSource
+    rules_app.dependency_overrides[get_code_host_source] = lambda: code
+    org_id = await _org(rules_client)
+    started = await rules_client.post(
+        "/api/connectors/github/sync", json={"organization_id": org_id}
+    )
+    assert started.status_code == 202
+
+    response = await rules_client.post(
+        "/api/connectors/linear/sync", json={"organization_id": org_id}
+    )
+
+    code.release.set()
+    await settle(rules_app)
+    assert response.status_code == 409
+    assert response.json()["detail"].startswith("Another GitHub sync is running")
+
+
 async def test_unknown_job_answers_404(rules_client: AsyncClient) -> None:
     response = await rules_client.get(f"/api/connectors/github/jobs/{uuid4()}")
 

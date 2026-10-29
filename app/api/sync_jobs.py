@@ -100,12 +100,18 @@ def covers(running: SyncJobRequest, wanted: SyncJobRequest) -> bool:
     return wanted.kind == "team" and wanted.team_id == running.team_id
 
 
+def kind_label(kind: SyncKind) -> str:
+    """How user-facing text names a job's kind: a code job is the GitHub sync."""
+    return "GitHub" if kind == "code" else kind
+
+
 class SyncBusyError(Exception):
     """A job is running that does not cover the request."""
 
     def __init__(self, job: SyncJob) -> None:
         super().__init__(
-            f"A {job.request.kind} sync is already running (job {job.id}); try again when it ends"
+            f"A {kind_label(job.request.kind)} sync is already running (job {job.id}); "
+            "try again when it ends"
         )
         self.job = job
 

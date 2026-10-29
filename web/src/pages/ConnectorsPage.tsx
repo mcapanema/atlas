@@ -195,7 +195,8 @@ export function ConnectorsPage() {
       <Typography.Title level={3}>Connectors</Typography.Title>
       <Typography.Paragraph type="secondary">
         Where Atlas gets its delivery data. Sync now pulls the latest from Linear, Sync GitHub pulls
-        pull requests and deployments; auto sync keeps Linear fresh on a schedule.
+        pull requests and deployments; auto sync keeps both fresh on a schedule (GitHub after each
+        successful Linear sync, when it is configured).
       </Typography.Paragraph>
       {loadError ? (
         <Alert

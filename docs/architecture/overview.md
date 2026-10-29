@@ -221,8 +221,8 @@ custom.
   `external_id` across organizations (never pruned; the first owner keeps
   one, ADR-0024), then the pull requests and deployments of
   mapped codebases, idempotently (ADR-0004): a codebase's first fetch
-  reaches back 180 days, later fetches start one day before its
-  `last_synced_at`. `POST /api/connectors/github/sync` runs it as a `code`
+  reaches back `BACKFILL`, later fetches start `OVERLAP` before its
+  `last_synced_at` (both in `app/application/codebases/sync.py`). `POST /api/connectors/github/sync` runs it as a `code`
   job on the same `SyncJobRunner` (`GET /api/connectors/github/jobs/{id}`);
   it captures no snapshots, because the REVIEW and MERGED events change no
   metric: the flow derivations never anchor on `CODE_EVENT_TYPES`

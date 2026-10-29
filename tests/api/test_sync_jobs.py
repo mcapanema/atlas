@@ -10,6 +10,7 @@ from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import (
     HISTORY_SIZE,
     SyncBusyError,
+    SyncJob,
     SyncJobRequest,
     SyncJobRunner,
     covers,
@@ -469,3 +470,11 @@ async def test_run_code_runs_a_code_job_to_completion(
     assert job.summary.codebases == 1
     assert job.phase == SyncPhase.DEPLOYMENTS
     assert runner.running is None
+
+
+def test_busy_error_names_a_code_job_a_github_sync() -> None:
+    code = SyncJob(SyncJobRequest(uuid4(), "code", "manual"))
+    linear = SyncJob(SyncJobRequest(uuid4(), "organization", "manual"))
+
+    assert str(SyncBusyError(code)).startswith("A GitHub sync is already running")
+    assert str(SyncBusyError(linear)).startswith("A organization sync is already running")
