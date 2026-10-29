@@ -277,8 +277,14 @@ async def get_scope_overview(
         team_id=scope.team_id, project_id=scope.project_id, scope=current
     )
     history = await snapshots.get_metric_history(team_id=scope.team_id, project_id=scope.project_id)
+    # Item filters do not apply to DORA: a type filter must not hide incidents.
     dora_metrics = (
-        await dora.get_dora(team_id=scope.team_id, scope=samples, window_days=window, now=now)
+        await dora.get_dora(
+            team_id=scope.team_id,
+            scope=current if now is None else data.samples(as_of=now),
+            window_days=window,
+            now=now,
+        )
         if scope.team_id is not None
         else None
     )

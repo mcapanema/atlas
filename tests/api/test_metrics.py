@@ -12,6 +12,7 @@ from app.application.scope import ScopeData, ScopeSampleLoader
 from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus
 from app.domain.people.entities import Person
 from app.domain.snapshots.entities import ForecastSnapshot
+from app.domain.work_items.entities import WorkItem
 from app.infrastructure.repositories.codebases import (
     SqlAlchemyCodebaseRepository,
     SqlAlchemyDeploymentRepository,
@@ -903,3 +904,29 @@ async def test_overview_carries_dora_for_a_team_and_null_for_a_project(
 
     assert team_body["dora"]["codebases"] == 0
     assert project_body["dora"] is None
+
+
+async def test_overview_dora_ignores_item_filters(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    team_id = await create_team(client)
+    async with sessionmaker() as session:
+        item = WorkItem(team_id=UUID(team_id), title="Outage", labels=("incident",))
+        await SqlAlchemyWorkItemRepository(session).add(item)
+        await session.commit()
+    for type_, days in (("created", 3), ("completed", 2)):
+        response = await client.post(
+            "/api/events",
+            json={"work_item_id": str(item.id), "type": type_, "occurred_at": days_ago(days)},
+        )
+        assert response.status_code == 201
+
+    plain = (await client.get(f"/api/metrics/overview?team_id={team_id}")).json()
+    filtered = (await client.get(f"/api/metrics/overview?team_id={team_id}&types=bug")).json()
+    route = (await client.get(f"/api/metrics/dora?team_id={team_id}&types=bug")).json()
+
+    assert plain["dora"]["restores"] == 1
+    assert filtered["dora"]["restores"] == 1
+    for body in (filtered["dora"], route):
+        del body["window_start"], body["window_end"]  # each request reads the clock
+    assert filtered["dora"] == route
