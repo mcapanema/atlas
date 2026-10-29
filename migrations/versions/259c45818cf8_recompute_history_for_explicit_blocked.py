@@ -1,6 +1,6 @@
 """recompute snapshot history for the explicit blocked defaults
 
-ADR-0025 turned two blocked sources off by default: the built-in label
+ADR-0026 turned two blocked sources off by default: the built-in label
 pattern and Linear "blocked by" relations (blocked-named workflow states
 and listed labels still count). Stored metric snapshots were computed with
 both on, so mark every organization's recompute "running": the app's

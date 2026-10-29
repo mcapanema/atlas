@@ -21,7 +21,7 @@ def test_new_rule_defaults_reproduce_todays_behavior() -> None:
     assert DEFAULT_RULES.canceled_then_reopened == "canceled"
     assert DEFAULT_RULES.blocked_label_pattern is False
     assert DEFAULT_RULES.blocked_label_names == ()
-    # ADR-0025: only explicit sources (states, listed labels) count by default.
+    # ADR-0026: only explicit sources (states, listed labels) count by default.
     assert DEFAULT_RULES.blocked_by_relations is False
     assert DEFAULT_RULES.remaining_state_types == OPEN_STATE_TYPES
     assert DEFAULT_RULES.type_labels == ()

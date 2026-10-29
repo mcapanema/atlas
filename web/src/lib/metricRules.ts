@@ -168,7 +168,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "blocked_label_pattern",
         label: "Labels named like 'Blocked'",
-        help: "Labels such as Blocked, Blocker: external, Blocking, Bloqueado or Bloqueante mark an item blocked while applied. Whole words only: 'regras-blockly' and 'Desbloqueado' don't count.",
+        help: "Off by default. When on, labels such as Blocked, Blocker: external, Bloqueado or Bloqueante mark an item blocked while applied. Words like these often name something else (a rule that blocks a bill), so prefer listing your real blocked labels below. Whole words only: 'regras-blockly' and 'Desbloqueado' don't count.",
         control: { kind: "switch" },
       },
       {
@@ -204,7 +204,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "blocked_by_relations",
         label: "Count Linear 'blocked by' relations",
-        help: "An item is blocked from when a 'blocked by' relation is added until it is removed or the blocker is done or canceled, and again if the blocker reopens. Linear records relation history from about mid-2026; older relations don't count.",
+        help: "Off by default: teams often add 'blocked by' to record planned order and start the work anyway. An item is blocked from when a 'blocked by' relation is added until it is removed or the blocker is done or canceled, and again if the blocker reopens. Linear records relation history from about mid-2026; older relations don't count.",
         control: { kind: "switch" },
       },
     ],

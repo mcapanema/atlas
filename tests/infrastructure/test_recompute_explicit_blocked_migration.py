@@ -16,7 +16,7 @@ BEFORE = "8e8cbbb28dcd"
 def test_every_organization_is_marked_for_recompute(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ADR-0025 changed the blocked defaults, so every organization's history
+    """ADR-0026 changed the blocked defaults, so every organization's history
     is recomputed; an organization without an overrides row gets an empty one."""
     db_path = tmp_path / "explicit-blocked.db"
     monkeypatch.setenv("ATLAS_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")

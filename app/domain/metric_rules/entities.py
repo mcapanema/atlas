@@ -118,7 +118,7 @@ class MetricRules:
     # Blocked signal: label names and workflow-state names (each by the
     # built-in pattern and/or a list), and Linear "blocked by" relations
     # (history only — ADR-0011). Only explicit sources count by default
-    # (ADR-0025, amends ADR-0015): blocked-named states and listed labels.
+    # (ADR-0026, amends ADR-0015): blocked-named states and listed labels.
     # The label pattern is opt-in (words like "Bloqueante" also name billing
     # rules), and so are relations (teams add them to record planned order
     # and start the work anyway).
