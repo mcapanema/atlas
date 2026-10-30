@@ -272,7 +272,11 @@ archived while still open emits CANCELED at `archivedAt` (`:archived:`), and
 Linear's `duplicate` state type reads as `canceled`. Archived issues are synced
 and trashed ones skipped; already-synced issues that are trashed or deleted
 upstream are pruned (ADR-0009). All of these use derived external ids,
-so a re-sync backfills existing data.
+so a re-sync backfills existing data. Linear coalesces quick transitions
+by rewriting an already-synced history entry in place (Todo → In Progress
+becomes Todo → Done); events stay insert-only, so when no stored event of an
+issue with `completedAt` is a completion, the sync synthesizes one
+(`:completed`) and the stored start keeps its real time.
 
 The GitHub connector (`app/infrastructure/connectors/github/`) implements
 `CodeHostSource` on GitHub's GraphQL API with the GraphQL client shared

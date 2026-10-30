@@ -147,6 +147,18 @@ class SqlAlchemyEventRepository:
                     found.add(external_id)
         return found
 
+    async def completed_external_ids(self, external_ids: list[str]) -> set[str]:
+        found: set[str] = set()
+        for chunk in chunked(external_ids):
+            result = await self._session.execute(
+                select(EventModel.external_id).where(
+                    EventModel.external_id.in_(chunk),
+                    EventModel.type == EventType.COMPLETED.value,
+                )
+            )
+            found.update(eid for eid in result.scalars() if eid is not None)
+        return found
+
     async def external_ids_missing_state_types(self, external_ids: list[str]) -> set[str]:
         found: set[str] = set()
         for chunk in chunked(external_ids):

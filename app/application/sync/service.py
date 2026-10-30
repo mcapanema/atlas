@@ -452,6 +452,9 @@ class SyncService:
         existing_event_eids = await self._events.existing_external_ids(
             _candidate_event_eids(sources)
         )
+        stored_completions = await self._events.completed_external_ids(
+            [e.external_id for s in sources for e in s.events if e.type is EventType.COMPLETED]
+        )
         synced: dict[str, WorkItem] = {}
         written: set[UUID] = set()
         for source in sources:
@@ -469,7 +472,9 @@ class SyncService:
             synced[source.external_id] = item
             if changed:
                 written.add(item.id)
-            n, diverged = await self._sync_events(item.id, source, existing_event_eids)
+            n, diverged = await self._sync_events(
+                item.id, source, existing_event_eids, stored_completions
+            )
             events_written += n
             divergences += diverged
         written |= await self._link_parents(sources, {**items_by_eid, **synced})
@@ -535,7 +540,11 @@ class SyncService:
         return len(vanished)
 
     async def _sync_events(
-        self, work_item_id: UUID, source: SourceWorkItem, existing: set[str]
+        self,
+        work_item_id: UUID,
+        source: SourceWorkItem,
+        existing: set[str],
+        stored_completions: set[str],
     ) -> tuple[int, int]:
         """Insert missing events; returns (events written, divergences found).
 
@@ -544,9 +553,14 @@ class SyncService:
         preserving idempotency without per-event SELECTs. A divergence is an
         item whose source state says done while its history shows no
         completion event — the terminal event is synthesized with a
-        deterministic external_id (see Phase C).
+        deterministic external_id (see Phase C). `stored_completions` holds
+        the ids persisted as COMPLETED: Linear coalesces quick transitions
+        by rewriting a history entry in place, so an id stored as STARTED
+        can come back as a completion. Events are insert-only and the stored
+        one keeps the real start, so that completion is synthesized instead.
         """
         written = 0
+        inserted: set[str] = set()
         for source_event in source.events:
             if source_event.external_id in existing:
                 continue
@@ -563,9 +577,14 @@ class SyncService:
             )
             await self._events.add(event)
             existing.add(source_event.external_id)
+            inserted.add(source_event.external_id)
             written += 1
 
-        has_completion = any(e.type is EventType.COMPLETED for e in source.events)
+        has_completion = any(
+            e.type is EventType.COMPLETED
+            and (e.external_id in inserted or e.external_id in stored_completions)
+            for e in source.events
+        )
         if source.completed_at is None or has_completion:
             return written, 0
         external_id = f"{source.external_id}:completed"

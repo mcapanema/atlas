@@ -28,6 +28,10 @@ class EventRepository(Protocol):
 
     async def existing_external_ids(self, external_ids: list[str]) -> set[str]: ...
 
+    async def completed_external_ids(self, external_ids: list[str]) -> set[str]:
+        """Stored events among `external_ids` whose type is COMPLETED."""
+        ...
+
     async def external_ids_missing_state_types(self, external_ids: list[str]) -> set[str]:
         """Stored events among `external_ids` whose state types are still unknown."""
         ...
