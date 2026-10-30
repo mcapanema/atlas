@@ -36,22 +36,7 @@ what the charts mean, and what to do next. Atlas closes the loop. Each
 step feeds the next, and each improvement you make becomes new evidence
 for the next cycle.
 
-![The Atlas loop: Observe, Understand, Predict, Advise and Improve, with new evidence flowing back to Observe](docs/assets/philosophy-loop.svg)
-
-- **Observe.** Atlas syncs work items from Linear, and pull requests and
-  deployments from GitHub, into one vendor-neutral event model. Events
-  never change, so every number traces back to the facts behind it.
-- **Understand.** Flow metrics from Lean and Kanban, Delivery Health and
-  DORA show where work waits, not only how much got done. The bottleneck
-  gets a name.
-- **Predict.** Monte Carlo simulations on your own history give completion
-  dates as probabilities, not promises. Statistics forecast; AI does not
-  guess.
-- **Advise.** AI turns the numbers into explanations and prioritized
-  recommendations, ready for your standup, retrospective or planning. It
-  explains the numbers; it never invents them.
-- **Improve.** Change a process, then let the same metrics tell you whether
-  it worked. Decisions rest on evidence, not intuition.
+![The Atlas loop. Observe: Linear and GitHub events in one vendor-neutral model. Understand: flow metrics, Delivery Health and DORA name the bottleneck. Predict: Monte Carlo forecasts as probabilities. Advise: AI explains the numbers and recommends next steps. Improve: the same metrics show whether a change worked, and that evidence feeds the next cycle.](docs/assets/philosophy-loop.svg)
 
 ## Main views
 
