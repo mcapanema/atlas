@@ -13,13 +13,12 @@ Delivery health scored predictability as the lead-time p95/p50 ratio. The
 arithmetic was right, but the 2026-10-09 review on live data showed the
 measure was wrong:
 
-- A small median inflates the ratio. Forward Deployment finished every
-  item within 6 days and scored 40; AI Team's 0.3-day cycle median read
-  36x.
+- A small median inflates the ratio. One team finished every item within
+  6 days and scored 40; another's 0.3-day cycle median read 36x.
 - p95 over 5-16 items is the slowest item: one outlier decides the score.
 - A mix of quick bugs and long features reads as unpredictability.
-- Lead time folds in backlog waits. Regras Auditoria's tail was 106 days
-  in backlog followed by 5-day cycles.
+- Lead time folds in backlog waits. One team's tail was 106 days in
+  backlog followed by 5-day cycles.
 
 No record explained why lead time had been chosen.
 
@@ -44,8 +43,8 @@ history). A scope with less prior history leaves predictability out.
   the lead/cycle stat tiles, not in the score.
 - A team that slows down scores low even when it is steady at its new
   pace. That is the point: its track record stopped predicting its work.
-- Scores moved on live data: Deployment 78 -> 28 (42% hit, against 77% the
-  window before), Regras Auditoria 27 -> 100, AI Team 7 -> 100.
+- Scores moved on live data: one team 78 -> 28 (42% hit, against 77% the
+  window before), two others 27 -> 100 and 7 -> 100.
 - On a view longer than the 30-day default (Last 180 days, or a custom
   range), the reference is the aging history before that whole view, so
   the score grades the view against an older commitment. A scope without

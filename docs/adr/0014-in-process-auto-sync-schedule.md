@@ -9,9 +9,9 @@ Accepted. Amended by ADR-0022: the lock moved to `SyncJobRunner`.
 ## Context
 
 Sync was manual-only (the Connectors page's "Sync now", or the MCP
-`run_sync` tool). The 2026-10-06 Faturamento & Glosa audit found 28 of 31
-status mismatches against Linear were just staleness: issues changed after
-the last manual sync. Engineering Managers want fresh data during working
+`run_sync` tool). The 2026-10-06 audit of one team found 28 of 31 status
+mismatches against Linear were just staleness: issues changed after the
+last manual sync. Engineering Managers want fresh data during working
 hours without remembering to click, but Atlas is a single-deployable
 monolith with no queue or cron (ADR-0002).
 

@@ -15,17 +15,16 @@ on. The 2026-10-29 data showed two sources behind them:
 - **Linear "blocked by" relations.** All five reported items carried a
   relation added within one second of the issue's creation — planned
   order, written when the issues were created as a batch — and the team
-  started them while the blocker was still open. In Faturamento & Glosa,
+  started them while the blocker was still open. In one team,
   27 of the 31 items blocked in the last seven days came from relations,
   and none was a stop inside the cycle.
 - **The built-in label pattern.** `Bloqueante` (60 adds) and `Bloqueada`
-  (28 adds) name billing-rule outcomes on the REG, DEP and AREG teams ("a
-  rule that blocks the bill"), not work status.
+  (28 adds) name billing-rule outcomes on three teams ("a rule that blocks
+  the bill"), not work status.
 
 The workflow state **Blocked** (341 transitions) was clean: entering it is
-an explicit team choice. One team does use a label for real blocks:
-Faturamento & Glosa adds `Bloqueada` while work is in progress and removes
-it later (FNG-528, FNG-652, FNG-763).
+an explicit team choice. One team does use a label for real blocks: it adds
+`Bloqueada` while work is in progress and removes it later.
 
 ## Decision
 
@@ -46,5 +45,5 @@ it later (FNG-528, FNG-652, FNG-763).
   turns the pattern back on); a team that uses relations as real stops
   turns them on. Overrides win over the defaults, so a team that stored
   either rule keeps it.
-- Faturamento & Glosa lists `Bloqueada` as a team override, so its real
-  blocks stay counted.
+- A team whose label means a real block lists it as a team override, so
+  its blocks stay counted.
