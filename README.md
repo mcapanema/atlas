@@ -318,6 +318,15 @@ curl http://localhost:8000/api/connectors/linear/jobs/<id>
 It re-derives every synced issue's events and rewrites snapshot history;
 feedback, learned guidance, and metric rules are kept (ADR-0013).
 
+### Blocked time after the explicit blocked signal
+
+From this release, Linear 'blocked by' relations and blocked-named labels
+no longer count as blocked by default (ADR-0026). Atlas recomputes history
+at startup, so blocked time, flow efficiency and health can change. To
+count them again, turn on **Count Linear 'blocked by' relations** or
+**Labels named like 'Blocked'** in Metric rules, for the workspace or one
+team.
+
 ### Sync once for people
 
 After the upgrade that adds people, run **Sync now** once: owners read
