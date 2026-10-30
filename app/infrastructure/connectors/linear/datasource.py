@@ -80,6 +80,9 @@ query Issues($after: String, $filter: IssueFilter) {{
       project {{ id }}
       labelIds
       parent {{ id }}
+      inverseRelations(first: 50) {{
+        nodes {{ type issue {{ identifier previousIdentifiers }} }}
+      }}
       history(first: {HISTORY_PAGE_SIZE}) {{
         nodes {{
           id

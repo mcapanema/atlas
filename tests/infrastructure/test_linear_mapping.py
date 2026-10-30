@@ -474,6 +474,53 @@ def test_an_unknown_blocking_code_warns_once(caplog: pytest.LogCaptureFixture) -
     assert sum("bz" in r.getMessage() for r in caplog.records) == 1
 
 
+def _blocker_events(node: dict[str, Any]) -> list[tuple[str | None, str]]:
+    blocker_types = (EventType.BLOCKER_ADDED, EventType.BLOCKER_CLEARED)
+    return [(e.detail, e.external_id) for e in map_issue(node).events if e.type in blocker_types]
+
+
+def test_a_blocker_moved_between_teams_keeps_one_identifier() -> None:
+    """The 2026-10-30 FNG-678 case: FNG-664 moved to Deployment as DEP-1480,
+    so Linear wrote the add as FNG-664 and the resolve as DEP-1480."""
+    node = {
+        **ISSUE_NODE,
+        "inverseRelations": {
+            "nodes": [
+                {
+                    "type": "blocks",
+                    "issue": {"identifier": "DEP-1480", "previousIdentifiers": ["FNG-664"]},
+                },
+                {
+                    "type": "related",
+                    "issue": {"identifier": "DEP-9", "previousIdentifiers": ["FNG-1"]},
+                },
+            ]
+        },
+        "history": {
+            "nodes": [
+                {**_relation_entry(("ab", "FNG-664")), "id": "h1"},
+                {**_relation_entry(("br", "DEP-1480")), "id": "h2"},
+                {**_relation_entry(("ab", "FNG-1")), "id": "h3"},
+            ]
+        },
+    }
+
+    assert _blocker_events(node) == [
+        ("DEP-1480", "h1:blocker:ab:FNG-664"),  # detail current, external_id raw
+        ("DEP-1480", "h2:blocker:br:DEP-1480"),
+        ("FNG-1", "h3:blocker:ab:FNG-1"),  # a "related" relation renames nothing
+    ]
+
+
+@pytest.mark.parametrize("inverse", [None, {"nodes": None}, {"nodes": [None]}])
+def test_missing_or_null_inverse_relations_keep_raw_identifiers(inverse: object) -> None:
+    node = {**ISSUE_NODE, "history": {"nodes": [_relation_entry(("ab", "FNG-664"))]}}
+    if inverse is not None:
+        node["inverseRelations"] = inverse
+
+    assert _blocker_events(node) == [("FNG-664", "h7:blocker:ab:FNG-664")]
+
+
 def test_labels_present_at_creation_are_added_at_creation() -> None:
     node = {
         **ISSUE_NODE,
