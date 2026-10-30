@@ -53,7 +53,7 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 
 On pull requests CI also gates diff coverage of the changed lines, per side
 (threshold: diff-cover's `--fail-under` in the `Makefile` and `ci.yml`). CI
-and Dependabot are summarized in `README.md`.
+and Dependabot are summarized in `CONTRIBUTING.md`.
 
 ## Non-negotiable constraints
 
