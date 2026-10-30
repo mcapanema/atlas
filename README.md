@@ -36,16 +36,7 @@ what the charts mean, and what to do next. Atlas closes the loop. Each
 step feeds the next, and each improvement you make becomes new evidence
 for the next cycle.
 
-```mermaid
-flowchart LR
-    O["<b>Observe</b><br/>Linear and GitHub events"]
-    U["<b>Understand</b><br/>flow, health and DORA"]
-    P["<b>Predict</b><br/>Monte Carlo forecasts"]
-    A["<b>Advise</b><br/>AI explanations"]
-    I["<b>Improve</b><br/>evidence-based change"]
-    O --> U --> P --> A --> I
-    I -.->|new evidence| O
-```
+![The Atlas loop: Observe, Understand, Predict, Advise and Improve, with new evidence flowing back to Observe](docs/assets/philosophy-loop.svg)
 
 - **Observe.** Atlas syncs work items from Linear, and pull requests and
   deployments from GitHub, into one vendor-neutral event model. Events

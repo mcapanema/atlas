@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 230" width="960" height="230" role="img" aria-labelledby="title desc">
+  <title id="title">The Atlas loop</title>
+  <desc id="desc">Observe, then Understand, then Predict, then Advise, then Improve. A dashed arrow labeled new evidence returns from Improve to Observe.</desc>
+  <style>
+    :root { --fg: #1f2328; --muted: #59636e; --card: #ffffff; --line: #d1d9e0; --accent: #0969da; --loop: #8250df; --bg: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #f0f6fc; --muted: #9198a1; --card: #151b23; --line: #3d444d; --accent: #4493f8; --loop: #ab7df8; --bg: #0d1117; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .card { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+    .bar { fill: var(--accent); }
+    .num { fill: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; }
+    .name { fill: var(--fg); font-size: 19px; font-weight: 600; }
+    .sub { fill: var(--muted); font-size: 13px; }
+    .arrow { stroke: var(--accent); stroke-width: 2; fill: none; }
+    .loop { stroke: var(--loop); stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+    .loop-label { fill: var(--loop); font-size: 13px; font-weight: 600; }
+    .head { fill: var(--accent); }
+    .loop-head { fill: var(--loop); }
+    .loop-bg { fill: var(--bg); }
+  </style>
+
+  <!-- Step cards: x = 20 + i * 192, width 152 -->
+  <g>
+    <rect class="card" x="20" y="30" width="152" height="100" rx="10"/>
+    <rect class="bar" x="20" y="30" width="128" height="4" rx="2" transform="translate(12 0)"/>
+    <text class="num" x="36" y="58">01</text>
+    <text class="name" x="36" y="84">Observe</text>
+    <text class="sub" x="36" y="106">Linear and GitHub</text>
+    <text class="sub" x="36" y="122">events</text>
+  </g>
+  <g>
+    <rect class="card" x="212" y="30" width="152" height="100" rx="10"/>
+    <rect class="bar" x="212" y="30" width="128" height="4" rx="2" transform="translate(12 0)"/>
+    <text class="num" x="228" y="58">02</text>
+    <text class="name" x="228" y="84">Understand</text>
+    <text class="sub" x="228" y="106">Flow, health</text>
+    <text class="sub" x="228" y="122">and DORA</text>
+  </g>
+  <g>
+    <rect class="card" x="404" y="30" width="152" height="100" rx="10"/>
+    <rect class="bar" x="404" y="30" width="128" height="4" rx="2" transform="translate(12 0)"/>
+    <text class="num" x="420" y="58">03</text>
+    <text class="name" x="420" y="84">Predict</text>
+    <text class="sub" x="420" y="106">Monte Carlo</text>
+    <text class="sub" x="420" y="122">forecasts</text>
+  </g>
+  <g>
+    <rect class="card" x="596" y="30" width="152" height="100" rx="10"/>
+    <rect class="bar" x="596" y="30" width="128" height="4" rx="2" transform="translate(12 0)"/>
+    <text class="num" x="612" y="58">04</text>
+    <text class="name" x="612" y="84">Advise</text>
+    <text class="sub" x="612" y="106">AI explanations</text>
+    <text class="sub" x="612" y="122">and next steps</text>
+  </g>
+  <g>
+    <rect class="card" x="788" y="30" width="152" height="100" rx="10"/>
+    <rect class="bar" x="788" y="30" width="128" height="4" rx="2" transform="translate(12 0)"/>
+    <text class="num" x="804" y="58">05</text>
+    <text class="name" x="804" y="84">Improve</text>
+    <text class="sub" x="804" y="106">Evidence-based</text>
+    <text class="sub" x="804" y="122">change</text>
+  </g>
+
+  <!-- Forward arrows between cards (y = 80) -->
+  <path class="arrow" d="M176 80 H202"/><path class="head" d="M208 80 l-8 -5 v10 z"/>
+  <path class="arrow" d="M368 80 H394"/><path class="head" d="M400 80 l-8 -5 v10 z"/>
+  <path class="arrow" d="M560 80 H586"/><path class="head" d="M592 80 l-8 -5 v10 z"/>
+  <path class="arrow" d="M752 80 H778"/><path class="head" d="M784 80 l-8 -5 v10 z"/>
+
+  <!-- Return loop: Improve back to Observe -->
+  <path class="loop" d="M864 134 V180 Q864 195 849 195 H111 Q96 195 96 180 V146"/>
+  <path class="loop-head" d="M96 138 l-5 9 h10 z"/>
+  <rect x="424" y="184" width="112" height="22" class="loop-bg" rx="4"/>
+  <text class="loop-label" x="480" y="200" text-anchor="middle">new evidence</text>
+</svg>
