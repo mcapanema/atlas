@@ -153,6 +153,30 @@ async def test_existing_external_ids_returns_only_found(session: AsyncSession) -
     assert found == {"lin_e1"}
 
 
+async def test_completed_external_ids_returns_only_stored_completions(
+    session: AsyncSession,
+) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    work_item_id = await _work_item_id(session)
+    at = datetime(2026, 1, 1, tzinfo=UTC)
+    for event_type, external_id in (
+        (EventType.STARTED, "lin_started"),
+        (EventType.COMPLETED, "lin_done"),
+    ):
+        await repo.add(
+            Event(
+                work_item_id=work_item_id,
+                type=event_type,
+                occurred_at=at,
+                external_id=external_id,
+            )
+        )
+
+    found = await repo.completed_external_ids(["lin_started", "lin_done", "missing"])
+
+    assert found == {"lin_done"}
+
+
 async def test_list_for_work_items_survives_sqlite_bind_param_limit(
     session: AsyncSession,
 ) -> None:

@@ -14,7 +14,7 @@ from uuid import UUID
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.people.entities import Person
@@ -213,6 +213,7 @@ class InMemoryEventRepository:
         self._events: dict[UUID, Event] = {e.id: e for e in events or []}
         self.single_lookup_calls = 0
         self.batch_lookup_calls = 0
+        self.completed_lookup_calls = 0
 
     async def add(self, event: Event) -> None:
         self._events[event.id] = event
@@ -257,6 +258,15 @@ class InMemoryEventRepository:
             e.external_id
             for e in self._events.values()
             if e.external_id is not None and e.external_id in wanted
+        }
+
+    async def completed_external_ids(self, external_ids: list[str]) -> set[str]:
+        self.completed_lookup_calls += 1
+        wanted = set(external_ids)
+        return {
+            e.external_id
+            for e in self._events.values()
+            if e.external_id in wanted and e.type is EventType.COMPLETED
         }
 
     async def external_ids_missing_state_types(self, external_ids: list[str]) -> set[str]:
