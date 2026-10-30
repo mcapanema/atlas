@@ -98,13 +98,14 @@ and turns their history into these views (sidebar groups in the app):
   stability, risk; efficiency is off by default — weights live in Metric
   rules); Lead/Cycle Time, Throughput, WIP, Blocked Time and Flow
   Efficiency; flow charts; **Time in state**, which marks the state where
-  work waits longest (the bottleneck); the four **DORA** metrics with their
-  bands, once a repository is mapped to the team; Aging WIP with each
-  item's owner, a stop icon on blocked items and > P50 / > P85 age flags;
-  and a Monte Carlo completion forecast. **Sync team** refreshes just that
-  team from Linear.
-- **Projects** (`/projects`) — the same analytics scoped to one project. A
-  project that spans several teams reads the workspace rules (ADR-0020).
+  completed work spends the most time (the bottleneck); the four **DORA**
+  metrics with their bands, once a repository is mapped to the team; Aging
+  WIP with each item's owner, a stop icon on blocked items and > P50 / > P85
+  age flags; and a Monte Carlo completion forecast. **Sync team** refreshes
+  just that team from Linear.
+- **Projects** (`/projects`) — the same analytics scoped to one project,
+  without DORA (it is measured per team). A project that spans several
+  teams reads the workspace rules (ADR-0020).
 - **Work Items** (`/work-items`) — every synced item, with its event
   timeline, time in each state, and blocked periods.
 
@@ -235,14 +236,14 @@ A fresh Atlas has no data. To fill it:
    background; the Linear card shows its result when it finishes.
 3. Optional, for DORA: set `ATLAS_GITHUB_TOKEN` and `ATLAS_GITHUB_OWNER`,
    restart, then map each repository to a team in the GitHub card and click
-   **Sync GitHub**. Incidents come from issues with an incident label
-   (Metric rules → **Incident labels**).
+   **Sync GitHub**. Incidents come from Linear issues with an incident
+   label (Metric rules → **Incident labels**).
 4. Optional, for Advisor and Meetings: set `ATLAS_OPENROUTER_API_KEY` and
    restart.
 5. Set an **Auto sync** schedule (see [Automatic sync](#automatic-sync)).
 
-A connector with no key shows "Not configured", and its sync requests
-return `409`.
+Until its keys are set, a connector shows "Not configured" (Linear) or "Not
+set up" (GitHub), and its sync requests return `409`.
 
 ### Development
 
@@ -289,8 +290,9 @@ feedback, learned guidance, and metric rules are kept (ADR-0013).
 #### Blocked time after the explicit blocked signal
 
 From this release, Linear 'blocked by' relations and blocked-named labels
-no longer count as blocked by default (ADR-0026). Atlas recomputes history
-at startup, so blocked time, flow efficiency and health can change. To
+no longer count as blocked by default (ADR-0026). After `make migrate`
+(Docker and `make run` apply it for you), Atlas recomputes history at
+startup, so blocked time, flow efficiency and health can change. To
 count them again, turn on **Count Linear 'blocked by' relations** or
 **Labels named like 'Blocked'** in Metric rules, for the workspace or one
 team.
