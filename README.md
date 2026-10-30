@@ -36,7 +36,7 @@ what the charts mean, and what to do next. Atlas closes the loop. Each
 step feeds the next, and each improvement you make becomes new evidence
 for the next cycle.
 
-![The Atlas loop. Observe: Linear and GitHub events in one vendor-neutral model. Understand: flow metrics, Delivery Health and DORA name the bottleneck. Predict: Monte Carlo forecasts as probabilities. Advise: AI explains the numbers and recommends next steps. Improve: the same metrics show whether a change worked, and that evidence feeds the next cycle.](docs/assets/philosophy-loop.svg)
+![The Atlas loop. Observe: events from the tools your teams already use, in one vendor-neutral model; one source of truth. Understand: flow metrics, Delivery Health and DORA; see the bottleneck, not just the backlog. Predict: Monte Carlo forecasts; odds to plan on, not promises to miss. Advise: AI explanations and recommendations; advice that shows its work. Improve: the same metrics show whether a change worked; change with confidence. New evidence starts the next cycle.](docs/assets/philosophy-loop.svg)
 
 ## Main views
 
