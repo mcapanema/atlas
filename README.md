@@ -128,9 +128,9 @@ and turns their history into these views (sidebar groups in the app):
 - **Organizations** (`/organizations`) — the workspaces Atlas has synced,
   and the people who own work items. Click a person's **Display name** to
   override how their name shows; syncs never overwrite it.
-- **Connectors** (`/connectors`) — Linear status, **Sync now**, and the
-  **Auto sync** schedule. For GitHub, set `ATLAS_GITHUB_TOKEN` and
-  `ATLAS_GITHUB_OWNER`, then map repositories to teams in the GitHub card.
+- **Connectors** (`/connectors`) — Linear status, **Sync now**, the GitHub
+  card that maps repositories to teams, and the **Auto sync** schedule; see
+  [First sync](#first-sync).
 - **Metric rules** (`/metric-rules`) — how metrics are computed (what
   counts as blocked, lifecycle, when tracking started, working days and
   holidays, waiting states, incident labels, health scales and weights,
@@ -152,7 +152,7 @@ numbers; it never produces them.
 ## Clone the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/mcapanema/atlas.git
 cd atlas
 ```
 
@@ -232,6 +232,25 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 </details>
+
+## First sync
+
+A fresh Atlas has no data. To fill it:
+
+1. Set `ATLAS_LINEAR_API_KEY` in `.env` (Linear → Settings → Security &
+   access → Personal API keys) and restart Atlas.
+2. Open **Connectors** and click **Sync now**. The sync runs in the
+   background; the Linear card shows its result when it finishes.
+3. Optional, for DORA: set `ATLAS_GITHUB_TOKEN` and `ATLAS_GITHUB_OWNER`,
+   restart, then map each repository to a team in the GitHub card and click
+   **Sync GitHub**. Incidents come from issues with an incident label
+   (Metric rules → **Incident labels**).
+4. Optional, for Advisor and Meetings: set `ATLAS_OPENROUTER_API_KEY` and
+   restart.
+5. Set an **Auto sync** schedule (see [Automatic sync](#automatic-sync)).
+
+A connector with no key shows "Not configured", and its sync requests
+return `409`.
 
 ## Continuous Integration
 
