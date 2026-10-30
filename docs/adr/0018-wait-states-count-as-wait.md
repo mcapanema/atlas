@@ -15,10 +15,10 @@ or Waiting for Deploy counted as active work. Linear gives In Progress, In
 Review and Waiting for Deploy the same `started` state type, so only state
 names can separate work from wait.
 
-Faturamento & Glosa, trailing 14 days to 2026-10-21: flow efficiency 0.97,
-queue time p50 0.2 working days. Of the started-state time of the 158 items
-it completed since 2026-10-07, In Review held 59% and Waiting for Deploy
-12%; In Progress held 29%.
+One team, trailing 14 days to 2026-10-21: flow efficiency 0.97, queue time
+p50 0.2 working days. Of the started-state time of the 158 items it
+completed since 2026-10-07, In Review held 59% and Waiting for Deploy 12%;
+In Progress held 29%.
 
 ## Decision
 
@@ -37,10 +37,10 @@ it completed since 2026-10-07, In Review held 59% and Waiting for Deploy
 
 ## Consequences
 
-- Listing In Review and Waiting for Deploy for Faturamento & Glosa moved
-  its trailing-14-day flow efficiency from 0.97 to 0.41, queue time p50
-  from 0.2 to 1.8 working days and touch time p50 from 1.4 to 0.2 working
-  days. An unconfigured team's numbers were unchanged.
+- Listing In Review and Waiting for Deploy for that team moved its
+  trailing-14-day flow efficiency from 0.97 to 0.41, queue time p50 from
+  0.2 to 1.8 working days and touch time p50 from 1.4 to 0.2 working days.
+  An unconfigured team's numbers were unchanged.
 - The advisor context (and the MCP brief) adds a wait-time total when it
   exceeds blocked time, so advice can attribute low efficiency to waiting
   stages rather than to blockers.

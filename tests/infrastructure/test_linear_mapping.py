@@ -445,14 +445,14 @@ def _relation_entry(*changes: tuple[str, str]) -> dict[str, Any]:
 
 def test_blocked_side_relation_codes_map_to_blocker_events() -> None:
     events = map_history_entry(
-        _relation_entry(("ab", "DEP-1"), ("bo", "DEP-2"), ("rb", "DEP-3"), ("br", "DEP-4"))
+        _relation_entry(("ab", "OPS-1"), ("bo", "OPS-2"), ("rb", "OPS-3"), ("br", "OPS-4"))
     )
 
     assert [(e.type, e.detail, e.external_id) for e in events] == [
-        (EventType.BLOCKER_ADDED, "DEP-1", "h7:blocker:ab:DEP-1"),
-        (EventType.BLOCKER_ADDED, "DEP-2", "h7:blocker:bo:DEP-2"),
-        (EventType.BLOCKER_CLEARED, "DEP-3", "h7:blocker:rb:DEP-3"),
-        (EventType.BLOCKER_CLEARED, "DEP-4", "h7:blocker:br:DEP-4"),
+        (EventType.BLOCKER_ADDED, "OPS-1", "h7:blocker:ab:OPS-1"),
+        (EventType.BLOCKER_ADDED, "OPS-2", "h7:blocker:bo:OPS-2"),
+        (EventType.BLOCKER_CLEARED, "OPS-3", "h7:blocker:rb:OPS-3"),
+        (EventType.BLOCKER_CLEARED, "OPS-4", "h7:blocker:br:OPS-4"),
     ]
 
 
@@ -480,45 +480,45 @@ def _blocker_events(node: dict[str, Any]) -> list[tuple[str | None, str]]:
 
 
 def test_a_blocker_moved_between_teams_keeps_one_identifier() -> None:
-    """The 2026-10-30 FNG-678 case: FNG-664 moved to Deployment as DEP-1480,
-    so Linear wrote the add as FNG-664 and the resolve as DEP-1480."""
+    """A live case: ENG-664 moved to another team as OPS-1480,
+    so Linear wrote the add as ENG-664 and the resolve as OPS-1480."""
     node = {
         **ISSUE_NODE,
         "inverseRelations": {
             "nodes": [
                 {
                     "type": "blocks",
-                    "issue": {"identifier": "DEP-1480", "previousIdentifiers": ["FNG-664"]},
+                    "issue": {"identifier": "OPS-1480", "previousIdentifiers": ["ENG-664"]},
                 },
                 {
                     "type": "related",
-                    "issue": {"identifier": "DEP-9", "previousIdentifiers": ["FNG-1"]},
+                    "issue": {"identifier": "OPS-9", "previousIdentifiers": ["ENG-1"]},
                 },
             ]
         },
         "history": {
             "nodes": [
-                {**_relation_entry(("ab", "FNG-664")), "id": "h1"},
-                {**_relation_entry(("br", "DEP-1480")), "id": "h2"},
-                {**_relation_entry(("ab", "FNG-1")), "id": "h3"},
+                {**_relation_entry(("ab", "ENG-664")), "id": "h1"},
+                {**_relation_entry(("br", "OPS-1480")), "id": "h2"},
+                {**_relation_entry(("ab", "ENG-1")), "id": "h3"},
             ]
         },
     }
 
     assert _blocker_events(node) == [
-        ("DEP-1480", "h1:blocker:ab:FNG-664"),  # detail current, external_id raw
-        ("DEP-1480", "h2:blocker:br:DEP-1480"),
-        ("FNG-1", "h3:blocker:ab:FNG-1"),  # a "related" relation renames nothing
+        ("OPS-1480", "h1:blocker:ab:ENG-664"),  # detail current, external_id raw
+        ("OPS-1480", "h2:blocker:br:OPS-1480"),
+        ("ENG-1", "h3:blocker:ab:ENG-1"),  # a "related" relation renames nothing
     ]
 
 
 @pytest.mark.parametrize("inverse", [None, {"nodes": None}, {"nodes": [None]}])
 def test_missing_or_null_inverse_relations_keep_raw_identifiers(inverse: object) -> None:
-    node = {**ISSUE_NODE, "history": {"nodes": [_relation_entry(("ab", "FNG-664"))]}}
+    node = {**ISSUE_NODE, "history": {"nodes": [_relation_entry(("ab", "ENG-664"))]}}
     if inverse is not None:
         node["inverseRelations"] = inverse
 
-    assert _blocker_events(node) == [("FNG-664", "h7:blocker:ab:FNG-664")]
+    assert _blocker_events(node) == [("ENG-664", "h7:blocker:ab:ENG-664")]
 
 
 def test_labels_present_at_creation_are_added_at_creation() -> None:
@@ -579,12 +579,12 @@ def test_node_without_new_optional_keys_maps_normally() -> None:
 
 
 def test_a_null_relation_change_is_skipped_not_fatal() -> None:
-    entry = _relation_entry(("ab", "DEP-1"))
-    entry["relationChanges"] = [None, {"type": "ab", "identifier": "DEP-1"}]
+    entry = _relation_entry(("ab", "OPS-1"))
+    entry["relationChanges"] = [None, {"type": "ab", "identifier": "OPS-1"}]
 
     events = map_history_entry(entry)
 
-    assert [(e.type, e.detail) for e in events] == [(EventType.BLOCKER_ADDED, "DEP-1")]
+    assert [(e.type, e.detail) for e in events] == [(EventType.BLOCKER_ADDED, "OPS-1")]
 
 
 def test_long_label_names_and_blockers_are_truncated_to_the_detail_column() -> None:
@@ -657,9 +657,9 @@ def test_map_issue_not_archived_emits_no_archive_cancel() -> None:
 
 
 def test_map_issue_carries_identifier_as_key() -> None:
-    node = {**ISSUE_NODE, "identifier": "DEP-123"}
+    node = {**ISSUE_NODE, "identifier": "OPS-123"}
 
-    assert map_issue(node, {}).key == "DEP-123"
+    assert map_issue(node, {}).key == "OPS-123"
 
 
 def test_map_issue_without_identifier_has_no_key() -> None:

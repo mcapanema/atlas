@@ -1,6 +1,6 @@
 import re
 
-# A tracker key such as DEP-123: a letter-led prefix, a hyphen, digits, and
+# A tracker key such as OPS-123: a letter-led prefix, a hyphen, digits, and
 # no letter or digit glued on either side. Branch names are lower case.
 _KEY = re.compile(r"(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]{0,9}-\d{1,7})(?![A-Za-z0-9])")
 

@@ -74,7 +74,7 @@ class SourceWorkItem:
     parent_external_id: str | None = None
     # Person the issue is currently assigned to; None when unassigned.
     assignee: SourcePerson | None = None
-    # The item's human-readable key in the source, e.g. "DEP-123".
+    # The item's human-readable key in the source, e.g. "OPS-123".
     key: str | None = None
 
 

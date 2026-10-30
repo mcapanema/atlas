@@ -57,7 +57,7 @@ class WorkItem:
     assignee: str | None = None
     # The assigned Person, once resolved; None when unassigned.
     assignee_id: UUID | None = None
-    # The item's human-readable key in its source, e.g. DEP-123.
+    # The item's human-readable key in its source, e.g. OPS-123.
     key: str | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)

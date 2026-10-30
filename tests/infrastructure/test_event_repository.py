@@ -326,7 +326,7 @@ async def test_event_detail_and_types_round_trip(session: AsyncSession) -> None:
         work_item_id=item_id,
         type=EventType.BLOCKER_ADDED,
         occurred_at=datetime(2026, 9, 1, tzinfo=UTC),
-        detail="DEP-1309",
+        detail="OPS-1309",
     )
     await repo.add(event)
 
@@ -334,7 +334,7 @@ async def test_event_detail_and_types_round_trip(session: AsyncSession) -> None:
 
     assert (stored.type, stored.detail, stored.to_state_type) == (
         EventType.BLOCKER_ADDED,
-        "DEP-1309",
+        "OPS-1309",
         None,
     )
 
@@ -344,9 +344,9 @@ async def test_rename_blockers_changes_only_stale_blocker_details(session: Async
     item_id = await _work_item_id(session)
     at = datetime(2026, 10, 17, tzinfo=UTC)
     for external_id, type_, detail in (
-        ("h1", EventType.BLOCKER_ADDED, "FNG-664"),
-        ("h2", EventType.BLOCKER_CLEARED, "DEP-1480"),
-        ("h3", EventType.LABEL_ADDED, "FNG-664"),
+        ("h1", EventType.BLOCKER_ADDED, "ENG-664"),
+        ("h2", EventType.BLOCKER_CLEARED, "OPS-1480"),
+        ("h3", EventType.LABEL_ADDED, "ENG-664"),
     ):
         await repo.add(
             Event(
@@ -359,12 +359,12 @@ async def test_rename_blockers_changes_only_stale_blocker_details(session: Async
         )
 
     renamed = await repo.rename_blockers(
-        {"h1": "DEP-1480", "h2": "DEP-1480", "h3": "DEP-1480", "nope": "DEP-1"}
+        {"h1": "OPS-1480", "h2": "OPS-1480", "h3": "OPS-1480", "nope": "OPS-1"}
     )
     stored = {e.external_id: e.detail for e in await repo.list_for_work_item(item_id)}
 
     assert renamed == 1  # h2 is already current; h3 is not a blocker event
-    assert stored == {"h1": "DEP-1480", "h2": "DEP-1480", "h3": "FNG-664"}
+    assert stored == {"h1": "OPS-1480", "h2": "OPS-1480", "h3": "ENG-664"}
 
 
 async def test_delete_sourced_for_work_items_keeps_events_recorded_through_the_api(

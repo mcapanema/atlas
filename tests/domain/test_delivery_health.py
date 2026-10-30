@@ -145,7 +145,7 @@ def test_canceled_blocked_item_is_not_in_progress_risk() -> None:
 
 
 def test_a_scope_tracked_for_part_of_the_window_has_no_flow_trend() -> None:
-    # The live Forward Deployment Squad case (2026-10-09): first synced 11
+    # A live case (2026-10-09): a team first synced 11
     # days into a 30-day window, it read "throughput grew from 0 to 95" -> 100.
     streams = [
         _stream((EventType.CREATED, 11), (EventType.STARTED, 10), (EventType.COMPLETED, days))
@@ -158,7 +158,7 @@ def test_a_scope_tracked_for_part_of_the_window_has_no_flow_trend() -> None:
 
 
 def test_an_old_moved_in_item_does_not_unlock_the_flow_trend() -> None:
-    # Audit 2026-10-13 (FNG): one issue created long before the team existed
+    # Audit 2026-10-13: one issue created long before the team existed
     # made a 49-day-old scope look tracked for a whole 90-day window, so flow
     # read "215 recently vs 11" -> 100.
     streams = [
@@ -291,7 +291,7 @@ def test_meeting_the_service_level_more_often_than_the_target_scores_100() -> No
 
 
 def test_a_scope_without_prior_history_has_no_predictability() -> None:
-    # Review focus 1: Forward Deployment's case. History starts inside the
+    # Review focus 1: the same live case. History starts inside the
     # window, so no commitment existed to meet: omitted, not 0 or 100.
     assert _predictability(_window(1, count=10)) is None
 

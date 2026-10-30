@@ -39,7 +39,7 @@ def test_event_carries_state_types_and_detail() -> None:
         work_item_id=uuid4(),
         type=EventType.BLOCKER_ADDED,
         occurred_at=AT,
-        detail="DEP-1309",
+        detail="OPS-1309",
     )
     moved = Event(
         work_item_id=uuid4(),
@@ -49,7 +49,7 @@ def test_event_carries_state_types_and_detail() -> None:
         to_state_type=StateType.UNSTARTED,
     )
 
-    assert (event.detail, event.from_state_type, event.to_state_type) == ("DEP-1309", None, None)
+    assert (event.detail, event.from_state_type, event.to_state_type) == ("OPS-1309", None, None)
     assert (moved.from_state_type, moved.to_state_type) == (
         StateType.COMPLETED,
         StateType.UNSTARTED,

@@ -371,7 +371,7 @@ def observed_history_days(
     starts at its own items. Without it, the start is estimated: the earlier
     of the first completion and the 10th percentile of item creation. Not
     the oldest item: a moved-in issue keeps its original creation date
-    (audit 2026-10-13: one 2025 issue put 41 phantom zero days in FNG's
+    (audit 2026-10-13: one 2025 issue put 41 phantom zero days in a team's
     90-day forecast). Not the first completion alone: a team or project
     fills up for weeks before anything finishes, and those are real zero
     days. The partial first day counts; never less than one day.

@@ -155,7 +155,7 @@ describe("WorkItemPage", () => {
         ...events[0],
         id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
         type: "blocker_added",
-        detail: "DEP-1309",
+        detail: "OPS-1309",
       },
       {
         ...events[0],
@@ -173,7 +173,7 @@ describe("WorkItemPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText(/'Blocked by' relation added: DEP-1309/)).toBeInTheDocument();
+    expect(await screen.findByText(/'Blocked by' relation added: OPS-1309/)).toBeInTheDocument();
     expect(screen.getByText(/Label added: Blocked/)).toBeInTheDocument();
   });
 
@@ -207,7 +207,7 @@ describe("WorkItemPage", () => {
         ...events[0],
         id: "99999999-9999-9999-9999-999999999999",
         type: "blocker_cleared",
-        detail: "DEP-7",
+        detail: "OPS-7",
       },
     ];
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
@@ -220,6 +220,6 @@ describe("WorkItemPage", () => {
     renderPage();
 
     expect(await screen.findByText(/Label removed: Bug/)).toBeInTheDocument();
-    expect(screen.getByText(/'Blocked by' relation cleared: DEP-7/)).toBeInTheDocument();
+    expect(screen.getByText(/'Blocked by' relation cleared: OPS-7/)).toBeInTheDocument();
   });
 });

@@ -26,7 +26,7 @@ work items. A code host has repositories, pull requests and deployments.
   it; another organization's sync renames it but never re-inserts it, and
   fetches pull requests and deployments only for its own mapped codebases.
 - A pull request links to a work item when a work-item key (for example
-  `DEP-123`) appears in its branch name, title or body. A link adds `REVIEW`
+  `ENG-123`) appears in its branch name, title or body. A link adds `REVIEW`
   (opened) and `MERGED` events to that item. Every pull request is stored,
   linked or not. These code events (`CODE_EVENT_TYPES`) change no flow
   metric: they never anchor an item's creation, born-done, first state or

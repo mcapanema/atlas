@@ -34,7 +34,7 @@ class EventType(StrEnum):
     LABEL_REMOVED = "label_removed"
     # A "blocked by" relation opened (added, or its blocker reopened) or
     # cleared (removed, or its blocker resolved); detail = the blocker's
-    # identifier, e.g. "DEP-1309".
+    # identifier, e.g. "OPS-1309".
     BLOCKER_ADDED = "blocker_added"
     BLOCKER_CLEARED = "blocker_cleared"
 
