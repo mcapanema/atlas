@@ -8,6 +8,7 @@ import pytest
 from app.application.sync.service import (
     SyncPhase,
     SyncService,
+    SyncSummary,
     UnknownOrganizationError,
     UnknownTeamError,
 )
@@ -649,31 +650,34 @@ async def test_synthesized_completion_is_idempotent_across_syncs() -> None:
     assert sum(1 for e in events if e.type is EventType.COMPLETED) == 1
 
 
+def _done_with_real_completion(
+    item_external_id: str = "li2", entry_external_id: str = "lh9"
+) -> SourceWorkItem:
+    """A done item whose history holds its real completion transition."""
+    item_source = done_without_completion_source().work_items[0]
+    return dataclasses.replace(
+        item_source,
+        external_id=item_external_id,
+        events=(
+            SourceEvent(
+                external_id=f"{item_external_id}:created",
+                type=EventType.CREATED,
+                occurred_at=CREATED_AT,
+            ),
+            SourceEvent(
+                external_id=entry_external_id,
+                type=EventType.COMPLETED,
+                occurred_at=COMPLETED_AT,
+                from_state="In Progress",
+                to_state="Done",
+            ),
+        ),
+    )
+
+
 async def test_done_item_with_real_completion_event_is_not_a_divergence() -> None:
     source = done_without_completion_source()
-    item_source = source.work_items[0]
-    source.work_items = [
-        SourceWorkItem(
-            external_id=item_source.external_id,
-            title=item_source.title,
-            type=item_source.type,
-            state=item_source.state,
-            team_external_id=item_source.team_external_id,
-            project_external_id=None,
-            created_at=item_source.created_at,
-            completed_at=item_source.completed_at,
-            events=(
-                *item_source.events,
-                SourceEvent(
-                    external_id="lh9",
-                    type=EventType.COMPLETED,
-                    occurred_at=COMPLETED_AT,
-                    from_state="In Progress",
-                    to_state="Done",
-                ),
-            ),
-        )
-    ]
+    source.work_items = [_done_with_real_completion()]
     harness = Harness(source)
     org_id = await seed_org(harness)
 
@@ -683,12 +687,118 @@ async def test_done_item_with_real_completion_event_is_not_a_divergence() -> Non
     assert await harness.events.get_by_external_id("li2:completed") is None
 
 
+async def test_resync_of_item_with_stored_completion_is_not_a_divergence() -> None:
+    source = done_without_completion_source()
+    source.work_items = [_done_with_real_completion()]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.divergences == 0
+    assert summary.events == 0
+    assert await harness.events.get_by_external_id("li2:completed") is None
+
+
 async def test_open_item_is_not_a_divergence() -> None:
     harness = Harness(full_source())  # completed_at is None throughout
 
     summary = await harness.service.sync(await seed_org(harness))
 
     assert summary.divergences == 0
+
+
+STARTED_AT = datetime(2026, 7, 3, 9, 0, tzinfo=UTC)
+
+
+def _coalesced(source: FakeDataSource, *, done: bool) -> None:
+    """li3 has one history entry "lh7"; Linear rewrites it in place from
+    Todo -> In Progress (STARTED) to Todo -> Done (COMPLETED) when the issue
+    is finished soon after it starts."""
+    entry = SourceEvent(
+        external_id="lh7",
+        type=EventType.COMPLETED if done else EventType.STARTED,
+        occurred_at=STARTED_AT,
+        from_state="Todo",
+        to_state="Done" if done else "In Progress",
+    )
+    source.work_items = [
+        SourceWorkItem(
+            external_id="li3",
+            title="Quick fix",
+            type=WorkItemType.TASK,
+            state="Done" if done else "In Progress",
+            team_external_id="lt1",
+            project_external_id=None,
+            created_at=CREATED_AT,
+            completed_at=COMPLETED_AT if done else None,
+            events=(
+                SourceEvent(
+                    external_id="li3:created",
+                    type=EventType.CREATED,
+                    occurred_at=CREATED_AT,
+                ),
+                entry,
+            ),
+        )
+    ]
+
+
+async def _synced_coalesced(harness: Harness, source: FakeDataSource) -> SyncSummary:
+    """Sync li3 while started, then again after Linear rewrote its entry to done."""
+    org_id = await seed_org(harness)
+    _coalesced(source, done=False)
+    await harness.service.sync(org_id)
+    _coalesced(source, done=True)
+    return await harness.service.sync(org_id)
+
+
+async def test_entry_rewritten_to_done_synthesizes_completion() -> None:
+    source = FakeDataSource(teams=[SourceTeam(external_id="lt1", name="Platform")], work_items=[])
+    harness = Harness(source)
+
+    summary = await _synced_coalesced(harness, source)
+
+    assert summary.divergences == 1
+    assert summary.events == 1
+    item = await harness.work_items.get_by_external_id("li3")
+    assert item is not None
+    events = {e.type: e for e in await harness.events.list_for_work_item(item.id)}
+    assert set(events) == {EventType.CREATED, EventType.STARTED, EventType.COMPLETED}
+    assert events[EventType.STARTED].external_id == "lh7"
+    assert events[EventType.STARTED].occurred_at == STARTED_AT
+    completion = events[EventType.COMPLETED]
+    assert completion.external_id == "li3:completed"
+    assert completion.occurred_at == COMPLETED_AT
+    assert completion.to_state == "Done"
+
+
+async def test_coalesced_completion_is_synthesized_once() -> None:
+    source = FakeDataSource(teams=[SourceTeam(external_id="lt1", name="Platform")], work_items=[])
+    harness = Harness(source)
+    org_id = (await _synced_coalesced(harness, source)).organization_id
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.events == 0
+    item = await harness.work_items.get_by_external_id("li3")
+    assert item is not None
+    events = await harness.events.list_for_work_item(item.id)
+    assert sum(1 for e in events if e.type is EventType.COMPLETED) == 1
+
+
+async def test_sync_batches_completion_lookup() -> None:
+    source = done_without_completion_source()
+    source.work_items = [
+        _done_with_real_completion("li2", "lh9"),
+        _done_with_real_completion("li4", "lh10"),
+    ]
+    harness = Harness(source)
+
+    await harness.service.sync(await seed_org(harness))
+
+    assert harness.events.completed_lookup_calls == 1
 
 
 async def test_sync_batches_event_lookups() -> None:
