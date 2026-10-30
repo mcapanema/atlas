@@ -185,6 +185,7 @@ class SyncService:
         # their types, so only stored events left untyped are filled — exact in both
         # modes, including items a rebuild skips (team unresolved).
         filled = await self._fill_state_types(sources)
+        await self._rename_blockers(sources)
         await self._stamp_synced(organization_id, team_external_id)
         summary = SyncSummary(
             organization_id=organization_id,
@@ -340,7 +341,7 @@ class SyncService:
     async def _fill_state_types(self, sources: list[SourceWorkItem]) -> int:
         """Give already-stored transition events their state types, once (ADR-0011).
 
-        The one exception to insert-only events: a type that's still empty
+        An exception to insert-only events: a type that's still empty
         is filled, never changed. After the first sync under this code
         nothing is missing, and this is a single batched lookup.
         """
@@ -356,6 +357,23 @@ class SyncService:
         filled = await self._events.fill_state_types({eid: typed[eid] for eid in missing})
         logger.info("Filled state types on %d stored event(s)", filled)
         return filled
+
+    async def _rename_blockers(self, sources: list[SourceWorkItem]) -> None:
+        """Give stored blocker events the blocker's current identifier.
+
+        An exception to insert-only events: a blocker moved to another team
+        after its add was stored would otherwise never pair with its resolve.
+        """
+        details = {
+            event.external_id: event.detail
+            for source in sources
+            for event in source.events
+            if event.type in (EventType.BLOCKER_ADDED, EventType.BLOCKER_CLEARED)
+            and event.detail is not None
+        }
+        renamed = await self._events.rename_blockers(details)
+        if renamed:
+            logger.info("Renamed the blocker on %d stored event(s)", renamed)
 
     async def _upsert_item(
         self,

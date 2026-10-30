@@ -41,6 +41,14 @@ class EventRepository(Protocol):
     ) -> int:
         """Set (from, to) state types on stored events whose types are unknown; never overwrite.
 
-        The one exception to insert-only events (ADR-0011). Returns rows changed.
+        An exception to insert-only events (ADR-0011). Returns rows changed.
+        """
+        ...
+
+    async def rename_blockers(self, details_by_external_id: Mapping[str, str]) -> int:
+        """Set the blocker identifier on stored BLOCKER_ADDED/CLEARED events whose detail differs.
+
+        An exception to insert-only events: a blocker moved to another team
+        changes identifier after its events were stored. Returns rows changed.
         """
         ...

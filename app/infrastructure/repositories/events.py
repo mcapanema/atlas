@@ -84,6 +84,7 @@ class EventModel(Base):
 # to-type, or a from state whose type had no mapping when it was stored.
 _TO_UNTYPED = EventModel.to_state_type.is_(None)
 _FROM_UNTYPED = and_(EventModel.from_state.is_not(None), EventModel.from_state_type.is_(None))
+_BLOCKER_TYPES = (EventType.BLOCKER_ADDED.value, EventType.BLOCKER_CLEARED.value)
 
 
 class SqlAlchemyEventRepository:
@@ -193,3 +194,21 @@ class SqlAlchemyEventRepository:
             )
             filled += cast(CursorResult[Any], result).rowcount
         return filled
+
+    async def rename_blockers(self, details_by_external_id: Mapping[str, str]) -> int:
+        # ponytail: one UPDATE per blocker event per sync — blocker events
+        # are a few hundred per workspace. Batch with a CASE expression if
+        # that ever shows in sync time.
+        renamed = 0
+        for external_id, detail in details_by_external_id.items():
+            result = await self._session.execute(
+                update(EventModel)
+                .where(
+                    EventModel.external_id == external_id,
+                    EventModel.type.in_(_BLOCKER_TYPES),
+                    EventModel.detail != detail,
+                )
+                .values(detail=detail)
+            )
+            renamed += cast(CursorResult[Any], result).rowcount
+        return renamed

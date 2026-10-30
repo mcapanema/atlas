@@ -294,6 +294,17 @@ class InMemoryEventRepository:
                 filled += 1
         return filled
 
+    async def rename_blockers(self, details_by_external_id: Mapping[str, str]) -> int:
+        renamed = 0
+        blocker_types = (EventType.BLOCKER_ADDED, EventType.BLOCKER_CLEARED)
+        for event_id, event in list(self._events.items()):
+            detail = details_by_external_id.get(event.external_id or "")
+            if detail is None or event.type not in blocker_types or event.detail == detail:
+                continue
+            self._events[event_id] = replace(event, detail=detail)
+            renamed += 1
+        return renamed
+
 
 class FakeDataSource:
     """Configurable DeliveryDataSource returning canned snapshots."""

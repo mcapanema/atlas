@@ -255,8 +255,9 @@ mapping functions, and a paginating `LinearDataSource`. Exposed as
 and the Connectors page in the frontend. A project's home team is the first
 of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
-events (named by the blocker's current identifier, so a blocker moved to
-another team still pairs its add with its resolve), state types on transitions, and each issue's labels, parent and
+events (named by the blocker's current identifier, and each sync renames
+stored ones, so a blocker moved to another team still pairs its add with
+its resolve), state types on transitions, and each issue's labels, parent and
 current assignee as a `SourcePerson` (Linear user id, name, email; a blank
 name reads as unassigned) — an email or handle Linear uses as the name is
 turned into "First Last" (ADR-0011); the team's metric rules decide at read
