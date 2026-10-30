@@ -1029,6 +1029,35 @@ async def test_sync_stores_state_type_labels_and_event_facts() -> None:
     assert (stored.type, stored.detail) == (EventType.BLOCKER_ADDED, "DEP-1")
 
 
+async def test_a_later_sync_renames_a_stored_blocker_to_its_current_identifier() -> None:
+    """The add was stored as FNG-664 before the blocker moved to DEP-1480;
+    the later resolve reads DEP-1480, so the stored add must follow."""
+    added = SourceEvent(
+        external_id="h1:blocker:ab:FNG-664",
+        type=EventType.BLOCKER_ADDED,
+        occurred_at=CREATED_AT,
+        detail="FNG-664",
+    )
+    source = _facts_source(_source_item("li1", events=(added,)))
+    harness = Harness(source)
+    await harness.service.sync()
+    resolved = SourceEvent(
+        external_id="h2:blocker:br:DEP-1480",
+        type=EventType.BLOCKER_CLEARED,
+        occurred_at=CREATED_AT,
+        detail="DEP-1480",
+    )
+    source.work_items = [
+        _source_item("li1", events=(dataclasses.replace(added, detail="DEP-1480"), resolved))
+    ]
+
+    await harness.service.sync()
+    [item] = await harness.work_items.list()
+    stored = {e.external_id: e.detail for e in await harness.events.list_for_work_item(item.id)}
+
+    assert stored == {"h1:blocker:ab:FNG-664": "DEP-1480", "h2:blocker:br:DEP-1480": "DEP-1480"}
+
+
 async def test_label_change_updates_the_item() -> None:
     source = _facts_source(_source_item("li1", labels=("Bug",)))
     harness = Harness(source)

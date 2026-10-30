@@ -101,6 +101,8 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
         assert "completedAt" in body["query"]
         assert "canceledAt" in body["query"]
         assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
+        assert "inverseRelations(first: 50)" in body["query"]
+        assert "issue { identifier previousIdentifiers }" in body["query"]
         return _page("issues", [issue_node])
 
     items = await _datasource(handler).fetch_work_items()

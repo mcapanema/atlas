@@ -139,8 +139,9 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
             HISTORY_PAGE_SIZE,
         )
     events = [*_initial_events(node, created_at), *_born_label_events(node, created_at, names)]
+    aliases = _blocker_aliases(node)
     for entry in history_nodes:
-        events.extend(map_history_entry(entry, names))
+        events.extend(map_history_entry(entry, names, aliases))
     canceled_at = node.get("canceledAt")
     if canceled_at:
         # Keyed by time: a reopen-then-recancel carries a new canceledAt and
@@ -231,6 +232,9 @@ def _archive_events(node: dict[str, Any]) -> list[SourceEvent]:
 # reopens). "ax", "rx", "xr", "xo" are the same four seen from the blocker's
 # side; "ar"/"rr" (related) and "ad"/"am"/"rd"/"rm" (duplicate) don't block.
 # Only the blocked side becomes events, so a blocker never blocks itself.
+# Each entry names the blocker by its identifier at that moment: a blocker
+# moved to another team is added as FNG-664 and resolved as DEP-1480, so
+# events carry the blocker's current identifier (_blocker_aliases).
 _BLOCKER_CODES = {
     "ab": EventType.BLOCKER_ADDED,
     "bo": EventType.BLOCKER_ADDED,
@@ -258,7 +262,25 @@ def _warn_unknown_code(code: str) -> None:
         logger.warning("Ignoring unknown Linear relation-change code %r", code)
 
 
-def _relation_events(entry: dict[str, Any], occurred_at: datetime) -> list[SourceEvent]:
+# ponytail: only the issue's current "blocked by" relations are known, so a
+# relation removed after its blocker moved teams keeps the old identifier on
+# its add and never pairs. Upgrade path: store each work item's
+# previousIdentifiers and resolve blocker identifiers at read time.
+def _blocker_aliases(node: dict[str, Any]) -> dict[str, str]:
+    """Each current blocker's previous identifiers → its current identifier."""
+    aliases: dict[str, str] = {}
+    for relation in (node.get("inverseRelations") or {}).get("nodes") or ():
+        if not isinstance(relation, dict) or relation.get("type") != "blocks":
+            continue
+        blocker = relation.get("issue") or {}
+        for previous in blocker.get("previousIdentifiers") or ():
+            aliases[previous] = blocker["identifier"]
+    return aliases
+
+
+def _relation_events(
+    entry: dict[str, Any], occurred_at: datetime, aliases: Mapping[str, str]
+) -> list[SourceEvent]:
     """Blocked-side "blocked by" relation changes → BLOCKER_ADDED/CLEARED (history only)."""
     events: list[SourceEvent] = []
     for change in entry.get("relationChanges") or ():
@@ -276,7 +298,7 @@ def _relation_events(entry: dict[str, Any], occurred_at: datetime) -> list[Sourc
                 external_id=f"{entry['id']}:blocker:{code}:{identifier}",
                 type=event_type,
                 occurred_at=occurred_at,
-                detail=_detail(identifier),
+                detail=_detail(aliases.get(identifier, identifier)),
             )
         )
     return events
@@ -376,7 +398,9 @@ def _transition_events(entry: dict[str, Any], occurred_at: datetime) -> list[Sou
 
 
 def map_history_entry(
-    entry: dict[str, Any], label_names: Mapping[str, str] | None = None
+    entry: dict[str, Any],
+    label_names: Mapping[str, str] | None = None,
+    blocker_aliases: Mapping[str, str] | None = None,
 ) -> list[SourceEvent]:
     """One issue-history entry → 0..n SourceEvents.
 
@@ -389,7 +413,7 @@ def map_history_entry(
     return [
         *_transition_events(entry, occurred_at),
         *_label_events(entry, occurred_at, label_names or {}),
-        *_relation_events(entry, occurred_at),
+        *_relation_events(entry, occurred_at, blocker_aliases or {}),
     ]
 
 
