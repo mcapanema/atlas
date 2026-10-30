@@ -56,7 +56,7 @@ Improve
 
 ### Observe
 
-Collect delivery events from engineering systems such as Linear and transform them into a unified delivery model.
+Collect delivery events from engineering systems — Linear for work items, GitHub for pull requests and deployments — and transform them into a unified delivery model.
 
 ### Understand
 
@@ -91,24 +91,29 @@ Measure the impact of every improvement and continuously evolve engineering deli
 
 # What's in Atlas
 
-Atlas reads your Linear workspace and turns its history into these views
-(sidebar groups in the app):
+Atlas reads your Linear workspace, and optionally your GitHub repositories,
+and turns their history into these views (sidebar groups in the app):
 
 **Overview**
 - **Executive** (`/`) — one row per team: Delivery Health, flow metrics with
-  their change against the prior window, and how accurate past forecasts
-  turned out. An at-risk row expands to its weakest health components and a
-  7-day lead-time sparkline.
+  their change against the prior window, DORA deploys per week and change
+  failure rate (for teams with a mapped repository), and how accurate past
+  forecasts turned out. An at-risk row expands to its weakest health
+  components and a 7-day lead-time sparkline.
 
 **Delivery**
 - **Teams** (`/teams`) — a team's Delivery Health: the overall score plus a
   tile, with its reason, for each weighted component (predictability, flow,
   stability, risk; efficiency is off by default — weights live in Metric
   rules); Lead/Cycle Time, Throughput, WIP, Blocked Time and Flow
-  Efficiency; flow charts; Aging WIP with each item's owner, a stop icon on blocked items and > P50 / > P85 age flags; and a Monte
-  Carlo completion forecast. **Sync team** refreshes just that team from
-  Linear.
-- **Projects** (`/projects`) — the same analytics scoped to one project.
+  Efficiency; flow charts; **Time in state**, which marks the state where
+  work waits longest (the bottleneck); the four **DORA** metrics with their
+  bands, once a repository is mapped to the team; Aging WIP with each
+  item's owner, a stop icon on blocked items and > P50 / > P85 age flags;
+  and a Monte Carlo completion forecast. **Sync team** refreshes just that
+  team from Linear.
+- **Projects** (`/projects`) — the same analytics scoped to one project. A
+  project that spans several teams reads the workspace rules (ADR-0020).
 - **Work Items** (`/work-items`) — every synced item, with its event
   timeline, time in each state, and blocked periods.
 
@@ -126,10 +131,16 @@ Atlas reads your Linear workspace and turns its history into these views
 - **Connectors** (`/connectors`) — Linear status, **Sync now**, and the
   **Auto sync** schedule. For GitHub, set `ATLAS_GITHUB_TOKEN` and
   `ATLAS_GITHUB_OWNER`, then map repositories to teams in the GitHub card.
-- **Metric rules** (`/metric-rules`) — how metrics are computed (what counts as blocked,
-  lifecycle, health scales and weights, sprint length…), set for the whole
-  workspace or overridden per team. Changing a metric rule recomputes
-  history in the background; sprint length only sets the Meetings default.
+- **Metric rules** (`/metric-rules`) — how metrics are computed (what
+  counts as blocked, lifecycle, when tracking started, working days and
+  holidays, waiting states, incident labels, health scales and weights,
+  sprint length…), set for the whole workspace or overridden per team.
+  Changing a metric rule recomputes history in the background; sprint
+  length only sets the Meetings default.
+  By default only workflow states named like 'Blocked' and the labels you
+  list count as blocked; Linear 'blocked by' relations and blocked-named
+  labels are opt-in (ADR-0026). **Export** and **Import** share the rules as
+  a file between workspaces (ADR-0019).
 
 Every number is computed by Atlas from synced events. The AI explains
 numbers; it never produces them.
