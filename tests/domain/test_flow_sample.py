@@ -107,7 +107,7 @@ def test_open_blocked_period_clamps_to_completion() -> None:
 
 
 def test_an_item_never_started_has_no_blocked_time() -> None:
-    # Audit 2026-10-13 (FNG): a backlog item closed while blocked added 4.7 days
+    # Audit 2026-10-13: a backlog item closed while blocked added 4.7 days
     # to the Blocked time tile, which counts blocking while in progress only.
     sample = derive_flow_sample(
         [

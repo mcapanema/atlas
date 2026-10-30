@@ -77,7 +77,7 @@ def pr(**kwargs: object) -> SourcePullRequest:
         "number": 12,
         "title": "Fix",
         "opened_at": T1,
-        "work_item_keys": ("DEP-1",),
+        "work_item_keys": ("OPS-1",),
     }
     return SourcePullRequest(**{**base, **kwargs})  # type: ignore[arg-type]
 
@@ -178,7 +178,7 @@ async def test_second_sync_writes_nothing() -> None:
         pull_requests={"r1": [pr(merged_at=T2)]}, deployments={"r1": [deployment()]}
     )
     h = await seeded(source)
-    await h.work_items.add(WorkItem(team_id=h.team_id, title="Dep", key="DEP-1"))
+    await h.work_items.add(WorkItem(team_id=h.team_id, title="Ops", key="OPS-1"))
 
     first = await h.sync()
     second = await h.sync()
@@ -218,7 +218,7 @@ async def test_pull_request_change_updates_row() -> None:
 
 async def test_merged_pr_adds_review_and_merged_events() -> None:
     h = await seeded(api_source(pull_requests={"r1": [pr(merged_at=T2)]}))
-    item = WorkItem(team_id=h.team_id, title="Dep", key="DEP-1")
+    item = WorkItem(team_id=h.team_id, title="Ops", key="OPS-1")
     await h.work_items.add(item)
 
     summary = await h.sync()
@@ -232,7 +232,7 @@ async def test_merged_pr_adds_review_and_merged_events() -> None:
 
 async def test_open_pr_adds_review_only() -> None:
     h = await seeded(api_source(pull_requests={"r1": [pr()]}))
-    item = WorkItem(team_id=h.team_id, title="Dep", key="DEP-1")
+    item = WorkItem(team_id=h.team_id, title="Ops", key="OPS-1")
     await h.work_items.add(item)
 
     await h.sync()
@@ -243,7 +243,7 @@ async def test_open_pr_adds_review_only() -> None:
 async def test_unknown_keys_link_nothing() -> None:
     source = api_source(pull_requests={"r1": [pr(work_item_keys=("UTF-8", "RELEASE-2026"))]})
     h = await seeded(source)
-    await h.work_items.add(WorkItem(team_id=h.team_id, title="Dep", key="DEP-1"))
+    await h.work_items.add(WorkItem(team_id=h.team_id, title="Ops", key="OPS-1"))
 
     summary = await h.sync()
 
@@ -256,7 +256,7 @@ async def test_link_pass_reaches_items_synced_after_the_pr() -> None:
     source = api_source(pull_requests={"r1": [pr(merged_at=T2)]})
     h = await seeded(source)
     await h.sync()
-    item = WorkItem(team_id=h.team_id, title="Dep", key="DEP-1")
+    item = WorkItem(team_id=h.team_id, title="Ops", key="OPS-1")
     await h.work_items.add(item)
     source.pull_requests = {}
 
@@ -269,7 +269,7 @@ async def test_link_pass_reaches_items_synced_after_the_pr() -> None:
 
 async def test_link_pass_restores_events_a_rebuild_deleted() -> None:
     h = await seeded(api_source(pull_requests={"r1": [pr(merged_at=T2)]}))
-    item = WorkItem(team_id=h.team_id, title="Dep", key="DEP-1")
+    item = WorkItem(team_id=h.team_id, title="Ops", key="OPS-1")
     await h.work_items.add(item)
     await h.sync()
     before = await h.item_events(item)
@@ -349,7 +349,7 @@ async def test_link_pass_ignores_work_items_of_other_organizations() -> None:
     other_team = Team(organization_id=other_org.id, name="Elsewhere")
     await h.organizations.add(other_org)
     await h.teams.add(other_team)
-    foreign = WorkItem(team_id=other_team.id, title="Dep", key="DEP-1")
+    foreign = WorkItem(team_id=other_team.id, title="Ops", key="OPS-1")
     await h.work_items.add(foreign)
 
     summary = await h.sync()
@@ -360,13 +360,13 @@ async def test_link_pass_ignores_work_items_of_other_organizations() -> None:
 
 async def test_link_pass_picks_the_syncing_organizations_item_when_keys_collide() -> None:
     h = await seeded(api_source(pull_requests={"r1": [pr(merged_at=T2)]}))
-    mine = WorkItem(team_id=h.team_id, title="Dep", key="DEP-1")
+    mine = WorkItem(team_id=h.team_id, title="Ops", key="OPS-1")
     await h.work_items.add(mine)
     other_org = Organization(name="Other")
     other_team = Team(organization_id=other_org.id, name="Elsewhere")
     await h.organizations.add(other_org)
     await h.teams.add(other_team)
-    foreign = WorkItem(team_id=other_team.id, title="Dep", key="DEP-1")
+    foreign = WorkItem(team_id=other_team.id, title="Ops", key="OPS-1")
     await h.work_items.add(foreign)
 
     summary = await h.sync()

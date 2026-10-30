@@ -233,7 +233,7 @@ def _archive_events(node: dict[str, Any]) -> list[SourceEvent]:
 # side; "ar"/"rr" (related) and "ad"/"am"/"rd"/"rm" (duplicate) don't block.
 # Only the blocked side becomes events, so a blocker never blocks itself.
 # Each entry names the blocker by its identifier at that moment: a blocker
-# moved to another team is added as FNG-664 and resolved as DEP-1480, so
+# moved to another team is added as ENG-664 and resolved as OPS-1480, so
 # events carry the blocker's current identifier (_blocker_aliases).
 _BLOCKER_CODES = {
     "ab": EventType.BLOCKER_ADDED,

@@ -98,12 +98,12 @@ async def test_pull_request_get_by_external_ids_round_trips_keys(session: AsyncS
     pr.url = "https://x/1"
     pr.merged_at = T0
     pr.merge_commit_sha = "abc"
-    pr.work_item_keys = ("DEP-1", "ENG-2")
+    pr.work_item_keys = ("OPS-1", "ENG-2")
     await repo.add(pr)
     session.expire_all()
     found = await repo.get_by_external_ids(["pr1", "nope"])
     assert found == {"pr1": pr}
-    assert found["pr1"].work_item_keys == ("DEP-1", "ENG-2")
+    assert found["pr1"].work_item_keys == ("OPS-1", "ENG-2")
 
 
 async def test_pull_request_update(session: AsyncSession) -> None:
@@ -112,7 +112,7 @@ async def test_pull_request_update(session: AsyncSession) -> None:
     pr = _pr(codebase, "pr1")
     await repo.add(pr)
     pr.closed_at = T0
-    pr.work_item_keys = ("DEP-9",)
+    pr.work_item_keys = ("OPS-9",)
     await repo.update(pr)
     session.expire_all()
     assert (await repo.get_by_external_ids(["pr1"]))["pr1"] == pr

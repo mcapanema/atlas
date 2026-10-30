@@ -298,13 +298,13 @@ async def test_team_ids_by_project_groups_distinct_teams(session: AsyncSession) 
 async def test_get_by_keys_returns_items_by_key(session: AsyncSession) -> None:
     repo = SqlAlchemyWorkItemRepository(session)
     team_id = await _team_id(session)
-    items = {key: WorkItem(team_id=team_id, title="t", key=key) for key in ("DEP-1", "DEP-2", None)}
+    items = {key: WorkItem(team_id=team_id, title="t", key=key) for key in ("OPS-1", "OPS-2", None)}
     for item in items.values():
         await repo.add(item)
 
-    found = await repo.get_by_keys(["DEP-1", "DEP-9"], team_ids={team_id})
-    assert set(found) == {"DEP-1"}
-    assert found["DEP-1"].id == items["DEP-1"].id
+    found = await repo.get_by_keys(["OPS-1", "OPS-9"], team_ids={team_id})
+    assert set(found) == {"OPS-1"}
+    assert found["OPS-1"].id == items["OPS-1"].id
     assert await repo.get_by_keys([], team_ids={team_id}) == {}
 
 
@@ -312,22 +312,22 @@ async def test_get_by_keys_filters_by_team(session: AsyncSession) -> None:
     repo = SqlAlchemyWorkItemRepository(session)
     team_a = await _team_id(session)
     team_b = await _team_id(session)
-    item_a = WorkItem(team_id=team_a, title="a", key="DEP-1")
+    item_a = WorkItem(team_id=team_a, title="a", key="OPS-1")
     await repo.add(item_a)
-    await repo.add(WorkItem(team_id=team_b, title="b", key="DEP-1"))
+    await repo.add(WorkItem(team_id=team_b, title="b", key="OPS-1"))
 
-    found = await repo.get_by_keys(["DEP-1"], team_ids={team_a})
+    found = await repo.get_by_keys(["OPS-1"], team_ids={team_a})
 
-    assert found["DEP-1"].id == item_a.id
-    assert await repo.get_by_keys(["DEP-1"], team_ids=set()) == {}
+    assert found["OPS-1"].id == item_a.id
+    assert await repo.get_by_keys(["OPS-1"], team_ids=set()) == {}
 
 
 async def test_get_by_keys_returns_one_item_per_key(session: AsyncSession) -> None:
     repo = SqlAlchemyWorkItemRepository(session)
     team_id = await _team_id(session)
-    await repo.add(WorkItem(team_id=team_id, title="old", key="DEP-1"))
-    await repo.add(WorkItem(team_id=team_id, title="new", key="DEP-1"))
+    await repo.add(WorkItem(team_id=team_id, title="old", key="OPS-1"))
+    await repo.add(WorkItem(team_id=team_id, title="new", key="OPS-1"))
 
-    found = await repo.get_by_keys(["DEP-1"], team_ids={team_id})
+    found = await repo.get_by_keys(["OPS-1"], team_ids={team_id})
 
-    assert list(found) == ["DEP-1"]
+    assert list(found) == ["OPS-1"]

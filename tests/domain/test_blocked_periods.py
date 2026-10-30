@@ -47,7 +47,7 @@ def test_label_events_block_only_when_the_rules_call_the_label_blocked() -> None
 
 
 def test_blocker_events_count_only_when_the_relations_rule_is_on() -> None:
-    events = [_on(EventType.BLOCKER_ADDED, 1, "DEP-1"), _on(EventType.BLOCKER_CLEARED, 4, "DEP-1")]
+    events = [_on(EventType.BLOCKER_ADDED, 1, "OPS-1"), _on(EventType.BLOCKER_CLEARED, 4, "OPS-1")]
 
     assert blocked_periods(events, RELATIONS) == (BlockedPeriod(_day(1), _day(4)),)
     assert blocked_periods(events) == ()
@@ -56,7 +56,7 @@ def test_blocker_events_count_only_when_the_relations_rule_is_on() -> None:
 def test_default_rules_block_only_on_explicit_signals() -> None:
     """The 2026-10-29 false positives: a planned "blocked by" relation and a
     billing-rule label ("Bloqueante") no longer block; the Blocked state does."""
-    relation = [_on(EventType.BLOCKER_ADDED, 1, "FNG-905")]
+    relation = [_on(EventType.BLOCKER_ADDED, 1, "ENG-905")]
     rule_labels = [
         _on(EventType.LABEL_ADDED, 1, "Bloqueante"),
         _on(EventType.LABEL_ADDED, 1, "Bloqueada"),
@@ -77,8 +77,8 @@ def test_default_rules_block_only_on_explicit_signals() -> None:
 
 
 def test_listed_label_blocks_with_the_pattern_off() -> None:
-    """Faturamento & Glosa's real blocked label (FNG-652): listed, it still
-    blocks in any case; an unlisted pattern word ("Bloqueante") does not."""
+    """A team's real blocked label: listed, it still blocks in any case; an
+    unlisted pattern word ("Bloqueante") does not."""
     events = [
         _on(EventType.LABEL_ADDED, 1, "bloqueada"),
         _on(EventType.LABEL_ADDED, 2, "Bloqueante"),
@@ -91,7 +91,7 @@ def test_listed_label_blocks_with_the_pattern_off() -> None:
 
 def test_overrides_turn_the_old_sources_back_on() -> None:
     """Each source on its own, so one override can't hide the other's effect."""
-    relation = [_on(EventType.BLOCKER_ADDED, 1, "DEP-1")]
+    relation = [_on(EventType.BLOCKER_ADDED, 1, "OPS-1")]
     label = [_on(EventType.LABEL_ADDED, 2, "Bloqueante")]
 
     relations_on = resolve_rules({"blocked_by_relations": True})
@@ -105,13 +105,13 @@ def test_overrides_turn_the_old_sources_back_on() -> None:
 
 def test_overlapping_sources_form_one_period() -> None:
     events = [
-        _on(EventType.BLOCKER_ADDED, 1, "DEP-1"),
+        _on(EventType.BLOCKER_ADDED, 1, "OPS-1"),
         _on(EventType.LABEL_ADDED, 2, "Blocked"),
-        _on(EventType.BLOCKER_ADDED, 3, "DEP-2"),
-        _on(EventType.BLOCKER_CLEARED, 5, "DEP-1"),
+        _on(EventType.BLOCKER_ADDED, 3, "OPS-2"),
+        _on(EventType.BLOCKER_CLEARED, 5, "OPS-1"),
         _on(EventType.LABEL_REMOVED, 6, "Blocked"),
-        _on(EventType.BLOCKER_CLEARED, 7, "DEP-2"),
-        _on(EventType.BLOCKER_ADDED, 9, "DEP-1"),  # blocker reopened
+        _on(EventType.BLOCKER_CLEARED, 7, "OPS-2"),
+        _on(EventType.BLOCKER_ADDED, 9, "OPS-1"),  # blocker reopened
     ]
 
     assert blocked_periods(events, RELATIONS) == (
@@ -122,7 +122,7 @@ def test_overlapping_sources_form_one_period() -> None:
 
 def test_a_clear_for_a_blocker_never_opened_is_ignored() -> None:
     # Truncated history: the "ab" fell off the 250-entry page.
-    events = [_on(EventType.BLOCKER_CLEARED, 2, "DEP-1"), _on(EventType.BLOCKER_ADDED, 3, "DEP-2")]
+    events = [_on(EventType.BLOCKER_CLEARED, 2, "OPS-1"), _on(EventType.BLOCKER_ADDED, 3, "OPS-2")]
 
     assert blocked_periods(events, RELATIONS) == (BlockedPeriod(_day(3), None),)
 
@@ -131,9 +131,9 @@ def test_flow_sample_counts_relation_blocked_time_and_blocked_now() -> None:
     events = [
         _on(EventType.CREATED, 1),
         _on(EventType.STARTED, 2),
-        _on(EventType.BLOCKER_ADDED, 3, "DEP-1"),
-        _on(EventType.BLOCKER_CLEARED, 5, "DEP-1"),
-        _on(EventType.BLOCKER_ADDED, 6, "DEP-2"),
+        _on(EventType.BLOCKER_ADDED, 3, "OPS-1"),
+        _on(EventType.BLOCKER_CLEARED, 5, "OPS-1"),
+        _on(EventType.BLOCKER_ADDED, 6, "OPS-2"),
     ]
 
     off = derive_flow_sample(events, NO_RELATIONS)
@@ -153,7 +153,7 @@ def test_health_risk_reads_blocked_now_from_the_rules() -> None:
     stream = [
         _on(EventType.CREATED, 1),
         _on(EventType.STARTED, 2),
-        _on(EventType.BLOCKER_ADDED, 3, "DEP-1"),
+        _on(EventType.BLOCKER_ADDED, 3, "OPS-1"),
     ]
 
     any_sample = MetricRules(health_min_sample=1)  # one item: pin the mechanic, not the floor

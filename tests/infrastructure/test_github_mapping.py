@@ -84,9 +84,9 @@ def test_in_progress_or_no_status_reads_pending() -> None:
 
 def test_pull_request_keys_come_from_branch_title_and_body() -> None:
     pr = map_pull_request(
-        pull_request_node(headRefName="murilo/dep-1-x", title="ENG-2 fix", body=None)
+        pull_request_node(headRefName="murilo/ops-1-x", title="ENG-2 fix", body=None)
     )
-    assert pr.work_item_keys == ("DEP-1", "ENG-2")
+    assert pr.work_item_keys == ("OPS-1", "ENG-2")
     assert pr.first_commit_at == datetime(2026, 6, 30, 8, tzinfo=UTC)
     assert pr.number == 7
 

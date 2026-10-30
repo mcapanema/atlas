@@ -152,14 +152,14 @@ async def test_sync_backfills_key_on_existing_item() -> None:
     harness = Harness(source)
     org_id = await seed_org(harness)
     await harness.service.sync(org_id)  # stored with key=None
-    source.work_items = [dataclasses.replace(source.work_items[0], key="DEP-1")]
+    source.work_items = [dataclasses.replace(source.work_items[0], key="OPS-1")]
 
     summary = await harness.service.sync(org_id)
 
     assert summary.work_items == 1
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
-    assert item.key == "DEP-1"
+    assert item.key == "OPS-1"
 
 
 async def test_changed_url_is_updated() -> None:
@@ -1010,10 +1010,10 @@ def _source_item(external_id: str, **fields: object) -> SourceWorkItem:
 
 async def test_sync_stores_state_type_labels_and_event_facts() -> None:
     event = SourceEvent(
-        external_id="h1:blocker:ab:DEP-1",
+        external_id="h1:blocker:ab:OPS-1",
         type=EventType.BLOCKER_ADDED,
         occurred_at=CREATED_AT,
-        detail="DEP-1",
+        detail="OPS-1",
     )
     harness = Harness(
         _facts_source(
@@ -1026,36 +1026,36 @@ async def test_sync_stores_state_type_labels_and_event_facts() -> None:
     [stored] = await harness.events.list_for_work_item(item.id)
 
     assert (item.state_type, item.labels) == (StateType.UNSTARTED, ("Bug",))
-    assert (stored.type, stored.detail) == (EventType.BLOCKER_ADDED, "DEP-1")
+    assert (stored.type, stored.detail) == (EventType.BLOCKER_ADDED, "OPS-1")
 
 
 async def test_a_later_sync_renames_a_stored_blocker_to_its_current_identifier() -> None:
-    """The add was stored as FNG-664 before the blocker moved to DEP-1480;
-    the later resolve reads DEP-1480, so the stored add must follow."""
+    """The add was stored as ENG-664 before the blocker moved to OPS-1480;
+    the later resolve reads OPS-1480, so the stored add must follow."""
     added = SourceEvent(
-        external_id="h1:blocker:ab:FNG-664",
+        external_id="h1:blocker:ab:ENG-664",
         type=EventType.BLOCKER_ADDED,
         occurred_at=CREATED_AT,
-        detail="FNG-664",
+        detail="ENG-664",
     )
     source = _facts_source(_source_item("li1", events=(added,)))
     harness = Harness(source)
     await harness.service.sync()
     resolved = SourceEvent(
-        external_id="h2:blocker:br:DEP-1480",
+        external_id="h2:blocker:br:OPS-1480",
         type=EventType.BLOCKER_CLEARED,
         occurred_at=CREATED_AT,
-        detail="DEP-1480",
+        detail="OPS-1480",
     )
     source.work_items = [
-        _source_item("li1", events=(dataclasses.replace(added, detail="DEP-1480"), resolved))
+        _source_item("li1", events=(dataclasses.replace(added, detail="OPS-1480"), resolved))
     ]
 
     await harness.service.sync()
     [item] = await harness.work_items.list()
     stored = {e.external_id: e.detail for e in await harness.events.list_for_work_item(item.id)}
 
-    assert stored == {"h1:blocker:ab:FNG-664": "DEP-1480", "h2:blocker:br:DEP-1480": "DEP-1480"}
+    assert stored == {"h1:blocker:ab:ENG-664": "OPS-1480", "h2:blocker:br:OPS-1480": "OPS-1480"}
 
 
 async def test_label_change_updates_the_item() -> None:

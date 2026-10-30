@@ -89,7 +89,7 @@ async def test_timeline_blocked_periods_follow_the_rules() -> None:
     repo = InMemoryEventRepository(
         [
             Event(
-                work_item_id=item_id, type=EventType.BLOCKER_ADDED, occurred_at=at, detail="DEP-1"
+                work_item_id=item_id, type=EventType.BLOCKER_ADDED, occurred_at=at, detail="OPS-1"
             ),
         ]
     )

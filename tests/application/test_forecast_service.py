@@ -155,8 +155,8 @@ async def test_forecast_samples_only_the_scopes_observed_history() -> None:
 
 
 async def test_an_old_moved_in_item_does_not_stretch_the_forecast_history() -> None:
-    # Audit 2026-10-13 (FNG): a 400-day-old open issue made 85 pre-team days
-    # zero-throughput samples (FNG's P50 read 2026-12-31 instead of 2026-11-26).
+    # Audit 2026-10-13: a 400-day-old open issue made 85 pre-team days
+    # zero-throughput samples (the team's P50 read 2026-12-31 instead of 2026-11-26).
     team_id = uuid4()
     old = _item(team_id)
     items = [_item(team_id) for _ in range(5)]

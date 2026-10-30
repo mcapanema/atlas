@@ -115,7 +115,7 @@ def test_a_ramping_scope_keeps_its_build_up_before_the_first_completion() -> Non
 
 
 def test_an_old_moved_in_item_does_not_stretch_the_observed_history() -> None:
-    # Audit 2026-10-13 (FNG): an issue created 15 months before the team, moved
+    # Audit 2026-10-13: an issue created 15 months before the team, moved
     # in and still open, made 41 pre-team days count as zero-throughput days.
     scope = [_created(470), *[_completed(48.5 - i) for i in range(19)]]
     assert observed_history_days(scope, end=NOW, days=90) == 49
