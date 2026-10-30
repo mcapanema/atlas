@@ -1,42 +1,42 @@
 # Atlas
 
-Atlas is a delivery intelligence platform for engineering managers. It
-reads delivery data from Linear and GitHub, measures how work flows,
-forecasts risk, and uses AI to explain the results.
+Atlas is a Delivery Intelligence Platform that transforms software delivery
+events into actionable engineering intelligence.
 
-Atlas does not replace your project management tool. It adds an analysis
-layer on top of it.
+It continuously observes software delivery, measures flow efficiency,
+forecasts outcomes, and provides AI-powered guidance to help Engineering
+Managers make better decisions.
 
-## What Atlas answers
+Rather than replacing project management tools, Atlas sits on top of them
+as an intelligence layer, helping engineering organizations understand how
+work flows through their systems and how delivery performance impacts
+business outcomes.
 
-- Why is delivery slow?
+## Why Atlas?
+
+Modern engineering teams generate enormous amounts of delivery data: issues
+move across workflows, pull requests merge, deployments ship, projects slip
+and deadlines move. Very few tools answer the questions engineering leaders
+actually care about:
+
+- Why is delivery slowing down?
 - Where is the bottleneck?
 - Which project is at risk?
 - Which team needs attention today?
-- What do we improve next, and did the last change help?
+- What should I improve next?
+- Are our process improvements actually working?
+- How does engineering performance affect business outcomes?
 
-## How it works
+Atlas exists to answer those questions.
 
-| Step | What Atlas does |
-|---|---|
-| Observe | Syncs work items from Linear, and pull requests and deployments from GitHub. |
-| Understand | Calculates flow metrics, Delivery Health and DORA metrics from the synced events. |
-| Predict | Uses statistics (Monte Carlo), not AI, to forecast completion and risk. |
-| Advise | Uses AI to explain the numbers and recommend improvements. |
+## Philosophy
 
-Atlas calculates every number from synced events. The AI explains the
-numbers. It never makes a number.
+Most delivery dashboards stop at charts and leave the hard part to you:
+what the charts mean, and what to do next. Atlas closes the loop. Each
+step feeds the next, and each improvement you make becomes new evidence
+for the next cycle.
 
-## Main views
-
-- **Executive**: health, flow, DORA and forecast accuracy for all teams on
-  one page.
-- **Teams** and **Projects**: metrics, charts, the bottleneck, aging work
-  and a completion forecast.
-- **Advisor** and **Meetings**: AI advice, and preparation for standups,
-  retrospectives and planning.
-- **Metric rules**: how Atlas calculates each metric, for the workspace or
-  for one team.
+![The Atlas loop. Observe: events from the tools your teams already use, in one vendor-neutral model; one source of truth. Understand: flow metrics, Delivery Health and DORA; see the bottleneck, not just the backlog. Predict: Monte Carlo forecasts; odds to plan on, not promises to miss. Advise: AI explanations and recommendations; advice that shows its work. Improve: the same metrics show whether a change worked; change with confidence. New evidence starts the next cycle.](docs/assets/philosophy-loop.svg)
 
 ## Quick start
 

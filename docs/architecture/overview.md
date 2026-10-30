@@ -4,13 +4,7 @@ Atlas is a single-deployable monolith with a Domain-Driven Design interior.
 
 ## Layers (dependencies point inward)
 
-    Presentation (app/api, web/)
-        ↓
-    Application (app/application)  — use cases / orchestration
-        ↓
-    Domain (app/domain)           — entities + repository ports; ZERO framework imports
-        ↑
-    Infrastructure (app/infrastructure) — SQLAlchemy adapters, DB session, SPA serving
+![Atlas architecture layers. Presentation (app/api, web/) depends on Application (app/application), which depends only on Domain ports. Domain (app/domain) is the core: entities and repository ports, zero framework imports. Infrastructure (app/infrastructure) implements the Domain ports. Dependencies point inward, enforced by tests/test_architecture.py.](../assets/architecture-layers.svg)
 
 - **Domain** is pure Python. It never imports FastAPI, SQLAlchemy, Pydantic, or any connector.
 - **Application** depends only on Domain ports (Protocols), never on Infrastructure.
