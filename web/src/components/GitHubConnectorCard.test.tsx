@@ -34,10 +34,12 @@ function mockApi({
   running?: object | null;
   polled?: object;
 }) {
-  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/github")
-      return jsonResponse({ configured, owner: configured ? "acme" : null, running });
+      return jsonResponse({ configured, owner: configured ? "acme" : null, hint: null, running });
+    if (url === "/api/connectors/github/credentials" && init?.method === "PUT")
+      return jsonResponse({ configured: true, owner: "acme", hint: "…p_x", running: null });
     if (url === "/api/connectors/github/sync") return jsonResponse(job("running"), 202);
     if (url === "/api/connectors/github/jobs/job1") return jsonResponse(polled);
     if (url.startsWith("/api/codebases")) return jsonResponse([]);
@@ -58,9 +60,24 @@ describe("GitHubConnectorCard", () => {
     renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
 
     expect(await screen.findByText("GitHub isn't configured")).toBeInTheDocument();
-    expect(screen.getByText("ATLAS_GITHUB_TOKEN")).toBeInTheDocument();
-    expect(screen.getByText("ATLAS_GITHUB_OWNER")).toBeInTheDocument();
+    expect(screen.getByText(/Add a GitHub token and owner below/)).toBeInTheDocument();
+    expect(screen.getByText(/Metadata, Pull requests and Deployments/)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Sync GitHub/ })).toBeDisabled();
+  });
+
+  it("saves token and owner", async () => {
+    const fetchMock = mockApi({ configured: true });
+
+    renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
+    const owner = await screen.findByLabelText("Owner (organization or user)");
+    expect(owner).toHaveValue("acme");
+    fireEvent.change(screen.getByLabelText("GitHub token"), { target: { value: "ghp_x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+
+    expect(await screen.findByText("Key saved")).toBeInTheDocument();
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(requestUrl(put?.[0] as RequestInfo)).toBe("/api/connectors/github/credentials");
+    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ token: "ghp_x", owner: "acme" });
   });
 
   it("syncs and shows the outcome", async () => {

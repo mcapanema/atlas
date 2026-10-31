@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { jsonResponse, requestUrl } from "../test/fixtures";
@@ -47,8 +47,16 @@ function mockApi({
   organizationsAfterSync = organizations,
   scheduleAfterSync = null,
   githubRunning = null,
+  hint = configured ? "…abcd" : null,
+  putResponse,
+  calls = [],
 }: {
   githubRunning?: object | null;
+  hint?: string | null;
+  /** What PUT …/linear/credentials answers; default: stores the key. */
+  putResponse?: Response;
+  /** Records every credentials request as "METHOD url body". */
+  calls?: string[];
   configured: boolean;
   running?: boolean;
   /** Job poll answers in order; the last one repeats. Default: succeeded. */
@@ -60,13 +68,26 @@ function mockApi({
   scheduleAfterSync?: object | null;
 }) {
   let synced = false;
+  let linear = { configured, hint };
   const polls = syncPolls.length > 0 ? [...syncPolls] : [succeededJob()];
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/linear")
       return statusPending
         ? new Promise<Response>(() => {})
-        : jsonResponse({ configured, running: running ? job("running", "auto") : githubRunning });
+        : jsonResponse({ ...linear, running: running ? job("running", "auto") : githubRunning });
+    if (url === "/api/connectors/linear/credentials") {
+      calls.push(`${init?.method} ${url} ${(init?.body as string | undefined) ?? ""}`.trim());
+      if (init?.method === "DELETE") linear = { configured: false, hint: null };
+      else if (putResponse) return putResponse;
+      else {
+        const { api_key } = JSON.parse(init?.body as string) as { api_key: string };
+        linear = { configured: true, hint: `…${api_key.slice(-4)}` };
+      }
+      return jsonResponse({ ...linear, running: null });
+    }
+    if (url === "/api/connectors/openrouter")
+      return jsonResponse({ configured: true, model: "anthropic/claude-sonnet-5", hint: "…or00" });
     if (url === "/api/connectors/github")
       return jsonResponse({ configured: false, owner: null, running: githubRunning });
     if (url === "/api/organizations")
@@ -97,13 +118,80 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The Linear card's credentials form. */
+function linearForm(): HTMLElement {
+  return screen.getByLabelText("Linear API key").closest("form") as HTMLElement;
+}
+
 describe("ConnectorsPage", () => {
+  it("saves a Linear key", async () => {
+    const calls: string[] = [];
+    mockApi({ configured: false, calls });
+
+    renderWithClient(<ConnectorsPage />);
+    const field = await screen.findByLabelText("Linear API key");
+    fireEvent.change(field, { target: { value: "lin_api_new1" } });
+    fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
+
+    expect(await screen.findByText("Configured · …new1")).toBeInTheDocument();
+    expect(calls).toEqual(['PUT /api/connectors/linear/credentials {"api_key":"lin_api_new1"}']);
+    expect(screen.getByLabelText("Linear API key")).toHaveValue("");
+    expect(screen.getByText("Key saved")).toBeInTheDocument();
+  });
+
+  it("shows why a key was rejected", async () => {
+    const detail = "Could not verify the Linear credentials: Linear API returned HTTP 400";
+    mockApi({ configured: false, putResponse: jsonResponse({ detail }, 422) });
+
+    renderWithClient(<ConnectorsPage />);
+    const field = await screen.findByLabelText("Linear API key");
+    fireEvent.change(field, { target: { value: "lin_api_bad" } });
+    fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
+
+    expect(await screen.findByText("Could not save the Linear key")).toBeInTheDocument();
+    expect(screen.getByText(detail)).toBeInTheDocument();
+    expect(screen.getByText("Not configured")).toBeInTheDocument();
+  });
+
+  it("removes a stored key after confirming", async () => {
+    const calls: string[] = [];
+    mockApi({ configured: true, calls });
+
+    renderWithClient(<ConnectorsPage />);
+    await screen.findByLabelText("Linear API key");
+    fireEvent.click(within(linearForm()).getByRole("button", { name: "Remove key" }));
+    expect(await screen.findByText("Remove the Linear key?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(await screen.findByText("Not configured")).toBeInTheDocument();
+    expect(calls).toEqual(["DELETE /api/connectors/linear/credentials"]);
+  });
+
+  it("never shows the stored key", async () => {
+    mockApi({ configured: true, hint: "…abcd" });
+
+    renderWithClient(<ConnectorsPage />);
+
+    const field = await screen.findByLabelText("Linear API key");
+    expect(field).toHaveValue("");
+    expect(field).toHaveAttribute("placeholder", "Enter a new key to replace the stored one");
+  });
+
+  it("shows the AI advisor card", async () => {
+    mockApi({ configured: true });
+
+    renderWithClient(<ConnectorsPage />);
+
+    expect(await screen.findByText("AI advisor (OpenRouter)")).toBeInTheDocument();
+    expect(await screen.findByText("Configured · …or00")).toBeInTheDocument();
+  });
+
   it("shows configured status and the sync outcome in one line", async () => {
     mockApi({ configured: true });
 
     renderWithClient(<ConnectorsPage />);
 
-    expect(await screen.findByText("Configured")).toBeInTheDocument();
+    expect(await screen.findByText("Configured · …abcd")).toBeInTheDocument();
     const button = await screen.findByRole("button", { name: /Sync now/ });
     await waitFor(() => expect(button).toBeEnabled());
 
@@ -218,7 +306,8 @@ describe("ConnectorsPage", () => {
     renderWithClient(<ConnectorsPage />);
 
     expect(await screen.findByText("Linear isn't configured")).toBeInTheDocument();
-    expect(screen.getAllByText("ATLAS_LINEAR_API_KEY")).toHaveLength(1);
+    expect(screen.getAllByText(/Add a Linear personal API key below/)).toHaveLength(1);
+    expect(screen.getByText(/Security & access → Personal API keys/)).toBeInTheDocument();
     expect(screen.getByText(/scheduled syncs fail/)).toBeInTheDocument();
     expect(screen.getByText("Not configured")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Sync now/ })).toBeDisabled();
