@@ -14,6 +14,9 @@ connector SDKs. It never imports `app.application` or `app.api`
 - `database/types.py` — cross-dialect column types. `UTCDateTime` wraps
   `DateTime(timezone=True)` to reattach UTC after SQLite's naive read;
   every persisted timestamp column uses it.
+- `secrets.py` — `cipher_for(key_file)`, the Fernet cipher for stored
+  connector credentials. The key file is created on first use and must be
+  backed up with the DB; losing it means re-entering the credentials.
 - `repositories/<concept>.py` — the ORM model (`<Concept>Model`) + the
   adapter class implementing the Domain `Protocol`. Include
   `to_domain()`/`from_domain()` mappers — an ORM instance must never leak

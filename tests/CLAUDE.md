@@ -19,6 +19,9 @@ the codebase or its tooling rather than one layer. Exemplar:
   instance with `app.state.sessionmaker` overridden to the in-memory
   factory. Use this for `tests/api/` tests; don't stand up a separate app
   instance per test file.
+- `_secret_key_file` (autouse) — points `ATLAS_SECRET_KEY_FILE` at the test's
+  `tmp_path` and clears the `get_settings` cache, so no test writes
+  `data/atlas.key`.
 - `file_sessionmaker` / `rules_app` / `rules_client` — the same app on a
   file-backed SQLite DB with a real connection pool, for code that opens
   concurrent sessions (the advice, sync-job and recompute runners): the

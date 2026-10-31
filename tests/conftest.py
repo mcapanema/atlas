@@ -98,6 +98,15 @@ async def rules_client(rules_app: FastAPI) -> AsyncIterator[AsyncClient]:
         yield http_client
 
 
+@pytest.fixture(autouse=True)
+def _secret_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Point the credential key file at a temp dir so no test writes ``data/atlas.key``."""
+    monkeypatch.setenv("ATLAS_SECRET_KEY_FILE", str(tmp_path / "atlas.key"))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
     """The one way tests override settings.

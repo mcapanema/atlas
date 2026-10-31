@@ -4,6 +4,7 @@
 from app.infrastructure.repositories import (
     advice_runs,
     codebases,
+    credentials,
     events,
     metric_rules,
     organizations,
@@ -19,6 +20,7 @@ from app.infrastructure.repositories import (
 __all__ = [
     "advice_runs",
     "codebases",
+    "credentials",
     "events",
     "metric_rules",
     "organizations",

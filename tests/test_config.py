@@ -14,6 +14,7 @@ _VARS = (
     "ATLAS_SQLITE_JOURNAL_MODE",
     "ATLAS_ADVISOR_MODEL",
     "ATLAS_MCP_TOKEN",
+    "ATLAS_SECRET_KEY_FILE",
     "ATLAS_ADVISOR_MAX_TOKENS",
     "ATLAS_ADVISOR_TIMEOUT_SECONDS",
 )
@@ -31,6 +32,10 @@ def test_defaults_apply_without_env() -> None:
     assert settings.database_url == "sqlite+aiosqlite:///./data/atlas.db"
     assert settings.db_echo is False
     assert settings.advisor_model == "anthropic/claude-sonnet-5"
+
+
+def test_secret_key_file_defaults_to_data_dir() -> None:
+    assert Settings(_env_file=None).secret_key_file == Path("data/atlas.key")
 
 
 def test_prefixed_env_var_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:

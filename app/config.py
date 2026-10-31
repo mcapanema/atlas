@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -32,6 +33,8 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./data/atlas.db"
     db_echo: bool = False
+    # Fernet key file for stored connector credentials; created on first use, keep with the DB.
+    secret_key_file: Path = Path("data/atlas.key")
     # SQLite journal mode: WAL on a local disk; Compose forces "delete" on its
     # bind mount, where WAL's memory-mapped -shm file isn't reliable.
     sqlite_journal_mode: SqliteJournalMode = "wal"
