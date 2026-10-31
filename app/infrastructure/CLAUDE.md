@@ -17,6 +17,10 @@ connector SDKs. It never imports `app.application` or `app.api`
 - `secrets.py` — `cipher_for(key_file)`, the Fernet cipher for stored
   connector credentials. The key file is created on first use and must be
   backed up with the DB; losing it means re-entering the credentials.
+- `credential_checks.py` — `ProviderCredentialVerifier`: checks a credential
+  with Linear/GitHub/OpenRouter before it is stored. A rejection raises
+  `CredentialCheckError` (422); an outage propagates as `DataSourceError`/
+  `AdvisorError` (502), decided by `is_rejection(status)`.
 - `repositories/<concept>.py` — the ORM model (`<Concept>Model`) + the
   adapter class implementing the Domain `Protocol`. Include
   `to_domain()`/`from_domain()` mappers — an ORM instance must never leak

@@ -17,7 +17,12 @@ class DataSourceError(Exception):
     Raised by DeliveryDataSource implementations; Presentation maps it to 502.
     Deliberately not a ValueError — the global ValueError handler returns 422
     blaming the client, which is wrong for an upstream failure.
+    `status` is the vendor's HTTP status when one answered (None for a network failure).
     """
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class DeliveryDataSource(Protocol):

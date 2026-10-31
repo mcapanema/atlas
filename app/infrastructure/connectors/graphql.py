@@ -103,7 +103,9 @@ class GraphQLClient:
     def _parse(self, response: httpx.Response) -> dict[str, Any]:
         vendor = self._vendor
         if response.status_code != 200:
-            raise self._error(f"{vendor} API returned HTTP {response.status_code}")
+            raise self._error(
+                f"{vendor} API returned HTTP {response.status_code}", status=response.status_code
+            )
         try:
             payload = response.json()
         except ValueError as exc:
@@ -111,7 +113,9 @@ class GraphQLClient:
         if not isinstance(payload, dict):
             raise self._error(f"{vendor} response is not an object")
         if payload.get("errors"):
-            raise self._error(f"{vendor} GraphQL errors: {payload['errors']}")
+            raise self._error(
+                f"{vendor} GraphQL errors: {payload['errors']}", status=response.status_code
+            )
         data: dict[str, Any] | None = payload.get("data")
         if data is None:
             raise self._error(f"{vendor} response has no data")
