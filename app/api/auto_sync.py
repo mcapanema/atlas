@@ -27,7 +27,7 @@ ever runs several workers.
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -44,16 +44,22 @@ TICK_SECONDS = 60.0
 _NEVER = datetime.min.replace(tzinfo=UTC)
 
 
+async def _no_code_source(_session: AsyncSession) -> CodeHostSource | None:
+    return None
+
+
 class AutoSyncRunner:
     """Runs scheduled syncs, one organization at a time."""
 
     def __init__(
         self,
         sessionmaker: async_sessionmaker[AsyncSession],
-        source_factory: Callable[[], DeliveryDataSource | None],
+        source_factory: Callable[[AsyncSession], Awaitable[DeliveryDataSource | None]],
         *,
         jobs: SyncJobRunner,
-        code_source_factory: Callable[[], CodeHostSource | None] = lambda: None,
+        code_source_factory: Callable[
+            [AsyncSession], Awaitable[CodeHostSource | None]
+        ] = _no_code_source,
         tick_seconds: float = TICK_SECONDS,
     ) -> None:
         self._sessionmaker = sessionmaker
@@ -104,7 +110,8 @@ class AutoSyncRunner:
 
     async def _sync(self, organization_id: UUID) -> str | None:
         """Run one organization's sync job; the error message, if it failed."""
-        source = self._source_factory()
+        async with self._sessionmaker() as session:
+            source = await self._source_factory(session)
         if source is None:
             logger.warning("Auto sync skipped for %s: %s", organization_id, LINEAR_NOT_CONFIGURED)
             return LINEAR_NOT_CONFIGURED
@@ -115,7 +122,8 @@ class AutoSyncRunner:
 
     async def _sync_code(self, organization_id: UUID) -> None:
         """Pull GitHub after a good Linear sync; a failure only logs."""
-        code_source = self._code_source_factory()
+        async with self._sessionmaker() as session:
+            code_source = await self._code_source_factory(session)
         if code_source is None:
             return
         job = await self._jobs.run_code(

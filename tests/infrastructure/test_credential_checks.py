@@ -99,7 +99,7 @@ async def test_github_bad_token_rejected() -> None:
         )
 
 
-async def test_github_token_and_owner_accepted() -> None:
+async def test_github_credential_with_owner_accepted() -> None:
     def answer(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer ghp"
         return httpx.Response(200, json={"data": {"repositoryOwner": {"login": "acme"}}})

@@ -36,7 +36,7 @@ async def test_lifespan_disposes_the_engine_on_shutdown(
 async def test_lifespan_starts_auto_sync_and_stops_it_on_shutdown(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
-    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
     app = create_app()
     with mock.patch.object(AutoSyncRunner, "tick", autospec=True, return_value=0):
         async with lifespan(app):
@@ -49,7 +49,7 @@ async def test_lifespan_starts_auto_sync_and_stops_it_on_shutdown(
 async def test_lifespan_cancels_a_running_sync_job(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
-    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
     app = create_app()
     entered = asyncio.Event()
 
@@ -85,7 +85,7 @@ async def test_lifespan_auto_sync_and_routes_share_one_sync_job_runner(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
     # One lock for every sync: a route's job runner is the one auto sync defers to.
-    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
     app = create_app()
     with mock.patch.object(AutoSyncRunner, "start", autospec=True):
         async with lifespan(app):
@@ -99,7 +99,7 @@ async def test_lifespan_fails_runs_left_running(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
     url = f"sqlite+aiosqlite:///{tmp_path}/lifespan.db"
-    settings_env(database_url=url, linear_api_key="")
+    settings_env(database_url=url)
     engine = create_async_engine(url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

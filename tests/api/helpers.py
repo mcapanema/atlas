@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
-from app.domain.credentials.entities import Credential
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.metric_rules.entities import RuleOverrides
 from app.infrastructure.repositories.credentials import SqlAlchemyCredentialRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
@@ -102,4 +102,14 @@ async def store_credential(
     cipher = cipher_for(get_settings().secret_key_file)
     async with sessionmaker() as session:
         await SqlAlchemyCredentialRepository(session, cipher).save(credential)
+        await session.commit()
+
+
+async def remove_credential(
+    sessionmaker: async_sessionmaker[AsyncSession], integration: Integration
+) -> None:
+    """Remove a stored connector credential, as the Connectors page's Remove does."""
+    cipher = cipher_for(get_settings().secret_key_file)
+    async with sessionmaker() as session:
+        await SqlAlchemyCredentialRepository(session, cipher).delete(integration)
         await session.commit()

@@ -1,11 +1,9 @@
 import asyncio
 import dataclasses
-from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
@@ -77,17 +75,22 @@ async def _outcome(app: FastAPI, client: AsyncClient, response: Response) -> dic
     return body
 
 
+_LINEAR_KEY = Credential(Integration.LINEAR, "lin_api_test_abcd1234")
+
+
 @pytest_asyncio.fixture
 async def linear_configured(sessionmaker: async_sessionmaker[AsyncSession]) -> None:
-    await store_credential(sessionmaker, Credential(Integration.LINEAR, "lin_api_test_abcd1234"))
+    """A stored Linear key for tests on `client` (the in-memory DB)."""
+    await store_credential(sessionmaker, _LINEAR_KEY)
 
 
-@pytest.fixture
-def linear_unconfigured(settings_env: Callable[..., None]) -> None:
-    settings_env(linear_api_key="")
+@pytest_asyncio.fixture
+async def linear_configured_rules(file_sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    """A stored Linear key for tests on `rules_client` (the file DB)."""
+    await store_credential(file_sessionmaker, _LINEAR_KEY)
 
 
-async def test_status_reports_unconfigured(client: AsyncClient, linear_unconfigured: None) -> None:
+async def test_status_reports_unconfigured(client: AsyncClient) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
@@ -101,9 +104,7 @@ async def test_status_reports_configured(client: AsyncClient, linear_configured:
     assert response.json() == {"configured": True, "hint": "…1234", "running": None}
 
 
-async def test_sync_returns_409_when_unconfigured(
-    client: AsyncClient, linear_unconfigured: None
-) -> None:
+async def test_sync_returns_409_when_unconfigured(client: AsyncClient) -> None:
     response = await client.post(
         "/api/connectors/linear/sync", json={"organization_id": str(uuid4())}
     )
@@ -250,7 +251,7 @@ async def test_sync_without_organization_is_422_when_ambiguous(
 
 
 async def test_rebuild_resyncs_events_and_recomputes_history(
-    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured_rules: None
 ) -> None:
     rules_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
@@ -273,7 +274,7 @@ async def test_rebuild_resyncs_events_and_recomputes_history(
 
 
 async def test_a_plain_sync_does_not_recompute_history(
-    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured_rules: None
 ) -> None:
     rules_app.dependency_overrides[get_delivery_data_source] = _fake_source
     org = (await rules_client.post("/api/organizations", json={"name": "Acme"})).json()
@@ -289,7 +290,7 @@ async def test_a_plain_sync_does_not_recompute_history(
 
 
 async def test_rebuild_for_an_unknown_organization_is_404_and_leaves_the_runner_usable(
-    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured_rules: None
 ) -> None:
     rules_app.dependency_overrides[get_delivery_data_source] = _fake_source
 
@@ -443,9 +444,7 @@ async def test_team_sync_of_a_hand_made_team_is_422(
     assert "nothing to sync" in response.json()["detail"]
 
 
-async def test_team_sync_returns_409_when_unconfigured(
-    client: AsyncClient, linear_unconfigured: None
-) -> None:
+async def test_team_sync_returns_409_when_unconfigured(client: AsyncClient) -> None:
     response = await client.post(f"/api/connectors/linear/teams/{uuid4()}/sync")
 
     assert response.status_code == 409
@@ -520,7 +519,7 @@ async def test_sync_answers_202_with_a_running_job(
 
 
 async def test_sync_while_a_covering_job_runs_returns_that_job(
-    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured_rules: None
 ) -> None:
     # "Sync now" clicked while a sync of the same organization runs: the
     # user sees that sync's result, not an error and not a second sync.
@@ -539,7 +538,7 @@ async def test_sync_while_a_covering_job_runs_returns_that_job(
 
 
 async def test_rebuild_while_a_plain_sync_runs_is_409(
-    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured_rules: None
 ) -> None:
     source = _BlockingSource()
     rules_app.dependency_overrides[get_delivery_data_source] = lambda: source
@@ -568,7 +567,7 @@ async def test_unknown_job_is_404(client: AsyncClient) -> None:
 
 
 async def test_status_reports_the_running_job(
-    rules_app: FastAPI, rules_client: AsyncClient, linear_configured: None
+    rules_app: FastAPI, rules_client: AsyncClient, linear_configured_rules: None
 ) -> None:
     source = _BlockingSource()
     rules_app.dependency_overrides[get_delivery_data_source] = lambda: source

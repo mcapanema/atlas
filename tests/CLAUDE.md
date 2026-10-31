@@ -29,7 +29,7 @@ the codebase or its tooling rather than one layer. Exemplar:
   and advice API tests use `rules_client`. `rules_app` closes all three
   runners on teardown; `helpers.settle(app)` waits for them to go idle.
 - `settings_env` — the one way to override settings in a test:
-  `settings_env(linear_api_key="x")` sets `ATLAS_LINEAR_API_KEY` and clears
+  `settings_env(db_echo="true")` sets `ATLAS_DB_ECHO` and clears
   the `get_settings` cache (cleared again on teardown). Pass `""` to
   disable a key hermetically (a real env var beats `.env`). Never
   `monkeypatch.setattr` `get_settings` at an import site.
@@ -60,6 +60,10 @@ test_...` functions need no `@pytest.mark.asyncio` decorator.
   (pinned to 12:00 UTC). Never `datetime.now(UTC) - timedelta(...)`
   directly — exact offsets put date-bucket assertions one midnight away
   from flaking.
+- A connector or the advisor is configured with `helpers.store_credential(...)`
+  (and unset with `remove_credential`) into the sessionmaker of the app under
+  test (`sessionmaker` for `client`, `file_sessionmaker` for `rules_client`),
+  never with `settings_env`.
 
 ## Coverage
 

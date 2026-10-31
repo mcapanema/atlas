@@ -26,6 +26,7 @@ from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorPort
+from app.domain.credentials.entities import Integration
 from app.domain.credentials.port import CredentialVerifier
 from app.domain.credentials.repository import CredentialRepository
 from app.domain.sync.port import CodeHostSource, DeliveryDataSource
@@ -192,16 +193,18 @@ def get_forecast_service(session: SessionDep) -> ForecastService:
 ForecastServiceDep = Annotated[ForecastService, Depends(get_forecast_service)]
 
 
-def get_advisor_port() -> AdvisorPort:
-    settings = get_settings()
-    if not settings.openrouter_api_key:
+async def get_advisor_port(session: SessionDep) -> AdvisorPort:
+    credential = await credential_repository_for(session).get(Integration.OPENROUTER)
+    # An OpenRouter credential always carries a model; the second test narrows the type.
+    if credential is None or credential.model is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Advisor is not configured; set ATLAS_OPENROUTER_API_KEY",
+            detail="Advisor is not configured; add an OpenRouter API key on the Connectors page",
         )
+    settings = get_settings()
     return OpenRouterAdvisor(
-        api_key=settings.openrouter_api_key,
-        model=settings.advisor_model,
+        api_key=credential.secret,
+        model=credential.model,
         self_critique=settings.advisor_self_critique,
         max_tokens=settings.advisor_max_tokens,
         timeout_seconds=settings.advisor_timeout_seconds,
@@ -250,19 +253,21 @@ def get_advice_run_service(session: SessionDep) -> AdviceRunService:
 AdviceRunServiceDep = Annotated[AdviceRunService, Depends(get_advice_run_service)]
 
 
-LINEAR_NOT_CONFIGURED = "Linear connector is not configured; set ATLAS_LINEAR_API_KEY"
+LINEAR_NOT_CONFIGURED = (
+    "Linear connector is not configured; add a Linear API key on the Connectors page"
+)
 
 
-def linear_data_source() -> DeliveryDataSource | None:
-    """The Linear adapter, or None while ATLAS_LINEAR_API_KEY is unset."""
-    settings = get_settings()
-    if not settings.linear_api_key:
+async def linear_data_source(session: AsyncSession) -> DeliveryDataSource | None:
+    """The Linear adapter on the stored key, or None while none is stored."""
+    credential = await credential_repository_for(session).get(Integration.LINEAR)
+    if credential is None:
         return None
-    return LinearDataSource(LinearGraphQLClient(settings.linear_api_key))
+    return LinearDataSource(LinearGraphQLClient(credential.secret))
 
 
-def get_delivery_data_source() -> DeliveryDataSource:
-    source = linear_data_source()
+async def get_delivery_data_source(session: SessionDep) -> DeliveryDataSource:
+    source = await linear_data_source(session)
     if source is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=LINEAR_NOT_CONFIGURED)
     return source
@@ -292,20 +297,21 @@ SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
 
 
 GITHUB_NOT_CONFIGURED = (
-    "GitHub connector is not configured; set ATLAS_GITHUB_TOKEN and ATLAS_GITHUB_OWNER"
+    "GitHub connector is not configured; add a GitHub token and owner on the Connectors page"
 )
 
 
-def github_code_source() -> CodeHostSource | None:
-    """The GitHub adapter, or None until ATLAS_GITHUB_TOKEN and ATLAS_GITHUB_OWNER are set."""
-    settings = get_settings()
-    if not (settings.github_token and settings.github_owner):
+async def github_code_source(session: AsyncSession) -> CodeHostSource | None:
+    """The GitHub adapter on the stored token and owner, or None while none is stored."""
+    credential = await credential_repository_for(session).get(Integration.GITHUB)
+    # A GitHub credential always carries an owner; the second test narrows the type.
+    if credential is None or credential.owner is None:
         return None
-    return GitHubDataSource(GitHubGraphQLClient(settings.github_token), settings.github_owner)
+    return GitHubDataSource(GitHubGraphQLClient(credential.secret), credential.owner)
 
 
-def get_code_host_source() -> CodeHostSource:
-    source = github_code_source()
+async def get_code_host_source(session: SessionDep) -> CodeHostSource:
+    source = await github_code_source(session)
     if source is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=GITHUB_NOT_CONFIGURED)
     return source

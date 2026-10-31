@@ -12,7 +12,7 @@ _VARS = (
     "ATLAS_DATABASE_URL",
     "ATLAS_DB_ECHO",
     "ATLAS_SQLITE_JOURNAL_MODE",
-    "ATLAS_ADVISOR_MODEL",
+    "ATLAS_ADVISOR_SELF_CRITIQUE",
     "ATLAS_MCP_TOKEN",
     "ATLAS_SECRET_KEY_FILE",
     "ATLAS_ADVISOR_MAX_TOKENS",
@@ -31,7 +31,7 @@ def test_defaults_apply_without_env() -> None:
 
     assert settings.database_url == "sqlite+aiosqlite:///./data/atlas.db"
     assert settings.db_echo is False
-    assert settings.advisor_model == "anthropic/claude-sonnet-5"
+    assert settings.advisor_self_critique is False
 
 
 def test_secret_key_file_defaults_to_data_dir() -> None:
@@ -72,19 +72,19 @@ def test_unprefixed_env_var_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_env_file_is_read(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
-    env_file.write_text("ATLAS_ADVISOR_MODEL=model-from-dotenv\n")
+    env_file.write_text("ATLAS_ADVISOR_SELF_CRITIQUE=true\n")
 
-    assert Settings(_env_file=env_file).advisor_model == "model-from-dotenv"
+    assert Settings(_env_file=env_file).advisor_self_critique is True
 
 
 def test_real_env_var_beats_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The documented contract (Settings docstring, app/config.py): real env vars always win
     # over .env. tests/api/test_connectors.py's hermeticity relies on it.
     env_file = tmp_path / ".env"
-    env_file.write_text("ATLAS_ADVISOR_MODEL=model-from-dotenv\n")
-    monkeypatch.setenv("ATLAS_ADVISOR_MODEL", "model-from-env")
+    env_file.write_text("ATLAS_DB_ECHO=true\n")
+    monkeypatch.setenv("ATLAS_DB_ECHO", "false")
 
-    assert Settings(_env_file=env_file).advisor_model == "model-from-env"
+    assert Settings(_env_file=env_file).db_echo is False
 
 
 _GOOD_TOKEN = "test-token-0123456789abcdefghij"

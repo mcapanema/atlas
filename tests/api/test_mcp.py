@@ -270,7 +270,6 @@ async def test_run_sync_surfaces_unconfigured_connector(
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        settings_env(mcp_token=TOKEN, linear_api_key="")
         transport = ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
             org = await client.post("/api/organizations", json={"name": "Acme"})
@@ -280,7 +279,7 @@ async def test_run_sync_surfaces_unconfigured_connector(
             result = await session.call_tool("run_sync", {"organization_id": org_id})
             assert result.is_error
             # The 409-until-configured detail must reach the model verbatim.
-            assert "ATLAS_LINEAR_API_KEY" in tool_text(result)
+            assert "Connectors page" in tool_text(result)
 
 
 class _BlockingSource(FakeDataSource):
@@ -316,7 +315,6 @@ async def test_run_sync_waits_for_the_job_and_reports_counts(
 ) -> None:
     monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
     async with running_app(sessionmaker, settings_env) as app:
-        settings_env(mcp_token=TOKEN, linear_api_key="lin_api_test")
         source = FakeDataSource(teams=[SourceTeam(external_id="lt1", name="Platform")])
 
         result = await _run_sync(app, source)
@@ -335,8 +333,6 @@ async def test_run_sync_reports_a_failed_job_as_a_tool_error(
 ) -> None:
     monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
     async with running_app(sessionmaker, settings_env) as app:
-        settings_env(mcp_token=TOKEN, linear_api_key="lin_api_test")
-
         result = await _run_sync(app, _FailingSource())
 
     assert result.is_error
@@ -352,7 +348,6 @@ async def test_run_sync_returns_still_running_after_the_wait(
     monkeypatch.setattr(mcp_server, "RUN_SYNC_WAIT_SECONDS", 0.05)
     monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
     async with running_app(sessionmaker, settings_env) as app:
-        settings_env(mcp_token=TOKEN, linear_api_key="lin_api_test")
         source = _BlockingSource()
 
         result = await _run_sync(app, source)

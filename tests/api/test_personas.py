@@ -99,13 +99,10 @@ async def test_guidance_is_empty_initially(client: AsyncClient) -> None:
     assert response.json() == []
 
 
-async def test_reflect_409_when_unconfigured(
-    client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
-    settings_env(openrouter_api_key="")
+async def test_reflect_409_when_unconfigured(client: AsyncClient) -> None:
     response = await client.post("/api/personas/agile_coach/reflect")
     assert response.status_code == 409
-    assert "OPENROUTER" in response.json()["detail"]
+    assert "Connectors page" in response.json()["detail"]
 
 
 async def test_reflect_409_when_no_new_feedback(client: AsyncClient, test_app: FastAPI) -> None:
