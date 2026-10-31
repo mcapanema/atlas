@@ -5,11 +5,13 @@ from uuid import uuid4
 
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_advisor_port
 from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
-from tests.api.helpers import create_team, settle
+from app.domain.credentials.entities import Credential, Integration
+from tests.api.helpers import create_team, settle, store_credential
 
 
 class FakeAdvisor:
@@ -45,19 +47,18 @@ class FakeAdvisor:
         )
 
 
-async def test_status_reports_unconfigured(
-    client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
-    settings_env(openrouter_api_key="")
+async def test_status_reports_unconfigured(client: AsyncClient) -> None:
     response = await client.get("/api/recommendations/status")
     assert response.status_code == 200
     assert response.json() == {"configured": False}
 
 
 async def test_status_reports_configured(
-    client: AsyncClient, settings_env: Callable[..., None]
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> None:
-    settings_env(openrouter_api_key="sk-test")
+    await store_credential(
+        sessionmaker, Credential(Integration.OPENROUTER, "sk-test", model="openai/gpt-5")
+    )
     response = await client.get("/api/recommendations/status")
     assert response.json() == {"configured": True}
 

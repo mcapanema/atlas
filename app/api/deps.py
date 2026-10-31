@@ -8,6 +8,7 @@ from app.application.advisor.runs import AdviceRunService
 from app.application.advisor.service import AdvisorService
 from app.application.codebases.service import CodebaseService
 from app.application.codebases.sync import CodeSyncService
+from app.application.credentials.service import CredentialService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
@@ -25,18 +26,22 @@ from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorPort
+from app.domain.credentials.port import CredentialVerifier
+from app.domain.credentials.repository import CredentialRepository
 from app.domain.sync.port import CodeHostSource, DeliveryDataSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
 from app.infrastructure.connectors.github.datasource import GitHubDataSource
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
+from app.infrastructure.credential_checks import ProviderCredentialVerifier
 from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
 from app.infrastructure.repositories.codebases import (
     SqlAlchemyCodebaseRepository,
     SqlAlchemyDeploymentRepository,
     SqlAlchemyPullRequestRepository,
 )
+from app.infrastructure.repositories.credentials import SqlAlchemyCredentialRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
@@ -53,6 +58,7 @@ from app.infrastructure.repositories.snapshots import (
 from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
+from app.infrastructure.secrets import cipher_for
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -83,6 +89,23 @@ def rules_resolver_for(session: AsyncSession) -> MetricRulesResolver:
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
     )
+
+
+def credential_repository_for(session: AsyncSession) -> CredentialRepository:
+    return SqlAlchemyCredentialRepository(session, cipher_for(get_settings().secret_key_file))
+
+
+def get_credential_verifier() -> CredentialVerifier:
+    return ProviderCredentialVerifier()
+
+
+def get_credential_service(
+    session: SessionDep, verifier: Annotated[CredentialVerifier, Depends(get_credential_verifier)]
+) -> CredentialService:
+    return CredentialService(credential_repository_for(session), verifier)
+
+
+CredentialServiceDep = Annotated[CredentialService, Depends(get_credential_service)]
 
 
 def get_organization_service(session: SessionDep) -> OrganizationService:

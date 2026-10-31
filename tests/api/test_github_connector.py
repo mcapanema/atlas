@@ -3,13 +3,15 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import GITHUB_NOT_CONFIGURED, get_code_host_source, get_delivery_data_source
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.sync.source import SourceCodebase, SourceTeam
-from tests.api.helpers import settle
+from tests.api.helpers import settle, store_credential
 from tests.fakes import FakeDataSource, InMemoryCodeHostSource
 
 
@@ -21,9 +23,15 @@ def _code_source() -> InMemoryCodeHostSource:
     )
 
 
-@pytest.fixture
-def github_configured(settings_env: Callable[..., None]) -> None:
+@pytest_asyncio.fixture
+async def github_configured(
+    settings_env: Callable[..., None], file_sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    # The sync tests still build their source from the environment.
     settings_env(github_token="ghp_test", github_owner="acme")
+    await store_credential(
+        file_sessionmaker, Credential(Integration.GITHUB, "ghp_test_abcd1234", owner="acme")
+    )
 
 
 async def _org(client: AsyncClient) -> str:
@@ -33,15 +41,11 @@ async def _org(client: AsyncClient) -> str:
     return org_id
 
 
-async def test_status_unconfigured_without_owner(
-    settings_env: Callable[..., None], rules_client: AsyncClient
-) -> None:
-    settings_env(github_token="t", github_owner="")
-
+async def test_status_unconfigured_without_credentials(rules_client: AsyncClient) -> None:
     response = await rules_client.get("/api/connectors/github")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False, "owner": None, "running": None}
+    assert response.json() == {"configured": False, "owner": None, "hint": None, "running": None}
 
 
 async def test_status_reports_configured_with_owner(
@@ -49,7 +53,12 @@ async def test_status_reports_configured_with_owner(
 ) -> None:
     response = await rules_client.get("/api/connectors/github")
 
-    assert response.json() == {"configured": True, "owner": "acme", "running": None}
+    assert response.json() == {
+        "configured": True,
+        "owner": "acme",
+        "hint": "…1234",
+        "running": None,
+    }
 
 
 async def test_sync_answers_409_until_configured(

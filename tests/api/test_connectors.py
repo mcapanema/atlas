@@ -6,12 +6,15 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from httpx import AsyncClient, Response
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_delivery_data_source
 from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.events.entities import EventType
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import (
@@ -22,7 +25,7 @@ from app.domain.sync.source import (
     SourceWorkItem,
 )
 from app.domain.work_items.entities import WorkItemType
-from tests.api.helpers import create_org_and_team, settle
+from tests.api.helpers import create_org_and_team, settle, store_credential
 from tests.fakes import FakeDataSource
 
 
@@ -74,9 +77,9 @@ async def _outcome(app: FastAPI, client: AsyncClient, response: Response) -> dic
     return body
 
 
-@pytest.fixture
-def linear_configured(settings_env: Callable[..., None]) -> None:
-    settings_env(linear_api_key="lin_api_test")
+@pytest_asyncio.fixture
+async def linear_configured(sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    await store_credential(sessionmaker, Credential(Integration.LINEAR, "lin_api_test_abcd1234"))
 
 
 @pytest.fixture
@@ -88,14 +91,14 @@ async def test_status_reports_unconfigured(client: AsyncClient, linear_unconfigu
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False, "running": None}
+    assert response.json() == {"configured": False, "hint": None, "running": None}
 
 
 async def test_status_reports_configured(client: AsyncClient, linear_configured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": True, "running": None}
+    assert response.json() == {"configured": True, "hint": "…1234", "running": None}
 
 
 async def test_sync_returns_409_when_unconfigured(

@@ -1,9 +1,16 @@
 import re
 from datetime import date, datetime, time
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import PydanticCustomError
 
 from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
@@ -213,6 +220,8 @@ class SyncJobRead(BaseModel):
 
 
 class LinearStatusRead(IntegrationStatusRead):
+    # The last characters of the stored key; None while unset.
+    hint: str | None
     # The sync job running now, manual or automatic; a new request either
     # gets it back (it covers the request) or a 409.
     running: SyncJobRead | None
@@ -221,8 +230,42 @@ class LinearStatusRead(IntegrationStatusRead):
 class GitHubStatusRead(IntegrationStatusRead):
     # The configured organization or user login; None while unset.
     owner: str | None
+    hint: str | None
     # The sync job running now, of any kind; as on LinearStatusRead.
     running: SyncJobRead | None
+
+
+class OpenRouterStatusRead(IntegrationStatusRead):
+    # The stored advisor model, or the default while unconfigured.
+    model: str
+    hint: str | None
+
+
+DEFAULT_ADVISOR_MODEL = "anthropic/claude-sonnet-5"
+
+Secret = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=512)]
+_Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+_ModelId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+class LinearCredentialsWrite(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    api_key: Secret
+
+
+class GitHubCredentialsWrite(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    token: Secret
+    owner: _Label
+
+
+class OpenRouterCredentialsWrite(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    api_key: Secret
+    model: _ModelId = DEFAULT_ADVISOR_MODEL
 
 
 class CodebaseRead(BaseModel):
