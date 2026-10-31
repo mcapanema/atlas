@@ -20,7 +20,7 @@ connector SDKs. It never imports `app.application` or `app.api`
 - `credential_checks.py` — `ProviderCredentialVerifier`: checks a credential
   with Linear/GitHub/OpenRouter before it is stored. A rejection raises
   `CredentialCheckError` (422); an outage propagates as `DataSourceError`/
-  `AdvisorError` (502), decided by `is_rejection(status)`.
+  `AdvisorError` (502), decided by `is_rejection(status)` (defined in `ai/key_check.py`).
 - `repositories/<concept>.py` — the ORM model (`<Concept>Model`) + the
   adapter class implementing the Domain `Protocol`. Include
   `to_domain()`/`from_domain()` mappers — an ORM instance must never leak

@@ -10,21 +10,12 @@ import httpx
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.credentials.port import CredentialCheckError
 from app.domain.sync.port import DataSourceError
-from app.infrastructure.ai.key_check import check_openrouter_key
+from app.infrastructure.ai.key_check import check_openrouter_key, is_rejection
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 
 _GITHUB_OWNER_QUERY = "query($owner: String!) { repositoryOwner(login: $owner) { login } }"
-
-
-def is_rejection(status: int | None) -> bool:
-    """Whether a vendor answer is about the credentials rather than an outage.
-
-    A GraphQL `errors` payload at 200 counts: the check queries are trivial,
-    so an error there is about the credentials.
-    """
-    return status is not None and status < 500 and status != 429
 
 
 class ProviderCredentialVerifier:

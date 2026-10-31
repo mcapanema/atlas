@@ -8,8 +8,13 @@ from app.domain.credentials.port import CredentialCheckError
 OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 
 
-def _is_rejection(status: int) -> bool:
-    return status < 500 and status != 429
+def is_rejection(status: int | None) -> bool:
+    """Whether a vendor answer is about the credentials rather than an outage.
+
+    A GraphQL `errors` payload at 200 counts: the check queries are trivial,
+    so an error there is about the credentials.
+    """
+    return status is not None and status < 500 and status != 429
 
 
 async def check_openrouter_key(
@@ -26,7 +31,7 @@ async def check_openrouter_key(
     status = response.status_code
     if status == 200:
         return
-    if _is_rejection(status):
+    if is_rejection(status):
         raise CredentialCheckError(
             f"Could not verify the OpenRouter credentials: OpenRouter returned HTTP {status}"
         )

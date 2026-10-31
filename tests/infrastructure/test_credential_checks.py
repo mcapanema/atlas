@@ -5,8 +5,9 @@ from app.domain.advisor.port import AdvisorError
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.credentials.port import CredentialCheckError
 from app.domain.sync.port import DataSourceError
+from app.infrastructure.ai.key_check import is_rejection
 from app.infrastructure.connectors import graphql
-from app.infrastructure.credential_checks import ProviderCredentialVerifier, is_rejection
+from app.infrastructure.credential_checks import ProviderCredentialVerifier
 
 
 async def _no_sleep(delay: float) -> None:
