@@ -1,5 +1,6 @@
 import { Alert, Checkbox, Form, Input, Modal } from "antd";
 
+import { newPasswordRules, PASSWORD_HINT } from "../lib/passwordRules";
 import { useCreateUser } from "../api/users";
 
 interface Values {
@@ -10,7 +11,6 @@ interface Values {
 }
 
 const FORM_ID = "add-user";
-const PASSWORD_HINT = "At least 12 characters";
 
 /** Admin creates an account with a starting password. */
 export function AddUserModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -60,10 +60,7 @@ export function AddUserModal({ open, onClose }: { open: boolean; onClose: () => 
           label="Password"
           name="password"
           extra={PASSWORD_HINT}
-          rules={[
-            { required: true, message: "Enter a password" },
-            { min: 12, message: PASSWORD_HINT },
-          ]}
+          rules={newPasswordRules("Enter a password")}
         >
           <Input.Password autoComplete="new-password" />
         </Form.Item>

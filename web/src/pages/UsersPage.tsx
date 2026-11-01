@@ -10,34 +10,33 @@ import { formatDateTime } from "../lib/dates";
 
 function RowActions({
   user,
-  isSelf,
+  removing,
   onReset,
   onRemove,
 }: {
   user: CurrentUser;
-  isSelf: boolean;
+  removing: boolean;
   onReset: () => void;
-  onRemove: () => void;
+  onRemove: () => Promise<unknown>;
 }) {
   return (
     <Flex gap="small" justify="flex-end">
-      <Button size="small" onClick={onReset}>
+      <Button size="small" aria-label={`Reset password for ${user.name}`} onClick={onReset}>
         Reset password
       </Button>
-      {isSelf ? null : (
-        <Popconfirm
-          title={`Remove ${user.name}? Their sessions end now.`}
-          okText="OK"
-          cancelText="Cancel"
-          // Keyboard: Enter on Remove, then Enter again confirms.
-          okButtonProps={{ autoFocus: true }}
-          onConfirm={onRemove}
-        >
-          <Button size="small" danger>
-            Remove
-          </Button>
-        </Popconfirm>
-      )}
+      <Popconfirm
+        title={`Remove ${user.name}? Their sessions end now.`}
+        okText="OK"
+        cancelText="Cancel"
+        // Keyboard: Enter on Remove, then Enter again confirms; one DELETE at a time.
+        okButtonProps={{ autoFocus: true, loading: removing }}
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Popconfirm awaits this promise to keep OK loading
+        onConfirm={onRemove}
+      >
+        <Button size="small" danger aria-label={`Remove ${user.name}`}>
+          Remove
+        </Button>
+      </Popconfirm>
     </Flex>
   );
 }
@@ -75,18 +74,23 @@ function UsersTable() {
       align: "right",
       fixed: "right",
       key: "actions",
-      render: (_, user) => (
-        <RowActions
-          user={user}
-          isSelf={user.id === me?.id}
-          onReset={() => {
-            setResetting(user);
-          }}
-          onRemove={() => {
-            remove.mutate(user.id);
-          }}
-        />
-      ),
+      // Your own row has no actions: resetting yourself ends your session (use
+      // Change password in the account menu) and you cannot remove yourself.
+      render: (_, user) =>
+        user.id === me?.id ? null : (
+          <RowActions
+            user={user}
+            removing={remove.isPending}
+            onReset={() => {
+              setResetting(user);
+            }}
+            onRemove={() => {
+              // The promise keeps the popconfirm open (OK loading) until the DELETE ends;
+              // a failure shows in the page alert, so it is not rethrown here.
+              return remove.mutateAsync(user.id).catch(() => undefined);
+            }}
+          />
+        ),
     },
   ];
 

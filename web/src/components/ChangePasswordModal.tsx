@@ -1,5 +1,6 @@
 import { Alert, App, Form, Input, Modal } from "antd";
 
+import { confirmProps, newPasswordRules, PASSWORD_HINT } from "../lib/passwordRules";
 import { useChangePassword } from "../api/auth";
 
 interface Values {
@@ -9,7 +10,6 @@ interface Values {
 }
 
 const FORM_ID = "change-password";
-const PASSWORD_HINT = "At least 12 characters";
 
 /** Lets the signed-in user replace their own password. */
 export function ChangePasswordModal({
@@ -79,26 +79,14 @@ export function ChangePasswordModal({
           label="New password"
           name="new_password"
           extra={PASSWORD_HINT}
-          rules={[
-            { required: true, message: "Enter a new password" },
-            { min: 12, message: PASSWORD_HINT },
-          ]}
+          rules={newPasswordRules("Enter a new password")}
         >
           <Input.Password autoComplete="new-password" />
         </Form.Item>
         <Form.Item
           label="Confirm new password"
           name="confirm"
-          dependencies={["new_password"]}
-          rules={[
-            { required: true, message: "Confirm the new password" },
-            ({ getFieldValue }) => ({
-              validator: (_, value: string | undefined) =>
-                !value || getFieldValue("new_password") === value
-                  ? Promise.resolve()
-                  : Promise.reject(new Error("The passwords don't match")),
-            }),
-          ]}
+          {...confirmProps("new_password", "Confirm the new password")}
         >
           <Input.Password autoComplete="new-password" />
         </Form.Item>

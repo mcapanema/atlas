@@ -2,6 +2,7 @@ import { Alert, Button, Form, Input, Layout, Typography } from "antd";
 import { useEffect } from "react";
 
 import { useSetup, useSignIn } from "../api/auth";
+import { PASSWORD_HINT, passwordLengthRules } from "../lib/passwordRules";
 
 interface Credentials {
   email: string;
@@ -11,7 +12,6 @@ interface Credentials {
 
 const SETUP_HINT =
   "This account becomes the administrator. Add the rest of the team from Setup → Users.";
-const PASSWORD_HINT = "At least 12 characters";
 
 /** Full-page sign-in; the first-run account setup while no user exists. */
 export function SignInPage({ setupRequired }: { setupRequired: boolean }) {
@@ -84,7 +84,7 @@ function PasswordField({ setupRequired }: { setupRequired: boolean }) {
       extra={setupRequired ? PASSWORD_HINT : undefined}
       rules={[
         { required: true, message: "Enter your password" },
-        ...(setupRequired ? [{ min: 12, message: PASSWORD_HINT }] : []),
+        ...(setupRequired ? passwordLengthRules : []),
       ]}
     >
       <Input.Password autoComplete={setupRequired ? "new-password" : "current-password"} />

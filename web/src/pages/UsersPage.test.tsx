@@ -41,22 +41,24 @@ describe("UsersPage", () => {
     }
   });
 
-  it("marks the signed-in admin's row You and offers no Remove there", async () => {
+  it("marks the signed-in admin's row You and offers no actions there", async () => {
     mockApi();
     renderWithClient(<UsersPage />);
     const adminRow = (await screen.findByText("admin@atlas.local")).closest("tr")!;
     expect(within(adminRow).getByText("You")).toBeInTheDocument();
-    expect(within(adminRow).queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(within(adminRow).queryByRole("button")).toBeNull();
     const anaRow = screen.getByText("ana@acme.com").closest("tr")!;
-    expect(within(anaRow).getByRole("button", { name: "Remove" })).toBeInTheDocument();
-    expect(within(anaRow).getByRole("button", { name: "Reset password" })).toBeInTheDocument();
+    expect(within(anaRow).getByRole("button", { name: "Remove Ana" })).toBeInTheDocument();
+    expect(
+      within(anaRow).getByRole("button", { name: "Reset password for Ana" }),
+    ).toBeInTheDocument();
   });
 
   it("removes an account after confirmation", async () => {
     const spy = mockApi();
     renderWithClient(<UsersPage />);
     const row = (await screen.findByText("ana@acme.com")).closest("tr")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Remove" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Remove Ana" }));
     expect(await screen.findByText("Remove Ana? Their sessions end now.")).toBeInTheDocument();
     expect(spy.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
@@ -66,11 +68,29 @@ describe("UsersPage", () => {
     });
   });
 
+  it("sends one DELETE when OK is pressed twice", async () => {
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = requestUrl(input);
+      if (url === "/api/auth/session") return Promise.resolve(jsonResponse(authFixture()));
+      if (init?.method === "DELETE") return new Promise<Response>(() => undefined);
+      return Promise.resolve(jsonResponse([admin, ana]));
+    });
+    renderWithClient(<UsersPage />);
+    const row = (await screen.findByText("ana@acme.com")).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Remove Ana" }));
+    const ok = await screen.findByRole("button", { name: "OK" });
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    await waitFor(() => {
+      expect(spy.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
+    });
+  });
+
   it("opens the reset dialog for the chosen account", async () => {
     mockApi();
     renderWithClient(<UsersPage />);
     const row = (await screen.findByText("ana@acme.com")).closest("tr")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Reset password" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Reset password for Ana" }));
     expect(await screen.findByText("Reset password for Ana")).toBeInTheDocument();
   });
 
@@ -111,7 +131,7 @@ describe("UsersPage", () => {
     });
     renderWithClient(<UsersPage />);
     const row = (await screen.findByText("ana@acme.com")).closest("tr")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Remove" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Remove Ana" }));
     fireEvent.click(await screen.findByRole("button", { name: "OK" }));
     expect(await screen.findByText("Cannot remove yourself")).toBeInTheDocument();
   });
