@@ -11,11 +11,11 @@ import asyncio
 import getpass
 import sys
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from uuid import UUID
 
 from sqlalchemy import inspect
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import ArgumentError, DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,12 @@ class _CliError(Exception):
     """A failure to report as one line on stderr, exit code 1."""
 
 
+def _reason(error: BaseException) -> str:
+    """The first non-blank line of the error's text, or its class name."""
+    lines = (line.strip() for line in str(error).splitlines())
+    return next((line for line in lines if line), type(error).__name__)
+
+
 def _has_users_table(session: Session) -> bool:
     return inspect(session.connection()).has_table("users")
 
@@ -42,9 +48,17 @@ def _has_users_table(session: Session) -> bool:
 async def _database() -> AsyncIterator[AsyncSession]:
     """One session on the configured database; the engine is disposed afterwards."""
     settings = get_settings()
-    sessionmaker = build_sessionmaker(
-        settings.database_url, journal_mode=settings.sqlite_journal_mode
-    )
+    try:
+        sessionmaker = build_sessionmaker(
+            settings.database_url, journal_mode=settings.sqlite_journal_mode
+        )
+    except ArgumentError:
+        # Its text can hold the URL and its password: never show or chain it.
+        raise _CliError(
+            "Can't use the database: ATLAS_DATABASE_URL is not a usable database URL."
+        ) from None
+    except ImportError as exc:  # the URL names a driver that isn't installed
+        raise _CliError(f"Can't use the database: {_reason(exc)}") from exc
     try:
         async with sessionmaker() as session:
             # inspect() works on every engine; SQLite and Postgres raise
@@ -53,12 +67,16 @@ async def _database() -> AsyncIterator[AsyncSession]:
                 raise _CliError("Can't read the users table — run make migrate first.")
             yield session
     except DBAPIError as exc:
-        reason = str(exc.orig).splitlines() or [type(exc.orig).__name__]
-        raise _CliError(f"Can't use the database: {reason[0]}") from exc
+        raise _CliError(f"Can't use the database: {_reason(exc.orig or exc)}") from exc
+    except OSError as exc:  # asyncpg raises a raw OSError when it can't connect
+        raise _CliError(f"Can't use the database: {_reason(exc)}") from exc
     finally:
         engine = sessionmaker.kw["bind"]
         assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
-        await engine.dispose()
+        # The outcome (success or a _CliError) is already decided; a failed
+        # cleanup must not replace it.
+        with suppress(DBAPIError, OSError):
+            await engine.dispose()
 
 
 async def _find_user(email: str) -> UUID:

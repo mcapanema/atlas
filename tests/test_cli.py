@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
-from app.cli import main
+from app.cli import _reason, main
 from app.domain._time import utcnow
 from app.domain.auth.entities import AuthSession, User
 from app.domain.auth.passwords import verify_password
@@ -188,6 +188,75 @@ def test_unopenable_database_is_a_clear_error(
     assert err.startswith("Can't use the database: ")
     assert "migrate" not in err
     assert str(tmp_path) not in err
+
+
+def test_reason_skips_blank_lines() -> None:
+    assert _reason(Exception("\n  \nreal reason\nmore")) == "real reason"
+    assert _reason(ValueError("")) == "ValueError"
+
+
+def test_unusable_url_is_a_clear_error(
+    settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings_env(database_url="postgresql+nosuchdriver://atlas:s3cret@db/atlas")
+
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err == "Can't use the database: ATLAS_DATABASE_URL is not a usable database URL.\n"
+
+
+def test_missing_driver_is_a_clear_error(
+    settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings_env(database_url="postgresql+asyncpg://atlas:s3cret@127.0.0.1:1/atlas")
+
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("Can't use the database: ")
+    assert "s3cret" not in err
+
+
+def test_refused_connection_is_a_clear_error(
+    db: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refused(session: object) -> bool:
+        raise ConnectionRefusedError(61, "Connect call failed")
+
+    monkeypatch.setattr("app.cli._has_users_table", refused)
+
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+
+    assert code == 1
+    assert capsys.readouterr().err == "Can't use the database: [Errno 61] Connect call failed\n"
+
+
+@pytest.mark.parametrize(
+    ("email", "code", "err"),
+    [("nobody@acme.com", 1, "No user with email nobody@acme.com\n"), ("ana@acme.com", 0, "")],
+)
+def test_dispose_failure_never_hides_the_outcome(
+    db: str,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    email: str,
+    code: int,
+    err: str,
+) -> None:
+    real_dispose = AsyncEngine.dispose
+
+    async def broken_dispose(self: AsyncEngine, close: bool = True) -> None:
+        await real_dispose(self, close)  # close the pool, or a ResourceWarning fails the run
+        raise OSError("disk went away")
+
+    with monkeypatch.context() as patched:  # _stored and _seed must dispose normally
+        patched.setattr(AsyncEngine, "dispose", broken_dispose)
+        result = main(["reset-password", email], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD))
+
+    assert (result, capsys.readouterr().err) == (code, err)
 
 
 def test_password_never_comes_from_argv() -> None:
