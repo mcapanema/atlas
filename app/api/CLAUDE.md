@@ -90,6 +90,13 @@ Presentation is allowed to know a concrete adapter exists).
   `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()` (before `mount_spa`) only when
   the token is set, and `lifespan` must run
   `app.state.mcp.session_manager.run()` for it to serve.
+- **Auth** (ADR-0027): every router except `health` and `auth` is
+  included in `create_app()` with `require_signed_in` (a valid
+  `atlas_session` cookie, else 401); `tests/api/test_auth_guard.py` fails on
+  an unguarded `/api` route. Routes that need *who* take `CurrentUserDep`
+  (admin-only: `AdminDep`, or `require_admin` on the router like
+  `users.py`). The MCP facade's in-process calls pass `INTERNAL_HEADER`
+  with `app.state.internal_token` instead of a session.
 - **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
   UI and every `/api/*` route to loopback, unproxied requests only; the MCP
   mount is the one public path. A new route needs nothing — it is

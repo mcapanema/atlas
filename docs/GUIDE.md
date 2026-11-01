@@ -172,6 +172,9 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ## First sync
 
+On first start, Atlas asks you to create the first (administrator) account.
+An administrator adds the other users.
+
 A new Atlas has no data. To get data:
 
 1. Set `ATLAS_LINEAR_API_KEY` in `.env`. To get a key, go to Linear →
@@ -295,10 +298,12 @@ does not make numbers that Atlas did not give.
 
 A normal sync does not change events that it already synced. Some releases
 fix how Atlas reads Linear history. To apply such a fix to existing data,
-start a rebuild:
+start a rebuild. The API needs a signed-in user: copy the value of the
+`atlas_session` cookie from your browser.
 
 ```bash
 curl -X POST http://localhost:8000/api/connectors/linear/sync \
+  -b 'atlas_session=<value>' \
   -H 'content-type: application/json' -d '{"rebuild": true}'
 ```
 
@@ -306,7 +311,7 @@ The response is `202` with a background sync job. To read the state,
 phase, counts and error of the job, use its `id`:
 
 ```bash
-curl http://localhost:8000/api/connectors/linear/jobs/<id>
+curl -b 'atlas_session=<value>' http://localhost:8000/api/connectors/linear/jobs/<id>
 ```
 
 The rebuild makes the events of each synced issue again, and writes the

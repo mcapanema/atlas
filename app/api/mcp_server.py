@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from app.api.deps import INTERNAL_HEADER
 from app.api.schemas import AgingWipRead, DoraMetricsRead
 from app.domain.advisor.render import quote_title, render_aging, render_dora
 from app.domain.metrics.aging import AgingItem, AgingWip
@@ -105,7 +106,12 @@ async def _api(
     # app.state if tool latency ever matters.
     transport = httpx.ASGITransport(app=app)
     # A loopback Host: LocalOnlyMiddleware serves in-process tool calls as local.
-    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+    # The internal header stands in for a session: tools work with no user (ADR-0027).
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://localhost",
+        headers={INTERNAL_HEADER: app.state.internal_token},
+    ) as client:
         response = await client.request(method, path, params=params, json=json)
     if response.status_code >= 400:
         try:

@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.api import (
     advisor,
+    auth,
     codebases,
     connectors,
     events,
@@ -26,11 +28,12 @@ from app.api import (
     projects,
     sync_schedules,
     teams,
+    users,
     work_items,
 )
 from app.api.advice_runner import AdviceRunner
 from app.api.auto_sync import AutoSyncRunner
-from app.api.deps import github_code_source, linear_data_source
+from app.api.deps import github_code_source, linear_data_source, require_signed_in
 from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
@@ -123,22 +126,31 @@ def create_app() -> FastAPI:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
+    # Per-process secret for the MCP facade's in-process calls (ADR-0027).
+    app.state.internal_token = secrets.token_urlsafe(32)
     app.include_router(health.router)
-    app.include_router(organizations.router)
-    app.include_router(teams.router)
-    app.include_router(people.router)
-    app.include_router(projects.router)
-    app.include_router(work_items.router)
-    app.include_router(events.router)
-    app.include_router(metrics.router)
-    app.include_router(forecasts.router)
-    app.include_router(connectors.router)
-    app.include_router(codebases.router)
-    app.include_router(advisor.router)
-    app.include_router(personas.router)
-    app.include_router(meetings.router)
-    app.include_router(metric_rules.router)
-    app.include_router(sync_schedules.router)
+    app.include_router(auth.router)
+    # Everything else needs a signed-in user; test_auth_guard.py fails on a
+    # /api route left out of this loop.
+    for router in (
+        organizations.router,
+        teams.router,
+        people.router,
+        projects.router,
+        work_items.router,
+        events.router,
+        metrics.router,
+        forecasts.router,
+        connectors.router,
+        codebases.router,
+        advisor.router,
+        personas.router,
+        meetings.router,
+        metric_rules.router,
+        sync_schedules.router,
+        users.router,
+    ):
+        app.include_router(router, dependencies=[Depends(require_signed_in)])
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

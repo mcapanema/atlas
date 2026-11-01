@@ -1,3 +1,4 @@
+import secrets
 from collections.abc import AsyncIterator
 from typing import Annotated
 
@@ -6,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.advisor.runs import AdviceRunService
 from app.application.advisor.service import AdvisorService
+from app.application.auth.service import AuthService
+from app.application.auth.users import UserService
 from app.application.codebases.service import CodebaseService
 from app.application.codebases.sync import CodeSyncService
 from app.application.events.service import EventService
@@ -25,6 +28,7 @@ from app.application.teams.service import TeamService
 from app.application.work_items.service import WorkItemService
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorPort
+from app.domain.auth.entities import User
 from app.domain.sync.port import CodeHostSource, DeliveryDataSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
@@ -32,6 +36,10 @@ from app.infrastructure.connectors.github.datasource import GitHubDataSource
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
 from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
+from app.infrastructure.repositories.auth import (
+    SqlAlchemyAuthSessionRepository,
+    SqlAlchemyUserRepository,
+)
 from app.infrastructure.repositories.codebases import (
     SqlAlchemyCodebaseRepository,
     SqlAlchemyDeploymentRepository,
@@ -369,3 +377,55 @@ def get_sync_schedule_service(session: SessionDep) -> SyncScheduleService:
 
 
 SyncScheduleServiceDep = Annotated[SyncScheduleService, Depends(get_sync_schedule_service)]
+
+
+SESSION_COOKIE = "atlas_session"
+# The MCP facade's in-process REST calls carry this header with
+# app.state.internal_token, so its tools work with no user (ADR-0027).
+INTERNAL_HEADER = "X-Atlas-Internal"
+
+
+def get_auth_service(session: SessionDep) -> AuthService:
+    return AuthService(SqlAlchemyUserRepository(session), SqlAlchemyAuthSessionRepository(session))
+
+
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_user_service(session: SessionDep) -> UserService:
+    return UserService(SqlAlchemyUserRepository(session), SqlAlchemyAuthSessionRepository(session))
+
+
+UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+
+
+async def get_current_user(request: Request, auth: AuthServiceDep) -> User:
+    token = request.cookies.get(SESSION_COOKIE)
+    user = await auth.user_for_token(token) if token else None
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in to use Atlas")
+    return user
+
+
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+async def require_signed_in(request: Request, auth: AuthServiceDep) -> None:
+    """Router-level guard: a valid session cookie, or the MCP facade's internal header."""
+    internal = request.headers.get(INTERNAL_HEADER)
+    if internal is not None and secrets.compare_digest(
+        internal.encode(), request.app.state.internal_token.encode()
+    ):
+        return
+    await get_current_user(request, auth)
+
+
+def require_admin(user: CurrentUserDep) -> User:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators manage users"
+        )
+    return user
+
+
+AdminDep = Annotated[User, Depends(require_admin)]
