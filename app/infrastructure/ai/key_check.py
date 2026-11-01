@@ -59,7 +59,12 @@ async def check_openrouter_model(
     response = await _get(
         OPENROUTER_MODELS_URL, transport, params={"supported_parameters": "structured_outputs"}
     )
-    if model not in {entry["id"] for entry in response.json()["data"]}:
+    try:
+        models = {entry["id"] for entry in response.json()["data"]}
+    except (ValueError, KeyError, TypeError) as exc:
+        # An off-shape answer is OpenRouter's fault (502), never a 422 blaming the user.
+        raise AdvisorError("OpenRouter returned the model list in an unexpected shape") from exc
+    if model not in models:
         raise CredentialCheckError(
             "Could not verify the OpenRouter credentials: OpenRouter has no model "
             f"'{model}' that supports structured outputs"

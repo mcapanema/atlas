@@ -28,6 +28,13 @@ up only when the first sync or advice request failed.
   and is not stored. A provider that is down, answers 5xx or answers 429
   gives 502 and nothing is stored. `DataSourceError.status` tells the two
   apart.
+- For OpenRouter, the check also looks the advisor model up in OpenRouter's
+  public model list, filtered to models with structured outputs. An exact id
+  match is required; otherwise the save answers 422.
+- A GitHub or OpenRouter `PUT` may omit the secret to change only the owner
+  or the model. Atlas keeps the stored secret and checks it again with the
+  new setting. With nothing stored, the save answers 422. The Linear key is
+  always required.
 - The API is write-only: `PUT` and `DELETE`
   `/api/connectors/{linear|github|openrouter}/credentials`. Status
   responses carry a `hint` ("…" plus the last four characters, or "…" for a

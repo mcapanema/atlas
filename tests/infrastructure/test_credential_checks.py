@@ -167,6 +167,23 @@ async def test_openrouter_models_outage_is_an_advisor_error() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "models",
+    [
+        httpx.Response(200, text="<html>captive portal</html>"),
+        httpx.Response(200, json={"error": {"code": 200}}),
+        httpx.Response(200, json={"data": ["m/x"]}),
+    ],
+)
+async def test_openrouter_off_shape_model_list_is_an_advisor_error(
+    models: httpx.Response,
+) -> None:
+    with pytest.raises(AdvisorError, match="unexpected shape"):
+        await ProviderCredentialVerifier(_key_ok(models)).verify(
+            Credential(Integration.OPENROUTER, "sk", model="m/x")
+        )
+
+
 async def test_rejected_key_skips_the_model_check() -> None:
     paths: list[str] = []
 
