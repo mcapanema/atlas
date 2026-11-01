@@ -181,17 +181,16 @@ A new Atlas has no data. To get data:
 3. Click **Sync now**. The sync runs in the background. When it finishes,
    the Linear card shows the result.
 4. Optional, for DORA:
-   1. In the GitHub card, paste the token and the owner. Select **Save
-      key**.
+   1. In the GitHub card, paste the token and the owner. Select **Save**.
    2. Map each repository to a team.
    3. Click **Sync GitHub**.
 
    Incidents are Linear issues with an incident label. You set these labels
    in Metric rules → **Incident labels**.
 5. Optional, for Advisor and Meetings: paste the OpenRouter key in the
-   OpenRouter card and select **Save key**. Atlas does not check the model
-   when you save. Use an OpenRouter model id that supports structured
-   outputs.
+   OpenRouter card and select **Save**. The model must be an OpenRouter
+   model id that supports structured outputs. Atlas checks the model when
+   you save.
 6. Set an **Auto sync** schedule. See [Automatic sync](#automatic-sync).
 
 If a key is not set, its connector shows "Not configured", and its sync
@@ -199,6 +198,8 @@ requests return `409`.
 
 If a provider rejects a key, Atlas shows the reason and does not save the
 key. If the provider is down, Atlas answers `502` and does not save the key.
+To change the GitHub owner or the OpenRouter model, leave the key blank and
+select **Save**. Atlas keeps the stored key and checks it again.
 Atlas stores keys encrypted. It never shows a key again. The card shows only
 the last four characters. If you lose `data/atlas.key`, the keys read as not
 configured. Enter them again. After you replace or delete `data/atlas.key`,

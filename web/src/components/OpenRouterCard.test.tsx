@@ -49,17 +49,52 @@ describe("OpenRouterCard", () => {
     expect(screen.getByLabelText("Model")).toHaveValue(MODEL);
     expect(
       screen.getByText(
-        "The model is not checked when you save. Use an OpenRouter model id that supports structured outputs.",
+        "An OpenRouter model id that supports structured outputs. Atlas checks it when you save.",
       ),
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("OpenRouter API key"), {
       target: { value: "sk-or-1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("Key saved")).toBeInTheDocument();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
     expect(JSON.parse(put?.[1]?.body as string)).toEqual({ api_key: "sk-or-1", model: MODEL });
+  });
+
+  it("keeps the stored key when the key field is left blank", async () => {
+    const fetchMock = mockApi({ configured: true });
+
+    renderWithClient(<OpenRouterCard />);
+    fireEvent.change(await screen.findByLabelText("Model"), {
+      target: { value: "openai/gpt-5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ model: "openai/gpt-5" });
+  });
+
+  it("asks for the key while nothing is stored", async () => {
+    const fetchMock = mockApi({ configured: false });
+
+    renderWithClient(<OpenRouterCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("OpenRouter API key is required")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
+  it("says a blank key keeps the stored one", async () => {
+    mockApi({ configured: true });
+
+    renderWithClient(<OpenRouterCard />);
+
+    expect(await screen.findByLabelText("OpenRouter API key")).toHaveAttribute(
+      "placeholder",
+      "Leave blank to keep the stored key",
+    );
   });
 
   it("keeps password managers off the key and model fields", async () => {
@@ -83,10 +118,10 @@ describe("OpenRouterCard", () => {
     for (const key of ["sk-or-a-or00", "sk-or-b-or00"]) {
       const field = await screen.findByLabelText("OpenRouter API key");
       fireEvent.change(field, { target: { value: key } });
-      fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
       await waitFor(() => expect(screen.getByLabelText("OpenRouter API key")).toHaveValue(""));
-      expect(screen.getByText("Key saved")).toBeInTheDocument();
+      expect(screen.getByText("Saved")).toBeInTheDocument();
     }
   });
 
@@ -98,7 +133,7 @@ describe("OpenRouterCard", () => {
     fireEvent.change(await screen.findByLabelText("OpenRouter API key"), {
       target: { value: "sk-or-bad" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Could not save the OpenRouter key")).toBeInTheDocument();
     expect(screen.getByText(detail)).toBeInTheDocument();
@@ -114,12 +149,12 @@ describe("OpenRouterCard", () => {
     fireEvent.change(await screen.findByLabelText("OpenRouter API key"), {
       target: { value: "sk-or-good" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
-    expect(await screen.findByText("Key saved")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("OpenRouter API key"), {
       target: { value: "sk-or-bad" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Could not save the OpenRouter key")).toBeInTheDocument();
     expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-bad");

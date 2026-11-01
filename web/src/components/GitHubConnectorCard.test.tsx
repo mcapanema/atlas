@@ -74,9 +74,9 @@ describe("GitHubConnectorCard", () => {
     const owner = await screen.findByLabelText("Owner (organization or user)");
     expect(owner).toHaveValue("acme");
     fireEvent.change(screen.getByLabelText("GitHub token"), { target: { value: "ghp_x" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("Key saved")).toBeInTheDocument();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
     const puts = fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT");
     expect(puts).toHaveLength(1);
     const [[input, init]] = puts;

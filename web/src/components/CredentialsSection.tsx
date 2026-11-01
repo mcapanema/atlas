@@ -13,6 +13,19 @@ interface CredentialField {
 
 type Values = Record<string, string>;
 
+/** A stored secret with settings beside it may be left blank: the server keeps it. */
+function secretPlaceholder(configured: boolean, keepable: boolean) {
+  if (keepable) return "Leave blank to keep the stored key";
+  return configured ? "Enter a new key to replace the stored one" : undefined;
+}
+
+/** Only the typed values: a blank secret is left out so the server keeps the stored one. */
+function filled(values: Values): Values {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => typeof value === "string" && value.trim()),
+  );
+}
+
 function CredentialsForm({
   name,
   fields,
@@ -33,6 +46,8 @@ function CredentialsForm({
   onSave: (values: Values) => void;
   extra: ReactNode;
 }) {
+  const hasSettings = fields.some((field) => !field.secret);
+  const keepable = configured && hasSettings;
   return (
     <Form<Values>
       name={name}
@@ -47,13 +62,19 @@ function CredentialsForm({
           name={field.name}
           label={field.label}
           extra={field.help}
-          rules={[{ required: true, whitespace: true }]}
+          rules={[
+            {
+              required: !(field.secret && keepable),
+              whitespace: true,
+              message: `${field.label} is required`,
+            },
+          ]}
         >
           {field.secret ? (
             // "new-password": browsers and password managers ignore "off" on password inputs.
             <Input.Password
               autoComplete="new-password"
-              placeholder={configured ? "Enter a new key to replace the stored one" : undefined}
+              placeholder={secretPlaceholder(configured, keepable)}
             />
           ) : (
             <Input autoComplete="off" />
@@ -62,10 +83,12 @@ function CredentialsForm({
       ))}
       <Flex wrap gap="small" align="center">
         <Button type="primary" htmlType="submit" loading={saving}>
-          Save key
+          {hasSettings ? "Save" : "Save key"}
         </Button>
         {extra}
-        {saved && <Typography.Text type="success">Key saved</Typography.Text>}
+        {saved && (
+          <Typography.Text type="success">{hasSettings ? "Saved" : "Key saved"}</Typography.Text>
+        )}
       </Flex>
     </Form>
   );
@@ -105,7 +128,7 @@ export function CredentialsSection({
         saved={save.isSuccess}
         onSave={(values) => {
           remove.reset();
-          save.mutate(values, { onSuccess: () => setSaves((n) => n + 1) });
+          save.mutate(filled(values), { onSuccess: () => setSaves((n) => n + 1) });
         }}
         extra={
           status.configured && (

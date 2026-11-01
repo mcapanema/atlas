@@ -51,7 +51,7 @@ export function OpenRouterCard() {
               {
                 name: "model",
                 label: "Model",
-                help: "The model is not checked when you save. Use an OpenRouter model id that supports structured outputs.",
+                help: "An OpenRouter model id that supports structured outputs. Atlas checks it when you save.",
               },
             ]}
             initial={{ model: status.model }}
