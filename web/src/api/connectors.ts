@@ -5,9 +5,20 @@ import { ApiError, apiFetch } from "./client";
 
 export interface ConnectorStatus {
   configured: boolean;
+  /** "…" plus the stored key's last 4 characters; null when unconfigured. */
+  hint: string | null;
   /** The sync job running right now, started by anyone. */
   running: SyncJob | null;
 }
+
+export interface OpenRouterStatus {
+  configured: boolean;
+  /** The stored advisor model, or the default when unconfigured. */
+  model: string;
+  hint: string | null;
+}
+
+export type Integration = "linear" | "github" | "openrouter";
 
 export interface SyncSummary {
   teams: number;
@@ -69,6 +80,47 @@ export function useLinearStatus() {
     queryFn: () => apiFetch<ConnectorStatus>("/api/connectors/linear"),
     // Polled so a scheduled sync that starts while the page is open shows up.
     refetchInterval: 15_000,
+  });
+}
+
+export function useOpenRouterStatus() {
+  return useQuery({
+    queryKey: ["connectors", "openrouter"],
+    queryFn: () => apiFetch<OpenRouterStatus>("/api/connectors/openrouter"),
+  });
+}
+
+const credentialsPath = (integration: Integration) => `/api/connectors/${integration}/credentials`;
+
+/**
+ * Refetch every status a stored credential decides: the connectors' and the
+ * advisor's, and for GitHub the codebases table (the owner may have changed).
+ */
+function useRefreshCredentialed(integration: Integration) {
+  const queryClient = useQueryClient();
+  const keys = [["connectors"], ["advisor", "status"]];
+  if (integration === "github") keys.push(["codebases"]);
+  return () => Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+}
+
+/** Stores credentials after the server checks them with the provider. */
+export function useSaveCredentials(integration: Integration) {
+  const refresh = useRefreshCredentialed(integration);
+  return useMutation({
+    mutationFn: (values: Record<string, string>) =>
+      apiFetch<unknown>(credentialsPath(integration), {
+        method: "PUT",
+        body: JSON.stringify(values),
+      }),
+    onSuccess: refresh,
+  });
+}
+
+export function useRemoveCredentials(integration: Integration) {
+  const refresh = useRefreshCredentialed(integration);
+  return useMutation({
+    mutationFn: () => apiFetch<unknown>(credentialsPath(integration), { method: "DELETE" }),
+    onSuccess: refresh,
   });
 }
 

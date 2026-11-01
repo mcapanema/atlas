@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, time
 from unittest import mock
 from uuid import UUID
@@ -9,11 +9,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.auto_sync import AutoSyncRunner
-from app.api.deps import LINEAR_NOT_CONFIGURED
+from app.api.deps import LINEAR_NOT_CONFIGURED, linear_data_source
 from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
 from app.application.sync_schedules.service import SyncScheduleService
 from app.domain._time import utcnow
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.organizations.entities import Organization
 from app.domain.sync.port import CodeHostSource, DataSourceError, DeliveryDataSource
 from app.domain.sync.source import SourceCodebase, SourceTeam
@@ -21,6 +22,7 @@ from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
+from tests.api.helpers import remove_credential, store_credential
 from tests.fakes import FakeDataSource, InMemoryCodeHostSource
 
 LONG_AGO = datetime(2020, 1, 1, tzinfo=UTC)
@@ -33,13 +35,22 @@ def _auto(
     recompute: RecomputeRunner | None = None,
     tick_seconds: float = 60.0,
     code_source_factory: Callable[[], CodeHostSource | None] = lambda: None,
+    session_source: Callable[[AsyncSession], Awaitable[DeliveryDataSource | None]] | None = None,
 ) -> AutoSyncRunner:
+    """The runner on zero-arg test factories, or on `session_source` when given."""
+
+    async def source(_session: AsyncSession) -> DeliveryDataSource | None:
+        return source_factory()
+
+    async def code_source(_session: AsyncSession) -> CodeHostSource | None:
+        return code_source_factory()
+
     jobs = SyncJobRunner(sessionmaker, recompute=recompute or RecomputeRunner(sessionmaker))
     return AutoSyncRunner(
         sessionmaker,
-        source_factory,
+        session_source or source,
         jobs=jobs,
-        code_source_factory=code_source_factory,
+        code_source_factory=code_source,
         tick_seconds=tick_seconds,
     )
 
@@ -180,6 +191,21 @@ async def test_tick_records_unconfigured_connector(
     assert await runner.tick() == 0
 
 
+async def test_auto_sync_reads_the_key_on_every_tick(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    org_id = await _seed(sessionmaker)
+    await store_credential(sessionmaker, Credential(Integration.LINEAR, "lin_api_x"))
+    runner = _auto(sessionmaker, lambda: None, session_source=linear_data_source)
+    await remove_credential(sessionmaker, Integration.LINEAR)  # removed after the runner was built
+
+    assert await runner.tick() == 1
+
+    run = await _last_run(sessionmaker, org_id)
+    assert run is not None
+    assert run.error == LINEAR_NOT_CONFIGURED
+
+
 async def test_tick_skips_disabled_and_just_saved_schedules(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -293,7 +319,16 @@ async def test_tick_skips_code_sync_when_github_unconfigured(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     await _seed(sessionmaker)
-    runner = _auto(sessionmaker, _source)
+
+    async def source(_session: AsyncSession) -> DeliveryDataSource | None:
+        return _source()
+
+    # No code_source_factory: the runner's default is "GitHub unconfigured".
+    runner = AutoSyncRunner(
+        sessionmaker,
+        source,
+        jobs=SyncJobRunner(sessionmaker, recompute=RecomputeRunner(sessionmaker)),
+    )
 
     await runner.tick()
 

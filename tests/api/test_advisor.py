@@ -1,15 +1,17 @@
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_advisor_port
 from app.domain.advisor.entities import AdviceFeedback, DeliveryAdvice, Persona, Recommendation
 from app.domain.advisor.port import AdvisorError, DeliveryContext
-from tests.api.helpers import create_team, settle
+from app.domain.credentials.entities import Credential, Integration
+from tests.api.helpers import create_team, settle, store_credential
 
 
 class FakeAdvisor:
@@ -45,19 +47,18 @@ class FakeAdvisor:
         )
 
 
-async def test_status_reports_unconfigured(
-    client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
-    settings_env(openrouter_api_key="")
+async def test_status_reports_unconfigured(client: AsyncClient) -> None:
     response = await client.get("/api/recommendations/status")
     assert response.status_code == 200
     assert response.json() == {"configured": False}
 
 
 async def test_status_reports_configured(
-    client: AsyncClient, settings_env: Callable[..., None]
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> None:
-    settings_env(openrouter_api_key="sk-test")
+    await store_credential(
+        sessionmaker, Credential(Integration.OPENROUTER, "sk-test", model="openai/gpt-5")
+    )
     response = await client.get("/api/recommendations/status")
     assert response.json() == {"configured": True}
 
@@ -120,15 +121,13 @@ async def test_post_twice_while_running_calls_the_advisor_once(
 
 
 async def test_get_reads_stored_advice_without_a_key(
-    rules_client: AsyncClient, rules_app: FastAPI, settings_env: Callable[..., None]
+    rules_client: AsyncClient, rules_app: FastAPI
 ) -> None:
     rules_app.dependency_overrides[get_advisor_port] = lambda: FakeAdvisor()
     team_id = await create_team(rules_client)
     await rules_client.post(f"/api/recommendations?team_id={team_id}")
     await settle(rules_app)
     rules_app.dependency_overrides.clear()
-
-    settings_env(openrouter_api_key="")
 
     got = await rules_client.get(f"/api/recommendations?team_id={team_id}")
     posted = await rules_client.post(f"/api/recommendations?team_id={team_id}")
@@ -137,18 +136,12 @@ async def test_get_reads_stored_advice_without_a_key(
     assert posted.status_code == 409
 
 
-async def test_post_409_when_unconfigured(
-    client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
-    settings_env(openrouter_api_key="")
+async def test_post_409_when_unconfigured(client: AsyncClient) -> None:
     response = await client.post(f"/api/recommendations?team_id={uuid4()}")
     assert response.status_code == 409
 
 
-async def test_post_unconfigured_beats_unknown_scope(
-    rules_client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
-    settings_env(openrouter_api_key="")
+async def test_post_unconfigured_beats_unknown_scope(rules_client: AsyncClient) -> None:
     response = await rules_client.post(f"/api/recommendations?team_id={uuid4()}")
     assert response.status_code == 409
 

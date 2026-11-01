@@ -80,7 +80,13 @@ describe("AdvisorPage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText(/Advisor is not configured/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Advisor is not configured. Add an OpenRouter API key on the Connectors page to enable AI coaching.",
+        ),
+      ).toBeInTheDocument(),
+    );
   });
 
   it("shows the stored advice on load without a click", async () => {

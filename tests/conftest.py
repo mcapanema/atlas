@@ -98,6 +98,15 @@ async def rules_client(rules_app: FastAPI) -> AsyncIterator[AsyncClient]:
         yield http_client
 
 
+@pytest.fixture(autouse=True)
+def _secret_key_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Point the credential key file at a temp dir so no test writes ``data/atlas.key``."""
+    monkeypatch.setenv("ATLAS_SECRET_KEY_FILE", str(tmp_path / "atlas.key"))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
     """The one way tests override settings.
@@ -105,7 +114,7 @@ def settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None
     Sets ``ATLAS_<FIELD>`` env vars and clears the ``get_settings`` cache
     (cleared again on teardown so later tests re-read a clean environment).
     Exercises the real Settings loading path — and because a real env var
-    always beats ``.env``, passing ``""`` disables a key hermetically even
+    always beats ``.env``, passing ``""`` unsets a setting hermetically even
     when the developer's ``.env`` sets it. Don't ``monkeypatch.setattr``
     ``get_settings`` at import sites; that bypasses the cache and breaks
     silently when imports move.

@@ -53,7 +53,7 @@ numbers. It never makes a number.
 
 ### Intelligence
 
-These views need `ATLAS_OPENROUTER_API_KEY`.
+These views need an OpenRouter key. Enter it on the **Connectors** page.
 
 - **Advisor** (`/advisor`): AI explanations and recommendations in order of
   priority. They come from the calculated metrics. Your feedback teaches
@@ -174,25 +174,36 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 A new Atlas has no data. To get data:
 
-1. Set `ATLAS_LINEAR_API_KEY` in `.env`. To get a key, go to Linear →
-   Settings → Security & access → Personal API keys.
-2. Restart Atlas.
-3. Open **Connectors** and click **Sync now**. The sync runs in the
-   background. When it finishes, the Linear card shows the result.
+1. To get a Linear key, go to Linear → Settings → Security & access →
+   Personal API keys.
+2. Open **Connectors**. Paste the key in the Linear card and select
+   **Save key**. Atlas checks the key before it saves it.
+3. Click **Sync now**. The sync runs in the background. When it finishes,
+   the Linear card shows the result.
 4. Optional, for DORA:
-   1. Set `ATLAS_GITHUB_TOKEN` and `ATLAS_GITHUB_OWNER` in `.env`, then
-      restart Atlas.
-   2. In the GitHub card, map each repository to a team.
+   1. In the GitHub card, paste the token and the owner. Select **Save**.
+   2. Map each repository to a team.
    3. Click **Sync GitHub**.
 
    Incidents are Linear issues with an incident label. You set these labels
    in Metric rules → **Incident labels**.
-5. Optional, for Advisor and Meetings: set `ATLAS_OPENROUTER_API_KEY` in
-   `.env`, then restart Atlas.
+5. Optional, for Advisor and Meetings: paste the OpenRouter key in the
+   OpenRouter card and select **Save**. The model must be an OpenRouter
+   model id that supports structured outputs. Atlas checks the model when
+   you save.
 6. Set an **Auto sync** schedule. See [Automatic sync](#automatic-sync).
 
-If a key is not set, its connector shows "Not configured" (Linear) or "Not
-set up" (GitHub), and its sync requests return `409`.
+If a key is not set, its connector shows "Not configured", and its sync
+requests return `409`.
+
+If a provider rejects a key, Atlas shows the reason and does not save the
+key. If the provider is down, Atlas answers `502` and does not save the key.
+To change the GitHub owner or the OpenRouter model, leave the key blank and
+select **Save**. Atlas keeps the stored key and checks it again.
+Atlas stores keys encrypted. It never shows a key again. The card shows only
+the last four characters. If you lose `data/atlas.key`, the keys read as not
+configured. Enter them again. After you replace or delete `data/atlas.key`,
+restart Atlas. The running app keeps the old key in memory.
 
 ## Automatic sync
 
@@ -329,6 +340,13 @@ In this release, Linear 'blocked by' relations and labels with a name like
 
 After the upgrade that adds people, click **Sync now** one time. Until the
 next sync, owners show as Unassigned.
+
+### Credentials moved to the Connectors page
+
+Atlas ignores the `ATLAS_LINEAR_API_KEY`, `ATLAS_GITHUB_TOKEN`,
+`ATLAS_GITHUB_OWNER`, `ATLAS_OPENROUTER_API_KEY` and `ATLAS_ADVISOR_MODEL`
+lines in `.env`. Enter the keys once on the Connectors page, then delete
+those lines. Back up `data/atlas.key` with `data/atlas.db`.
 
 ### An older `.env` and the database path
 

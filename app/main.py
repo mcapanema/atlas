@@ -1,9 +1,13 @@
 import asyncio
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
+from dotenv import dotenv_values
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +42,7 @@ from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
 from app.domain.sync.port import DataSourceError
 from app.infrastructure.database.session import build_sessionmaker
+from app.infrastructure.secrets import cipher_for
 from app.infrastructure.static import mount_spa
 
 logger = logging.getLogger(__name__)
@@ -66,9 +71,34 @@ def _mask_in_access_log(secret: str) -> None:
     access.addFilter(_RedactSecret(secret))
 
 
+# Credentials entered on the Connectors page replaced these env keys (ADR-0027).
+_IGNORED_ENV_KEYS = (
+    "ATLAS_LINEAR_API_KEY",
+    "ATLAS_GITHUB_TOKEN",
+    "ATLAS_GITHUB_OWNER",
+    "ATLAS_OPENROUTER_API_KEY",
+    "ATLAS_ADVISOR_MODEL",
+)
+
+
+def _warn_about_ignored_env_keys() -> None:
+    dotenv = dotenv_values(".env")  # Settings' env_file; a missing file reads as empty
+    found = [key for key in _IGNORED_ENV_KEYS if os.environ.get(key) or dotenv.get(key)]
+    if found:  # names only — never the values
+        logger.warning(
+            "Ignored settings: %s. Enter connector keys and the advisor model on the "
+            "Connectors page.",
+            ", ".join(found),
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    _warn_about_ignored_env_keys()
+    # Create (or check) the credential key now: a corrupt key file fails
+    # startup with its path, not every request that touches a credential.
+    cipher_for(settings.secret_key_file)
     sessionmaker = build_sessionmaker(
         settings.database_url,
         echo=settings.db_echo,
@@ -153,6 +183,15 @@ def create_app() -> FastAPI:
             "ValueError handled as 422 on %s %s: %s", request.method, request.url.path, exc
         )
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        # FastAPI's default echoes each rejected value back as "input"; a
+        # rejected credential body must never reach a response or a log.
+        errors = [{k: v for k, v in error.items() if k != "input"} for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
 
     @app.exception_handler(IntegrityError)
     async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:

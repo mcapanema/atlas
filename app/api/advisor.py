@@ -1,21 +1,27 @@
 from fastapi import APIRouter, Query, status
 
 from app.api.advice_runner import AdviceRunnerDep
-from app.api.deps import AdviceRunServiceDep, AdvisorPortDep, AdvisorServiceDep
+from app.api.deps import (
+    AdviceRunServiceDep,
+    AdvisorPortDep,
+    AdvisorServiceDep,
+    CredentialServiceDep,
+)
 from app.api.schemas import AdviceContextRead, AdviceRunRead, IntegrationStatusRead
 from app.api.scope import ScopeDep
-from app.config import get_settings
 from app.domain.advisor.entities import Persona
 from app.domain.advisor.render import render_context
 from app.domain.advisor.runs import run_params
+from app.domain.credentials.entities import Integration
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
 router = APIRouter(prefix="/api/recommendations", tags=["recommendations"])
 
 
 @router.get("/status", response_model=IntegrationStatusRead)
-async def advisor_status() -> IntegrationStatusRead:
-    return IntegrationStatusRead(configured=bool(get_settings().openrouter_api_key))
+async def advisor_status(credentials: CredentialServiceDep) -> IntegrationStatusRead:
+    stored = await credentials.get(Integration.OPENROUTER)
+    return IntegrationStatusRead(configured=stored is not None)
 
 
 @router.get("/context", response_model=AdviceContextRead)

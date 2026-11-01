@@ -65,3 +65,27 @@ async def test_execute_raises_the_given_error_type_on_graphql_errors() -> None:
 
     with pytest.raises(AcmeError, match=r"Acme GraphQL errors: .*boom"):
         await _client(handler).execute("{ a }")
+
+
+async def test_http_error_carries_the_status() -> None:
+    with pytest.raises(AcmeError) as caught:
+        await _client(lambda r: httpx.Response(401)).execute("{ x }")
+    assert caught.value.status == 401
+
+
+async def test_graphql_errors_payload_carries_the_status() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"errors": [{"message": "no"}]})
+
+    with pytest.raises(AcmeError) as caught:
+        await _client(handler).execute("{ x }")
+    assert caught.value.status == 200
+
+
+async def test_network_failure_has_no_status() -> None:
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise httpx.UnsupportedProtocol("boom")  # not retried
+
+    with pytest.raises(AcmeError) as caught:
+        await _client(fail).execute("{ x }")
+    assert caught.value.status is None

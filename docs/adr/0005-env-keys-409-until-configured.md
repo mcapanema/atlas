@@ -4,7 +4,7 @@ Date: 2026-07-11 (backfilled; decided in Phase 2b, 2026-07-09; extended to the a
 
 ## Status
 
-Accepted
+Accepted; credential storage superseded by ADR-0027 — the 409-until-configured contract stands.
 
 ## Context
 

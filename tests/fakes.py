@@ -14,6 +14,7 @@ from uuid import UUID
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
@@ -35,6 +36,33 @@ from app.domain.work_items.entities import StateType, WorkItem
 # The default rules measuring on all seven days: for tests that assert
 # durations across a weekend and aren't about the working calendar.
 CALENDAR_DAYS = replace(DEFAULT_RULES, working_days=(1, 2, 3, 4, 5, 6, 7))
+
+
+class InMemoryCredentialRepository:
+    def __init__(self) -> None:
+        self._credentials: dict[Integration, Credential] = {}
+
+    async def get(self, integration: Integration) -> Credential | None:
+        return self._credentials.get(integration)
+
+    async def save(self, credential: Credential) -> None:
+        self._credentials[credential.integration] = credential
+
+    async def delete(self, integration: Integration) -> None:
+        self._credentials.pop(integration, None)
+
+
+class FakeCredentialVerifier:
+    """Records what it was asked to verify; raises `error` when set."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.verified: list[Credential] = []
+
+    async def verify(self, credential: Credential) -> None:
+        self.verified.append(credential)
+        if self.error is not None:
+            raise self.error
 
 
 class InMemoryOrganizationRepository:

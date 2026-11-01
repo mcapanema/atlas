@@ -29,15 +29,23 @@ function mockApi({
   configured,
   running = null,
   polled = SUCCEEDED,
+  putResponse,
 }: {
   configured: boolean;
   running?: object | null;
   polled?: object;
+  /** The PUT's answer; by default the save succeeds. */
+  putResponse?: Response;
 }) {
-  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/github")
-      return jsonResponse({ configured, owner: configured ? "acme" : null, running });
+      return jsonResponse({ configured, owner: configured ? "acme" : null, hint: null, running });
+    if (url === "/api/connectors/github/credentials" && init?.method === "PUT")
+      return (
+        putResponse ??
+        jsonResponse({ configured: true, owner: "acme", hint: "…p_x", running: null })
+      );
     if (url === "/api/connectors/github/sync") return jsonResponse(job("running"), 202);
     if (url === "/api/connectors/github/jobs/job1") return jsonResponse(polled);
     if (url.startsWith("/api/codebases")) return jsonResponse([]);
@@ -58,9 +66,45 @@ describe("GitHubConnectorCard", () => {
     renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
 
     expect(await screen.findByText("GitHub isn't configured")).toBeInTheDocument();
-    expect(screen.getByText("ATLAS_GITHUB_TOKEN")).toBeInTheDocument();
-    expect(screen.getByText("ATLAS_GITHUB_OWNER")).toBeInTheDocument();
+    expect(screen.getByText("Not configured")).toBeInTheDocument();
+    expect(screen.queryByText("Not set up")).not.toBeInTheDocument();
+    expect(screen.getByText(/Add a GitHub token and owner below/)).toBeInTheDocument();
+    expect(screen.getByText(/Metadata, Pull requests and Deployments/)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Sync GitHub/ })).toBeDisabled();
+  });
+
+  it("saves token and owner", async () => {
+    const fetchMock = mockApi({ configured: true });
+
+    renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
+    const owner = await screen.findByLabelText("Owner (organization or user)");
+    expect(owner).toHaveValue("acme");
+    fireEvent.change(screen.getByLabelText("GitHub token"), { target: { value: "ghp_x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    const puts = fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    const [[input, init]] = puts;
+    expect(requestUrl(input)).toBe("/api/connectors/github/credentials");
+    expect(JSON.parse(init?.body as string)).toEqual({ token: "ghp_x", owner: "acme" });
+  });
+
+  it("reports a rejected owner change as the credentials, not the token", async () => {
+    const detail =
+      "Could not verify the GitHub credentials: owner 'globex' was not found or the token can't see it";
+    const fetchMock = mockApi({ configured: true, putResponse: jsonResponse({ detail }, 422) });
+
+    renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
+    fireEvent.change(await screen.findByLabelText("Owner (organization or user)"), {
+      target: { value: "globex" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Could not save the GitHub credentials")).toBeInTheDocument();
+    expect(screen.getByText(detail)).toBeInTheDocument();
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ owner: "globex" });
   });
 
   it("syncs and shows the outcome", async () => {

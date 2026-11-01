@@ -214,7 +214,7 @@ export function MeetingsPage() {
       <Space direction="vertical" style={{ width: "100%" }} size="large">
         <AdvisorStatusAlerts
           status={status}
-          notConfigured="Meeting prep is not configured. Set ATLAS_OPENROUTER_API_KEY to prepare meetings inside Atlas — or connect an external AI via MCP."
+          notConfigured="Meeting prep is not configured. Add an OpenRouter API key on the Connectors page to prepare meetings inside Atlas — or connect an external AI via MCP."
         />
         <Space wrap>
           <Select
