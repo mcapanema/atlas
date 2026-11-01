@@ -31,7 +31,7 @@ the codebase or its tooling rather than one layer. Exemplar:
 - `settings_env` — the one way to override settings in a test:
   `settings_env(db_echo="true")` sets `ATLAS_DB_ECHO` and clears
   the `get_settings` cache (cleared again on teardown). Pass `""` to
-  disable a key hermetically (a real env var beats `.env`). Never
+  unset a setting hermetically (a real env var beats `.env`). Never
   `monkeypatch.setattr` `get_settings` at an import site.
 
 ## What belongs where

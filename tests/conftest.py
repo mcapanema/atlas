@@ -114,7 +114,7 @@ def settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None
     Sets ``ATLAS_<FIELD>`` env vars and clears the ``get_settings`` cache
     (cleared again on teardown so later tests re-read a clean environment).
     Exercises the real Settings loading path — and because a real env var
-    always beats ``.env``, passing ``""`` disables a key hermetically even
+    always beats ``.env``, passing ``""`` unsets a setting hermetically even
     when the developer's ``.env`` sets it. Don't ``monkeypatch.setattr``
     ``get_settings`` at import sites; that bypasses the cache and breaks
     silently when imports move.

@@ -195,7 +195,7 @@ ForecastServiceDep = Annotated[ForecastService, Depends(get_forecast_service)]
 
 async def get_advisor_port(session: SessionDep) -> AdvisorPort:
     credential = await credential_repository_for(session).get(Integration.OPENROUTER)
-    # An OpenRouter credential always carries a model; the second test narrows the type.
+    # An OpenRouter credential always carries a model; the second condition only narrows the type.
     if credential is None or credential.model is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -304,7 +304,7 @@ GITHUB_NOT_CONFIGURED = (
 async def github_code_source(session: AsyncSession) -> CodeHostSource | None:
     """The GitHub adapter on the stored token and owner, or None while none is stored."""
     credential = await credential_repository_for(session).get(Integration.GITHUB)
-    # A GitHub credential always carries an owner; the second test narrows the type.
+    # A GitHub credential always carries an owner; the second condition only narrows the type.
     if credential is None or credential.owner is None:
         return None
     return GitHubDataSource(GitHubGraphQLClient(credential.secret), credential.owner)

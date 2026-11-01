@@ -76,10 +76,8 @@ async def linear_status(jobs: SyncJobRunnerDep, service: CredentialServiceDep) -
     return await _linear_status(service, jobs)
 
 
-# ponytail: a PUT replaces the whole credential, so changing the GitHub owner or advisor model
-# means re-entering the key. Accept an omitted secret as "keep the stored one" if that friction
-# is ever reported. A rejected key (CredentialCheckError) answers 422 and an unreachable provider
-# 502 through create_app()'s handlers; nothing is stored either way.
+# Every credentials PUT: a rejected key (CredentialCheckError) answers 422 and an unreachable
+# provider 502 through create_app()'s handlers; nothing is stored either way.
 @router.put("/linear/credentials", response_model=LinearStatusRead)
 async def put_linear_credentials(
     payload: LinearCredentialsWrite, jobs: SyncJobRunnerDep, service: CredentialServiceDep
@@ -101,6 +99,8 @@ async def openrouter_status(service: CredentialServiceDep) -> OpenRouterStatusRe
     return await _openrouter_status(service)
 
 
+# ponytail: a PUT replaces the whole credential, so changing the advisor model means re-entering
+# the key. Accept an omitted secret as "keep the stored one" if that friction is ever reported.
 @router.put("/openrouter/credentials", response_model=OpenRouterStatusRead)
 async def put_openrouter_credentials(
     payload: OpenRouterCredentialsWrite, service: CredentialServiceDep
@@ -193,6 +193,8 @@ async def github_status(jobs: SyncJobRunnerDep, service: CredentialServiceDep) -
     return await _github_status(service, jobs)
 
 
+# ponytail: a PUT replaces the whole credential, so changing the owner means re-entering the
+# token. Accept an omitted secret as "keep the stored one" if that friction is ever reported.
 @router.put("/github/credentials", response_model=GitHubStatusRead)
 async def put_github_credentials(
     payload: GitHubCredentialsWrite, jobs: SyncJobRunnerDep, service: CredentialServiceDep

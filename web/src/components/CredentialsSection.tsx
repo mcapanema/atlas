@@ -7,6 +7,8 @@ interface CredentialField {
   name: string;
   label: string;
   secret?: boolean;
+  /** A note under the field. */
+  help?: string;
 }
 
 type Values = Record<string, string>;
@@ -44,6 +46,7 @@ function CredentialsForm({
           key={field.name}
           name={field.name}
           label={field.label}
+          extra={field.help}
           rules={[{ required: true, whitespace: true }]}
         >
           {field.secret ? (

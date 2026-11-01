@@ -48,7 +48,11 @@ export function OpenRouterCard() {
             label="OpenRouter"
             fields={[
               { name: "api_key", label: "OpenRouter API key", secret: true },
-              { name: "model", label: "Model" },
+              {
+                name: "model",
+                label: "Model",
+                help: "The model is not checked when you save. Use an OpenRouter model id that supports structured outputs.",
+              },
             ]}
             initial={{ model: status.model }}
             status={status}

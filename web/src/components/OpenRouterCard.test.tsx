@@ -47,6 +47,11 @@ describe("OpenRouterCard", () => {
       "https://openrouter.ai/keys",
     );
     expect(screen.getByLabelText("Model")).toHaveValue(MODEL);
+    expect(
+      screen.getByText(
+        "The model is not checked when you save. Use an OpenRouter model id that supports structured outputs.",
+      ),
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("OpenRouter API key"), {
       target: { value: "sk-or-1" },
     });
