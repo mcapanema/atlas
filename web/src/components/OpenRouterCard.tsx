@@ -40,7 +40,7 @@ export function OpenRouterCard() {
           <Typography.Link href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">
             openrouter.ai/keys
           </Typography.Link>
-          ; the model is any OpenRouter model id.
+          .
         </Typography.Text>
         {status && (
           <CredentialsSection
