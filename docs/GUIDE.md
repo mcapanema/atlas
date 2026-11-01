@@ -175,6 +175,19 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 On first start, Atlas asks you to create the first (administrator) account.
 An administrator adds the other users.
 
+If you forget a password, reset it from the terminal. The command asks for
+the new password two times and ends the user's open sessions:
+
+```bash
+make reset-password EMAIL=you@example.com
+```
+
+If Atlas runs in Docker, run the command in the container:
+
+```bash
+docker compose exec app python -m app.cli reset-password you@example.com
+```
+
 A new Atlas has no data. To get data:
 
 1. Set `ATLAS_LINEAR_API_KEY` in `.env`. To get a key, go to Linear →

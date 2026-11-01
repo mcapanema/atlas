@@ -4,7 +4,8 @@
 .NOTPARALLEL:
 
 .PHONY: help install hooks migrate dev test lint format typecheck security check build run clean \
-	deps fetch-base pre-push docker-build docker-up docker-down docker-logs local-db-free
+	deps fetch-base pre-push docker-build docker-up docker-down docker-logs local-db-free \
+	reset-password
 
 # Base for diff coverage; CI passes the PR's base branch instead.
 DIFF_COVER_BASE ?= origin/main
@@ -23,6 +24,10 @@ hooks: ## Install git hooks: pre-commit (ruff, eslint, prettier) + pre-push (mak
 
 migrate: local-db-free ## Apply database migrations
 	uv run alembic upgrade head
+
+reset-password: local-db-free ## Reset a user's password from the terminal (EMAIL=...)
+	@if [ -z "$(EMAIL)" ]; then echo "Usage: make reset-password EMAIL=you@example.com"; exit 1; fi
+	uv run python -m app.cli reset-password "$(EMAIL)"
 
 dev: local-db-free ## Run backend + frontend dev servers together (Ctrl+C stops both)
 	@trap 'kill 0' EXIT; \

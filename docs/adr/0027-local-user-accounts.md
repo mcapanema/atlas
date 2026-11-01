@@ -62,8 +62,10 @@ SSO later.
   `SameSite=Lax` treats every `http://localhost:<port>` as same-site, so
   unsafe methods need an `Origin` / `Sec-Fetch-Site` check (or a required
   `Content-Type: application/json`).
-- If the only admin forgets the password, nobody can reset it through the
-  app, and the fix is a database edit. This is a deliberate ceiling; a CLI
-  reset command is the upgrade path.
+- If the only admin forgets the password, `make reset-password EMAIL=…`
+  (`python -m app.cli reset-password`) sets a new one from the terminal and
+  ends that user's sessions. It reads the password with `getpass`, never
+  from the command line, and whoever can run it can already read the
+  database file.
 - A removed user or a user with a reset password loses open sessions on the
   next request.

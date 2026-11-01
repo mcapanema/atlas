@@ -3,7 +3,8 @@
 Presentation layer — FastAPI routers + DTOs. Depends on Application
 (services) and, only for dependency wiring, on the concrete Infrastructure
 adapter (`app/api/deps.py` is the composition root — the one place
-Presentation is allowed to know a concrete adapter exists).
+Presentation is allowed to know a concrete adapter exists; the terminal
+entry point `app/cli.py` is the only other one).
 
 ## Rules
 
