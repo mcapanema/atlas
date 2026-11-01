@@ -22,7 +22,9 @@ SSO later.
   signs out.
 - While no user exists, the sign-in screen becomes "Create the first
   account". That account is an admin. Later users are added on a
-  Setup → Users page.
+  Setup → Users page. Setup inserts the one row of `auth_setup` in the
+  same transaction, so two simultaneous setups cannot both create an
+  admin: the second insert fails and that request answers 409.
 - Passwords use stdlib `hashlib.scrypt` (`n=2**14, r=8, p=1, dklen=32`,
   16-byte random salt), stored as
   `scrypt$16384$8$1$<salt>$<hash>` (urlsafe base64) and compared with

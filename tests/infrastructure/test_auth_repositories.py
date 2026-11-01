@@ -1,11 +1,14 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.infrastructure.repositories.auth import (
+    AuthSetupModel,
     SqlAlchemyAuthSessionRepository,
     SqlAlchemyUserRepository,
 )
@@ -112,3 +115,28 @@ async def test_delete_for_user_can_keep_one_session(session: AsyncSession) -> No
     await sessions.delete_for_user(user.id)
 
     assert await sessions.get("b") is None
+
+
+async def test_second_claim_is_refused(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with file_sessionmaker() as first:
+        await SqlAlchemyUserRepository(first).claim_setup(_NOW)
+        await first.commit()
+
+    async with file_sessionmaker() as second:
+        with pytest.raises(SetupAlreadyClaimedError):
+            await SqlAlchemyUserRepository(second).claim_setup(_NOW)
+        await second.rollback()
+        rows = await second.execute(select(func.count()).select_from(AuthSetupModel))
+        assert rows.scalar_one() == 1
+
+
+async def test_failed_claim_leaves_the_session_usable(session: AsyncSession) -> None:
+    repo = SqlAlchemyUserRepository(session)
+    await repo.claim_setup(_NOW)
+
+    with pytest.raises(SetupAlreadyClaimedError):
+        await repo.claim_setup(_NOW)
+
+    assert await repo.count() == 0

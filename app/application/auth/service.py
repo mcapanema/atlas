@@ -12,7 +12,11 @@ from app.domain.auth.entities import (
     require_valid_password,
 )
 from app.domain.auth.passwords import hash_password, verify_password
-from app.domain.auth.repository import AuthSessionRepository, UserRepository
+from app.domain.auth.repository import (
+    AuthSessionRepository,
+    SetupAlreadyClaimedError,
+    UserRepository,
+)
 from app.domain.auth.tokens import hash_token, new_session_token
 
 
@@ -70,14 +74,17 @@ class AuthService:
         return await self._users.count() == 0
 
     async def create_first_admin(self, email: str, name: str, password: str) -> SignedIn:
-        # ponytail: two simultaneous first-run submissions can both pass this
-        # count() == 0 check. Accepted: the UI is local-only (ADR-0012). Upgrade
-        # path: a unique "setup done" row or a database constraint.
+        closed = SetupClosedError("Atlas already has an account; sign in instead")
         if not await self.setup_required():
-            raise SetupClosedError("Atlas already has an account; sign in instead")
+            raise closed
         require_valid_password(password)
         password_hash = await asyncio.to_thread(hash_password, password)
         user = User(email=email, name=name, password_hash=password_hash, is_admin=True)
+        # Two simultaneous setups can both pass the count check; only one claim wins.
+        try:
+            await self._users.claim_setup(self._now())
+        except SetupAlreadyClaimedError as exc:
+            raise closed from exc
         await self._users.add(user)
         return await self._start_session(user)
 

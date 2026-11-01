@@ -10,6 +10,7 @@ from app.application.auth.service import (
 from app.domain._time import utcnow
 from app.domain.auth.entities import SESSION_LIFETIME, User
 from app.domain.auth.passwords import hash_password
+from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.domain.auth.tokens import hash_token
 from tests.fakes import InMemoryAuthSessionRepository, InMemoryUserRepository
 
@@ -133,3 +134,22 @@ async def test_change_password_for_a_user_without_one_is_refused() -> None:
 
     with pytest.raises(InvalidCredentialsError):
         await service.change_password(user, PASSWORD, "a brand new password", "t")
+
+
+async def test_setup_refused_when_claim_is_taken() -> None:
+    service, users, _ = make_service()
+    await users.claim_setup(NOW)  # another transaction won the race
+
+    with pytest.raises(SetupClosedError, match="sign in instead"):
+        await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+
+    assert await users.count() == 0
+
+
+async def test_setup_claims_before_adding_the_user() -> None:
+    service, users, _ = make_service()
+
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+
+    with pytest.raises(SetupAlreadyClaimedError):
+        await users.claim_setup(NOW)

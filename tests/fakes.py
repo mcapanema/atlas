@@ -14,6 +14,7 @@ from uuid import UUID
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
@@ -55,6 +56,7 @@ class InMemoryOrganizationRepository:
 class InMemoryUserRepository:
     def __init__(self, users: list[User] | None = None) -> None:
         self._users: dict[UUID, User] = {u.id: u for u in users or []}
+        self._setup_claimed = False
 
     async def add(self, user: User) -> None:
         # Stand-in for the unique index on users.email.
@@ -80,6 +82,11 @@ class InMemoryUserRepository:
     async def delete(self, user_id: UUID) -> None:
         # Does not cascade: services call sessions.delete_for_user first.
         self._users.pop(user_id, None)
+
+    async def claim_setup(self, now: datetime) -> None:
+        if self._setup_claimed:
+            raise SetupAlreadyClaimedError("first-run setup is already done")
+        self._setup_claimed = True
 
 
 class InMemoryAuthSessionRepository:

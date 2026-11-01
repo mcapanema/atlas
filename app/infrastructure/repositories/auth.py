@@ -1,12 +1,14 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, String, delete, func, select
+from sqlalchemy import Boolean, ForeignKey, Integer, String, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
 
@@ -71,6 +73,15 @@ class AuthSessionModel(Base):
         )
 
 
+class AuthSetupModel(Base):
+    """One row, ever: the primary key makes a second first-run setup fail to insert."""
+
+    __tablename__ = "auth_setup"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    completed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+
+
 class SqlAlchemyUserRepository:
     """SQLAlchemy adapter for the UserRepository port."""
 
@@ -111,6 +122,14 @@ class SqlAlchemyUserRepository:
         # Bulk delete: the database cascades the user's sessions (FK ON DELETE CASCADE).
         await self._session.execute(delete(UserModel).where(UserModel.id == user_id))
         await self._session.flush()
+
+    async def claim_setup(self, now: datetime) -> None:
+        # A savepoint, so a lost claim leaves the outer transaction usable.
+        try:
+            async with self._session.begin_nested():
+                self._session.add(AuthSetupModel(id=1, completed_at=now))
+        except IntegrityError as exc:
+            raise SetupAlreadyClaimedError("first-run setup is already done") from exc
 
 
 class SqlAlchemyAuthSessionRepository:

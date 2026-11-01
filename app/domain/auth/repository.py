@@ -1,7 +1,12 @@
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
 from app.domain.auth.entities import AuthSession, User
+
+
+class SetupAlreadyClaimedError(Exception):
+    """First-run setup was already claimed by another transaction."""
 
 
 class UserRepository(Protocol):
@@ -20,6 +25,14 @@ class UserRepository(Protocol):
     async def update(self, user: User) -> None: ...
 
     async def delete(self, user_id: UUID) -> None: ...
+
+    async def claim_setup(self, now: datetime) -> None:
+        """Record that first-run setup happened; raise SetupAlreadyClaimedError if it did.
+
+        Only one transaction can ever claim it, so two simultaneous setups
+        cannot both create an admin.
+        """
+        ...
 
 
 class AuthSessionRepository(Protocol):
