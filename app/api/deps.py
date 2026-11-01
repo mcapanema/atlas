@@ -385,8 +385,13 @@ SESSION_COOKIE = "atlas_session"
 INTERNAL_HEADER = "X-Atlas-Internal"
 
 
-def get_auth_service(session: SessionDep) -> AuthService:
-    return AuthService(SqlAlchemyUserRepository(session), SqlAlchemyAuthSessionRepository(session))
+def get_auth_service(request: Request, session: SessionDep) -> AuthService:
+    # The throttle lives on app.state: services are per request, failures must not be.
+    return AuthService(
+        SqlAlchemyUserRepository(session),
+        SqlAlchemyAuthSessionRepository(session),
+        request.app.state.sign_in_throttle,
+    )
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

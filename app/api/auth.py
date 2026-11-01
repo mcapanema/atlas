@@ -1,3 +1,5 @@
+import math
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.api.deps import SESSION_COOKIE, AuthServiceDep, CurrentUserDep
@@ -12,6 +14,7 @@ from app.application.auth.service import (
     InvalidCredentialsError,
     SetupClosedError,
     SignedIn,
+    TooManySignInsError,
 )
 from app.domain.auth.entities import SESSION_LIFETIME
 
@@ -42,6 +45,17 @@ def _signed_in(response: Response, signed_in: SignedIn) -> UserRead:
     return UserRead.model_validate(signed_in.user)
 
 
+def _locked(exc: TooManySignInsError) -> HTTPException:
+    seconds = math.ceil(exc.retry_after.total_seconds())
+    minutes = math.ceil(seconds / 60)
+    wait = "1 minute" if minutes == 1 else f"{minutes} minutes"
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=f"Too many failed sign-ins. Try again in {wait}.",
+        headers={"Retry-After": str(seconds)},
+    )
+
+
 @router.get("/session", response_model=AuthStatusRead)
 async def get_session_status(request: Request, auth: AuthServiceDep) -> AuthStatusRead:
     token = request.cookies.get(SESSION_COOKIE)
@@ -67,6 +81,8 @@ async def sign_in(payload: SignInRequest, response: Response, auth: AuthServiceD
         signed_in = await auth.sign_in(payload.email, payload.password)
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    except TooManySignInsError as exc:
+        raise _locked(exc) from exc
     return _signed_in(response, signed_in)
 
 

@@ -1,8 +1,12 @@
 """First-run setup, sign-in, sign-out and password change (ADR-0027)."""
 
+from datetime import timedelta
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.auth import _locked
+from app.application.auth.service import TooManySignInsError
 from tests.api.helpers import sign_in
 from tests.conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
@@ -79,6 +83,31 @@ async def test_wrong_password_is_401_with_one_message(
 
     assert wrong.status_code == unknown.status_code == 401
     assert wrong.json() == unknown.json() == {"detail": "Wrong email or password"}
+
+
+async def test_sign_in_locks_after_five_failures(
+    client: AsyncClient, anon_client: AsyncClient
+) -> None:
+    for _ in range(5):
+        wrong = await anon_client.post(
+            "/api/auth/sign-in", json={"email": ADMIN_EMAIL, "password": "not-the-password"}
+        )
+        assert wrong.status_code == 401
+
+    locked = await anon_client.post(
+        "/api/auth/sign-in", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+    )
+
+    assert locked.status_code == 429
+    assert int(locked.headers["Retry-After"]) == 900
+    assert locked.json() == {"detail": "Too many failed sign-ins. Try again in 15 minutes."}
+
+
+def test_lockout_under_a_minute_says_one_minute() -> None:
+    locked = _locked(TooManySignInsError(timedelta(seconds=30)))
+
+    assert locked.detail == "Too many failed sign-ins. Try again in 1 minute."
+    assert locked.headers == {"Retry-After": "30"}
 
 
 async def test_short_password_is_422(anon_client: AsyncClient) -> None:

@@ -6,11 +6,13 @@ from app.application.auth.service import (
     AuthService,
     InvalidCredentialsError,
     SetupClosedError,
+    TooManySignInsError,
 )
 from app.domain._time import utcnow
 from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, User
 from app.domain.auth.passwords import hash_password
 from app.domain.auth.repository import SetupAlreadyClaimedError
+from app.domain.auth.throttle import SignInThrottle
 from app.domain.auth.tokens import hash_token
 from tests.fakes import InMemoryAuthSessionRepository, InMemoryUserRepository
 
@@ -23,7 +25,7 @@ def make_service(
 ) -> tuple[AuthService, InMemoryUserRepository, InMemoryAuthSessionRepository]:
     users = InMemoryUserRepository()
     sessions = InMemoryAuthSessionRepository()
-    return AuthService(users, sessions, now=lambda: now), users, sessions
+    return AuthService(users, sessions, SignInThrottle(), now=lambda: now), users, sessions
 
 
 async def test_setup_creates_an_admin_and_a_session() -> None:
@@ -77,7 +79,9 @@ async def test_user_without_a_password_cannot_sign_in() -> None:
 async def test_expired_session_is_rejected_and_deleted() -> None:
     service, users, sessions = make_service()
     signed_in = await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
-    later = AuthService(users, sessions, now=lambda: NOW + SESSION_LIFETIME + timedelta(seconds=1))
+    later = AuthService(
+        users, sessions, SignInThrottle(), now=lambda: NOW + SESSION_LIFETIME + timedelta(seconds=1)
+    )
 
     assert await later.user_for_token(signed_in.token) is None
     assert await sessions.get(hash_token(signed_in.token)) is None
@@ -167,3 +171,48 @@ async def test_sign_in_purges_expired_sessions() -> None:
 
     assert await sessions.get("stale") is None
     assert await sessions.get("live") is not None
+
+
+async def _fail_sign_ins(service: AuthService, email: str, times: int = 5) -> None:
+    for _ in range(times):
+        with pytest.raises(InvalidCredentialsError):
+            await service.sign_in(email, "wrong password!")
+
+
+async def test_key_ignores_case_and_spaces() -> None:
+    service, _, _ = make_service()
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+    await _fail_sign_ins(service, " Ana@Acme.com ")
+
+    with pytest.raises(TooManySignInsError) as locked:
+        await service.sign_in("ana@acme.com", PASSWORD)
+
+    assert locked.value.retry_after == timedelta(minutes=15)
+
+
+async def test_locked_sign_in_skips_password_check() -> None:
+    service, _, _ = make_service()
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+    await _fail_sign_ins(service, "ana@acme.com")
+
+    with pytest.raises(TooManySignInsError):
+        await service.sign_in("ana@acme.com", PASSWORD)
+
+
+async def test_unknown_email_is_throttled_too() -> None:
+    service, _, _ = make_service()
+    await _fail_sign_ins(service, "nobody@acme.com")
+
+    with pytest.raises(TooManySignInsError):
+        await service.sign_in("nobody@acme.com", PASSWORD)
+
+
+async def test_successful_sign_in_clears_the_count() -> None:
+    service, _, _ = make_service()
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+    await _fail_sign_ins(service, "ana@acme.com", times=4)
+    await service.sign_in("ana@acme.com", PASSWORD)
+
+    await _fail_sign_ins(service, "ana@acme.com", times=4)
+
+    assert (await service.sign_in("ana@acme.com", PASSWORD)).user.email == "ana@acme.com"

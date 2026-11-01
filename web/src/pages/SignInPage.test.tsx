@@ -45,6 +45,19 @@ describe("SignInPage — sign in", () => {
       JSON.stringify({ email: "ana@acme.com", password: "not-the-password" }),
     );
   });
+
+  it("shows the lockout message on 429", async () => {
+    const lockout = "Too many failed sign-ins. Try again in 15 minutes.";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ detail: lockout }, 429));
+    renderWithClient(<SignInPage setupRequired={false} />);
+
+    type("Email", "ana@acme.com");
+    type("Password", "correct horse battery");
+    submit("Sign in");
+
+    const alert = await screen.findByText(lockout);
+    expect(alert.closest(".ant-alert-error")).not.toBeNull();
+  });
 });
 
 describe("SignInPage — email field", () => {

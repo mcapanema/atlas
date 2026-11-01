@@ -39,6 +39,7 @@ from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
+from app.domain.auth.throttle import SignInThrottle
 from app.domain.sync.port import DataSourceError
 from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.static import mount_spa
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     )
     app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
     # Per-process secret for the MCP facade's in-process calls (ADR-0027).
+    app.state.sign_in_throttle = SignInThrottle()
     app.state.internal_token = secrets.token_urlsafe(32)
     app.include_router(health.router)
     app.include_router(auth.router)

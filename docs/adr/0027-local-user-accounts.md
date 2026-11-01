@@ -41,6 +41,12 @@ SSO later.
 - The MCP facade keeps working without a user. Its in-process REST calls
   carry `X-Atlas-Internal: <token>`, a per-process random value made in
   `create_app()` and compared with `secrets.compare_digest`.
+- After 5 failed sign-ins for one email inside a sliding 15-minute window,
+  that email is locked: sign-in answers `429` with `Retry-After` until the
+  oldest failure leaves the window, and a correct password does not help
+  meanwhile. A success clears the count. The counter is in-process memory
+  (`app.state.sign_in_throttle`), keyed by the normalized email, because
+  every request is local and an IP says nothing; a restart clears it.
 - `LocalOnlyMiddleware` (ADR-0012) does not change.
 
 ## Consequences
@@ -48,8 +54,9 @@ SSO later.
 - Google SSO adds an identity table keyed `(provider, subject)` to
   `user_id`. A user with `password_hash = NULL` cannot sign in with a
   password, so SSO-only users fit the same `users` row.
-- Lifting ADR-0012 first needs `Secure` cookies, allowed hosts, and login
-  rate limiting. It also needs CSRF protection: cookies ignore the port and
+- Lifting ADR-0012 first needs `Secure` cookies and allowed hosts, and the
+  sign-in lock should then also count by client address. It also needs
+  CSRF protection: cookies ignore the port and
   `SameSite=Lax` treats every `http://localhost:<port>` as same-site, so
   unsafe methods need an `Origin` / `Sec-Fetch-Site` check (or a required
   `Content-Type: application/json`).

@@ -96,7 +96,10 @@ Presentation is allowed to know a concrete adapter exists).
   an unguarded `/api` route. Routes that need *who* take `CurrentUserDep`
   (admin-only: `AdminDep`, or `require_admin` on the router like
   `users.py`). The MCP facade's in-process calls pass `INTERNAL_HEADER`
-  with `app.state.internal_token` instead of a session.
+  with `app.state.internal_token` instead of a session. The sign-in lock
+  (`SignInThrottle`) lives on `app.state.sign_in_throttle` and
+  `get_auth_service` hands it to each per-request `AuthService` — state
+  that must outlive a request never lives in a service.
 - **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
   UI and every `/api/*` route to loopback, unproxied requests only; the MCP
   mount is the one public path. A new route needs nothing — it is

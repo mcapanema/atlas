@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.domain._time import utcnow
 from app.domain.auth.entities import (
@@ -17,11 +17,20 @@ from app.domain.auth.repository import (
     SetupAlreadyClaimedError,
     UserRepository,
 )
+from app.domain.auth.throttle import SignInThrottle
 from app.domain.auth.tokens import hash_token, new_session_token
 
 
 class InvalidCredentialsError(Exception):
     """The email or password is wrong. One message for both, so it reveals nothing."""
+
+
+class TooManySignInsError(Exception):
+    """This email failed to sign in too often; it stays locked for retry_after."""
+
+    def __init__(self, retry_after: timedelta) -> None:
+        super().__init__("Too many failed sign-ins")
+        self.retry_after = retry_after
 
 
 class SetupClosedError(Exception):
@@ -64,10 +73,12 @@ class AuthService:
         self,
         users: UserRepository,
         sessions: AuthSessionRepository,
+        throttle: SignInThrottle,
         now: Callable[[], datetime] = utcnow,
     ) -> None:
         self._users = users
         self._sessions = sessions
+        self._throttle = throttle
         self._now = now
 
     async def setup_required(self) -> bool:
@@ -90,15 +101,22 @@ class AuthService:
 
     async def sign_in(self, email: str, password: str) -> SignedIn:
         try:
-            user = await self._users.get_by_email(normalize_email(email))
+            key = normalize_email(email)
         except ValueError:
-            user = None
+            key = None
+        throttle_key = key or email.strip().lower()
+        retry_after = self._throttle.retry_after(throttle_key, self._now())
+        if retry_after is not None:
+            raise TooManySignInsError(retry_after)
+        user = await self._users.get_by_email(key) if key is not None else None
         stored = user.password_hash if user is not None else None
         valid = await asyncio.to_thread(
             verify_password, password, stored or await _dummy_password_hash()
         )
         if user is None or stored is None or not valid:
+            self._throttle.record_failure(throttle_key, self._now())
             raise InvalidCredentialsError("Wrong email or password")
+        self._throttle.clear(throttle_key)
         return await self._start_session(user)
 
     async def user_for_token(self, token: str) -> User | None:
