@@ -1,0 +1,125 @@
+import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
+
+from app.domain._time import utcnow
+from app.domain.auth.entities import (
+    SESSION_LIFETIME,
+    AuthSession,
+    User,
+    normalize_email,
+    require_valid_password,
+)
+from app.domain.auth.passwords import hash_password, verify_password
+from app.domain.auth.repository import AuthSessionRepository, UserRepository
+from app.domain.auth.tokens import hash_token, new_session_token
+
+
+class InvalidCredentialsError(Exception):
+    """The email or password is wrong. One message for both, so it reveals nothing."""
+
+
+class SetupClosedError(Exception):
+    """First-run setup was asked for, but an account already exists."""
+
+
+class EmailTakenError(Exception):
+    """Another user already has this email."""
+
+
+class UnknownUserError(Exception):
+    """The user does not exist."""
+
+
+class SelfRemovalError(Exception):
+    """An admin tried to remove their own account."""
+
+
+@dataclass(frozen=True)
+class SignedIn:
+    user: User
+    token: str
+
+
+_dummy_hash: str | None = None
+
+
+async def _dummy_password_hash() -> str:
+    """A hash to verify against when the email is unknown, so timing does not leak it."""
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = await asyncio.to_thread(hash_password, "atlas-timing-equalizer")
+    return _dummy_hash
+
+
+class AuthService:
+    """Application use cases for first-run setup, sign-in and sessions."""
+
+    def __init__(
+        self,
+        users: UserRepository,
+        sessions: AuthSessionRepository,
+        now: Callable[[], datetime] = utcnow,
+    ) -> None:
+        self._users = users
+        self._sessions = sessions
+        self._now = now
+
+    async def setup_required(self) -> bool:
+        return await self._users.count() == 0
+
+    async def create_first_admin(self, email: str, name: str, password: str) -> SignedIn:
+        # ponytail: two simultaneous first-run submissions can both pass this
+        # count() == 0 check. Accepted: the UI is local-only (ADR-0012). Upgrade
+        # path: a unique "setup done" row or a database constraint.
+        if not await self.setup_required():
+            raise SetupClosedError("Atlas already has an account; sign in instead")
+        require_valid_password(password)
+        password_hash = await asyncio.to_thread(hash_password, password)
+        user = User(email=email, name=name, password_hash=password_hash, is_admin=True)
+        await self._users.add(user)
+        return await self._start_session(user)
+
+    async def sign_in(self, email: str, password: str) -> SignedIn:
+        try:
+            user = await self._users.get_by_email(normalize_email(email))
+        except ValueError:
+            user = None
+        stored = user.password_hash if user is not None else None
+        valid = await asyncio.to_thread(
+            verify_password, password, stored or await _dummy_password_hash()
+        )
+        if user is None or stored is None or not valid:
+            raise InvalidCredentialsError("Wrong email or password")
+        return await self._start_session(user)
+
+    async def user_for_token(self, token: str) -> User | None:
+        token_hash = hash_token(token)
+        session = await self._sessions.get(token_hash)
+        if session is None:
+            return None
+        if session.is_expired(self._now()):
+            await self._sessions.delete(token_hash)
+            return None
+        return await self._users.get(session.user_id)
+
+    async def sign_out(self, token: str) -> None:
+        await self._sessions.delete(hash_token(token))
+
+    async def change_password(self, user: User, current: str, new: str, keep_token: str) -> None:
+        require_valid_password(new)
+        stored = user.password_hash
+        valid = stored is not None and await asyncio.to_thread(verify_password, current, stored)
+        if not valid:
+            raise InvalidCredentialsError("Wrong email or password")
+        user.password_hash = await asyncio.to_thread(hash_password, new)
+        await self._users.update(user)
+        await self._sessions.delete_for_user(user.id, keep_token_hash=hash_token(keep_token))
+
+    async def _start_session(self, user: User) -> SignedIn:
+        token, token_hash = new_session_token()
+        await self._sessions.add(
+            AuthSession(token_hash, user.id, expires_at=self._now() + SESSION_LIFETIME)
+        )
+        return SignedIn(user=user, token=token)
