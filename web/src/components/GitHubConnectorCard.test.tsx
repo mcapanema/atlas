@@ -29,17 +29,23 @@ function mockApi({
   configured,
   running = null,
   polled = SUCCEEDED,
+  putResponse,
 }: {
   configured: boolean;
   running?: object | null;
   polled?: object;
+  /** The PUT's answer; by default the save succeeds. */
+  putResponse?: Response;
 }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/github")
       return jsonResponse({ configured, owner: configured ? "acme" : null, hint: null, running });
     if (url === "/api/connectors/github/credentials" && init?.method === "PUT")
-      return jsonResponse({ configured: true, owner: "acme", hint: "…p_x", running: null });
+      return (
+        putResponse ??
+        jsonResponse({ configured: true, owner: "acme", hint: "…p_x", running: null })
+      );
     if (url === "/api/connectors/github/sync") return jsonResponse(job("running"), 202);
     if (url === "/api/connectors/github/jobs/job1") return jsonResponse(polled);
     if (url.startsWith("/api/codebases")) return jsonResponse([]);
@@ -82,6 +88,23 @@ describe("GitHubConnectorCard", () => {
     const [[input, init]] = puts;
     expect(requestUrl(input)).toBe("/api/connectors/github/credentials");
     expect(JSON.parse(init?.body as string)).toEqual({ token: "ghp_x", owner: "acme" });
+  });
+
+  it("reports a rejected owner change as the credentials, not the token", async () => {
+    const detail =
+      "Could not verify the GitHub credentials: owner 'globex' was not found or the token can't see it";
+    const fetchMock = mockApi({ configured: true, putResponse: jsonResponse({ detail }, 422) });
+
+    renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
+    fireEvent.change(await screen.findByLabelText("Owner (organization or user)"), {
+      target: { value: "globex" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Could not save the GitHub credentials")).toBeInTheDocument();
+    expect(screen.getByText(detail)).toBeInTheDocument();
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ owner: "globex" });
   });
 
   it("syncs and shows the outcome", async () => {
