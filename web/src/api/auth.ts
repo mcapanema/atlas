@@ -55,9 +55,11 @@ export function useSignOut() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => postJson<undefined>("/api/auth/sign-out"),
-    // Nothing the last user saw may outlive their session.
+    // Nothing the last user saw may outlive their session. The auth query
+    // stays: clear() would detach the mounted gate, which then never hears
+    // the signed-out status.
     onSuccess: () => {
-      queryClient.clear();
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== AUTH_KEY[0] });
       queryClient.setQueryData<AuthStatus>(AUTH_KEY, { setup_required: false, user: null });
     },
   });

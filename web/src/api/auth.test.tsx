@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { authFixture } from "../test/fixtures";
-import { AUTH_KEY, useChangePassword, useSignOut } from "./auth";
+import { AUTH_KEY, useAuthStatus, useChangePassword, useSignOut } from "./auth";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -34,6 +34,21 @@ describe("useSignOut", () => {
     expect(spy.mock.calls[0][1]?.method).toBe("POST");
     expect(client.getQueryData(["teams"])).toBeUndefined();
     expect(client.getQueryData(AUTH_KEY)).toEqual({ setup_required: false, user: null });
+  });
+});
+
+describe("useSignOut with a mounted gate", () => {
+  it("tells the components already watching the session", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    const { wrapper } = setup();
+    // Separate roots, as the gate in App and the menu in the footer are.
+    const gate = renderHook(() => useAuthStatus(), { wrapper });
+    const menu = renderHook(() => useSignOut(), { wrapper });
+    expect(gate.result.current.data?.user).not.toBeNull();
+
+    await act(() => menu.result.current.mutateAsync());
+
+    await waitFor(() => expect(gate.result.current.data?.user).toBeNull());
   });
 });
 

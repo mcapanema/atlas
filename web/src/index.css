@@ -446,6 +446,14 @@ h5 {
   padding: 8px;
   border-top: 1px solid var(--ant-color-split);
 }
+.app-account-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .app-content {
   padding: 20px 24px;
 }

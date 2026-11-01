@@ -198,14 +198,19 @@ describe("App", () => {
 });
 
 describe("App — opening the gate", () => {
-  // The session stays signed out: only the mutation's setQueryData can open the app.
+  // The session stays signed out until the sign-in call; the account menu in
+  // the opened app refetches it, as the real server then answers with the user.
   function mockSignedOut(setupRequired: boolean) {
+    let signedIn = false;
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = requestUrl(input);
       if (url === "/api/auth/session") {
-        return Promise.resolve(jsonResponse({ setup_required: setupRequired, user: null }));
+        return Promise.resolve(
+          jsonResponse(signedIn ? authFixture() : { setup_required: setupRequired, user: null }),
+        );
       }
       if (url === "/api/auth/sign-in" || url === "/api/auth/setup") {
+        signedIn = true;
         return Promise.resolve(jsonResponse(authFixture().user));
       }
       return Promise.resolve(jsonResponse([]));

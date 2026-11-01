@@ -19,6 +19,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useThemeMode } from "../theme/context";
+import { AccountMenu } from "./AccountMenu";
 
 const { Sider, Content } = Layout;
 
@@ -147,6 +148,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             style={{ flex: 1, background: "transparent", borderInlineEnd: 0 }}
           />
           <div className="app-sider-footer">
+            <AccountMenu collapsed={collapsed} />
             <Tooltip title={dark ? "Switch to light mode" : "Switch to dark mode"}>
               <Button
                 type="text"
