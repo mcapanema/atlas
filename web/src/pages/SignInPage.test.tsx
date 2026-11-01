@@ -47,6 +47,37 @@ describe("SignInPage — sign in", () => {
   });
 });
 
+describe("SignInPage — email field", () => {
+  it("trims spaces around the email and sends the request", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse({ detail: "Wrong email or password" }, 401));
+    renderWithClient(<SignInPage setupRequired={false} />);
+
+    type("Email", " Ana@Acme.com ");
+    type("Password", "not-the-password");
+    submit("Sign in");
+
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[0][1]?.body).toBe(
+      JSON.stringify({ email: "Ana@Acme.com", password: "not-the-password" }),
+    );
+  });
+
+  it("says a malformed email is not valid, without a request", async () => {
+    const spy = vi.spyOn(globalThis, "fetch");
+    renderWithClient(<SignInPage setupRequired={false} />);
+
+    type("Email", "ana-at-acme");
+    type("Password", "not-the-password");
+    submit("Sign in");
+
+    expect(await screen.findByText("Enter a valid email address")).toBeInTheDocument();
+    expect(screen.queryByText("Enter your email address")).not.toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
 describe("SignInPage — first run", () => {
   it("explains that the first account is the administrator", () => {
     renderWithClient(<SignInPage setupRequired />);

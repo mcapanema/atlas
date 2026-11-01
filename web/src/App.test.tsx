@@ -196,3 +196,59 @@ describe("App", () => {
     expect(await screen.findByText("Couldn't reach Atlas")).toBeInTheDocument();
   });
 });
+
+describe("App — opening the gate", () => {
+  // The session stays signed out: only the mutation's setQueryData can open the app.
+  function mockSignedOut(setupRequired: boolean) {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url === "/api/auth/session") {
+        return Promise.resolve(jsonResponse({ setup_required: setupRequired, user: null }));
+      }
+      if (url === "/api/auth/sign-in" || url === "/api/auth/setup") {
+        return Promise.resolve(jsonResponse(authFixture().user));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+  }
+
+  function renderApp() {
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter initialEntries={["/teams"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  function type(label: string, value: string) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  }
+
+  it("opens the app on the asked-for page after signing in", async () => {
+    mockSignedOut(false);
+    renderApp();
+    await screen.findByRole("heading", { name: "Sign in" });
+
+    type("Email", "admin@atlas.local");
+    type("Password", "correct-horse-battery");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("link", { name: "Atlas home" })).toBeInTheDocument();
+    expect(await screen.findByText("Team Dashboard")).toBeInTheDocument();
+  });
+
+  it("opens the app after creating the first account", async () => {
+    mockSignedOut(true);
+    renderApp();
+    await screen.findByRole("heading", { name: "Create the first account" });
+
+    type("Email", "admin@atlas.local");
+    type("Name", "Admin");
+    type("Password", "correct-horse-battery");
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByRole("link", { name: "Atlas home" })).toBeInTheDocument();
+  });
+});

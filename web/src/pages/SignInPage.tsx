@@ -47,7 +47,13 @@ export function SignInPage({ setupRequired }: { setupRequired: boolean }) {
           <Form.Item
             label="Email"
             name="email"
-            rules={[{ required: true, type: "email", message: "Enter your email address" }]}
+            // Trim before validating: " Ana@Acme.com " is valid (the server
+            // normalizes case), but the email rule would reject the spaces.
+            normalize={(value?: string) => value?.trim()}
+            rules={[
+              { required: true, message: "Enter your email address" },
+              { type: "email", message: "Enter a valid email address" },
+            ]}
           >
             <Input autoComplete="username" autoFocus />
           </Form.Item>
