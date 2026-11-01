@@ -6,7 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
@@ -55,6 +55,19 @@ async def _stored(url: str) -> tuple[str | None, int]:
     return stored, sessions
 
 
+async def _remove_ana(url: str) -> None:
+    engine = create_async_engine(url)
+    async with async_sessionmaker(engine)() as session:
+        await session.execute(delete(AuthSessionModel))
+        await session.execute(delete(UserModel))
+        await session.commit()
+    await engine.dispose()
+
+
+def _no_prompt(prompt: str) -> str:
+    raise AssertionError(f"prompted for {prompt!r}")
+
+
 @pytest.fixture
 def db(tmp_path: Path, settings_env: Callable[..., None]) -> str:
     url = f"sqlite+aiosqlite:///{tmp_path / 'atlas.db'}"
@@ -95,12 +108,40 @@ def test_short_password_exits_1(db: str, capsys: pytest.CaptureFixture[str]) -> 
 
 
 def test_unknown_email_exits_1(db: str, capsys: pytest.CaptureFixture[str]) -> None:
-    code = main(
-        ["reset-password", "nobody@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD)
-    )
+    code = main(["reset-password", "nobody@acme.com"], read_password=_no_prompt)
 
     assert code == 1
     assert capsys.readouterr().err == "No user with email nobody@acme.com\n"
+
+
+def test_user_removed_while_prompting_exits_1(db: str, capsys: pytest.CaptureFixture[str]) -> None:
+    def remove_ana_then_answer(prompt: str) -> str:
+        asyncio.run(_remove_ana(db))
+        return NEW_PASSWORD
+
+    code = main(["reset-password", "ana@acme.com"], read_password=remove_ana_then_answer)
+
+    assert code == 1
+    assert capsys.readouterr().err == "No user with email ana@acme.com\n"
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, EOFError])
+@pytest.mark.parametrize("at_prompt", [1, 2])
+def test_ctrl_c_at_a_prompt_cancels(
+    db: str, capsys: pytest.CaptureFixture[str], error: type[BaseException], at_prompt: int
+) -> None:
+    answers = [NEW_PASSWORD] * (at_prompt - 1)
+
+    def reader(prompt: str) -> str:
+        if not answers:
+            raise error
+        return answers.pop()
+
+    code = main(["reset-password", "ana@acme.com"], read_password=reader)
+
+    assert code == 1
+    assert capsys.readouterr().err == "\nCancelled; nothing changed.\n"
+    assert asyncio.run(_stored(db))[0] == PASSWORD_HASH
 
 
 def test_unmigrated_database_is_a_clear_error(
