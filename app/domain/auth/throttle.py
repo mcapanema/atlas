@@ -10,8 +10,10 @@ SIGN_IN_LOCKOUT = timedelta(minutes=15)
 class SignInThrottle:
     """Locks a key (an email) after too many failed sign-ins inside a sliding window.
 
-    It reads a monotonic clock, not the wall clock, so a clock step can
-    neither reorder its keys nor stretch a lock.
+    It reads a monotonic clock, so a wall-clock step (an NTP correction, a
+    manual change) can neither reorder its keys nor stretch a lock. That clock
+    pauses while the host sleeps, so a lock can outlast its window in
+    wall-clock time across a sleep — the safe direction.
 
     ponytail: in-process memory — per process, and a restart clears it. That
     fits the single-process monolith (ADR-0002). Upgrade path: a DB-backed
