@@ -11,6 +11,7 @@ import { MeetingsPage } from "./pages/MeetingsPage";
 import { MetricRulesPage } from "./pages/MetricRulesPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { SignInPage } from "./pages/SignInPage";
+import { UsersPage } from "./pages/UsersPage";
 import { WorkItemPage } from "./pages/WorkItemPage";
 import { WorkItemsPage } from "./pages/WorkItemsPage";
 
@@ -54,6 +55,7 @@ function SignedInApp() {
           <Route path="/metrics" element={<Navigate to="/teams" replace />} />
           <Route path="/connectors" element={<ConnectorsPage />} />
           <Route path="/metric-rules" element={<MetricRulesPage />} />
+          <Route path="/users" element={<UsersPage />} />
         </Routes>
       </Suspense>
     </AppLayout>
