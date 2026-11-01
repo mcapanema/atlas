@@ -25,6 +25,7 @@ hooks: ## Install git hooks: pre-commit (ruff, eslint, prettier) + pre-push (mak
 migrate: local-db-free ## Apply database migrations
 	uv run alembic upgrade head
 
+reset-password: DOCKER_HINT = Or reset it inside the container: docker compose exec app python -m app.cli reset-password $(EMAIL)
 reset-password: local-db-free ## Reset a user's password from the terminal (EMAIL=...)
 	@if [ -z "$(EMAIL)" ]; then echo "Usage: make reset-password EMAIL=you@example.com"; exit 1; fi
 	uv run python -m app.cli reset-password "$(EMAIL)"
@@ -120,5 +121,6 @@ docker-logs: ## Tail Docker container logs
 local-db-free:
 	@if [ -n "$$(docker compose ps --status running --quiet app 2>/dev/null)" ]; then \
 		echo "Atlas is running in Docker and uses the same data/atlas.db; stop it first: make docker-down"; \
+		if [ -n "$(DOCKER_HINT)" ]; then echo "$(DOCKER_HINT)"; fi; \
 		exit 1; \
 	fi
