@@ -149,12 +149,24 @@ def test_unmigrated_database_is_a_clear_error(
 ) -> None:
     settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path / 'empty.db'}")
 
-    code = main(
-        ["reset-password", "ana@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD)
-    )
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
 
     assert code == 1
     assert capsys.readouterr().err == "Can't read the users table — run make migrate first.\n"
+
+
+def test_unopenable_database_is_a_clear_error(
+    tmp_path: Path, settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path / 'no-such-dir' / 'atlas.db'}")
+
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("Can't use the database: ")
+    assert "migrate" not in err
+    assert str(tmp_path) not in err
 
 
 def test_password_never_comes_from_argv() -> None:

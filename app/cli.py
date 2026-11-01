@@ -14,8 +14,10 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from uuid import UUID
 
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import inspect
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.orm import Session
 
 from app.application.auth.service import UnknownUserError
 from app.application.auth.users import UserService
@@ -32,6 +34,10 @@ class _CliError(Exception):
     """A failure to report as one line on stderr, exit code 1."""
 
 
+def _has_users_table(session: Session) -> bool:
+    return inspect(session.connection()).has_table("users")
+
+
 @asynccontextmanager
 async def _database() -> AsyncIterator[AsyncSession]:
     """One session on the configured database; the engine is disposed afterwards."""
@@ -41,9 +47,14 @@ async def _database() -> AsyncIterator[AsyncSession]:
     )
     try:
         async with sessionmaker() as session:
+            # inspect() works on every engine; SQLite and Postgres raise
+            # different exception classes for a missing table.
+            if not await session.run_sync(_has_users_table):
+                raise _CliError("Can't read the users table — run make migrate first.")
             yield session
-    except OperationalError as exc:
-        raise _CliError("Can't read the users table — run make migrate first.") from exc
+    except DBAPIError as exc:
+        reason = str(exc.orig).splitlines() or [type(exc.orig).__name__]
+        raise _CliError(f"Can't use the database: {reason[0]}") from exc
     finally:
         engine = sessionmaker.kw["bind"]
         assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
