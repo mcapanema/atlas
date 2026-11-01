@@ -99,13 +99,12 @@ async def openrouter_status(service: CredentialServiceDep) -> OpenRouterStatusRe
     return await _openrouter_status(service)
 
 
-# ponytail: a PUT replaces the whole credential, so changing the advisor model means re-entering
-# the key. Accept an omitted secret as "keep the stored one" if that friction is ever reported.
+# An omitted key keeps the stored one; it is checked again with the new model.
 @router.put("/openrouter/credentials", response_model=OpenRouterStatusRead)
 async def put_openrouter_credentials(
     payload: OpenRouterCredentialsWrite, service: CredentialServiceDep
 ) -> OpenRouterStatusRead:
-    await service.save(Credential(Integration.OPENROUTER, payload.api_key, model=payload.model))
+    await service.update(Integration.OPENROUTER, payload.api_key, model=payload.model)
     return await _openrouter_status(service)
 
 
@@ -193,13 +192,12 @@ async def github_status(jobs: SyncJobRunnerDep, service: CredentialServiceDep) -
     return await _github_status(service, jobs)
 
 
-# ponytail: a PUT replaces the whole credential, so changing the owner means re-entering the
-# token. Accept an omitted secret as "keep the stored one" if that friction is ever reported.
+# An omitted token keeps the stored one; it is checked again against the new owner.
 @router.put("/github/credentials", response_model=GitHubStatusRead)
 async def put_github_credentials(
     payload: GitHubCredentialsWrite, jobs: SyncJobRunnerDep, service: CredentialServiceDep
 ) -> GitHubStatusRead:
-    await service.save(Credential(Integration.GITHUB, payload.token, owner=payload.owner))
+    await service.update(Integration.GITHUB, payload.token, owner=payload.owner)
     return await _github_status(service, jobs)
 
 

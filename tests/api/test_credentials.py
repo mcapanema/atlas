@@ -124,3 +124,54 @@ async def test_openrouter_status_defaults_the_model(
     assert (await client.get("/api/recommendations/status")).json() == {"configured": True}
     deleted = await client.delete("/api/connectors/openrouter/credentials")
     assert deleted.json()["configured"] is False
+
+
+async def test_github_owner_changes_without_the_token(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    await client.put(
+        "/api/connectors/github/credentials", json={"token": "ghp_secret_abcd", "owner": "acme"}
+    )
+
+    response = await client.put("/api/connectors/github/credentials", json={"owner": "globex"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "configured": True,
+        "owner": "globex",
+        "hint": "…abcd",
+        "running": None,
+    }
+    assert verifier.verified[-1].secret == "ghp_secret_abcd"
+
+
+async def test_openrouter_model_changes_without_the_key(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    await client.put(
+        "/api/connectors/openrouter/credentials", json={"api_key": "sk-or-v1-xxxx9876"}
+    )
+
+    response = await client.put(
+        "/api/connectors/openrouter/credentials", json={"model": "openai/gpt-5"}
+    )
+
+    assert response.json() == {"configured": True, "model": "openai/gpt-5", "hint": "…9876"}
+
+
+async def test_omitted_secret_with_nothing_stored_answers_422(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    response = await client.put("/api/connectors/github/credentials", json={"owner": "acme"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "No GitHub key is stored yet; enter one"
+    assert verifier.verified == []
+
+
+async def test_linear_key_is_still_required(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    response = await client.put("/api/connectors/linear/credentials", json={})
+
+    assert response.status_code == 422

@@ -257,14 +257,16 @@ class LinearCredentialsWrite(BaseModel):
 class GitHubCredentialsWrite(BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
 
-    token: Secret
+    # Omitted: keep the stored token (CredentialService.update).
+    token: Secret | None = None
     owner: _Label
 
 
 class OpenRouterCredentialsWrite(BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
 
-    api_key: Secret
+    # Omitted: keep the stored key (CredentialService.update).
+    api_key: Secret | None = None
     model: _ModelId = DEFAULT_ADVISOR_MODEL
 
 
