@@ -163,3 +163,9 @@ class SqlAlchemyAuthSessionRepository:
             statement = statement.where(AuthSessionModel.token_hash != keep_token_hash)
         await self._session.execute(statement)
         await self._session.flush()
+
+    async def delete_expired(self, now: datetime) -> None:
+        await self._session.execute(
+            delete(AuthSessionModel).where(AuthSessionModel.expires_at <= now)
+        )
+        await self._session.flush()

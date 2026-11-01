@@ -8,7 +8,7 @@ from app.application.auth.service import (
     SetupClosedError,
 )
 from app.domain._time import utcnow
-from app.domain.auth.entities import SESSION_LIFETIME, User
+from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, User
 from app.domain.auth.passwords import hash_password
 from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.domain.auth.tokens import hash_token
@@ -153,3 +153,17 @@ async def test_setup_claims_before_adding_the_user() -> None:
 
     with pytest.raises(SetupAlreadyClaimedError):
         await users.claim_setup(NOW)
+
+
+async def test_sign_in_purges_expired_sessions() -> None:
+    service, users, sessions = make_service()
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+    other = User(email="bo@acme.com", name="Bo", password_hash=None)
+    await users.add(other)
+    await sessions.add(AuthSession("stale", other.id, expires_at=NOW - timedelta(minutes=1)))
+    await sessions.add(AuthSession("live", other.id, expires_at=NOW + timedelta(minutes=1)))
+
+    await service.sign_in("ana@acme.com", PASSWORD)
+
+    assert await sessions.get("stale") is None
+    assert await sessions.get("live") is not None

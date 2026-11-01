@@ -140,3 +140,24 @@ async def test_failed_claim_leaves_the_session_usable(session: AsyncSession) -> 
         await repo.claim_setup(_NOW)
 
     assert await repo.count() == 0
+
+
+async def test_delete_expired_keeps_live_sessions(session: AsyncSession) -> None:
+    users = SqlAlchemyUserRepository(session)
+    sessions = SqlAlchemyAuthSessionRepository(session)
+    user = User(email="ana@acme.com", name="Ana", password_hash=None)
+    await users.add(user)
+    for token_hash, expires_at in [
+        ("expired", _NOW - timedelta(seconds=1)),
+        ("at-now", _NOW),
+        ("live", _NOW + timedelta(seconds=1)),
+    ]:
+        await sessions.add(
+            AuthSession(token_hash=token_hash, user_id=user.id, expires_at=expires_at)
+        )
+
+    await sessions.delete_expired(_NOW)
+
+    assert await sessions.get("expired") is None
+    assert await sessions.get("at-now") is None
+    assert await sessions.get("live") is not None

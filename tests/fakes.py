@@ -107,6 +107,9 @@ class InMemoryAuthSessionRepository:
             h: s for h, s in self._sessions.items() if s.user_id != user_id or h == keep_token_hash
         }
 
+    async def delete_expired(self, now: datetime) -> None:
+        self._sessions = {h: s for h, s in self._sessions.items() if s.expires_at > now}
+
 
 class InMemoryTeamRepository:
     def __init__(self, teams: list[Team] | None = None) -> None:
