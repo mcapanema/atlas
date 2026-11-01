@@ -102,10 +102,9 @@ async def test_reset_password_lifts_the_sign_in_lock() -> None:
     throttle = SignInThrottle()
     service = UserService(users, InMemoryAuthSessionRepository(), throttle)
     user = await service.create_user("ana@acme.com", "Ana", PASSWORD, is_admin=False)
-    now = utcnow()
     for _ in range(5):
-        throttle.record_failure("ana@acme.com", now)
+        throttle.record_failure("ana@acme.com")
 
     await service.reset_password(user.id, "a-brand-new-passphrase")
 
-    assert throttle.retry_after("ana@acme.com", now) is None
+    assert throttle.retry_after("ana@acme.com") is None

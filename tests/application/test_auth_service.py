@@ -13,9 +13,9 @@ from app.domain._time import utcnow
 from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, User
 from app.domain.auth.passwords import hash_password
 from app.domain.auth.repository import SetupAlreadyClaimedError
-from app.domain.auth.throttle import SignInThrottle
+from app.domain.auth.throttle import SIGN_IN_LOCKOUT, SignInThrottle
 from app.domain.auth.tokens import hash_token
-from tests.fakes import InMemoryAuthSessionRepository, InMemoryUserRepository
+from tests.fakes import FakeClock, InMemoryAuthSessionRepository, InMemoryUserRepository
 
 PASSWORD = "correct horse battery"
 NOW = utcnow()
@@ -26,7 +26,11 @@ def make_service(
 ) -> tuple[AuthService, InMemoryUserRepository, InMemoryAuthSessionRepository]:
     users = InMemoryUserRepository()
     sessions = InMemoryAuthSessionRepository()
-    return AuthService(users, sessions, SignInThrottle(), now=lambda: now), users, sessions
+    return (
+        AuthService(users, sessions, SignInThrottle(clock=FakeClock()), now=lambda: now),
+        users,
+        sessions,
+    )
 
 
 async def test_setup_creates_an_admin_and_a_session() -> None:
@@ -81,7 +85,10 @@ async def test_expired_session_is_rejected_and_deleted() -> None:
     service, users, sessions = make_service()
     signed_in = await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
     later = AuthService(
-        users, sessions, SignInThrottle(), now=lambda: NOW + SESSION_LIFETIME + timedelta(seconds=1)
+        users,
+        sessions,
+        SignInThrottle(clock=FakeClock()),
+        now=lambda: NOW + SESSION_LIFETIME + timedelta(seconds=1),
     )
 
     assert await later.user_for_token(signed_in.token) is None
@@ -215,6 +222,20 @@ async def test_successful_sign_in_clears_the_count() -> None:
     await service.sign_in("ana@acme.com", PASSWORD)
 
     await _fail_sign_ins(service, "ana@acme.com", times=4)
+
+    assert (await service.sign_in("ana@acme.com", PASSWORD)).user.email == "ana@acme.com"
+
+
+async def test_lock_ignores_wall_clock_steps() -> None:
+    wall = [NOW]
+    clock = FakeClock()
+    users, sessions = InMemoryUserRepository(), InMemoryAuthSessionRepository()
+    service = AuthService(users, sessions, SignInThrottle(clock=clock), now=lambda: wall[0])
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+    await _fail_sign_ins(service, "ana@acme.com")
+
+    wall[0] = NOW - timedelta(hours=1)  # the wall clock steps back
+    clock.advance(SIGN_IN_LOCKOUT)
 
     assert (await service.sign_in("ana@acme.com", PASSWORD)).user.email == "ana@acme.com"
 

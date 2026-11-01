@@ -8,7 +8,7 @@ stores entities in insertion order (dict keyed by id).
 
 from collections.abc import Collection, Mapping
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
@@ -764,3 +764,16 @@ class InMemoryDeploymentRepository:
             and d.started_at >= since
         ]
         return min(starts, default=None)
+
+
+class FakeClock:
+    """A monotonic clock that moves only when a test advances it."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self._now = start
+
+    def __call__(self) -> float:
+        return self._now
+
+    def advance(self, delta: timedelta) -> None:
+        self._now += delta.total_seconds()

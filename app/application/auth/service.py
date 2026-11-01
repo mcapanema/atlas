@@ -105,12 +105,12 @@ class AuthService:
         except ValueError:
             key = None
         throttle_key = key or email.strip().lower()
-        retry_after = self._throttle.retry_after(throttle_key, self._now())
+        retry_after = self._throttle.retry_after(throttle_key)
         if retry_after is not None:
             raise TooManySignInsError(retry_after)
         # Count the attempt before the first await: a burst of parallel requests
         # would otherwise all pass the check above before any failure lands.
-        self._throttle.record_failure(throttle_key, self._now())
+        self._throttle.record_failure(throttle_key)
         user = await self._users.get_by_email(key) if key is not None else None
         stored = user.password_hash if user is not None else None
         valid = await asyncio.to_thread(
