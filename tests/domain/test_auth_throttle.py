@@ -74,3 +74,36 @@ def test_stale_keys_are_pruned() -> None:
     throttle.record_failure(KEY, T + SIGN_IN_LOCKOUT)
 
     assert len(throttle) == 1
+
+
+def test_stale_keys_are_pruned_below_any_size_threshold() -> None:
+    throttle = SignInThrottle()
+    _fail(throttle, 1, key="a@acme.com")
+    _fail(throttle, 1, key="b@acme.com")
+
+    throttle.record_failure(KEY, T + SIGN_IN_LOCKOUT)
+
+    assert len(throttle) == 1
+
+
+def test_a_refreshed_key_moves_behind_stale_ones() -> None:
+    throttle = SignInThrottle()
+    _fail(throttle, 1, key="a@acme.com")
+    _fail(throttle, 1, at=T + timedelta(minutes=1), key="b@acme.com")
+    _fail(throttle, 1, at=T + timedelta(minutes=10), key="a@acme.com")
+
+    throttle.record_failure(KEY, T + timedelta(minutes=16))
+
+    # b's newest failure left the window; a's did not.
+    assert len(throttle) == 2
+
+
+def test_an_emptied_key_is_pruned() -> None:
+    throttle = SignInThrottle()
+    _fail(throttle, 1, key="a@acme.com")
+    later = T + SIGN_IN_LOCKOUT
+    assert throttle.retry_after("a@acme.com", later) is None  # empties a's deque
+
+    throttle.record_failure(KEY, later)
+
+    assert len(throttle) == 1
