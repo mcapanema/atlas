@@ -40,7 +40,9 @@ Presentation is allowed to know a concrete adapter exists).
 - One router per concept (`<concept>.py`,
   `APIRouter(prefix="/api/<concept>", tags=[...])`), registered in
   `app/main.py`'s `create_app()`. Deliberate exceptions: `health.py`
-  serves bare `/health`; `advisor.py` mounts at `/api/recommendations`
+  serves bare `/health`; `docs.py` serves Swagger UI at `/api/docs` and
+  the schema at `/api/openapi.json` (FastAPI's own docs URLs are off, so
+  the docs sit behind sign-in); `advisor.py` mounts at `/api/recommendations`
   (named for what it returns); `connectors.py` nests actions per vendor
   (`POST /api/connectors/linear/sync`, `POST /api/connectors/github/sync`); `metric_rules.py` is prefix-less
   because it serves both `/api/organizations/{id}/metric-rules` and

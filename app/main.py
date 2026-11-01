@@ -15,6 +15,7 @@ from app.api import (
     auth,
     codebases,
     connectors,
+    docs,
     events,
     forecasts,
     health,
@@ -126,15 +127,26 @@ def create_app() -> FastAPI:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    app = FastAPI(title="Atlas", version="0.1.0", lifespan=lifespan)
-    # Per-process secret for the MCP facade's in-process calls (ADR-0027).
+    # FastAPI's own docs bypass routers, so they can't be guarded; docs.py
+    # serves them at /api/docs behind sign-in instead.
+    app = FastAPI(
+        title="Atlas",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    # Failed sign-ins must outlive a request (ADR-0027).
     app.state.sign_in_throttle = SignInThrottle()
+    # Per-process secret for the MCP facade's in-process calls (ADR-0027).
     app.state.internal_token = secrets.token_urlsafe(32)
     app.include_router(health.router)
     app.include_router(auth.router)
     # Everything else needs a signed-in user; test_auth_guard.py fails on a
     # /api route left out of this loop.
     for router in (
+        docs.router,
         organizations.router,
         teams.router,
         people.router,

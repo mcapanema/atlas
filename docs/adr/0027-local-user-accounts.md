@@ -37,7 +37,9 @@ SSO later.
   14 days, `Secure` off). The database stores only its SHA-256. The
   lifetime is absolute (14 days), with no sliding renewal.
 - Every `/api/*` router except `/api/auth` needs a signed-in user;
-  `/api/users` needs an admin.
+  `/api/users` needs an admin. That includes the API docs, served at
+  `/api/docs` and `/api/openapi.json`; FastAPI's own `/docs`, `/redoc` and
+  `/openapi.json` are switched off.
 - The MCP facade keeps working without a user. Its in-process REST calls
   carry `X-Atlas-Internal: <token>`, a per-process random value made in
   `create_app()` and compared with `secrets.compare_digest`.
