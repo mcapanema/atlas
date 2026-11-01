@@ -52,7 +52,7 @@ Prerequisite: Docker with Compose.
 
 2. Start Atlas with `make docker-up`.
 3. Open http://localhost:8000.
-4. Go to **Connectors**. Add your Linear API key on the Connectors page, then click **Sync now**.
+4. Go to **Connectors**, add your Linear API key, then click **Sync now**.
 
 The [user guide](docs/GUIDE.md) tells how to run Atlas without Docker,
 connect GitHub, turn on the AI, schedule syncs, and connect a chat client.

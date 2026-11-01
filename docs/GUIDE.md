@@ -189,17 +189,20 @@ A new Atlas has no data. To get data:
    Incidents are Linear issues with an incident label. You set these labels
    in Metric rules → **Incident labels**.
 5. Optional, for Advisor and Meetings: paste the OpenRouter key in the
-   OpenRouter card and select **Save key**.
+   OpenRouter card and select **Save key**. Atlas does not check the model
+   when you save. Use an OpenRouter model id that supports structured
+   outputs.
 6. Set an **Auto sync** schedule. See [Automatic sync](#automatic-sync).
 
-If a key is not set, its connector shows "Not configured" (Linear) or "Not
-set up" (GitHub), and its sync requests return `409`.
+If a key is not set, its connector shows "Not configured", and its sync
+requests return `409`.
 
 If a provider rejects a key, Atlas shows the reason and does not save the
 key. If the provider is down, Atlas answers `502` and does not save the key.
 Atlas stores keys encrypted. It never shows a key again. The card shows only
 the last four characters. If you lose `data/atlas.key`, the keys read as not
-configured. Enter them again.
+configured. Enter them again. After you replace or delete `data/atlas.key`,
+restart Atlas. The running app keeps the old key in memory.
 
 ## Automatic sync
 
