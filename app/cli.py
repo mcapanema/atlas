@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager, suppress
 from uuid import UUID
 
 from sqlalchemy import inspect
-from sqlalchemy.exc import ArgumentError, DBAPIError
+from sqlalchemy.exc import ArgumentError, DBAPIError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import Session
 
@@ -52,8 +52,9 @@ async def _database() -> AsyncIterator[AsyncSession]:
         sessionmaker = build_sessionmaker(
             settings.database_url, journal_mode=settings.sqlite_journal_mode
         )
-    except ArgumentError:
-        # Its text can hold the URL and its password: never show or chain it.
+    except (ArgumentError, InvalidRequestError, ValueError):
+        # A bad URL, port or sync driver. The text can hold the password: never
+        # show or chain it.
         raise _CliError(
             "Can't use the database: ATLAS_DATABASE_URL is not a usable database URL."
         ) from None

@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from sqlalchemy import delete, select
@@ -155,17 +156,34 @@ def test_unmigrated_database_is_a_clear_error(
     assert capsys.readouterr().err == "Can't read the users table — run make migrate first.\n"
 
 
-@pytest.mark.parametrize("step", ["_find_user", "_reset"])
-def test_ctrl_c_outside_the_prompts_cancels(
-    db: str,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-    step: str,
+def test_ctrl_c_during_the_lookup_cancels(
+    db: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def interrupted(*args: object) -> None:
+    async def interrupted(email: str) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(f"app.cli.{step}", interrupted)
+    monkeypatch.setattr("app.cli._find_user", interrupted)
+
+    code = main(
+        ["reset-password", "ana@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD)
+    )
+
+    assert code == 1
+    assert capsys.readouterr().err == "\nCancelled; nothing changed.\n"
+
+
+def test_ctrl_c_inside_the_write_keeps_the_old_password(
+    db: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_delete = SqlAlchemyAuthSessionRepository.delete_for_user
+
+    async def delete_then_interrupt(
+        self: SqlAlchemyAuthSessionRepository, user_id: UUID, **kwargs: str | None
+    ) -> None:
+        await real_delete(self, user_id, **kwargs)  # the new hash is written, not committed
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(SqlAlchemyAuthSessionRepository, "delete_for_user", delete_then_interrupt)
 
     code = main(
         ["reset-password", "ana@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD)
@@ -195,10 +213,19 @@ def test_reason_skips_blank_lines() -> None:
     assert _reason(ValueError("")) == "ValueError"
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+nosuchdriver://atlas:s3cret@db/atlas",  # unknown dialect
+        "not a url :s3cret@",  # can't be parsed
+        "postgresql+asyncpg://atlas:s3cret@db:notaport/atlas",  # bad port
+        "sqlite:///./data/s3cret.db",  # a sync driver
+    ],
+)
 def test_unusable_url_is_a_clear_error(
-    settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+    settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str], url: str
 ) -> None:
-    settings_env(database_url="postgresql+nosuchdriver://atlas:s3cret@db/atlas")
+    settings_env(database_url=url)
 
     code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
 
