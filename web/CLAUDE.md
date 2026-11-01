@@ -29,6 +29,12 @@ Node's major version lives in `.nvmrc` (CI reads it); the root
 - `src/components/AppLayout.tsx` — the sidebar shell; a new page goes in
   its grouped `NAV` items, its `TITLES` map (the browser tab title — a
   missing entry falls back to plain "Atlas"), and `App.tsx`'s `<Routes>`.
+- Auth gate: `App.tsx` reads `useAuthStatus()` (`src/api/auth.ts`) and,
+  signed out, renders `SignInPage` in place of `AppLayout` at the same URL.
+  The QueryClient comes from `createQueryClient()` (`src/api/queryClient.ts`,
+  used by `main.tsx`): any `ApiError` 401 refetches the auth status, so
+  pages never handle a lost session themselves. A test rendering `<App />`
+  must answer `/api/auth/session` (`authFixture()` for a signed-in admin).
 - `src/theme/` — the design system. `tokens.ts` is the single source of
   truth for both modes' palette and font stacks; `antdTheme.ts` maps it
   onto AntD; `src/index.css` uses AntD's `--ant-*` variables; mode comes
@@ -62,7 +68,7 @@ Vitest + React Testing Library.
 - A component using `useQuery`/`useMutation` renders via
   `renderWithClient(ui, initialEntries?)` from `src/test/render.tsx` — a
   bare `render()` throws "No QueryClient set".
-- Shared fixtures (`jsonResponse`, `teamFixture`,
+- Shared fixtures (`jsonResponse`, `teamFixture`, `authFixture`,
   `mockMetricsFetch(extraRoutes?)`, `requestUrl()`) live in
   `src/test/fixtures.ts` — don't re-declare them per file. Read a fetch
   mock's URL with `requestUrl()`, never `String(input)`.

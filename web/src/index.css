@@ -453,6 +453,28 @@ h5 {
   max-width: 1440px;
   margin-inline: auto;
 }
+/* Sign-in / first-run: one narrow column, top-aligned like an app page —
+   no card, no shadow, no centered poster. */
+.auth-page {
+  /* Layout is a flex column: without a width the column shrinks to its
+     content and the form changes width between the two modes. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 360px;
+  margin: 15vh auto 48px;
+  padding: 0 16px;
+}
+.auth-page .app-wordmark {
+  display: block;
+  margin-bottom: 24px;
+}
+/* The password hint and its min-length error are the same words; show one. */
+.auth-page .ant-form-item-has-error .ant-form-item-extra {
+  display: none;
+}
+.auth-page__error {
+  margin-bottom: 16px;
+}
 /* Settings pages (Connectors): one readable column. Full-width cards left
    their controls clustered in the left third of a 1440px page. */
 .page-settings {

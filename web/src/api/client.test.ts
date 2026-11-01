@@ -7,6 +7,12 @@ afterEach(() => {
 });
 
 describe("apiFetch", () => {
+  it("returns undefined for 204 No Content", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(apiFetch("/api/auth/sign-out", { method: "POST" })).resolves.toBeUndefined();
+  });
+
   it("merges caller headers with the JSON content type", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")

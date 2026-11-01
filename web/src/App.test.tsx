@@ -4,16 +4,23 @@ import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { authFixture, jsonResponse, requestUrl } from "./test/fixtures";
 import { ThemeProvider } from "./theme/ThemeProvider";
+
+vi.mock("./components/EChart", () => ({ EChart: () => null }));
 
 function newClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-beforeEach(() => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }),
+function mockSession(session: unknown) {
+  vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+    Promise.resolve(jsonResponse(requestUrl(input) === "/api/auth/session" ? session : [])),
   );
+}
+
+beforeEach(() => {
+  mockSession(authFixture());
 });
 
 afterEach(() => {
@@ -21,7 +28,7 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("renders the Atlas sidebar with grouped navigation", () => {
+  it("renders the Atlas sidebar with grouped navigation", async () => {
     render(
       <QueryClientProvider client={newClient()}>
         <BrowserRouter>
@@ -29,14 +36,14 @@ describe("App", () => {
         </BrowserRouter>
       </QueryClientProvider>,
     );
-    expect(screen.getByText("Atlas")).toBeInTheDocument();
+    expect(await screen.findByText("Atlas")).toBeInTheDocument();
     for (const group of ["Overview", "Delivery", "Intelligence", "Setup"]) {
       expect(screen.getByText(group)).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "Advisor" })).toBeInTheDocument();
   });
 
-  it("collapses the sidebar down to the mark", () => {
+  it("collapses the sidebar down to the mark", async () => {
     render(
       <QueryClientProvider client={newClient()}>
         <BrowserRouter>
@@ -44,13 +51,13 @@ describe("App", () => {
         </BrowserRouter>
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Collapse navigation" }));
     expect(screen.getByRole("link", { name: "Atlas home" })).toHaveTextContent("A");
     fireEvent.click(screen.getByRole("button", { name: "Expand navigation" }));
     expect(screen.getByRole("link", { name: "Atlas home" })).toHaveTextContent("Atlas");
   });
 
-  it("switches theme mode from the sidebar footer", () => {
+  it("switches theme mode from the sidebar footer", async () => {
     render(
       <QueryClientProvider client={newClient()}>
         <ThemeProvider>
@@ -60,14 +67,14 @@ describe("App", () => {
         </ThemeProvider>
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Switch to dark mode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to dark mode" }));
     expect(document.documentElement.dataset.theme).toBe("dark");
     fireEvent.click(screen.getByRole("button", { name: "Switch to light mode" }));
     expect(document.documentElement.dataset.theme).toBe("light");
     window.localStorage.clear();
   });
 
-  it("offers a skip-to-content link as the first tab stop", () => {
+  it("offers a skip-to-content link as the first tab stop", async () => {
     render(
       <QueryClientProvider client={newClient()}>
         <BrowserRouter>
@@ -75,7 +82,7 @@ describe("App", () => {
         </BrowserRouter>
       </QueryClientProvider>,
     );
-    const skip = screen.getByRole("link", { name: "Skip to content" });
+    const skip = await screen.findByRole("link", { name: "Skip to content" });
     expect(skip).toHaveAttribute("href", "#main");
     expect(document.querySelector("main#main")).not.toBeNull();
   });
@@ -92,7 +99,7 @@ describe("App", () => {
     expect(document.title).toBe("Atlas — Teams");
   });
 
-  it("falls back to the bare product title on unknown routes", () => {
+  it("falls back to the bare product title on unknown routes", async () => {
     render(
       <QueryClientProvider client={newClient()}>
         <MemoryRouter initialEntries={["/nowhere"]}>
@@ -100,6 +107,7 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
+    await screen.findByRole("link", { name: "Atlas home" });
     expect(document.title).toBe("Atlas");
   });
 
@@ -133,8 +141,58 @@ describe("App", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(screen.getByRole("link", { name: "Meetings" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Meetings" })).toBeInTheDocument();
     expect(await screen.findByText("Select a team to prepare a meeting.")).toBeInTheDocument();
     expect(document.title).toBe("Atlas — Meetings");
+  });
+
+  it("shows the first-run screen, without the sidebar, while no account exists", async () => {
+    mockSession({ setup_required: true, user: null });
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter initialEntries={["/teams"]}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Create the first account" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Atlas home" })).not.toBeInTheDocument();
+  });
+
+  it("shows the sign-in screen to a signed-out visitor", async () => {
+    mockSession({ setup_required: false, user: null });
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("opens the app once signed in", async () => {
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("link", { name: "Atlas home" })).toBeInTheDocument();
+  });
+
+  it("says so when the session check fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Couldn't reach Atlas")).toBeInTheDocument();
   });
 });
