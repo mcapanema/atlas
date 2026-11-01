@@ -101,7 +101,11 @@ describe("MeetingsPage", () => {
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByText(/Meeting prep is not configured/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(
+          "Meeting prep is not configured. Add an OpenRouter API key on the Connectors page to prepare meetings inside Atlas — or connect an external AI via MCP.",
+        ),
+      ).toBeInTheDocument(),
     );
   });
 

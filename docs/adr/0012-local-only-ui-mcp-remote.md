@@ -5,7 +5,7 @@ Date: 2026-10-05
 ## Status
 
 Accepted. Narrows the open user-auth question in ADR-0005. Amended by
-ADR-0027 (users now sign in; the context below records the state at the
+ADR-0028 (users now sign in; the context below records the state at the
 time).
 
 ## Context

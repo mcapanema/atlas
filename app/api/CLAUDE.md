@@ -23,9 +23,8 @@ entry point `app/cli.py` is the only other one).
   deliberate transaction-scope boundary — read it before "fixing" it.
 - **409-until-configured**: a dependency backed by an external integration
   (`get_delivery_data_source`, `get_code_host_source`, `get_advisor_port`)
-  raises `409 Conflict` with a human-readable detail while its `ATLAS_*`
-  keys are unset
-  (ADR-0005). A new integration follows the same pattern — never a 500,
+  raises `409 Conflict` with a human-readable detail while its stored credential is missing
+  (ADR-0005, ADR-0027). A new integration follows the same pattern — never a 500,
   never a silent fallback.
 - **Analytics scope**: metrics/forecasts/recommendations endpoints take
   `ScopeDep` from `scope.py` — exactly one of `team_id`/`project_id`
@@ -93,7 +92,7 @@ entry point `app/cli.py` is the only other one).
   `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()` (before `mount_spa`) only when
   the token is set, and `lifespan` must run
   `app.state.mcp.session_manager.run()` for it to serve.
-- **Auth** (ADR-0027): every router except `health` and `auth` is
+- **Auth** (ADR-0028): every router except `health` and `auth` is
   included in `create_app()` with `require_signed_in` (a valid
   `atlas_session` cookie, else 401); `tests/api/test_auth_guard.py` fails on
   an unguarded `/api` route. Routes that need *who* take `CurrentUserDep`

@@ -1,4 +1,4 @@
-# 27. Local user accounts with server-side sessions
+# 28. Local user accounts with server-side sessions
 
 Date: 2026-10-31
 

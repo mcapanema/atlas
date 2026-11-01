@@ -1,6 +1,6 @@
 """Terminal entry point: `python -m app.cli reset-password <email>` (`make reset-password`).
 
-The way back in when the only admin forgets their password (ADR-0027). A
+The way back in when the only admin forgets their password (ADR-0028). A
 second composition root beside `app/api/deps.py`: it wires the concrete
 adapters itself. The new password is read with getpass, never from argv or
 the environment, so it stays out of shell history and process lists.

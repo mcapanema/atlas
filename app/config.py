@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -32,22 +33,15 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./data/atlas.db"
     db_echo: bool = False
+    # Fernet key file for stored connector credentials; created on first use, keep with the DB.
+    secret_key_file: Path = Path("data/atlas.key")
     # SQLite journal mode: WAL on a local disk; Compose forces "delete" on its
     # bind mount, where WAL's memory-mapped -shm file isn't reliable.
     sqlite_journal_mode: SqliteJournalMode = "wal"
 
-    # Linear personal API key; None/empty disables the Linear connector.
-    linear_api_key: str | None = None
+    # Connector keys and the advisor model are stored encrypted in the
+    # database, entered on the Connectors page — not settings.
 
-    # GitHub token and the organization or user login whose repositories Atlas
-    # reads; the GitHub connector stays disabled until both are set.
-    github_token: str | None = None
-    github_owner: str | None = None
-
-    # OpenRouter API key; None/empty disables the AI advisor.
-    openrouter_api_key: str | None = None
-    # OpenRouter model slug the advisor uses.
-    advisor_model: str = "anthropic/claude-sonnet-5"
     # Run a draft -> critique -> revise loop inside every advice request
     # (~3x LLM cost and latency). Off by default.
     advisor_self_critique: bool = False

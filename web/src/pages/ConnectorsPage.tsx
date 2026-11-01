@@ -10,7 +10,9 @@ import {
 } from "../api/connectors";
 import { useOrganizations, type Organization } from "../api/organizations";
 import { AutoSyncCard } from "../components/AutoSyncCard";
+import { CredentialsSection } from "../components/CredentialsSection";
 import { GitHubConnectorCard } from "../components/GitHubConnectorCard";
+import { OpenRouterCard } from "../components/OpenRouterCard";
 import { SyncStatus } from "../components/SyncStatus";
 import { syncOutcome } from "../lib/syncOutcome";
 
@@ -20,13 +22,7 @@ function SetupAlert() {
       type="warning"
       showIcon
       title="Linear isn't configured"
-      description={
-        <>
-          Set <Typography.Text code>ATLAS_LINEAR_API_KEY</Typography.Text> (a Linear personal API
-          key) in the server environment, then restart Atlas. Until then Sync now is off and
-          scheduled syncs fail.
-        </>
-      }
+      description="Add a Linear personal API key below (Linear → Settings → Security & access → Personal API keys). Until then Sync now is off and scheduled syncs fail."
     />
   );
 }
@@ -120,7 +116,7 @@ function LinearCard({
   const configured = status?.configured ?? false;
   // A dot plus a word: the state never rides on color alone.
   const badge = configured ? (
-    <Badge status="success" text="Configured" />
+    <Badge status="success" text={`Configured · ${status?.hint ?? "…"}`} />
   ) : (
     <Badge status="default" text="Not configured" />
   );
@@ -134,6 +130,15 @@ function LinearCard({
           configured={configured}
           otherRunning={otherSyncRunning(status, sync)}
         />
+        {status && (
+          <CredentialsSection
+            integration="linear"
+            label="Linear"
+            fields={[{ name: "api_key", label: "Linear API key", secret: true }]}
+            initial={{}}
+            status={status}
+          />
+        )}
       </Flex>
     </Card>
   );
@@ -182,6 +187,7 @@ function ConnectorsWorkspace({
         // Keyed: another organization's save result must not carry over.
         <AutoSyncCard key={selectedOrgId} organizationId={selectedOrgId} />
       )}
+      <OpenRouterCard />
     </Flex>
   );
 }
@@ -196,7 +202,8 @@ export function ConnectorsPage() {
       <Typography.Paragraph type="secondary">
         Where Atlas gets its delivery data. Sync now pulls the latest from Linear, Sync GitHub pulls
         pull requests and deployments; auto sync keeps both fresh on a schedule (GitHub after each
-        successful Linear sync, when it is configured).
+        successful Linear sync, when it is configured). Keys are entered here, checked with the
+        provider before they are saved, and stored encrypted.
       </Typography.Paragraph>
       {loadError ? (
         <Alert

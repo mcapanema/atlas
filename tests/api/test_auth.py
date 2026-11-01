@@ -1,4 +1,4 @@
-"""First-run setup, sign-in, sign-out and password change (ADR-0027)."""
+"""First-run setup, sign-in, sign-out and password change (ADR-0028)."""
 
 from datetime import timedelta
 

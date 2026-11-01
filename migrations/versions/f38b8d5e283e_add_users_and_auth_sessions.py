@@ -1,7 +1,7 @@
 """add users and auth sessions
 
 Revision ID: f38b8d5e283e
-Revises: 259c45818cf8
+Revises: 006e5f3d5b36
 Create Date: 2026-10-31 21:44:10.440894
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f38b8d5e283e"
-down_revision: str | Sequence[str] | None = "259c45818cf8"
+down_revision: str | Sequence[str] | None = "006e5f3d5b36"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

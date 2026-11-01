@@ -121,7 +121,7 @@ export function AdvisorPage() {
       <Space direction="vertical" style={{ width: "100%" }} size="large">
         <AdvisorStatusAlerts
           status={status}
-          notConfigured="Advisor is not configured. Set ATLAS_OPENROUTER_API_KEY to enable AI coaching."
+          notConfigured="Advisor is not configured. Add an OpenRouter API key on the Connectors page to enable AI coaching."
         />
         <Space>
           <Select

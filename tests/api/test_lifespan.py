@@ -1,9 +1,12 @@
 import asyncio
+import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 from uuid import uuid4
 
+import pytest
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
@@ -36,7 +39,7 @@ async def test_lifespan_disposes_the_engine_on_shutdown(
 async def test_lifespan_starts_auto_sync_and_stops_it_on_shutdown(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
-    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
     app = create_app()
     with mock.patch.object(AutoSyncRunner, "tick", autospec=True, return_value=0):
         async with lifespan(app):
@@ -49,7 +52,7 @@ async def test_lifespan_starts_auto_sync_and_stops_it_on_shutdown(
 async def test_lifespan_cancels_a_running_sync_job(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
-    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
     app = create_app()
     entered = asyncio.Event()
 
@@ -85,7 +88,7 @@ async def test_lifespan_auto_sync_and_routes_share_one_sync_job_runner(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
     # One lock for every sync: a route's job runner is the one auto sync defers to.
-    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", linear_api_key="")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
     app = create_app()
     with mock.patch.object(AutoSyncRunner, "start", autospec=True):
         async with lifespan(app):
@@ -99,7 +102,7 @@ async def test_lifespan_fails_runs_left_running(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
     url = f"sqlite+aiosqlite:///{tmp_path}/lifespan.db"
-    settings_env(database_url=url, linear_api_key="")
+    settings_env(database_url=url)
     engine = create_async_engine(url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -129,3 +132,57 @@ async def test_lifespan_fails_runs_left_running(
                 current = await stored()
     assert current.status is RunStatus.FAILED
     assert current.error == INTERRUPTED
+
+
+async def test_lifespan_creates_the_key_file_before_any_request(
+    settings_env: Callable[..., None], tmp_path: Path
+) -> None:
+    key_file = tmp_path / "keys" / "atlas.key"
+    settings_env(
+        database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", secret_key_file=str(key_file)
+    )
+    app = create_app()
+    with mock.patch.object(AutoSyncRunner, "start", autospec=True):
+        async with lifespan(app):
+            assert key_file.stat().st_mode & 0o777 == 0o600
+
+
+async def test_lifespan_fails_on_a_corrupt_key_file(
+    settings_env: Callable[..., None], tmp_path: Path
+) -> None:
+    key_file = tmp_path / "atlas.key"
+    key_file.write_bytes(b"not a key")
+    settings_env(
+        database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db", secret_key_file=str(key_file)
+    )
+    app = create_app()
+    with pytest.raises(RuntimeError, match=re.escape(str(key_file))):
+        async with lifespan(app):
+            pass
+
+
+async def test_lifespan_warns_once_about_ignored_env_keys(
+    settings_env: Callable[..., None],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.chdir(tmp_path)  # this .env, not the developer's
+    (tmp_path / ".env").write_text("ATLAS_GITHUB_OWNER=acme-owner\nATLAS_LINEAR_API_KEY=\n")
+    monkeypatch.setenv("ATLAS_OPENROUTER_API_KEY", "sk-or-secret")
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path}/lifespan.db")
+    app = create_app()
+    with (
+        mock.patch.object(AutoSyncRunner, "start", autospec=True),
+        caplog.at_level(logging.WARNING),
+    ):
+        async with lifespan(app):
+            pass
+    warnings = [r.getMessage() for r in caplog.records if "Ignored settings" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "ATLAS_GITHUB_OWNER" in warnings[0]
+    assert "ATLAS_OPENROUTER_API_KEY" in warnings[0]
+    assert "ATLAS_LINEAR_API_KEY" not in warnings[0]  # empty: nothing to ignore
+    assert "Connectors page" in warnings[0]
+    assert "acme-owner" not in caplog.text
+    assert "sk-or-secret" not in caplog.text

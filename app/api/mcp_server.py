@@ -106,7 +106,7 @@ async def _api(
     # app.state if tool latency ever matters.
     transport = httpx.ASGITransport(app=app)
     # A loopback Host: LocalOnlyMiddleware serves in-process tool calls as local.
-    # The internal header stands in for a session: tools work with no user (ADR-0027).
+    # The internal header stands in for a session: tools work with no user (ADR-0028).
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://localhost",

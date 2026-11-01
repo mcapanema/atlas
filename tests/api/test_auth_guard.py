@@ -1,4 +1,4 @@
-"""Every /api route outside /api/auth needs a signed-in user (ADR-0027)."""
+"""Every /api route outside /api/auth needs a signed-in user (ADR-0028)."""
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute

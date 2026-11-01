@@ -55,10 +55,7 @@ def _fake_source() -> FakeDataSource:
 
 
 @pytest.fixture
-def synced_team_id_factory(
-    test_app: FastAPI, client: AsyncClient, settings_env: Callable[..., None]
-) -> Callable[[], Awaitable[str]]:
-    settings_env(linear_api_key="lin_api_test")
+def synced_team_id_factory(test_app: FastAPI, client: AsyncClient) -> Callable[[], Awaitable[str]]:
     test_app.dependency_overrides[get_delivery_data_source] = _fake_source
 
     async def sync() -> str:

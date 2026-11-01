@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -56,10 +56,7 @@ class FakeMeetingAdvisor:
         return "Lead with stuck items."
 
 
-async def test_prep_409_when_unconfigured(
-    client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
-    settings_env(openrouter_api_key="")
+async def test_prep_409_when_unconfigured(client: AsyncClient) -> None:
     response = await client.post(f"/api/meetings/prep?team_id={uuid4()}&meeting=daily_standup")
     assert response.status_code == 409
 

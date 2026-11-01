@@ -1,4 +1,4 @@
-"""`python -m app.cli reset-password` — the terminal way back in (ADR-0027)."""
+"""`python -m app.cli reset-password` — the terminal way back in (ADR-0028)."""
 
 import asyncio
 from collections.abc import Callable

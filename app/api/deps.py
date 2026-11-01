@@ -11,6 +11,7 @@ from app.application.auth.service import AuthService
 from app.application.auth.users import UserService
 from app.application.codebases.service import CodebaseService
 from app.application.codebases.sync import CodeSyncService
+from app.application.credentials.service import CredentialService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
@@ -29,12 +30,16 @@ from app.application.work_items.service import WorkItemService
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorPort
 from app.domain.auth.entities import User
+from app.domain.credentials.entities import Integration
+from app.domain.credentials.port import CredentialVerifier
+from app.domain.credentials.repository import CredentialRepository
 from app.domain.sync.port import CodeHostSource, DeliveryDataSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
 from app.infrastructure.connectors.github.datasource import GitHubDataSource
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
+from app.infrastructure.credential_checks import ProviderCredentialVerifier
 from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
 from app.infrastructure.repositories.auth import (
     SqlAlchemyAuthSessionRepository,
@@ -45,6 +50,7 @@ from app.infrastructure.repositories.codebases import (
     SqlAlchemyDeploymentRepository,
     SqlAlchemyPullRequestRepository,
 )
+from app.infrastructure.repositories.credentials import SqlAlchemyCredentialRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
@@ -61,6 +67,7 @@ from app.infrastructure.repositories.snapshots import (
 from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
+from app.infrastructure.secrets import cipher_for
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -91,6 +98,23 @@ def rules_resolver_for(session: AsyncSession) -> MetricRulesResolver:
         SqlAlchemyTeamRepository(session),
         SqlAlchemyProjectRepository(session),
     )
+
+
+def credential_repository_for(session: AsyncSession) -> CredentialRepository:
+    return SqlAlchemyCredentialRepository(session, cipher_for(get_settings().secret_key_file))
+
+
+def get_credential_verifier() -> CredentialVerifier:
+    return ProviderCredentialVerifier()
+
+
+def get_credential_service(
+    session: SessionDep, verifier: Annotated[CredentialVerifier, Depends(get_credential_verifier)]
+) -> CredentialService:
+    return CredentialService(credential_repository_for(session), verifier)
+
+
+CredentialServiceDep = Annotated[CredentialService, Depends(get_credential_service)]
 
 
 def get_organization_service(session: SessionDep) -> OrganizationService:
@@ -177,16 +201,18 @@ def get_forecast_service(session: SessionDep) -> ForecastService:
 ForecastServiceDep = Annotated[ForecastService, Depends(get_forecast_service)]
 
 
-def get_advisor_port() -> AdvisorPort:
-    settings = get_settings()
-    if not settings.openrouter_api_key:
+async def get_advisor_port(session: SessionDep) -> AdvisorPort:
+    credential = await credential_repository_for(session).get(Integration.OPENROUTER)
+    # An OpenRouter credential always carries a model; the second condition only narrows the type.
+    if credential is None or credential.model is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Advisor is not configured; set ATLAS_OPENROUTER_API_KEY",
+            detail="Advisor is not configured; add an OpenRouter API key on the Connectors page",
         )
+    settings = get_settings()
     return OpenRouterAdvisor(
-        api_key=settings.openrouter_api_key,
-        model=settings.advisor_model,
+        api_key=credential.secret,
+        model=credential.model,
         self_critique=settings.advisor_self_critique,
         max_tokens=settings.advisor_max_tokens,
         timeout_seconds=settings.advisor_timeout_seconds,
@@ -235,19 +261,21 @@ def get_advice_run_service(session: SessionDep) -> AdviceRunService:
 AdviceRunServiceDep = Annotated[AdviceRunService, Depends(get_advice_run_service)]
 
 
-LINEAR_NOT_CONFIGURED = "Linear connector is not configured; set ATLAS_LINEAR_API_KEY"
+LINEAR_NOT_CONFIGURED = (
+    "Linear connector is not configured; add a Linear API key on the Connectors page"
+)
 
 
-def linear_data_source() -> DeliveryDataSource | None:
-    """The Linear adapter, or None while ATLAS_LINEAR_API_KEY is unset."""
-    settings = get_settings()
-    if not settings.linear_api_key:
+async def linear_data_source(session: AsyncSession) -> DeliveryDataSource | None:
+    """The Linear adapter on the stored key, or None while none is stored."""
+    credential = await credential_repository_for(session).get(Integration.LINEAR)
+    if credential is None:
         return None
-    return LinearDataSource(LinearGraphQLClient(settings.linear_api_key))
+    return LinearDataSource(LinearGraphQLClient(credential.secret))
 
 
-def get_delivery_data_source() -> DeliveryDataSource:
-    source = linear_data_source()
+async def get_delivery_data_source(session: SessionDep) -> DeliveryDataSource:
+    source = await linear_data_source(session)
     if source is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=LINEAR_NOT_CONFIGURED)
     return source
@@ -277,20 +305,21 @@ SyncServiceDep = Annotated[SyncService, Depends(get_sync_service)]
 
 
 GITHUB_NOT_CONFIGURED = (
-    "GitHub connector is not configured; set ATLAS_GITHUB_TOKEN and ATLAS_GITHUB_OWNER"
+    "GitHub connector is not configured; add a GitHub token and owner on the Connectors page"
 )
 
 
-def github_code_source() -> CodeHostSource | None:
-    """The GitHub adapter, or None until ATLAS_GITHUB_TOKEN and ATLAS_GITHUB_OWNER are set."""
-    settings = get_settings()
-    if not (settings.github_token and settings.github_owner):
+async def github_code_source(session: AsyncSession) -> CodeHostSource | None:
+    """The GitHub adapter on the stored token and owner, or None while none is stored."""
+    credential = await credential_repository_for(session).get(Integration.GITHUB)
+    # A GitHub credential always carries an owner; the second condition only narrows the type.
+    if credential is None or credential.owner is None:
         return None
-    return GitHubDataSource(GitHubGraphQLClient(settings.github_token), settings.github_owner)
+    return GitHubDataSource(GitHubGraphQLClient(credential.secret), credential.owner)
 
 
-def get_code_host_source() -> CodeHostSource:
-    source = github_code_source()
+async def get_code_host_source(session: SessionDep) -> CodeHostSource:
+    source = await github_code_source(session)
     if source is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=GITHUB_NOT_CONFIGURED)
     return source
@@ -381,7 +410,7 @@ SyncScheduleServiceDep = Annotated[SyncScheduleService, Depends(get_sync_schedul
 
 SESSION_COOKIE = "atlas_session"
 # The MCP facade's in-process REST calls carry this header with
-# app.state.internal_token, so its tools work with no user (ADR-0027).
+# app.state.internal_token, so its tools work with no user (ADR-0028).
 INTERNAL_HEADER = "X-Atlas-Internal"
 
 

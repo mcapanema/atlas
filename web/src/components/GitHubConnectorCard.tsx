@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, Flex, Typography } from "antd";
 import { useGitHubStatus, useGitHubSync, type GitHubStatus } from "../api/connectors";
 import { codeSyncOutcome } from "../lib/syncOutcome";
 import { CodebasesTable } from "./CodebasesTable";
+import { CredentialsSection } from "./CredentialsSection";
 
 function SetupAlert() {
   return (
@@ -11,13 +12,7 @@ function SetupAlert() {
       type="warning"
       showIcon
       title="GitHub isn't configured"
-      description={
-        <>
-          Set <Typography.Text code>ATLAS_GITHUB_TOKEN</Typography.Text> and{" "}
-          <Typography.Text code>ATLAS_GITHUB_OWNER</Typography.Text> in the server environment, then
-          restart Atlas. Until then Sync GitHub is off.
-        </>
-      }
+      description="Add a GitHub token and owner below: a fine-grained personal access token (GitHub → Settings → Developer settings) with read access to Metadata, Pull requests and Deployments on the repositories Atlas should see. Until then Sync GitHub is off."
     />
   );
 }
@@ -66,13 +61,28 @@ function SyncGitHub({
   );
 }
 
+function GitHubCredentials({ status }: { status: GitHubStatus }) {
+  return (
+    <CredentialsSection
+      integration="github"
+      label="GitHub"
+      fields={[
+        { name: "token", label: "GitHub token", secret: true },
+        { name: "owner", label: "Owner (organization or user)" },
+      ]}
+      initial={{ owner: status.owner ?? "" }}
+      status={status}
+    />
+  );
+}
+
 export function GitHubConnectorCard({ organizationId }: { organizationId: string | undefined }) {
   const query = useGitHubStatus();
   const status = query.data;
   const badge = status?.configured ? (
     <Badge status="success" text={`Configured · ${status.owner ?? ""}`} />
   ) : (
-    <Badge status="default" text="Not set up" />
+    <Badge status="default" text="Not configured" />
   );
   return (
     <Card title="GitHub" loading={query.isLoading} extra={query.isLoading ? null : badge}>
@@ -88,6 +98,7 @@ export function GitHubConnectorCard({ organizationId }: { organizationId: string
         {status?.configured === false && <SetupAlert />}
         <SyncGitHub organizationId={organizationId} status={status} />
         {status?.configured && organizationId && <CodebasesTable organizationId={organizationId} />}
+        {status && <GitHubCredentials status={status} />}
       </Flex>
     </Card>
   );

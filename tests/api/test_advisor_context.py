@@ -1,15 +1,10 @@
-from collections.abc import Callable
-
 from httpx import AsyncClient
 
 from tests.api.helpers import create_team
 
 
-async def test_context_returns_digest_without_openrouter_key(
-    client: AsyncClient, settings_env: Callable[..., None]
-) -> None:
+async def test_context_returns_digest_without_openrouter_key(client: AsyncClient) -> None:
     # The digest is computed metrics only — no LLM, so no key required.
-    settings_env(openrouter_api_key="")
     team_id = await create_team(client)
 
     response = await client.get("/api/recommendations/context", params={"team_id": team_id})

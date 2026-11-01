@@ -42,6 +42,17 @@ derivation lives beside its aggregate: `derive_timeline`
 and — under its team's rules (`blocked_periods`) — blocked periods for `GET /api/work-items/{id}/timeline` and the Work
 Item Explorer (`/work-items`).
 
+Credentials (`app/domain/credentials/`, ADR-0027) are a separate aggregate:
+one `Credential` per integration (Linear, GitHub, OpenRouter), stored by
+`app/infrastructure/repositories/credentials.py` with its secret fields
+Fernet-encrypted (`app/infrastructure/secrets.py`; the key lives in the key
+file `ATLAS_SECRET_KEY_FILE`). `CredentialService`
+(`app/application/credentials/service.py`) verifies a credential before it
+saves it. The API is write-only — `PUT` and `DELETE`
+`/api/connectors/{linear|github|openrouter}/credentials` — and status
+responses carry a `hint`, never the secret. A credential that cannot be
+decrypted reads as not configured and logs a warning.
+
 An Organization also owns Codebases (`app/domain/codebases/`, ADR-0024): a
 repository from a code host, mapped to at most one Team and holding its Pull
 Requests and Deployments. Codebases arrive unmapped from a code sync, and an
@@ -52,7 +63,7 @@ the work items whose keys it names by REVIEW and MERGED events
 (`CodeSyncService`, `app/application/codebases/sync.py`).
 
 Users and their sign-in sessions are the `auth` aggregate
-(`app/domain/auth/`, tables `users` and `auth_sessions`, ADR-0027). A
+(`app/domain/auth/`, tables `users` and `auth_sessions`, ADR-0028). A
 session is an opaque token in the `atlas_session` cookie; the database
 keeps only its SHA-256. `create_app()` includes every `/api` router except
 `/api/auth` with the `require_signed_in` dependency (`app/api/deps.py`), so
@@ -125,7 +136,7 @@ events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
 `/api/metrics/health`, `/api/metrics/dora` (team scope only; 422 for a
 project), `/api/forecasts`, and `/api/recommendations` (`POST` starts a
-stored background run and answers 202 — 409 until `ATLAS_OPENROUTER_API_KEY` is set,
+stored background run and answers 202 — 409 until the OpenRouter key is saved on the Connectors page,
 ADR-0005; `GET` reads the latest stored run for the same scope, persona and
 window, or `null`, with no key needed). `GET /api/metrics/overview`
 is the Executive Dashboard's per-team row: flow metrics, health, forecast
@@ -190,6 +201,12 @@ custom.
 
 ### Ports to external systems
 
+- **Credentials** (`app/domain/credentials/`): the `CredentialVerifier`
+  port, implemented in `app/infrastructure/credential_checks.py` and
+  `app/infrastructure/ai/key_check.py`. A rejected credential answers 422;
+  an outage (provider down, 5xx, 429) raises `DataSourceError`, answered 502
+  — `DataSourceError.status` tells them apart. Nothing is stored either way.
+
 - **Sync** (`app/domain/sync/`): the `DeliveryDataSource` port (`port.py`)
   plus platform-neutral snapshots (`SourceTeam`, `SourceProject`,
   `SourceWorkItem`, `SourceEvent` in `source.py`). `SyncService`
@@ -252,9 +269,9 @@ Connector-specific code lives only in
 `app/infrastructure/connectors/<vendor>/`; vendor payloads never leave
 that package. The first connector is Linear
 (`app/infrastructure/connectors/linear/`): a small GraphQL client (httpx,
-personal API key via `ATLAS_LINEAR_API_KEY`), pure payload→`Source*`
+personal API key saved on the Connectors page), pure payload→`Source*`
 mapping functions, and a paginating `LinearDataSource`. Exposed as
-`POST /api/connectors/linear/sync` (409 until the key is set — ADR-0005)
+`POST /api/connectors/linear/sync` (409 until the key is saved — ADR-0005)
 and the Connectors page in the frontend. A project's home team is the first
 of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
@@ -285,12 +302,11 @@ issue with `completedAt` is a completion, the sync synthesizes one
 
 The GitHub connector (`app/infrastructure/connectors/github/`) implements
 `CodeHostSource` on GitHub's GraphQL API with the GraphQL client shared
-between vendors (`app/infrastructure/connectors/graphql.py`): a token via
-`ATLAS_GITHUB_TOKEN` and the organization or user login via
-`ATLAS_GITHUB_OWNER`. Its codebases are that owner's repositories; GitHub
+between vendors (`app/infrastructure/connectors/graphql.py`): a token and
+the organization or user login, both saved on the Connectors page. Its codebases are that owner's repositories; GitHub
 errors raise `GitHubAPIError` (a `DataSourceError`). Exposed as `GET
 /api/connectors/github` and `POST /api/connectors/github/sync` (409 until
-both variables are set — ADR-0005).
+both are saved — ADR-0005).
 
 ## AI adapter
 
@@ -299,7 +315,7 @@ OpenRouter's OpenAI-compatible chat-completions API with plain httpx — no
 provider SDK (ADR-0006) — enforcing a strict JSON response schema and
 grounding the system prompt in a versioned knowledge file
 (`app/infrastructure/ai/knowledge/flow_coaching.md`). Model choice is
-configuration (`ATLAS_ADVISOR_MODEL`).
+a stored credential field, set with the OpenRouter key on the Connectors page (default `anthropic/claude-sonnet-5`).
 
 An optional self-critique pass (`ATLAS_ADVISOR_SELF_CRITIQUE`, default off)
 runs draft → critique → revise inside a single advice request; the reflect
@@ -334,7 +350,7 @@ layer facade: every tool calls the REST API in-process and reformats the DTO
 as compact text, so analytics logic and error semantics live in exactly one
 place. Those in-process calls carry `X-Atlas-Internal` with a per-process
 random token (`app.state.internal_token`), which `require_signed_in`
-accepts in place of a session, so tools work with no user (ADR-0027).
+accepts in place of a session, so tools work with no user (ADR-0028).
 `GET /api/recommendations/context` returns the advisor's digest as text for
 the same reason — a chat client brings its own LLM, so advice works
 without an OpenRouter key. The MCP mount is the only path served to

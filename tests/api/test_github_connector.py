@@ -1,15 +1,16 @@
 import asyncio
-from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import GITHUB_NOT_CONFIGURED, get_code_host_source, get_delivery_data_source
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.sync.source import SourceCodebase, SourceTeam
-from tests.api.helpers import settle
+from tests.api.helpers import settle, store_credential
 from tests.fakes import FakeDataSource, InMemoryCodeHostSource
 
 
@@ -21,9 +22,12 @@ def _code_source() -> InMemoryCodeHostSource:
     )
 
 
-@pytest.fixture
-def github_configured(settings_env: Callable[..., None]) -> None:
-    settings_env(github_token="ghp_test", github_owner="acme")
+@pytest_asyncio.fixture
+async def github_configured(file_sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    """A stored GitHub token for tests on `rules_client` (the file DB)."""
+    await store_credential(
+        file_sessionmaker, Credential(Integration.GITHUB, "ghp_test_abcd1234", owner="acme")
+    )
 
 
 async def _org(client: AsyncClient) -> str:
@@ -33,15 +37,11 @@ async def _org(client: AsyncClient) -> str:
     return org_id
 
 
-async def test_status_unconfigured_without_owner(
-    settings_env: Callable[..., None], rules_client: AsyncClient
-) -> None:
-    settings_env(github_token="t", github_owner="")
-
+async def test_status_unconfigured_without_credentials(rules_client: AsyncClient) -> None:
     response = await rules_client.get("/api/connectors/github")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False, "owner": None, "running": None}
+    assert response.json() == {"configured": False, "owner": None, "hint": None, "running": None}
 
 
 async def test_status_reports_configured_with_owner(
@@ -49,22 +49,26 @@ async def test_status_reports_configured_with_owner(
 ) -> None:
     response = await rules_client.get("/api/connectors/github")
 
-    assert response.json() == {"configured": True, "owner": "acme", "running": None}
+    assert response.json() == {
+        "configured": True,
+        "owner": "acme",
+        "hint": "…1234",
+        "running": None,
+    }
 
 
-async def test_sync_answers_409_until_configured(
-    settings_env: Callable[..., None], rules_client: AsyncClient
-) -> None:
-    settings_env(github_token="", github_owner="acme")
-
+async def test_sync_answers_409_until_configured(rules_client: AsyncClient) -> None:
     response = await rules_client.post("/api/connectors/github/sync", json={})
 
     assert response.status_code == 409
     assert response.json()["detail"] == GITHUB_NOT_CONFIGURED
 
 
-async def test_configured_source_is_the_github_adapter(github_configured: None) -> None:
-    source = get_code_host_source()
+async def test_configured_source_is_the_github_adapter(
+    file_sessionmaker: async_sessionmaker[AsyncSession], github_configured: None
+) -> None:
+    async with file_sessionmaker() as session:
+        source = await get_code_host_source(session)
 
     assert type(source).__name__ == "GitHubDataSource"
 
@@ -135,9 +139,7 @@ class _BlockingSource(FakeDataSource):
 async def test_sync_while_linear_job_runs_answers_409(
     rules_app: FastAPI,
     rules_client: AsyncClient,
-    settings_env: Callable[..., None],
 ) -> None:
-    settings_env(linear_api_key="lin_api_test", github_token="ghp_test", github_owner="acme")
     linear = _BlockingSource()
     rules_app.dependency_overrides[get_delivery_data_source] = lambda: linear
     rules_app.dependency_overrides[get_code_host_source] = _code_source
@@ -174,9 +176,7 @@ class _BlockingCodeSource(InMemoryCodeHostSource):
 async def test_linear_sync_while_a_code_job_runs_names_it_a_github_sync(
     rules_app: FastAPI,
     rules_client: AsyncClient,
-    settings_env: Callable[..., None],
 ) -> None:
-    settings_env(linear_api_key="lin_api_test", github_token="ghp_test", github_owner="acme")
     code = _BlockingCodeSource()
     rules_app.dependency_overrides[get_delivery_data_source] = FakeDataSource
     rules_app.dependency_overrides[get_code_host_source] = lambda: code

@@ -1,4 +1,4 @@
-"""Administrators manage users; members cannot (ADR-0027)."""
+"""Administrators manage users; members cannot (ADR-0028)."""
 
 from uuid import uuid4
 

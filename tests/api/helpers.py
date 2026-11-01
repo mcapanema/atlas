@@ -7,14 +7,18 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config import get_settings
 from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, User
 from app.domain.auth.tokens import new_session_token
+from app.domain.credentials.entities import Credential, Integration
 from app.domain.metric_rules.entities import RuleOverrides
 from app.infrastructure.repositories.auth import (
     SqlAlchemyAuthSessionRepository,
     SqlAlchemyUserRepository,
 )
+from app.infrastructure.repositories.credentials import SqlAlchemyCredentialRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
+from app.infrastructure.secrets import cipher_for
 from tests.conftest import PASSWORD_HASH
 
 
@@ -120,3 +124,23 @@ def days_ago(days: int) -> str:
     """
     noon = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
     return (noon - timedelta(days=days)).isoformat()
+
+
+async def store_credential(
+    sessionmaker: async_sessionmaker[AsyncSession], credential: Credential
+) -> None:
+    """Store a connector credential directly, as if it had been entered on the Connectors page."""
+    cipher = cipher_for(get_settings().secret_key_file)
+    async with sessionmaker() as session:
+        await SqlAlchemyCredentialRepository(session, cipher).save(credential)
+        await session.commit()
+
+
+async def remove_credential(
+    sessionmaker: async_sessionmaker[AsyncSession], integration: Integration
+) -> None:
+    """Remove a stored connector credential, as the Connectors page's Remove does."""
+    cipher = cipher_for(get_settings().secret_key_file)
+    async with sessionmaker() as session:
+        await SqlAlchemyCredentialRepository(session, cipher).delete(integration)
+        await session.commit()
