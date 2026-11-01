@@ -82,12 +82,8 @@ async def _reset(user_id: UUID, email: str, password: str) -> None:
 
 
 def _read_new_password(read_password: Callable[[str], str]) -> str:
-    try:
-        password = read_password("New password: ")
-        repeated = read_password("Repeat new password: ")
-    except (KeyboardInterrupt, EOFError):
-        raise _CliError("\nCancelled; nothing changed.") from None
-    if repeated != password:
+    password = read_password("New password: ")
+    if read_password("Repeat new password: ") != password:
         raise _CliError("The passwords don't match")
     return password
 
@@ -120,6 +116,12 @@ def main(
         _reset_password(args.email, read_password)
     except _CliError as exc:
         sys.stderr.write(f"{exc}\n")
+        return 1
+    except (KeyboardInterrupt, EOFError):
+        # An interrupt inside asyncio.run cancels the task, so the open
+        # transaction rolls back; only the instant between the commit and the
+        # success line could make "nothing changed" untrue.
+        sys.stderr.write("\nCancelled; nothing changed.\n")
         return 1
     return 0
 

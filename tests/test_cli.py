@@ -155,6 +155,27 @@ def test_unmigrated_database_is_a_clear_error(
     assert capsys.readouterr().err == "Can't read the users table — run make migrate first.\n"
 
 
+@pytest.mark.parametrize("step", ["_find_user", "_reset"])
+def test_ctrl_c_outside_the_prompts_cancels(
+    db: str,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    step: str,
+) -> None:
+    async def interrupted(*args: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(f"app.cli.{step}", interrupted)
+
+    code = main(
+        ["reset-password", "ana@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD)
+    )
+
+    assert code == 1
+    assert capsys.readouterr().err == "\nCancelled; nothing changed.\n"
+    assert asyncio.run(_stored(db))[0] == PASSWORD_HASH
+
+
 def test_unopenable_database_is_a_clear_error(
     tmp_path: Path, settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
 ) -> None:
