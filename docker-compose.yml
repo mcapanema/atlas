@@ -14,6 +14,8 @@ services:
       # virtiofs bind mount (new connections intermittently failed with
       # "disk I/O error"), so the container uses the rollback journal.
       ATLAS_SQLITE_JOURNAL_MODE: delete
+      # Key file for stored credentials: inside the bind-mounted data/, so it travels with the database.
+      ATLAS_SECRET_KEY_FILE: /app/data/atlas.key
     volumes:
       # ponytail: one database shared with local runs, so one side at a time
       # (SQLite's file locks don't cross Docker's VM; the Makefile guards it).
