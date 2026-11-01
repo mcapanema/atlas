@@ -1,3 +1,6 @@
+import json
+
+import httpx
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
@@ -5,6 +8,8 @@ from httpx import AsyncClient
 from app.api.deps import get_credential_verifier
 from app.domain.credentials.port import CredentialCheckError
 from app.domain.sync.port import DataSourceError
+from app.infrastructure.connectors.github.client import GITHUB_GRAPHQL_URL
+from app.infrastructure.credential_checks import ProviderCredentialVerifier
 from tests.fakes import FakeCredentialVerifier
 
 
@@ -157,6 +162,34 @@ async def test_openrouter_model_changes_without_the_key(
     )
 
     assert response.json() == {"configured": True, "model": "openai/gpt-5", "hint": "…9876"}
+
+
+async def test_kept_github_token_rejected_for_a_new_owner_keeps_the_old_one(
+    client: AsyncClient, test_app: FastAPI
+) -> None:
+    # The real verifier against a fake GitHub that only knows the owner "acme".
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url == GITHUB_GRAPHQL_URL
+        owner = json.loads(request.content)["variables"]["owner"]
+        found = {"login": owner} if owner == "acme" else None
+        return httpx.Response(200, json={"data": {"repositoryOwner": found}})
+
+    verifier = ProviderCredentialVerifier(httpx.MockTransport(answer))
+    test_app.dependency_overrides[get_credential_verifier] = lambda: verifier
+    await client.put(
+        "/api/connectors/github/credentials", json={"token": "ghp_secret_abcd", "owner": "acme"}
+    )
+
+    response = await client.put("/api/connectors/github/credentials", json={"owner": "globex"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Could not verify the GitHub credentials: owner 'globex' "
+        "was not found or the token can't see it"
+    )
+    assert "ghp_secret_abcd" not in response.text
+    status = (await client.get("/api/connectors/github")).json()
+    assert (status["owner"], status["hint"]) == ("acme", "…abcd")
 
 
 async def test_omitted_secret_with_nothing_stored_answers_422(
