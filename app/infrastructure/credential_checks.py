@@ -10,7 +10,11 @@ import httpx
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.credentials.port import CredentialCheckError
 from app.domain.sync.port import DataSourceError
-from app.infrastructure.ai.key_check import check_openrouter_key, is_rejection
+from app.infrastructure.ai.key_check import (
+    check_openrouter_key,
+    check_openrouter_model,
+    is_rejection,
+)
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
@@ -42,6 +46,8 @@ class ProviderCredentialVerifier:
                 await self._check_github(secret, credential.owner)
             case Integration.OPENROUTER:
                 await check_openrouter_key(secret, self._transport)
+                # The entity requires a model for OpenRouter; "" is only for the type checker.
+                await check_openrouter_model(credential.model or "", self._transport)
 
     async def _check_github(self, token: str, owner: str | None) -> None:
         client = GitHubGraphQLClient(token, transport=self._transport)

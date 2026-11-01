@@ -36,4 +36,5 @@ live.
 - No SDK lock-in; one adapter file owns the wire format.
 - Envelope drift or an off-schema reply surfaces as `AdvisorError` → 502 —
   never a 422 blaming the client.
-- Requires models that support structured outputs (noted in `.env.example`).
+- Requires models that support structured outputs. Atlas checks the model
+  against OpenRouter's model list when the credentials are saved (ADR-0027).
