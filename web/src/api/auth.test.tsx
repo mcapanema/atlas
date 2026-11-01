@@ -4,7 +4,14 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { authFixture } from "../test/fixtures";
-import { AUTH_KEY, useAuthStatus, useChangePassword, useSignOut } from "./auth";
+import {
+  AUTH_KEY,
+  useAuthStatus,
+  useChangePassword,
+  useSetup,
+  useSignIn,
+  useSignOut,
+} from "./auth";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,6 +56,47 @@ describe("useSignOut with a mounted gate", () => {
     await act(() => menu.result.current.mutateAsync());
 
     await waitFor(() => expect(gate.result.current.data?.user).toBeNull());
+  });
+});
+
+describe("useSignIn", () => {
+  it("drops queries left by an earlier user or an expired session", async () => {
+    const user = authFixture().user;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(user), { status: 200 }),
+    );
+    const { client, wrapper } = setup();
+    client.setQueryData(["teams"], [{ id: "t1" }]);
+    client.setQueryData(AUTH_KEY, { setup_required: false, user: null });
+    await client
+      .fetchQuery({ queryKey: ["people"], queryFn: () => Promise.reject(new Error("401")) })
+      .catch(() => {});
+    expect(client.getQueryState(["people"])?.error).not.toBeNull();
+    const { result } = renderHook(() => useSignIn(), { wrapper });
+
+    await act(() => result.current.mutateAsync({ email: "a@b.co", password: "pw" }));
+
+    expect(client.getQueryData(["teams"])).toBeUndefined();
+    expect(client.getQueryState(["people"])).toBeUndefined();
+    expect(client.getQueryData(AUTH_KEY)).toEqual({ setup_required: false, user });
+  });
+});
+
+describe("useSetup", () => {
+  it("returns to sign-in when another tab already made the account", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Atlas already has an account" }), { status: 409 }),
+    );
+    const { client, wrapper } = setup();
+    client.setQueryData(AUTH_KEY, { setup_required: true, user: null });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useSetup(), { wrapper });
+
+    await act(() =>
+      result.current.mutateAsync({ email: "a@b.co", name: "A", password: "pw" }).catch(() => {}),
+    );
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: AUTH_KEY });
   });
 });
 
