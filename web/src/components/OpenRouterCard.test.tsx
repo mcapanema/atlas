@@ -135,9 +135,28 @@ describe("OpenRouterCard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("Could not save the OpenRouter key")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Could not save the OpenRouter credentials"),
+    ).toBeInTheDocument();
     expect(screen.getByText(detail)).toBeInTheDocument();
     expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-bad");
+  });
+
+  it("blames the credentials, not the key, when a model-only save is rejected", async () => {
+    const detail =
+      "Could not verify the OpenRouter credentials: OpenRouter has no model 'acme/not-a-model' that supports structured outputs";
+    mockApi({ configured: true, putResponses: [jsonResponse({ detail }, 422)] });
+
+    renderWithClient(<OpenRouterCard />);
+    fireEvent.change(await screen.findByLabelText("Model"), {
+      target: { value: "acme/not-a-model" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText("Could not save the OpenRouter credentials"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(detail)).toBeInTheDocument();
   });
 
   it("keeps the typed key when a later save is rejected", async () => {
@@ -156,7 +175,9 @@ describe("OpenRouterCard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByText("Could not save the OpenRouter key")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Could not save the OpenRouter credentials"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-bad");
   });
 

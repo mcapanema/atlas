@@ -31,6 +31,7 @@ function CredentialsForm({
   fields,
   initial,
   configured,
+  hasSettings,
   saving,
   saved,
   onSave,
@@ -41,12 +42,13 @@ function CredentialsForm({
   /** Non-secret fields only: a stored secret never comes back to the browser. */
   initial: Values;
   configured: boolean;
+  /** The form has a non-secret field (GitHub owner, OpenRouter model). */
+  hasSettings: boolean;
   saving: boolean;
   saved: boolean;
   onSave: (values: Values) => void;
   extra: ReactNode;
 }) {
-  const hasSettings = fields.some((field) => !field.secret);
   const keepable = configured && hasSettings;
   return (
     <Form<Values>
@@ -103,7 +105,7 @@ export function CredentialsSection({
   status,
 }: {
   integration: Integration;
-  /** The provider's name, as in "Could not save the {label} key". */
+  /** The provider's name, as in "Could not save the {label} key" (or "credentials"). */
   label: string;
   fields: CredentialField[];
   initial: Values;
@@ -114,6 +116,7 @@ export function CredentialsSection({
   // Bumped by each successful save only: a rejected save keeps the typed key, and
   // so does a save that follows a successful one until it, too, succeeds.
   const [saves, setSaves] = useState(0);
+  const hasSettings = fields.some((field) => !field.secret);
   return (
     <Flex vertical gap="middle">
       {/* Keyed so every save or removal resets the fields and empties the secret ones,
@@ -124,6 +127,7 @@ export function CredentialsSection({
         fields={fields}
         initial={initial}
         configured={status.configured}
+        hasSettings={hasSettings}
         saving={save.isPending}
         saved={save.isSuccess}
         onSave={(values) => {
@@ -152,7 +156,8 @@ export function CredentialsSection({
         <Alert
           type="error"
           showIcon
-          title={`Could not save the ${label} key`}
+          // A form with settings may have failed on the owner or model, not the key.
+          title={`Could not save the ${label} ${hasSettings ? "credentials" : "key"}`}
           description={save.error.message}
         />
       )}
