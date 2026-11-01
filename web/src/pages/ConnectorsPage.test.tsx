@@ -118,6 +118,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The Linear card: GitHub and OpenRouter have "Not configured" badges of their own. */
+function linearCard(): HTMLElement {
+  return screen.getByText("Linear").closest(".ant-card") as HTMLElement;
+}
+
 /** The Linear card's credentials form. */
 function linearForm(): HTMLElement {
   return screen.getByLabelText("Linear API key").closest("form") as HTMLElement;
@@ -150,7 +155,7 @@ describe("ConnectorsPage", () => {
 
     expect(await screen.findByText("Could not save the Linear key")).toBeInTheDocument();
     expect(screen.getByText(detail)).toBeInTheDocument();
-    expect(screen.getByText("Not configured")).toBeInTheDocument();
+    expect(within(linearCard()).getByText("Not configured")).toBeInTheDocument();
   });
 
   it("removes a stored key after confirming", async () => {
@@ -163,7 +168,7 @@ describe("ConnectorsPage", () => {
     expect(await screen.findByText("Remove the Linear key?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
 
-    expect(await screen.findByText("Not configured")).toBeInTheDocument();
+    expect(await within(linearCard()).findByText("Not configured")).toBeInTheDocument();
     expect(calls).toEqual(["DELETE /api/connectors/linear/credentials"]);
   });
 
@@ -309,7 +314,7 @@ describe("ConnectorsPage", () => {
     expect(screen.getAllByText(/Add a Linear personal API key below/)).toHaveLength(1);
     expect(screen.getByText(/Security & access → Personal API keys/)).toBeInTheDocument();
     expect(screen.getByText(/scheduled syncs fail/)).toBeInTheDocument();
-    expect(screen.getByText("Not configured")).toBeInTheDocument();
+    expect(within(linearCard()).getByText("Not configured")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Sync now/ })).toBeDisabled();
   });
 
@@ -320,7 +325,7 @@ describe("ConnectorsPage", () => {
 
     expect(await screen.findByText("Connectors")).toBeInTheDocument();
     expect(screen.queryByText("Linear isn't configured")).not.toBeInTheDocument();
-    expect(screen.queryByText("Not configured")).not.toBeInTheDocument();
+    expect(within(linearCard()).queryByText("Not configured")).not.toBeInTheDocument();
   });
 
   it("refreshes the last sync after Sync now", async () => {

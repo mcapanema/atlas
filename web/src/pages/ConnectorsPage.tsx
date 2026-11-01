@@ -10,7 +10,7 @@ import {
 } from "../api/connectors";
 import { useOrganizations, type Organization } from "../api/organizations";
 import { AutoSyncCard } from "../components/AutoSyncCard";
-import { CredentialsSection } from "../components/CredentialsForm";
+import { CredentialsSection } from "../components/CredentialsSection";
 import { GitHubConnectorCard } from "../components/GitHubConnectorCard";
 import { OpenRouterCard } from "../components/OpenRouterCard";
 import { SyncStatus } from "../components/SyncStatus";

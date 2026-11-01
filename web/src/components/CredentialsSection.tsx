@@ -1,5 +1,5 @@
 import { Alert, Button, Flex, Form, Input, Popconfirm, Typography } from "antd";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useRemoveCredentials, useSaveCredentials, type Integration } from "../api/connectors";
 
@@ -47,12 +47,13 @@ function CredentialsForm({
           rules={[{ required: true, whitespace: true }]}
         >
           {field.secret ? (
+            // "new-password": browsers and password managers ignore "off" on password inputs.
             <Input.Password
-              autoComplete="off"
+              autoComplete="new-password"
               placeholder={configured ? "Enter a new key to replace the stored one" : undefined}
             />
           ) : (
-            <Input />
+            <Input autoComplete="off" />
           )}
         </Form.Item>
       ))}
@@ -84,11 +85,15 @@ export function CredentialsSection({
 }) {
   const save = useSaveCredentials(integration);
   const remove = useRemoveCredentials(integration);
+  // Bumped by each successful save only: a rejected save keeps the typed key, and
+  // so does a save that follows a successful one until it, too, succeeds.
+  const [saves, setSaves] = useState(0);
   return (
     <Flex vertical gap="middle">
-      {/* Keyed so a save or removal resets the fields and empties the secret ones. */}
+      {/* Keyed so every save or removal resets the fields and empties the secret ones,
+          even when the new key's hint matches the old one's. */}
       <CredentialsForm
-        key={[status.hint, ...Object.values(initial)].join(":")}
+        key={[status.hint, ...Object.values(initial), saves].join(":")}
         name={integration}
         fields={fields}
         initial={initial}
@@ -97,7 +102,7 @@ export function CredentialsSection({
         saved={save.isSuccess}
         onSave={(values) => {
           remove.reset();
-          save.mutate(values);
+          save.mutate(values, { onSuccess: () => setSaves((n) => n + 1) });
         }}
         extra={
           status.configured && (

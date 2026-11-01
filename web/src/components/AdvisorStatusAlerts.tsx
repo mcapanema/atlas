@@ -14,13 +14,13 @@ export function AdvisorStatusAlerts({
     return (
       <Alert
         type="error"
-        message="Failed to load advisor status"
+        title="Failed to load advisor status"
         description={status.error.message}
       />
     );
   }
   if (status.isSuccess && !status.data.configured) {
-    return <Alert type="warning" message={notConfigured} />;
+    return <Alert type="warning" title={notConfigured} />;
   }
   return null;
 }

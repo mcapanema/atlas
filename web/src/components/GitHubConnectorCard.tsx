@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Card, Flex, Typography } from "antd";
 import { useGitHubStatus, useGitHubSync, type GitHubStatus } from "../api/connectors";
 import { codeSyncOutcome } from "../lib/syncOutcome";
 import { CodebasesTable } from "./CodebasesTable";
-import { CredentialsSection } from "./CredentialsForm";
+import { CredentialsSection } from "./CredentialsSection";
 
 function SetupAlert() {
   return (
@@ -82,7 +82,7 @@ export function GitHubConnectorCard({ organizationId }: { organizationId: string
   const badge = status?.configured ? (
     <Badge status="success" text={`Configured · ${status.owner ?? ""}`} />
   ) : (
-    <Badge status="default" text="Not set up" />
+    <Badge status="default" text="Not configured" />
   );
   return (
     <Card title="GitHub" loading={query.isLoading} extra={query.isLoading ? null : badge}>

@@ -60,6 +60,8 @@ describe("GitHubConnectorCard", () => {
     renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
 
     expect(await screen.findByText("GitHub isn't configured")).toBeInTheDocument();
+    expect(screen.getByText("Not configured")).toBeInTheDocument();
+    expect(screen.queryByText("Not set up")).not.toBeInTheDocument();
     expect(screen.getByText(/Add a GitHub token and owner below/)).toBeInTheDocument();
     expect(screen.getByText(/Metadata, Pull requests and Deployments/)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Sync GitHub/ })).toBeDisabled();
@@ -75,9 +77,11 @@ describe("GitHubConnectorCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save key" }));
 
     expect(await screen.findByText("Key saved")).toBeInTheDocument();
-    const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
-    expect(requestUrl(put?.[0] as RequestInfo)).toBe("/api/connectors/github/credentials");
-    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ token: "ghp_x", owner: "acme" });
+    const puts = fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    const [[input, init]] = puts;
+    expect(requestUrl(input)).toBe("/api/connectors/github/credentials");
+    expect(JSON.parse(init?.body as string)).toEqual({ token: "ghp_x", owner: "acme" });
   });
 
   it("syncs and shows the outcome", async () => {

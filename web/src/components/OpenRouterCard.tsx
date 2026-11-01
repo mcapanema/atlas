@@ -1,7 +1,7 @@
 import { Alert, Badge, Card, Flex, Typography } from "antd";
 
 import { useOpenRouterStatus } from "../api/connectors";
-import { CredentialsSection } from "./CredentialsForm";
+import { CredentialsSection } from "./CredentialsSection";
 
 function SetupAlert() {
   return (
