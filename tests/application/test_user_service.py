@@ -12,6 +12,7 @@ from app.application.auth.users import UserService
 from app.domain._time import utcnow
 from app.domain.auth.entities import AuthSession, User
 from app.domain.auth.passwords import verify_password
+from app.domain.auth.throttle import SignInThrottle
 from app.domain.auth.tokens import hash_token
 from tests.fakes import InMemoryAuthSessionRepository, InMemoryUserRepository
 
@@ -94,3 +95,17 @@ async def test_unknown_id_on_reset_and_delete() -> None:
         await service.reset_password(missing, PASSWORD)
     with pytest.raises(UnknownUserError, match=str(missing)):
         await service.delete_user(admin, missing)
+
+
+async def test_reset_password_lifts_the_sign_in_lock() -> None:
+    users = InMemoryUserRepository()
+    throttle = SignInThrottle()
+    service = UserService(users, InMemoryAuthSessionRepository(), throttle)
+    user = await service.create_user("ana@acme.com", "Ana", PASSWORD, is_admin=False)
+    now = utcnow()
+    for _ in range(5):
+        throttle.record_failure("ana@acme.com", now)
+
+    await service.reset_password(user.id, "a-brand-new-passphrase")
+
+    assert throttle.retry_after("ana@acme.com", now) is None

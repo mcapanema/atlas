@@ -108,13 +108,15 @@ class AuthService:
         retry_after = self._throttle.retry_after(throttle_key, self._now())
         if retry_after is not None:
             raise TooManySignInsError(retry_after)
+        # Count the attempt before the first await: a burst of parallel requests
+        # would otherwise all pass the check above before any failure lands.
+        self._throttle.record_failure(throttle_key, self._now())
         user = await self._users.get_by_email(key) if key is not None else None
         stored = user.password_hash if user is not None else None
         valid = await asyncio.to_thread(
             verify_password, password, stored or await _dummy_password_hash()
         )
         if user is None or stored is None or not valid:
-            self._throttle.record_failure(throttle_key, self._now())
             raise InvalidCredentialsError("Wrong email or password")
         self._throttle.clear(throttle_key)
         return await self._start_session(user)

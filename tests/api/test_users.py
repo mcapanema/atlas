@@ -82,6 +82,25 @@ async def test_removed_user_loses_access(
     assert (await anon_client.get("/api/teams", headers=_cookie(token))).status_code == 401
 
 
+async def test_admin_reset_lifts_the_sign_in_lock(
+    client: AsyncClient,
+    anon_client: AsyncClient,
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    member, _ = await sign_in(sessionmaker)
+    for _ in range(5):
+        await anon_client.post(
+            "/api/auth/sign-in", json={"email": member.email, "password": "not-the-password"}
+        )
+
+    await client.put(f"/api/users/{member.id}/password", json={"new_password": NEW_PASSWORD})
+    signed_in = await anon_client.post(
+        "/api/auth/sign-in", json={"email": member.email, "password": NEW_PASSWORD}
+    )
+
+    assert signed_in.status_code == 200
+
+
 async def test_reset_password_revokes_sessions(
     client: AsyncClient,
     anon_client: AsyncClient,

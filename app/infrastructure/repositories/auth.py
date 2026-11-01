@@ -124,10 +124,14 @@ class SqlAlchemyUserRepository:
         await self._session.flush()
 
     async def claim_setup(self, now: datetime) -> None:
-        # A savepoint, so a lost claim leaves the outer transaction usable.
+        # No savepoint: under pysqlite a SAVEPOINT issued before any write opens
+        # the outermost transaction and its RELEASE commits the claim alone, so
+        # a setup that failed later would leave a claim with no admin. A plain
+        # flush joins the request's transaction; a lost claim fails the request
+        # and get_session rolls the whole of it back.
+        self._session.add(AuthSetupModel(id=1, completed_at=now))
         try:
-            async with self._session.begin_nested():
-                self._session.add(AuthSetupModel(id=1, completed_at=now))
+            await self._session.flush()
         except IntegrityError as exc:
             raise SetupAlreadyClaimedError("first-run setup is already done") from exc
 

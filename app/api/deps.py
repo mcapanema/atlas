@@ -397,8 +397,12 @@ def get_auth_service(request: Request, session: SessionDep) -> AuthService:
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
-def get_user_service(session: SessionDep) -> UserService:
-    return UserService(SqlAlchemyUserRepository(session), SqlAlchemyAuthSessionRepository(session))
+def get_user_service(request: Request, session: SessionDep) -> UserService:
+    return UserService(
+        SqlAlchemyUserRepository(session),
+        SqlAlchemyAuthSessionRepository(session),
+        request.app.state.sign_in_throttle,
+    )
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]

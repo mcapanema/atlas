@@ -132,14 +132,20 @@ async def test_second_claim_is_refused(
         assert rows.scalar_one() == 1
 
 
-async def test_failed_claim_leaves_the_session_usable(session: AsyncSession) -> None:
-    repo = SqlAlchemyUserRepository(session)
-    await repo.claim_setup(_NOW)
-
-    with pytest.raises(SetupAlreadyClaimedError):
+async def test_claim_rolls_back_with_its_transaction(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # The setup request's order: count, claim, add the admin — then it fails.
+    async with file_sessionmaker() as session:
+        repo = SqlAlchemyUserRepository(session)
+        assert await repo.count() == 0
         await repo.claim_setup(_NOW)
+        await repo.add(User(email="ana@acme.com", name="Ana", password_hash=None))
+        await session.rollback()
 
-    assert await repo.count() == 0
+    async with file_sessionmaker() as session:
+        claims = await session.execute(select(func.count()).select_from(AuthSetupModel))
+        assert claims.scalar_one() == 0
 
 
 async def test_delete_expired_keeps_live_sessions(session: AsyncSession) -> None:

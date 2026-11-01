@@ -9,14 +9,23 @@ from app.application.auth.service import (
 from app.domain.auth.entities import User, normalize_email, require_valid_password
 from app.domain.auth.passwords import hash_password
 from app.domain.auth.repository import AuthSessionRepository, UserRepository
+from app.domain.auth.throttle import SignInThrottle
 
 
 class UserService:
     """Application use cases for administrators managing users."""
 
-    def __init__(self, users: UserRepository, sessions: AuthSessionRepository) -> None:
+    def __init__(
+        self,
+        users: UserRepository,
+        sessions: AuthSessionRepository,
+        throttle: SignInThrottle | None = None,
+    ) -> None:
         self._users = users
         self._sessions = sessions
+        # The running server's sign-in lock. None from the terminal (app/cli.py):
+        # another process can't reach it, so a terminal reset waits out the lock.
+        self._throttle = throttle
 
     async def list_users(self) -> list[User]:
         return await self._users.list()
@@ -37,6 +46,8 @@ class UserService:
         user.password_hash = await asyncio.to_thread(hash_password, new)
         await self._users.update(user)
         await self._sessions.delete_for_user(user.id)
+        if self._throttle is not None:
+            self._throttle.clear(user.email)
 
     async def delete_user(self, actor: User, user_id: UUID) -> None:
         if actor.id == user_id:

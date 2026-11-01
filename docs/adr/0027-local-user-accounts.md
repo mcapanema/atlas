@@ -46,7 +46,8 @@ SSO later.
 - After 5 failed sign-ins for one email inside a sliding 15-minute window,
   that email is locked: sign-in answers `429` with `Retry-After` until the
   oldest failure leaves the window, and a correct password does not help
-  meanwhile. A success clears the count. The counter is in-process memory
+  meanwhile. A success, or an admin's password reset in the app, clears the
+  count; a reset from the terminal cannot reach it. The counter is in-process memory
   (`app.state.sign_in_throttle`), keyed by the normalized email, because
   every request is local and an IP says nothing; a restart clears it.
 - `LocalOnlyMiddleware` (ADR-0012) does not change.

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 
 import pytest
@@ -216,3 +217,16 @@ async def test_successful_sign_in_clears_the_count() -> None:
     await _fail_sign_ins(service, "ana@acme.com", times=4)
 
     assert (await service.sign_in("ana@acme.com", PASSWORD)).user.email == "ana@acme.com"
+
+
+async def test_a_burst_of_sign_ins_is_throttled_too() -> None:
+    service, _, _ = make_service()
+    await service.create_first_admin("ana@acme.com", "Ana", PASSWORD)
+
+    outcomes = await asyncio.gather(
+        *(service.sign_in("ana@acme.com", "wrong password!") for _ in range(20)),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(o, InvalidCredentialsError) for o in outcomes) == 5
+    assert sum(isinstance(o, TooManySignInsError) for o in outcomes) == 15
