@@ -1,6 +1,7 @@
 """Who may reach what: the UI and REST API are local-only; MCP is the remote surface.
 
-Atlas has no user authentication (ADR-0005). A request is local when its
+Users sign in (ADR-0027); this middleware still limits the UI and REST
+API to loopback. A request is local when its
 Host is a loopback name and no proxy forwarded it. Anything else — a tunnel
 (cloudflared and ngrok add X-Forwarded-For; cloudflared also keeps the
 public Host), a LAN client, a DNS-rebinding page — may reach only the MCP

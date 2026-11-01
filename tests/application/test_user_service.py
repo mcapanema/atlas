@@ -1,3 +1,4 @@
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -25,7 +26,7 @@ def make_service() -> tuple[UserService, InMemoryUserRepository, InMemoryAuthSes
 
 async def add_session(sessions: InMemoryAuthSessionRepository, user: User, token: str) -> None:
     now = utcnow()
-    expires = now.replace(year=now.year + 1)
+    expires = now + timedelta(days=365)
     await sessions.add(AuthSession(hash_token(token), user.id, expires))
 
 

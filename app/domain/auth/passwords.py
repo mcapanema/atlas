@@ -36,6 +36,6 @@ def verify_password(password: str, stored: str) -> bool:
             p=int(p),
             dklen=len(expected_bytes),
         )
-    except ValueError:
+    except (ValueError, TypeError, OverflowError):
         return False
     return hmac.compare_digest(digest, expected_bytes)

@@ -118,6 +118,9 @@ class AuthService:
         await self._sessions.delete_for_user(user.id, keep_token_hash=hash_token(keep_token))
 
     async def _start_session(self, user: User) -> SignedIn:
+        # ponytail: sessions that expire unused are never deleted (only on
+        # lookup or sign-out). Accepted: a handful of rows per sign-in.
+        # Upgrade: a periodic `DELETE ... WHERE expires_at < now`.
         token, token_hash = new_session_token()
         await self._sessions.add(
             AuthSession(token_hash, user.id, expires_at=self._now() + SESSION_LIFETIME)

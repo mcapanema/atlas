@@ -15,7 +15,17 @@ def test_same_password_hashes_differently() -> None:
     assert hash_password("correct horse battery") != hash_password("correct horse battery")
 
 
-@pytest.mark.parametrize("stored", ["", "bcrypt$x", "scrypt$1$2$3$!!$!!", "scrypt$16384$8$1$abc"])
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "",
+        "bcrypt$x",
+        "scrypt$1$2$3$!!$!!",
+        "scrypt$16384$8$1$abc",
+        "scrypt$99999999999999999999999$8$1$AAAA$AAAA",
+        "scrypt$16384$8$-1$AAAA$AAAA",
+    ],
+)
 def test_malformed_hash_never_verifies(stored: str) -> None:
     assert not verify_password("correct horse battery", stored)
 

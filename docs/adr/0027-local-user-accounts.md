@@ -47,7 +47,10 @@ SSO later.
   `user_id`. A user with `password_hash = NULL` cannot sign in with a
   password, so SSO-only users fit the same `users` row.
 - Lifting ADR-0012 first needs `Secure` cookies, allowed hosts, and login
-  rate limiting.
+  rate limiting. It also needs CSRF protection: cookies ignore the port and
+  `SameSite=Lax` treats every `http://localhost:<port>` as same-site, so
+  unsafe methods need an `Origin` / `Sec-Fetch-Site` check (or a required
+  `Content-Type: application/json`).
 - If the only admin forgets the password, nobody can reset it through the
   app, and the fix is a database edit. This is a deliberate ceiling; a CLI
   reset command is the upgrade path.
