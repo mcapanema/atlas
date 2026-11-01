@@ -1,4 +1,4 @@
-import { Alert, Form, Input, Modal, message } from "antd";
+import { Alert, App, Form, Input, Modal } from "antd";
 
 import { useChangePassword } from "../api/auth";
 
@@ -12,11 +12,23 @@ const FORM_ID = "change-password";
 const PASSWORD_HINT = "At least 12 characters";
 
 /** Lets the signed-in user replace their own password. */
-export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ChangePasswordModal({
+  open,
+  onClose,
+  onClosed,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Runs once the dialog has finished closing, when focus is free to move. */
+  onClosed?: () => void;
+}) {
   const [form] = Form.useForm<Values>();
   const change = useChangePassword();
+  const { message } = App.useApp();
 
   const submit = ({ current_password, new_password }: Values) => {
+    // A second Enter while the request is out must not send a second PUT.
+    if (change.isPending) return;
     change.mutate(
       { current_password, new_password },
       {
@@ -32,6 +44,8 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
     <Modal
       title="Change password"
       open={open}
+      // The opener (a menu item) is gone by then; onClosed places focus.
+      focusTriggerAfterClose={false}
       okText="Change password"
       cancelText="Cancel"
       confirmLoading={change.isPending}
@@ -41,6 +55,7 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
       afterClose={() => {
         form.resetFields();
         change.reset();
+        onClosed?.();
       }}
     >
       {change.error && (

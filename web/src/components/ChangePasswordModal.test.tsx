@@ -62,4 +62,18 @@ describe("ChangePasswordModal", () => {
     expect(text.closest(".ant-alert-error")).not.toBeNull();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("sends one request when submitted twice", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => new Promise<Response>(() => undefined));
+    renderWithClient(<ChangePasswordModal open onClose={vi.fn()} />);
+    fill("old-password-1", "new-password-12", "new-password-12");
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Change password/ }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 });

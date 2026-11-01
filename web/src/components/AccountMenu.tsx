@@ -1,6 +1,6 @@
 import { DownOutlined, KeyOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Dropdown } from "antd";
-import { useState } from "react";
+import { App, Button, Dropdown } from "antd";
+import { useRef, useState } from "react";
 
 import { useAuthStatus, useSignOut } from "../api/auth";
 import { ChangePasswordModal } from "./ChangePasswordModal";
@@ -9,6 +9,8 @@ import { ChangePasswordModal } from "./ChangePasswordModal";
 export function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const user = useAuthStatus().data?.user;
   const signOut = useSignOut();
+  const { message } = App.useApp();
+  const button = useRef<HTMLButtonElement>(null);
   const [changing, setChanging] = useState(false);
   if (!user) return null;
   return (
@@ -23,11 +25,16 @@ export function AccountMenu({ collapsed }: { collapsed: boolean }) {
           ],
           onClick: ({ key }) => {
             if (key === "password") setChanging(true);
-            else signOut.mutate();
+            else {
+              signOut.mutate(undefined, {
+                onError: () => void message.error("Couldn't sign out. Try again."),
+              });
+            }
           },
         }}
       >
         <Button
+          ref={button}
           type="text"
           block
           aria-label={`Account: ${user.name}`}
@@ -42,7 +49,12 @@ export function AccountMenu({ collapsed }: { collapsed: boolean }) {
           )}
         </Button>
       </Dropdown>
-      <ChangePasswordModal open={changing} onClose={() => setChanging(false)} />
+      <ChangePasswordModal
+        open={changing}
+        onClose={() => setChanging(false)}
+        // Focus can only move once the dialog's focus trap has let go.
+        onClosed={() => button.current?.focus()}
+      />
     </>
   );
 }

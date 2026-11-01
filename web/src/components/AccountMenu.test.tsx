@@ -54,4 +54,17 @@ describe("AccountMenu", () => {
     });
     expect(signOut()?.[1]?.method).toBe("POST");
   });
+
+  it("says so when signing out fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      requestUrl(input) === "/api/auth/session"
+        ? Promise.resolve(jsonResponse(authFixture({ name: "Ana" })))
+        : Promise.reject(new TypeError("Failed to fetch")),
+    );
+    renderWithClient(<AccountMenu collapsed={false} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Account: Ana" }));
+    fireEvent.click(await screen.findByText("Sign out"));
+    expect(await screen.findByText("Couldn't sign out. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account: Ana" })).toBeInTheDocument();
+  });
 });
