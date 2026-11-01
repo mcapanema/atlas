@@ -170,15 +170,17 @@ async def test_kept_github_token_rejected_for_a_new_owner_keeps_the_old_one(
     # The real verifier against a fake GitHub that only knows the owner "acme".
     def answer(request: httpx.Request) -> httpx.Response:
         assert request.url == GITHUB_GRAPHQL_URL
+        assert request.headers["Authorization"] == "Bearer ghp_secret_abcd"
         owner = json.loads(request.content)["variables"]["owner"]
         found = {"login": owner} if owner == "acme" else None
         return httpx.Response(200, json={"data": {"repositoryOwner": found}})
 
     verifier = ProviderCredentialVerifier(httpx.MockTransport(answer))
     test_app.dependency_overrides[get_credential_verifier] = lambda: verifier
-    await client.put(
+    stored = await client.put(
         "/api/connectors/github/credentials", json={"token": "ghp_secret_abcd", "owner": "acme"}
     )
+    assert stored.status_code == 200
 
     response = await client.put("/api/connectors/github/credentials", json={"owner": "globex"})
 
