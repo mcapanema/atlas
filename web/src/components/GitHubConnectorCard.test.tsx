@@ -69,7 +69,9 @@ describe("GitHubConnectorCard", () => {
     expect(screen.getByText("Not configured")).toBeInTheDocument();
     expect(screen.queryByText("Not set up")).not.toBeInTheDocument();
     expect(screen.getByText(/Add a GitHub token and owner below/)).toBeInTheDocument();
-    expect(screen.getByText(/Metadata, Pull requests and Deployments/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Metadata, Contents, Pull requests and Deployments/),
+    ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Sync GitHub/ })).toBeDisabled();
   });
 
