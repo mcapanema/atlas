@@ -3,7 +3,8 @@
 Presentation layer — FastAPI routers + DTOs. Depends on Application
 (services) and, only for dependency wiring, on the concrete Infrastructure
 adapter (`app/api/deps.py` is the composition root — the one place
-Presentation is allowed to know a concrete adapter exists).
+Presentation is allowed to know a concrete adapter exists; the terminal
+entry point `app/cli.py` is the only other one).
 
 ## Rules
 
@@ -39,7 +40,9 @@ Presentation is allowed to know a concrete adapter exists).
 - One router per concept (`<concept>.py`,
   `APIRouter(prefix="/api/<concept>", tags=[...])`), registered in
   `app/main.py`'s `create_app()`. Deliberate exceptions: `health.py`
-  serves bare `/health`; `advisor.py` mounts at `/api/recommendations`
+  serves bare `/health`; `docs.py` serves Swagger UI at `/api/docs` and
+  the schema at `/api/openapi.json` (FastAPI's own docs URLs are off, so
+  the docs sit behind sign-in); `advisor.py` mounts at `/api/recommendations`
   (named for what it returns); `connectors.py` nests actions per vendor
   (`POST /api/connectors/linear/sync`, `POST /api/connectors/github/sync`); `metric_rules.py` is prefix-less
   because it serves both `/api/organizations/{id}/metric-rules` and
@@ -89,6 +92,16 @@ Presentation is allowed to know a concrete adapter exists).
   `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()` (before `mount_spa`) only when
   the token is set, and `lifespan` must run
   `app.state.mcp.session_manager.run()` for it to serve.
+- **Auth** (ADR-0028): every router except `health` and `auth` is
+  included in `create_app()` with `require_signed_in` (a valid
+  `atlas_session` cookie, else 401); `tests/api/test_auth_guard.py` fails on
+  an unguarded `/api` route. Routes that need *who* take `CurrentUserDep`
+  (admin-only: `AdminDep`, or `require_admin` on the router like
+  `users.py`). The MCP facade's in-process calls pass `INTERNAL_HEADER`
+  with `app.state.internal_token` instead of a session. The sign-in lock
+  (`SignInThrottle`) lives on `app.state.sign_in_throttle` and
+  `get_auth_service` hands it to each per-request `AuthService` — state
+  that must outlive a request never lives in a service.
 - **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
   UI and every `/api/*` route to loopback, unproxied requests only; the MCP
   mount is the one public path. A new route needs nothing — it is

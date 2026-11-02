@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 
+import type { AuthStatus, CurrentUser } from "../api/auth";
+
 export function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -317,5 +319,20 @@ export function runFixture(overrides: Record<string, unknown> = {}) {
     finished_at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
     error: null,
     ...overrides,
+  };
+}
+
+/** A `/api/auth/session` body: a signed-in admin unless overridden. */
+export function authFixture(overrides: Partial<CurrentUser> = {}): AuthStatus {
+  return {
+    setup_required: false,
+    user: {
+      id: "55555555-5555-5555-5555-555555555555",
+      email: "admin@atlas.local",
+      name: "Admin",
+      is_admin: true,
+      created_at: "2026-10-31T00:00:00Z",
+      ...overrides,
+    },
   };
 }

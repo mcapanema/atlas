@@ -89,10 +89,11 @@ async def test_without_a_token_nothing_is_public() -> None:
 async def test_the_app_refuses_tunneled_requests_to_its_api_docs(test_app: FastAPI) -> None:
     transport = ASGITransport(app=test_app)
     async with AsyncClient(transport=transport, base_url="http://localhost") as client:
-        tunneled = await client.get("/docs", headers=_TUNNEL)
-        local = await client.get("/docs")
+        tunneled = await client.get("/api/docs", headers=_TUNNEL)
+        local = await client.get("/api/docs")
 
-    assert (tunneled.status_code, local.status_code) == (403, 200)
+    # Local reaches the app (401: the docs need sign-in); a tunnel never does.
+    assert (tunneled.status_code, local.status_code) == (403, 401)
 
 
 @pytest.mark.parametrize(

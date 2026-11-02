@@ -8,11 +8,13 @@ stores entities in insertion order (dict keyed by id).
 
 from collections.abc import Collection, Mapping
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
+from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.events.entities import Event, EventType
@@ -77,6 +79,64 @@ class InMemoryOrganizationRepository:
 
     async def get(self, organization_id: UUID) -> Organization | None:
         return self._orgs.get(organization_id)
+
+
+class InMemoryUserRepository:
+    def __init__(self, users: list[User] | None = None) -> None:
+        self._users: dict[UUID, User] = {u.id: u for u in users or []}
+        self._setup_claimed = False
+
+    async def add(self, user: User) -> None:
+        # Stand-in for the unique index on users.email.
+        if any(u.email == user.email for u in self._users.values()):
+            raise ValueError(f"email already taken: {user.email}")
+        self._users[user.id] = user
+
+    async def get(self, user_id: UUID) -> User | None:
+        return self._users.get(user_id)
+
+    async def get_by_email(self, email: str) -> User | None:
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    async def list(self) -> list[User]:
+        return sorted(self._users.values(), key=lambda u: u.created_at)
+
+    async def count(self) -> int:
+        return len(self._users)
+
+    async def update(self, user: User) -> None:
+        self._users[user.id] = user
+
+    async def delete(self, user_id: UUID) -> None:
+        # Does not cascade: services call sessions.delete_for_user first.
+        self._users.pop(user_id, None)
+
+    async def claim_setup(self, now: datetime) -> None:
+        if self._setup_claimed:
+            raise SetupAlreadyClaimedError("first-run setup is already done")
+        self._setup_claimed = True
+
+
+class InMemoryAuthSessionRepository:
+    def __init__(self, sessions: list[AuthSession] | None = None) -> None:
+        self._sessions: dict[str, AuthSession] = {s.token_hash: s for s in sessions or []}
+
+    async def add(self, session: AuthSession) -> None:
+        self._sessions[session.token_hash] = session
+
+    async def get(self, token_hash: str) -> AuthSession | None:
+        return self._sessions.get(token_hash)
+
+    async def delete(self, token_hash: str) -> None:
+        self._sessions.pop(token_hash, None)
+
+    async def delete_for_user(self, user_id: UUID, keep_token_hash: str | None = None) -> None:
+        self._sessions = {
+            h: s for h, s in self._sessions.items() if s.user_id != user_id or h == keep_token_hash
+        }
+
+    async def delete_expired(self, now: datetime) -> None:
+        self._sessions = {h: s for h, s in self._sessions.items() if s.expires_at > now}
 
 
 class InMemoryTeamRepository:
@@ -704,3 +764,16 @@ class InMemoryDeploymentRepository:
             and d.started_at >= since
         ]
         return min(starts, default=None)
+
+
+class FakeClock:
+    """A monotonic clock that moves only when a test advances it."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self._now = start
+
+    def __call__(self) -> float:
+        return self._now
+
+    def advance(self, delta: timedelta) -> None:
+        self._now += delta.total_seconds()

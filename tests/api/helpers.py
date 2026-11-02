@@ -8,11 +8,42 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
+from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, User
+from app.domain.auth.tokens import new_session_token
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.metric_rules.entities import RuleOverrides
+from app.infrastructure.repositories.auth import (
+    SqlAlchemyAuthSessionRepository,
+    SqlAlchemyUserRepository,
+)
 from app.infrastructure.repositories.credentials import SqlAlchemyCredentialRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.secrets import cipher_for
+from tests.conftest import PASSWORD_HASH
+
+
+async def sign_in(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    email: str = "member@atlas.test",
+    is_admin: bool = False,
+) -> tuple[User, str]:
+    """Write a user (password: ``conftest.ADMIN_PASSWORD``) and a session; return the raw token.
+
+    Writes through the adapters, not the API, so the scrypt hash is the
+    precomputed ``PASSWORD_HASH``. Send the token as the ``atlas_session`` cookie.
+    """
+    user = User(
+        email=email, name=email.split("@")[0], password_hash=PASSWORD_HASH, is_admin=is_admin
+    )
+    token, token_hash = new_session_token()
+    async with sessionmaker() as session:
+        await SqlAlchemyUserRepository(session).add(user)
+        await SqlAlchemyAuthSessionRepository(session).add(
+            AuthSession(token_hash, user.id, expires_at=datetime.now(UTC) + SESSION_LIFETIME)
+        )
+        await session.commit()
+    return user, token
 
 
 async def create_org_and_team(

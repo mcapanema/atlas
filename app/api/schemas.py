@@ -19,6 +19,7 @@ from app.application.codebases.sync import CodeSyncSummary
 from app.application.sync.service import SyncSummary
 from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType, Persona
 from app.domain.advisor.runs import AdviceRun
+from app.domain.auth.entities import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.metrics.dora import DoraBand, DoraMetrics
@@ -933,3 +934,52 @@ class PersonRead(BaseModel):
 class PersonWrite(BaseModel):
     # Blank clears the override.
     display_name: str | None = Field(max_length=255)
+
+
+# Email format is checked by the domain (ValueError → 422); this only bounds size.
+_Email = Annotated[str, Field(max_length=254)]
+_Name = Annotated[str, Field(min_length=1, max_length=255)]
+_Password = Annotated[str, Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_LENGTH)]
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    name: str
+    is_admin: bool
+    created_at: datetime
+
+
+class AuthStatusRead(BaseModel):
+    setup_required: bool
+    user: UserRead | None
+
+
+class SetupRequest(BaseModel):
+    email: _Email
+    name: _Name
+    password: _Password
+
+
+class SignInRequest(BaseModel):
+    email: _Email
+    # Not bounded below: a wrong password is a 401, not a hint about the rules.
+    password: str = Field(max_length=MAX_PASSWORD_LENGTH)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(max_length=MAX_PASSWORD_LENGTH)
+    new_password: _Password
+
+
+class UserCreate(BaseModel):
+    email: _Email
+    name: _Name
+    password: _Password
+    is_admin: bool = False
+
+
+class PasswordResetRequest(BaseModel):
+    new_password: _Password

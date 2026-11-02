@@ -4,19 +4,30 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from tests.api.helpers import sign_in
+
+
+async def _signed_in(app: FastAPI, sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncClient:
+    _, token = await sign_in(sessionmaker)
+    # raise_app_exceptions=False: observe the status a real HTTP client
+    # receives, not the exception the app re-raises after responding.
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    return AsyncClient(
+        transport=transport, base_url="http://localhost", cookies={"atlas_session": token}
+    )
 
 
 async def test_a_failed_commit_is_a_5xx_not_a_success(
-    test_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    test_app: FastAPI,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def failing_commit(self: AsyncSession) -> None:
         raise RuntimeError("disk full")
 
-    # raise_app_exceptions=False: observe the status a real HTTP client
-    # receives, not the exception the app re-raises after responding.
-    transport = ASGITransport(app=test_app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://localhost") as client:
+    async with await _signed_in(test_app, sessionmaker) as client:
         with monkeypatch.context() as patch:
             patch.setattr(AsyncSession, "commit", failing_commit)
             response = await client.post("/api/organizations", json={"name": "Acme"})
@@ -27,13 +38,14 @@ async def test_a_failed_commit_is_a_5xx_not_a_success(
 
 
 async def test_a_constraint_violation_at_commit_is_a_409(
-    test_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    test_app: FastAPI,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def conflicting_commit(self: AsyncSession) -> None:
         raise IntegrityError("INSERT …", {}, Exception("UNIQUE constraint failed"))
 
-    transport = ASGITransport(app=test_app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://localhost") as client:
+    async with await _signed_in(test_app, sessionmaker) as client:
         with monkeypatch.context() as patch:
             patch.setattr(AsyncSession, "commit", conflicting_commit)
             response = await client.post("/api/organizations", json={"name": "Acme"})

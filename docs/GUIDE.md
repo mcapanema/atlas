@@ -172,6 +172,30 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ## First sync
 
+On first start, Atlas asks you to create the first (administrator) account.
+An administrator adds the other users.
+
+If you forget a password, reset it from the terminal. The command first
+checks that the email belongs to a user. Then it asks for the new password
+two times and ends the user's open sessions. Press Ctrl+C at a prompt to
+cancel; nothing changes:
+
+```bash
+make reset-password EMAIL=you@example.com
+```
+
+If Atlas runs in Docker, run the command in the container:
+
+```bash
+docker compose exec app python -m app.cli reset-password you@example.com
+```
+
+After 5 failed sign-ins in 15 minutes, Atlas locks the email until 15
+minutes after the first of those 5 failures. If the computer sleeps, the
+sleep does not count toward the 15 minutes. A reset on the Users page
+removes the lock. A reset from the terminal cannot remove it: wait until
+the lock ends, or restart Atlas.
+
 A new Atlas has no data. To get data:
 
 1. To get a Linear key, go to Linear → Settings → Security & access →
@@ -306,10 +330,12 @@ does not make numbers that Atlas did not give.
 
 A normal sync does not change events that it already synced. Some releases
 fix how Atlas reads Linear history. To apply such a fix to existing data,
-start a rebuild:
+start a rebuild. The API needs a signed-in user: copy the value of the
+`atlas_session` cookie from your browser.
 
 ```bash
 curl -X POST http://localhost:8000/api/connectors/linear/sync \
+  -b 'atlas_session=<value>' \
   -H 'content-type: application/json' -d '{"rebuild": true}'
 ```
 
@@ -317,7 +343,7 @@ The response is `202` with a background sync job. To read the state,
 phase, counts and error of the job, use its `id`:
 
 ```bash
-curl http://localhost:8000/api/connectors/linear/jobs/<id>
+curl -b 'atlas_session=<value>' http://localhost:8000/api/connectors/linear/jobs/<id>
 ```
 
 The rebuild makes the events of each synced issue again, and writes the

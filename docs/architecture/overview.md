@@ -62,6 +62,15 @@ team and the production environment. The code sync links a pull request to
 the work items whose keys it names by REVIEW and MERGED events
 (`CodeSyncService`, `app/application/codebases/sync.py`).
 
+Users and their sign-in sessions are the `auth` aggregate
+(`app/domain/auth/`, tables `users` and `auth_sessions`, ADR-0028). A
+session is an opaque token in the `atlas_session` cookie; the database
+keeps only its SHA-256. `create_app()` includes every `/api` router except
+`/api/auth` with the `require_signed_in` dependency (`app/api/deps.py`), so
+an anonymous call is a 401; `/api/users` also needs an admin. While no user
+exists, `GET /api/auth/session` reports `setup_required` and
+`POST /api/auth/setup` creates the first (admin) account.
+
 ### Computed-on-read analytics (ADR-0003, amended by ADR-0008 and ADR-0023)
 
 Metrics and forecasts are recomputed per request from the persisted
@@ -339,8 +348,11 @@ the monolith at `/mcp/<ATLAS_MCP_TOKEN>` — Streamable HTTP, stateless, secret-
 URL auth (connector UIs cannot send custom headers). It is a Presentation-
 layer facade: every tool calls the REST API in-process and reformats the DTO
 as compact text, so analytics logic and error semantics live in exactly one
-place. `GET /api/recommendations/context` returns the advisor's digest as
-text for the same reason — a chat client brings its own LLM, so advice works
+place. Those in-process calls carry `X-Atlas-Internal` with a per-process
+random token (`app.state.internal_token`), which `require_signed_in`
+accepts in place of a session, so tools work with no user (ADR-0028).
+`GET /api/recommendations/context` returns the advisor's digest as text for
+the same reason — a chat client brings its own LLM, so advice works
 without an OpenRouter key. The MCP mount is the only path served to
 non-local requests — `LocalOnlyMiddleware` (`app/api/exposure.py`, ADR-0012)
 answers 403 to everything else.

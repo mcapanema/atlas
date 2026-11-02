@@ -38,6 +38,7 @@ from tests.api.helpers import (
     create_team,
     days_ago,
     settle,
+    sign_in,
     use_calendar_days,
 )
 from tests.fakes import FakeDataSource
@@ -84,6 +85,18 @@ async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
     ):
         await session.initialize()
         yield session
+
+
+@asynccontextmanager
+async def seed_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """A signed-in REST client for seeding data; the MCP tools themselves need no user."""
+    _, token = await sign_in(app.state.sessionmaker)
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://localhost",
+        cookies={"atlas_session": token},
+    ) as client:
+        yield client
 
 
 def tool_text(result: object) -> str:
@@ -154,8 +167,7 @@ async def test_list_scopes_tool(
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             await create_team(client)
 
         async with mcp_session(app) as session:
@@ -170,13 +182,23 @@ async def test_list_scopes_tool(
             assert "(sprint 14d)" in text  # the team's sprint_length_days rule
 
 
+async def test_mcp_tools_work_without_any_user(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    settings_env: Callable[..., None],
+) -> None:
+    # An upgraded install has data and no users yet: MCP must keep working.
+    async with running_app(sessionmaker, settings_env) as app, mcp_session(app) as session:
+        result = await session.call_tool("list_scopes", {})
+
+    assert not result.is_error, tool_text(result)
+
+
 async def test_list_scopes_names_every_team_of_a_project(
     sessionmaker: async_sessionmaker[AsyncSession],
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             org_id, home = await create_org_and_team(client)
             other = (
                 await client.post("/api/teams", json={"organization_id": org_id, "name": "Mobile"})
@@ -201,8 +223,7 @@ async def test_meeting_brief_composes_digest(
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             team_id = await create_team(client)
 
         async with mcp_session(app) as session:
@@ -241,8 +262,7 @@ async def test_drilldown_tools(
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             team_id = await create_team(client)
             item = await client.post(
                 "/api/work-items", json={"team_id": team_id, "title": "Fix login flake"}
@@ -270,8 +290,7 @@ async def test_run_sync_surfaces_unconfigured_connector(
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             org = await client.post("/api/organizations", json={"name": "Acme"})
             org_id = org.json()["id"]
 
@@ -301,8 +320,7 @@ class _FailingSource(FakeDataSource):
 
 async def _run_sync(app: FastAPI, source: FakeDataSource) -> CallToolResult:
     app.dependency_overrides[get_delivery_data_source] = lambda: source
-    transport = ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+    async with seed_client(app) as client:
         org_id = (await client.post("/api/organizations", json={"name": "Acme"})).json()["id"]
     async with mcp_session(app) as session:
         return await session.call_tool("run_sync", {"organization_id": org_id})
@@ -422,8 +440,7 @@ async def test_meeting_brief_names_the_aging_history(
 ) -> None:
     # Review focus 5: the real tool path, not just the helpers.
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             org_id, team_id = await create_org_and_team(client)
             await use_calendar_days(sessionmaker, org_id)
             await _seed_item(
@@ -449,8 +466,7 @@ async def test_aging_wip_tool_caps_at_fifty_without_pointing_at_itself(
 ) -> None:
     # Review focus 4: the full-list tool must not tell the model to call itself.
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             team_id = await create_team(client)
             for n in range(51):
                 await _seed_item(client, team_id, f"Item {n}", ("created", 5), ("started", 3))
@@ -528,8 +544,7 @@ async def test_dora_tool_renders_the_endpoint(
     settings_env: Callable[..., None],
 ) -> None:
     async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        async with seed_client(app) as client:
             team_id = await create_team(client)
 
         async with mcp_session(app) as session:

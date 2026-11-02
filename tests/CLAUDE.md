@@ -17,15 +17,22 @@ the codebase or its tooling rather than one layer. Exemplar:
 - `session` — one `AsyncSession` from that sessionmaker, function-scoped.
 - `client` — an `httpx.AsyncClient` wired to a real `create_app()`
   instance with `app.state.sessionmaker` overridden to the in-memory
-  factory. Use this for `tests/api/` tests; don't stand up a separate app
-  instance per test file.
+  factory, signed in as the admin `ADMIN_EMAIL` (password
+  `ADMIN_PASSWORD`, module constants). Use this for `tests/api/` tests;
+  don't stand up a separate app instance per test file. `anon_client` is
+  the same app with no session cookie (for 401 and sign-in tests).
+  `helpers.sign_in(sessionmaker, email=..., is_admin=...)` writes another
+  user and session and returns `(user, token)`; send the token as the
+  `atlas_session` cookie. Every fixture user shares one precomputed
+  `PASSWORD_HASH`: scrypt is slow, so never hash per test.
 - `_secret_key_file` (autouse) — points `ATLAS_SECRET_KEY_FILE` at the test's
   `tmp_path` and clears the `get_settings` cache, so no test writes
   `data/atlas.key`.
 - `file_sessionmaker` / `rules_app` / `rules_client` — the same app on a
   file-backed SQLite DB with a real connection pool, for code that opens
   concurrent sessions (the advice, sync-job and recompute runners): the
-  shared in-memory connection can't isolate their transactions. Sync-job
+  shared in-memory connection can't isolate their transactions;
+  `rules_client` is signed in like `client`. Sync-job
   and advice API tests use `rules_client`. `rules_app` closes all three
   runners on teardown; `helpers.settle(app)` waits for them to go idle.
 - `settings_env` — the one way to override settings in a test:

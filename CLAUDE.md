@@ -48,6 +48,7 @@ Prefer the Makefile (`make help` for the full list) over raw commands.
 | `make test` / `make lint` / `make typecheck` / `make security` | run one phase, both sides |
 | `make check` | full local CI gate — every `.github/workflows/ci.yml` job, incl. lockfile dependency sync + Docker build |
 | `make migrate` | apply Alembic migrations |
+| `make reset-password EMAIL=…` | set a user's password from the terminal (`app/cli.py`) |
 | `make run` | build frontend + serve single-service production mode |
 | `make docker-up` | run the whole stack in Docker (`docker-compose.yml`) |
 
@@ -83,6 +84,7 @@ and Dependabot are summarized in `CONTRIBUTING.md`.
 | `app/application/` | use cases / services |
 | `app/infrastructure/` | SQLAlchemy adapters, connectors, AI adapter, SPA serving |
 | `app/api/` | FastAPI routers + DTOs, composition root (`deps.py`) |
+| `app/cli.py` | terminal entry point (`reset-password`); a second composition root |
 | `app/config.py` | all runtime config (`ATLAS_`-prefixed `Settings`) |
 | `web/` | React frontend (design brief: `PRODUCT.md`) |
 | `migrations/` | Alembic migrations |

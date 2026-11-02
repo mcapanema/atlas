@@ -14,9 +14,15 @@ from sqlalchemy.pool import StaticPool
 
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
 from app.config import get_settings
+from app.domain.auth.passwords import hash_password
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.session import enable_sqlite_pragmas
 from app.main import create_app
+
+ADMIN_EMAIL = "admin@atlas.test"
+ADMIN_PASSWORD = "correct-horse-battery"
+# scrypt is slow on purpose: hash once per test session, not once per test.
+PASSWORD_HASH = hash_password(ADMIN_PASSWORD)
 
 
 @pytest_asyncio.fixture
@@ -49,8 +55,32 @@ async def test_app(sessionmaker: async_sessionmaker[AsyncSession]) -> FastAPI:
     return application
 
 
+async def _signed_in_client(
+    app: FastAPI, sessionmaker: async_sessionmaker[AsyncSession]
+) -> AsyncClient:
+    # Imported here: helpers imports this module for PASSWORD_HASH.
+    from tests.api.helpers import sign_in
+
+    _, token = await sign_in(sessionmaker, email=ADMIN_EMAIL, is_admin=True)
+    return AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://localhost",
+        cookies={"atlas_session": token},
+    )
+
+
 @pytest_asyncio.fixture
-async def client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
+async def client(
+    test_app: FastAPI, sessionmaker: async_sessionmaker[AsyncSession]
+) -> AsyncIterator[AsyncClient]:
+    """Signed in as the admin ADMIN_EMAIL."""
+    async with await _signed_in_client(test_app, sessionmaker) as http_client:
+        yield http_client
+
+
+@pytest_asyncio.fixture
+async def anon_client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    """Not signed in: no session cookie."""
     transport = ASGITransport(app=test_app)
     async with AsyncClient(transport=transport, base_url="http://localhost") as http_client:
         yield http_client
@@ -92,9 +122,11 @@ async def rules_app(
 
 
 @pytest_asyncio.fixture
-async def rules_client(rules_app: FastAPI) -> AsyncIterator[AsyncClient]:
-    transport = ASGITransport(app=rules_app)
-    async with AsyncClient(transport=transport, base_url="http://localhost") as http_client:
+async def rules_client(
+    rules_app: FastAPI, file_sessionmaker: async_sessionmaker[AsyncSession]
+) -> AsyncIterator[AsyncClient]:
+    """Signed in as the admin ADMIN_EMAIL."""
+    async with await _signed_in_client(rules_app, file_sessionmaker) as http_client:
         yield http_client
 
 

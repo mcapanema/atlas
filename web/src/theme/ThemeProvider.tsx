@@ -1,4 +1,4 @@
-import { ConfigProvider } from "antd";
+import { App as AntApp, ConfigProvider } from "antd";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { buildThemeConfig } from "./antdTheme";
@@ -42,7 +42,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeModeContext.Provider value={value}>
-      <ConfigProvider theme={buildThemeConfig(mode)}>{children}</ConfigProvider>
+      <ConfigProvider theme={buildThemeConfig(mode)}>
+        {/* App gives components a message API that follows the theme; no wrapper div. */}
+        <AntApp component={false}>{children}</AntApp>
+      </ConfigProvider>
     </ThemeModeContext.Provider>
   );
 }
