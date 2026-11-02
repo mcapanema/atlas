@@ -190,8 +190,9 @@ If Atlas runs in Docker, run the command in the container:
 docker compose exec app python -m app.cli reset-password you@example.com
 ```
 
-After 5 failed sign-ins, Atlas locks the email for 15 minutes. A reset on
-the Users page removes the lock. A reset from the terminal cannot remove
+After 5 failed sign-ins in 15 minutes, Atlas locks the email for 15
+minutes. If the computer sleeps, the sleep does not count toward either
+period. A reset on the Users page removes the lock. A reset from the terminal cannot remove
 it: wait until the lock ends, or restart Atlas.
 
 A new Atlas has no data. To get data:

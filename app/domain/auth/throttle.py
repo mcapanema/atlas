@@ -12,8 +12,8 @@ class SignInThrottle:
 
     It reads a monotonic clock, so a wall-clock step (an NTP correction, a
     manual change) can neither reorder its keys nor stretch a lock. That clock
-    pauses while the host sleeps, so a lock can outlast its window in
-    wall-clock time across a sleep — the safe direction.
+    pauses while the host sleeps, so across a sleep a lock lasts longer in
+    wall-clock time and earlier failures still count — both the safe direction.
 
     ponytail: in-process memory — per process, and a restart clears it. That
     fits the single-process monolith (ADR-0002). Upgrade path: a DB-backed
