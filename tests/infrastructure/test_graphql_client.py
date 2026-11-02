@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -89,3 +90,49 @@ async def test_network_failure_has_no_status() -> None:
     with pytest.raises(AcmeError) as caught:
         await _client(fail).execute("{ x }")
     assert caught.value.status is None
+
+
+_NO_ACCESS = "Resource not accessible by personal access token"
+
+
+def _forbidden(path: list[str | int]) -> dict[str, Any]:
+    return {"type": "FORBIDDEN", "path": path, "message": _NO_ACCESS}
+
+
+async def _graphql_error_message(errors: list[Any], data: Any = None) -> str:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"errors": errors, "data": data})
+
+    with pytest.raises(AcmeError) as caught:
+        await _client(handler).execute("{ a }")
+    return str(caught.value)
+
+
+async def test_graphql_errors_are_collapsed_by_wildcard_path() -> None:
+    errors = [
+        _forbidden(["node", "pullRequests", "nodes", 11, "mergeCommit"]),
+        _forbidden(["node", "pullRequests", "nodes", 12, "mergeCommit"]),
+        _forbidden(["node", "pullRequests", "nodes", 0, "commits", "nodes", 0]),
+    ]
+
+    # Partial data with errors still fails: no half-mapped records.
+    message = await _graphql_error_message(errors, data={"node": {}})
+
+    assert message == (
+        "Acme GraphQL errors: "
+        f"FORBIDDEN at node.pullRequests.nodes.*.mergeCommit: {_NO_ACCESS}; "
+        f"FORBIDDEN at node.pullRequests.nodes.*.commits.nodes.*: {_NO_ACCESS}"
+        " (3 errors)"
+    )
+
+
+async def test_graphql_error_without_type_or_path_is_its_message() -> None:
+    message = await _graphql_error_message([{"message": "boom"}, "raw"])
+
+    assert message == "Acme GraphQL errors: boom; raw"
+
+
+async def test_graphql_errors_list_at_most_five_kinds() -> None:
+    message = await _graphql_error_message([{"message": f"m{i}"} for i in range(7)])
+
+    assert message == "Acme GraphQL errors: m0; m1; m2; m3; m4; …and 2 more"
