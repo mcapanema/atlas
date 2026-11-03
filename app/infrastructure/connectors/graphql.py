@@ -57,6 +57,29 @@ def _retry_reason(outcome: httpx.Response | httpx.TransportError) -> str | None:
     return None
 
 
+_MAX_ERROR_KINDS = 5
+
+
+def _describe_error(error: Any) -> str:
+    """`TYPE at a.*.b: message`, with list indices as `*` so per-node errors collapse."""
+    if not isinstance(error, dict) or "message" not in error:
+        return str(error)
+    path = ".".join("*" if isinstance(p, int) else str(p) for p in error.get("path") or [])
+    where = " ".join(part for part in (error.get("type"), path and f"at {path}") if part)
+    return f"{where}: {error['message']}" if where else str(error["message"])
+
+
+def _summarize_errors(errors: list[Any]) -> str:
+    """Distinct error kinds in first-seen order; a page can return one error per node."""
+    kinds = list(dict.fromkeys(_describe_error(e) for e in errors))
+    summary = "; ".join(kinds[:_MAX_ERROR_KINDS])
+    if len(kinds) > _MAX_ERROR_KINDS:
+        summary += f"; …and {len(kinds) - _MAX_ERROR_KINDS} more"
+    elif len(errors) > len(kinds):
+        summary += f" ({len(errors)} errors)"
+    return summary
+
+
 class GraphQLClient:
     def __init__(
         self,
@@ -114,7 +137,8 @@ class GraphQLClient:
             raise self._error(f"{vendor} response is not an object")
         if payload.get("errors"):
             raise self._error(
-                f"{vendor} GraphQL errors: {payload['errors']}", status=response.status_code
+                f"{vendor} GraphQL errors: {_summarize_errors(payload['errors'])}",
+                status=response.status_code,
             )
         data: dict[str, Any] | None = payload.get("data")
         if data is None:

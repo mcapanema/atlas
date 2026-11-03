@@ -205,9 +205,12 @@ A new Atlas has no data. To get data:
 3. Click **Sync now**. The sync runs in the background. When it finishes,
    the Linear card shows the result.
 4. Optional, for DORA:
-   1. In the GitHub card, paste the token and the owner. Select **Save**.
-   2. Map each repository to a team.
-   3. Click **Sync GitHub**.
+   1. Make a fine-grained personal access token in GitHub → Settings →
+      Developer settings. Give it read-only access to Metadata, Contents,
+      Pull requests and Deployments on the repositories for Atlas.
+   2. In the GitHub card, paste the token and the owner. Select **Save**.
+   3. Map each repository to a team.
+   4. Click **Sync GitHub**.
 
    Incidents are Linear issues with an incident label. You set these labels
    in Metric rules → **Incident labels**.

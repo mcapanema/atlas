@@ -12,7 +12,7 @@ function SetupAlert() {
       type="warning"
       showIcon
       title="GitHub isn't configured"
-      description="Add a GitHub token and owner below: a fine-grained personal access token (GitHub → Settings → Developer settings) with read access to Metadata, Pull requests and Deployments on the repositories Atlas should see. Until then Sync GitHub is off."
+      description="Add a GitHub token and owner below: a fine-grained personal access token (GitHub → Settings → Developer settings) with read access to Metadata, Contents, Pull requests and Deployments on the repositories Atlas should see. Until then Sync GitHub is off."
     />
   );
 }
