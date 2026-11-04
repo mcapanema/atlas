@@ -55,9 +55,11 @@ decrypted reads as not configured and logs a warning.
 
 An Organization also owns Codebases (`app/domain/codebases/`, ADR-0024): a
 repository from a code host, mapped to at most one Team and holding its Pull
-Requests and Deployments. Codebases arrive unmapped from a code sync, and an
+Requests and Deployments. `Codebase.source` (`github` or `datadog`, ADR-0029)
+names the system it comes from, and each code sync fetches only the mapped
+codebases of its own source. Codebases arrive unmapped from a code sync, and an
 unmapped codebase is never fetched; `GET /api/codebases?organization_id=`
-lists them with their stored counts, and `PUT /api/codebases/{id}` sets the
+(optional `source=`) lists them with their stored counts, and `PUT /api/codebases/{id}` sets the
 team and the production environment. The code sync links a pull request to
 the work items whose keys it names by REVIEW and MERGED events
 (`CodeSyncService`, `app/application/codebases/sync.py`).

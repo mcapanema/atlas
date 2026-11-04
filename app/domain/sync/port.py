@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
+from app.domain.codebases.entities import CodebaseSource
 from app.domain.sync.source import (
     SourceCodebase,
     SourceDeployment,
@@ -43,6 +44,11 @@ class DeliveryDataSource(Protocol):
 
 class CodeHostSource(Protocol):
     """Port for an external code host (repositories, pull requests, deployments)."""
+
+    @property
+    def source(self) -> CodebaseSource:
+        """The source stamped on the codebases this port returns."""
+        ...
 
     async def fetch_codebases(self) -> list[SourceCodebase]: ...
 

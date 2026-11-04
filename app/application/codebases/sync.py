@@ -109,7 +109,11 @@ class CodeSyncService:
         logger.info("Code sync started for organization %s", organization_id)
         report(SyncPhase.CODEBASES)
         written = await self._sync_codebases(organization_id)
-        mapped = [c for c in await self._codebases.list(organization_id) if c.team_id is not None]
+        mapped = [
+            c
+            for c in await self._codebases.list(organization_id)
+            if c.team_id is not None and c.source == self._source.source
+        ]
         report(SyncPhase.PULL_REQUESTS)
         pull_requests = sum([await self._fetch_pull_requests(c, now) for c in mapped])
         report(SyncPhase.DEPLOYMENTS)
@@ -154,6 +158,7 @@ class CodeSyncService:
                         name=source.name,
                         external_id=source.external_id,
                         url=source.url,
+                        source=self._source.source,
                     )
                 )
             elif (stored.name, stored.url) != (source.name.strip(), source.url):

@@ -15,7 +15,13 @@ from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.auth.entities import AuthSession, User
 from app.domain.auth.repository import SetupAlreadyClaimedError
-from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.codebases.entities import (
+    Codebase,
+    CodebaseSource,
+    Deployment,
+    DeploymentStatus,
+    PullRequest,
+)
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
@@ -437,7 +443,9 @@ class InMemoryCodeHostSource:
         codebases: list[SourceCodebase] | None = None,
         pull_requests: dict[str, list[SourcePullRequest]] | None = None,
         deployments: dict[str, list[SourceDeployment]] | None = None,
+        source: CodebaseSource = CodebaseSource.GITHUB,
     ) -> None:
+        self.source = source
         self.codebases = codebases or []
         self.pull_requests = pull_requests or {}
         self.deployments = deployments or {}

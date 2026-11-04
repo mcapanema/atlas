@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass, replace
 from uuid import UUID
 
-from app.domain.codebases.entities import Codebase
+from app.domain.codebases.entities import Codebase, CodebaseSource
 from app.domain.codebases.repository import (
     CodebaseRepository,
     DeploymentRepository,
@@ -41,9 +41,14 @@ class CodebaseService:
         self._pull_requests = pull_requests
         self._deployments = deployments
 
-    async def list(self, organization_id: UUID) -> list[CodebaseOverview]:
-        """The organization's codebases by name, each with its stored counts."""
-        codebases = sorted(await self._codebases.list(organization_id), key=lambda c: c.name)
+    async def list(
+        self, organization_id: UUID, *, source: CodebaseSource | None = None
+    ) -> list[CodebaseOverview]:
+        """The organization's codebases by name (of one source, if given), with stored counts."""
+        stored = await self._codebases.list(organization_id)
+        codebases = sorted(
+            (c for c in stored if source is None or c.source == source), key=lambda c: c.name
+        )
         ids = [c.id for c in codebases]
         pull_requests = await self._pull_requests.count_by_codebase(ids)
         deployments = await self._deployments.count_by_codebase(ids)

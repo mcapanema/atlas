@@ -279,6 +279,7 @@ class CodebaseRead(BaseModel):
     name: str
     url: str | None
     team_id: UUID | None
+    source: str
     production_environment: str
     last_synced_at: datetime | None
     pull_requests: int
@@ -293,6 +294,7 @@ class CodebaseRead(BaseModel):
             name=codebase.name,
             url=codebase.url,
             team_id=codebase.team_id,
+            source=codebase.source.value,
             production_environment=codebase.production_environment,
             last_synced_at=codebase.last_synced_at,
             pull_requests=overview.pull_requests,
