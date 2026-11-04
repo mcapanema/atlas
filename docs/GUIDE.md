@@ -69,8 +69,8 @@ These views need an OpenRouter key. Enter it on the **Connectors** page.
   and the people who own work items. To change how a name shows, click the
   person's **Display name**. A sync never changes a display name.
 - **Connectors** (`/connectors`): the Linear status, **Sync now**, the
-  GitHub card where you map repositories to teams, and the **Auto sync**
-  schedule. See [First sync](#first-sync).
+  GitHub card where you map repositories to teams, the Datadog card where
+  you map services to teams, and the **Auto sync** schedule. See [First sync](#first-sync).
 - **Metric rules** (`/metric-rules`): the rules that Atlas uses to
   calculate metrics. Examples are: what counts as blocked, the lifecycle,
   when tracking started, working days and holidays, waiting states,
@@ -214,11 +214,12 @@ A new Atlas has no data. To get data:
 
    Incidents are Linear issues with an incident label. You set these labels
    in Metric rules → **Incident labels**.
-5. Optional, for Advisor and Meetings: paste the OpenRouter key in the
+5. Optional, for DORA with Datadog: see [Datadog](#datadog).
+6. Optional, for Advisor and Meetings: paste the OpenRouter key in the
    OpenRouter card and select **Save**. The model must be an OpenRouter
    model id that supports structured outputs. Atlas checks the model when
    you save.
-6. Set an **Auto sync** schedule. See [Automatic sync](#automatic-sync).
+7. Set an **Auto sync** schedule. See [Automatic sync](#automatic-sync).
 
 If a key is not set, its connector shows "Not configured", and its sync
 requests return `409`.
@@ -236,8 +237,9 @@ restart Atlas. The running app keeps the old key in memory.
 
 The **Auto sync** card on the Connectors page sets a sync schedule for each
 organization. Each sync gets Linear data first. If GitHub is configured and
-the Linear sync is successful, it then gets GitHub data. If the GitHub sync
-fails, Atlas only writes it to the log.
+the Linear sync is successful, it then gets GitHub data. If Datadog is
+configured, it then gets Datadog data. If the GitHub sync or the Datadog
+sync fails, Atlas only writes it to the log.
 
 - To set the schedule, select the days, a time window, an interval and a
   time zone. Example: Mon–Fri, 08:00–18:00, every 2 h, America/Sao_Paulo.
@@ -253,6 +255,45 @@ To get new data for one team immediately, use **Sync team** on the Team
 Dashboard. It gets only the issues of that team and does not delete data.
 The next sync of the organization removes the items that were deleted in
 Linear.
+
+## Datadog
+
+Datadog is an optional source for DORA metrics. Atlas reads the services,
+the deployments and the incidents from Datadog (ADR-0029).
+
+1. In Datadog, go to Organization Settings → API Keys. Make an API key.
+2. Go to Organization Settings → Application Keys. Make an application
+   key. Give it read access to Software Catalog, Incidents and DORA
+   Metrics.
+3. Open **Connectors**. In the Datadog card, paste the two keys. Select
+   the site of your Datadog account. Select **Save**. You must enter both
+   keys each time you save. Atlas checks them before it saves them.
+4. Click **Sync Datadog**. The card then lists the Datadog services.
+5. Map each service to a team. Set the production environment of the
+   service.
+6. Click **Sync Datadog** again to get the deployments and the incidents.
+
+Auto sync runs the Datadog sync after the Linear sync and the GitHub sync.
+
+Atlas only reads from Datadog. It adds no Datadog usage charge, but the
+rate limits of Datadog apply.
+
+A team uses one incident source, never both. In Metric rules, set
+**Incident source** for the team:
+
+- **Auto** (default): Atlas uses Datadog incidents if Datadog has
+  incidents for the mapped services of the team. If not, it uses the
+  Linear incident label.
+- **Linear label**: Atlas uses only the Linear incident label.
+- **Datadog**: Atlas uses only Datadog incidents.
+
+If GitHub and Datadog both report one release, Atlas counts it one time.
+It can do this only when the Datadog deployment event has the commit SHA.
+Make the deploy job send the Git data (repository and commit SHA) to
+Datadog. If the SHA is not there, Atlas counts the release two times.
+
+A team that uses only Datadog has no lead time, because Datadog gives no
+pull requests.
 
 ## Chat access from Claude and ChatGPT (MCP)
 
