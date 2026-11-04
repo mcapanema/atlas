@@ -64,6 +64,14 @@ team and the production environment. The code sync links a pull request to
 the work items whose keys it names by REVIEW and MERGED events
 (`CodeSyncService`, `app/application/codebases/sync.py`).
 
+An Organization also holds ServiceIncidents (`app/domain/incidents/`, table
+`service_incidents`): an incident from an incident tracker, with its open and
+restore times, the names of the affected services, and a severity. The
+`IncidentSyncService` (`app/application/incidents/sync.py`) fetches incidents
+since a backfill window and upserts them by external id. An incident keeps the
+organization that first synced it; a later sync from any organization updates
+its fields in place.
+
 Users and their sign-in sessions are the `auth` aggregate
 (`app/domain/auth/`, tables `users` and `auth_sessions`, ADR-0028). A
 session is an opaque token in the `atlas_session` cookie; the database

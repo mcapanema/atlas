@@ -24,6 +24,7 @@ from app.domain.codebases.entities import (
 )
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.events.entities import Event, EventType
+from app.domain.incidents.entities import ServiceIncident
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.people.entities import Person
@@ -32,6 +33,7 @@ from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import (
     SourceCodebase,
     SourceDeployment,
+    SourceIncident,
     SourceProject,
     SourcePullRequest,
     SourceTeam,
@@ -730,6 +732,39 @@ class InMemoryPullRequestRepository:
             if p.codebase_id in wanted:
                 counts[p.codebase_id] = counts.get(p.codebase_id, 0) + 1
         return counts
+
+
+class InMemoryServiceIncidentRepository:
+    def __init__(self, incidents: list[ServiceIncident] | None = None) -> None:
+        self._rows: dict[UUID, ServiceIncident] = {i.id: i for i in incidents or []}
+
+    async def add(self, incident: ServiceIncident) -> None:
+        self._rows[incident.id] = incident
+
+    async def update(self, incident: ServiceIncident) -> None:
+        self._rows[incident.id] = incident
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, ServiceIncident]:
+        wanted = set(external_ids)
+        return {i.external_id: i for i in self._rows.values() if i.external_id in wanted}
+
+    async def list(self, organization_id: UUID) -> list[ServiceIncident]:
+        return sorted(
+            (i for i in self._rows.values() if i.organization_id == organization_id),
+            key=lambda i: i.opened_at,
+        )
+
+
+class InMemoryIncidentSource:
+    """Configurable IncidentSource; `calls` records each `since`."""
+
+    def __init__(self, incidents: list[SourceIncident] | None = None) -> None:
+        self.incidents = incidents or []
+        self.calls: list[datetime] = []
+
+    async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
+        self.calls.append(since)
+        return self.incidents
 
 
 class InMemoryDeploymentRepository:

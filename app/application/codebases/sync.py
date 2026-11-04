@@ -1,10 +1,10 @@
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from typing import Protocol
 from uuid import UUID
 
 from app.application.sync.service import PhaseCallback, SyncPhase, UnknownOrganizationError
+from app.application.upsert import upsert_by_external_id
 from app.domain._time import utcnow
 from app.domain.codebases.entities import Codebase, Deployment, PullRequest
 from app.domain.codebases.repository import (
@@ -194,7 +194,7 @@ class CodeSyncService:
             )
             for s in sources
         ]
-        return await _upsert(self._pull_requests, rows)
+        return await upsert_by_external_id(self._pull_requests, rows)
 
     async def _fetch_deployments(self, codebase: Codebase, now: datetime) -> int:
         since = self._since(codebase, now)
@@ -216,7 +216,7 @@ class CodeSyncService:
             )
             for s in sources
         ]
-        return await _upsert(self._deployments, rows)
+        return await upsert_by_external_id(self._deployments, rows)
 
     async def _link(self, organization_id: UUID, mapped: list[Codebase]) -> int:
         """Insert the REVIEW/MERGED events of every stored pull request that names a work item.
@@ -246,36 +246,6 @@ class CodeSyncService:
         for event in fresh:
             await self._events.add(event)
         return len(fresh)
-
-
-class _Upsertable[T: (PullRequest, Deployment)](Protocol):
-    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, T]: ...
-
-    async def add(self, row: T, /) -> None: ...
-
-    async def update(self, row: T, /) -> None: ...
-
-
-async def _upsert[T: (PullRequest, Deployment)](repository: _Upsertable[T], rows: list[T]) -> int:
-    """Add new rows and update changed ones (matched by external_id); returns rows written.
-
-    A row the source returned twice (updated mid-pagination) is written once,
-    as its first, newest copy.
-    """
-    rows = list({row.external_id: row for row in reversed(rows)}.values())[::-1]
-    stored = await repository.get_by_external_ids([r.external_id for r in rows])
-    written = 0
-    for row in rows:
-        existing = stored.get(row.external_id)
-        if existing is None:
-            await repository.add(row)
-        else:
-            row = replace(row, id=existing.id)
-            if row == existing:
-                continue
-            await repository.update(row)
-        written += 1
-    return written
 
 
 def _events_for(pr: PullRequest, codebase_name: str, work_item_id: UUID) -> list[Event]:
