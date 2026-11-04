@@ -12,7 +12,7 @@ from app.domain.sync.source import (
     SourceIncident,
     SourcePullRequest,
 )
-from app.infrastructure.connectors.datadog.client import DatadogClient
+from app.infrastructure.connectors.datadog.client import DatadogAPIError, DatadogClient
 from app.infrastructure.connectors.datadog.mapping import (
     map_deployment,
     map_incident,
@@ -48,6 +48,23 @@ def _deployments_body(name: str, since: datetime, now: datetime) -> dict[str, An
     }
 
 
+def _data(payload: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise DatadogAPIError(f"Datadog {kind} response has no data")
+    return data
+
+
+def _last_started_at(page: list[dict[str, Any]]) -> datetime | None:
+    """`started_at` of the last node that has a readable one, else None."""
+    for node in reversed(page):
+        try:
+            return parse_time(node["attributes"]["started_at"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
+
+
 def _is_wanted(node: dict[str, Any], since: datetime) -> bool:
     """Drop test incidents and ones modified before `since`; an unreadable stamp stays in."""
     attributes = node.get("attributes") or {}
@@ -78,7 +95,7 @@ class DatadogDataSource:
                 "page[limit]": _PAGE_SIZE,
                 "page[offset]": page_number * _PAGE_SIZE,
             }
-            page = (await self._client.get("/api/v2/catalog/entity", params))["data"]
+            page = _data(await self._client.get("/api/v2/catalog/entity", params), "catalog")
             nodes.extend(page)
             if len(page) < _PAGE_SIZE:
                 break
@@ -96,20 +113,25 @@ class DatadogDataSource:
         now = self._now()
         cursor = since
         seen: dict[str, dict[str, Any]] = {}
+        nameless: list[dict[str, Any]] = []  # the tolerant mapper logs and skips these
         for _ in range(_MAX_PAGES):
             body = _deployments_body(name, cursor, now)
-            page = (await self._client.post("/api/v2/dora/deployments", body))["data"]
+            page = _data(await self._client.post("/api/v2/dora/deployments", body), "deployments")
             for node in page:
-                seen.setdefault(node["id"], node)
+                if "id" in node:
+                    seen.setdefault(node["id"], node)
+                else:
+                    nameless.append(node)
             if len(page) < _DEPLOYMENT_LIMIT:
                 break
-            last = parse_time(page[-1]["attributes"]["started_at"])
-            if last <= cursor:
+            last = _last_started_at(page)
+            if last is None or last <= cursor:
                 # ponytail: more than _DEPLOYMENT_LIMIT deployments share one
                 # started_at; the rest are skipped.
                 break
             cursor = last
-        return map_tolerantly(list(seen.values()), map_deployment, "deployment", vendor="Datadog")
+        nodes = [*seen.values(), *nameless]
+        return map_tolerantly(nodes, map_deployment, "deployment", vendor="Datadog")
 
     async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
         nodes: list[dict[str, Any]] = []
@@ -117,9 +139,10 @@ class DatadogDataSource:
         for _ in range(_MAX_PAGES):
             params = {"page[size]": _PAGE_SIZE, "page[offset]": offset}
             payload = await self._client.get("/api/v2/incidents", params)
-            nodes.extend(payload["data"])
+            page = _data(payload, "incidents")
+            nodes.extend(page)
             next_offset = ((payload.get("meta") or {}).get("pagination") or {}).get("next_offset")
-            if len(payload["data"]) < _PAGE_SIZE or next_offset is None:
+            if len(page) < _PAGE_SIZE or not isinstance(next_offset, int) or next_offset <= offset:
                 break
             offset = next_offset
         wanted = [node for node in nodes if _is_wanted(node, since)]

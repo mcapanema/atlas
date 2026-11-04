@@ -107,3 +107,19 @@ def test_map_incident_prefers_customer_impact_times() -> None:
     )
     assert incident.opened_at == datetime(2024, 5, 1, 10, 30, tzinfo=UTC)
     assert incident.restored_at == datetime(2024, 5, 1, 10, 45, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("attributes", "expected"),
+    [
+        ({"severity": "SEV-2"}, "SEV-2"),
+        ({"fields": {"severity": {"value": "SEV-3"}}}, "SEV-3"),
+        ({"severity": "SEV-1", "fields": {"severity": {"value": "SEV-3"}}}, "SEV-1"),
+        ({"severity": "UNKNOWN"}, None),
+        ({"severity": "UNKNOWN", "fields": {"severity": {"value": "SEV-4"}}}, "SEV-4"),
+        ({"severity": ""}, None),
+        ({"severity": None}, None),
+    ],
+)
+def test_map_incident_severity(attributes: dict[str, Any], expected: str | None) -> None:
+    assert map_incident(_incident(**attributes), "datadoghq.com").severity == expected

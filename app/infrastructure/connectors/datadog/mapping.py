@@ -48,6 +48,14 @@ def _services(fields: dict[str, Any] | None) -> tuple[str, ...]:
     return (value,) if isinstance(value, str) else tuple(value)
 
 
+def _severity(attributes: dict[str, Any]) -> str | None:
+    """Top-level `severity` first, then the `fields` form; UNKNOWN and blank mean none."""
+    for value in (attributes.get("severity"), _field_value(attributes.get("fields"), "severity")):
+        if value and value != "UNKNOWN":
+            return str(value)
+    return None
+
+
 def map_incident(node: dict[str, Any], site: str) -> SourceIncident:
     attributes = node["attributes"]
     fields = attributes.get("fields")
@@ -59,6 +67,6 @@ def map_incident(node: dict[str, Any], site: str) -> SourceIncident:
         opened_at=parse_time(opened_at),
         restored_at=_optional_time(restored_at),
         services=_services(fields),
-        severity=_field_value(fields, "severity"),
+        severity=_severity(attributes),
         url=f"https://app.{site}/incidents/{attributes['public_id']}",
     )

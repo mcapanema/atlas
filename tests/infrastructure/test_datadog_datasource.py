@@ -4,10 +4,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+import pytest
 
 from app.domain.codebases.entities import CodebaseSource
 from app.domain.sync.port import DatadogSource
-from app.infrastructure.connectors.datadog.client import DatadogClient
+from app.infrastructure.connectors.datadog.client import DatadogAPIError, DatadogClient
 from app.infrastructure.connectors.datadog.datasource import DatadogDataSource
 
 NOW = datetime(2024, 6, 1, tzinfo=UTC)
@@ -144,3 +145,77 @@ async def test_fetch_incidents_follows_next_offset_and_drops_old_and_test_incide
     assert len(incidents) == 99
     ids = {i.external_id for i in incidents}
     assert ids.isdisjoint({"datadog:incident:i98", "datadog:incident:i99"})
+
+
+async def test_responses_without_data_raise_a_datadog_error() -> None:
+    source = _source(lambda request: httpx.Response(200, json={"errors": []}))
+    for call in (
+        source.fetch_codebases(),
+        source.fetch_deployments("datadog:service:api", SINCE),
+        source.fetch_incidents(SINCE),
+    ):
+        with pytest.raises(DatadogAPIError, match="response has no data"):
+            await call
+
+
+async def test_data_that_is_not_a_list_raises_a_datadog_error() -> None:
+    source = _source(lambda request: httpx.Response(200, json={"data": {"a": 1}}))
+    with pytest.raises(DatadogAPIError, match="response has no data"):
+        await source.fetch_codebases()
+
+
+async def test_a_deployment_without_an_id_is_skipped() -> None:
+    nameless = {"attributes": {"started_at": "2024-02-01T00:00:00+00:00"}}
+    page = [nameless, _deployment(1, "2024-02-01T00:00:00+00:00")]
+    source = _source(lambda request: httpx.Response(200, json={"data": page}))
+
+    deployments = await source.fetch_deployments("datadog:service:api", SINCE)
+
+    assert [d.external_id for d in deployments] == ["datadog:deployment:d1"]
+
+
+async def test_a_bad_last_started_at_does_not_abort_the_deployment_fetch() -> None:
+    bodies: list[dict[str, Any]] = []
+    good = "2024-03-01T00:00:00+00:00"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        page: list[dict[str, Any]] = []
+        if len(bodies) == 1:
+            page = [_deployment(i, "2024-02-01T00:00:00+00:00") for i in range(498)]
+            page.append(_deployment(498, good))
+            page.append({"id": "d499", "attributes": {}})  # no started_at
+        return httpx.Response(200, json={"data": page})
+
+    deployments = await _source(handler).fetch_deployments("datadog:service:api", SINCE)
+
+    assert bodies[1]["data"]["attributes"]["from"] == datetime(2024, 3, 1, tzinfo=UTC).isoformat()
+    assert len(deployments) == 499
+
+
+async def test_deployment_paging_stops_when_no_started_at_parses() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"data": [_deployment(i, "bad") for i in range(500)]})
+
+    deployments = await _source(handler).fetch_deployments("datadog:service:api", SINCE)
+
+    assert calls == 1
+    assert deployments == []
+
+
+async def test_incident_paging_stops_when_next_offset_does_not_advance() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        data = [_incident(i, SINCE + timedelta(days=1)) for i in range(100)]
+        return httpx.Response(200, json={"data": data, "meta": {"pagination": {"next_offset": 0}}})
+
+    await _source(handler).fetch_incidents(SINCE)
+
+    assert calls == 1
