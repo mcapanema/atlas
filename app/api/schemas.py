@@ -13,7 +13,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
+from app.api.sync_jobs import DatadogSyncSummary, SyncJob, SyncKind, SyncState, SyncTrigger
 from app.application.codebases.service import CodebaseOverview
 from app.application.codebases.sync import CodeSyncSummary
 from app.application.sync.service import SyncSummary
@@ -178,8 +178,14 @@ class CodeSyncSummaryRead(BaseModel):
     events: int
 
 
+class DatadogSyncSummaryRead(BaseModel):
+    codebases: int
+    deployments: int
+    incidents: int
+
+
 class SyncJobRead(BaseModel):
-    """A background sync, Linear or code: running, or one of the last finished ones."""
+    """A background sync, Linear, code or Datadog: running, or one of the last finished ones."""
 
     id: UUID
     organization_id: UUID
@@ -196,6 +202,8 @@ class SyncJobRead(BaseModel):
     summary: SyncSummaryRead | None
     # The code-host counts (a code job).
     code_summary: CodeSyncSummaryRead | None
+    # The Datadog counts (a datadog job).
+    datadog_summary: DatadogSyncSummaryRead | None
 
     @classmethod
     def of(cls, job: SyncJob) -> "SyncJobRead":
@@ -217,6 +225,13 @@ class SyncJobRead(BaseModel):
             else None,
             code_summary=CodeSyncSummaryRead.model_validate(job.summary)
             if isinstance(job.summary, CodeSyncSummary)
+            else None,
+            datadog_summary=DatadogSyncSummaryRead(
+                codebases=job.summary.code.codebases,
+                deployments=job.summary.code.deployments,
+                incidents=job.summary.incidents,
+            )
+            if isinstance(job.summary, DatadogSyncSummary)
             else None,
         )
 

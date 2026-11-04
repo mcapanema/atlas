@@ -767,6 +767,24 @@ class InMemoryIncidentSource:
         return self.incidents
 
 
+class InMemoryDatadogSource(InMemoryCodeHostSource):
+    """Configurable DatadogSource: the code-host fake stamped DATADOG, plus incidents."""
+
+    def __init__(
+        self,
+        codebases: list[SourceCodebase] | None = None,
+        deployments: dict[str, list[SourceDeployment]] | None = None,
+        incidents: list[SourceIncident] | None = None,
+    ) -> None:
+        super().__init__(
+            codebases=codebases, deployments=deployments, source=CodebaseSource.DATADOG
+        )
+        self.incidents = incidents or []
+
+    async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
+        return self.incidents
+
+
 class InMemoryDeploymentRepository:
     def __init__(self, deployments: list[Deployment] | None = None) -> None:
         self._rows: dict[UUID, Deployment] = {d.id: d for d in deployments or []}

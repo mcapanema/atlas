@@ -16,14 +16,14 @@ from app.application.sync_schedules.service import SyncScheduleService
 from app.domain._time import utcnow
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.organizations.entities import Organization
-from app.domain.sync.port import CodeHostSource, DataSourceError, DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DatadogSource, DataSourceError, DeliveryDataSource
 from app.domain.sync.source import SourceCodebase, SourceTeam
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.sync_schedules import SqlAlchemySyncScheduleRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from tests.api.helpers import remove_credential, store_credential
-from tests.fakes import FakeDataSource, InMemoryCodeHostSource
+from tests.fakes import FakeDataSource, InMemoryCodeHostSource, InMemoryDatadogSource
 
 LONG_AGO = datetime(2020, 1, 1, tzinfo=UTC)
 
@@ -35,6 +35,7 @@ def _auto(
     recompute: RecomputeRunner | None = None,
     tick_seconds: float = 60.0,
     code_source_factory: Callable[[], CodeHostSource | None] = lambda: None,
+    datadog_source_factory: Callable[[], DatadogSource | None] = lambda: None,
     session_source: Callable[[AsyncSession], Awaitable[DeliveryDataSource | None]] | None = None,
 ) -> AutoSyncRunner:
     """The runner on zero-arg test factories, or on `session_source` when given."""
@@ -45,12 +46,16 @@ def _auto(
     async def code_source(_session: AsyncSession) -> CodeHostSource | None:
         return code_source_factory()
 
+    async def datadog_source(_session: AsyncSession) -> DatadogSource | None:
+        return datadog_source_factory()
+
     jobs = SyncJobRunner(sessionmaker, recompute=recompute or RecomputeRunner(sessionmaker))
     return AutoSyncRunner(
         sessionmaker,
         session_source or source,
         jobs=jobs,
         code_source_factory=code_source,
+        datadog_source_factory=datadog_source,
         tick_seconds=tick_seconds,
     )
 
@@ -340,6 +345,55 @@ async def test_tick_skips_code_sync_after_failed_linear_sync(
 ) -> None:
     await _seed(sessionmaker)
     runner = _auto(sessionmaker, _FailingSource, code_source_factory=InMemoryCodeHostSource)
+
+    await runner.tick()
+
+    assert _job_kinds(runner) == ["organization"]
+
+
+class _FailingDatadogSource(InMemoryDatadogSource):
+    async def fetch_codebases(self) -> list[SourceCodebase]:
+        raise DataSourceError("datadog down")
+
+
+async def test_auto_sync_runs_datadog_after_github_and_a_failure_only_logs(
+    sessionmaker: async_sessionmaker[AsyncSession], caplog: pytest.LogCaptureFixture
+) -> None:
+    org_id = await _seed(sessionmaker)
+    runner = _auto(
+        sessionmaker,
+        _source,
+        code_source_factory=_FailingCodeSource,
+        datadog_source_factory=_FailingDatadogSource,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        await runner.tick()
+
+    # A GitHub failure does not skip Datadog; a Datadog failure only logs.
+    assert _job_kinds(runner) == ["organization", "code", "datadog"]
+    run = await _last_run(sessionmaker, org_id)
+    assert run is not None
+    assert run.error is None
+    assert any("datadog down" in r.getMessage() for r in caplog.records)
+
+
+async def test_auto_sync_skips_datadog_after_a_failed_linear_sync(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed(sessionmaker)
+    runner = _auto(sessionmaker, _FailingSource, datadog_source_factory=InMemoryDatadogSource)
+
+    await runner.tick()
+
+    assert _job_kinds(runner) == ["organization"]
+
+
+async def test_auto_sync_skips_datadog_when_unconfigured(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed(sessionmaker)
+    runner = _auto(sessionmaker, _source)
 
     await runner.tick()
 

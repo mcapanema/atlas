@@ -14,6 +14,7 @@ from app.application.codebases.sync import CodeSyncService
 from app.application.credentials.service import CredentialService
 from app.application.events.service import EventService
 from app.application.forecasting.service import ForecastService
+from app.application.incidents.sync import IncidentSyncService
 from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.metric_rules.service import MetricRulesService
 from app.application.metrics.dora import DoraService
@@ -33,7 +34,7 @@ from app.domain.auth.entities import User
 from app.domain.credentials.entities import Integration
 from app.domain.credentials.port import CredentialVerifier
 from app.domain.credentials.repository import CredentialRepository
-from app.domain.sync.port import CodeHostSource, DatadogSource, DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DatadogSource, DeliveryDataSource, IncidentSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
 from app.infrastructure.connectors.datadog.client import DatadogClient
 from app.infrastructure.connectors.datadog.datasource import DatadogDataSource
@@ -54,6 +55,7 @@ from app.infrastructure.repositories.codebases import (
 )
 from app.infrastructure.repositories.credentials import SqlAlchemyCredentialRepository
 from app.infrastructure.repositories.events import SqlAlchemyEventRepository
+from app.infrastructure.repositories.incidents import SqlAlchemyServiceIncidentRepository
 from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
@@ -368,6 +370,11 @@ def code_sync_service_for(session: AsyncSession, source: CodeHostSource) -> Code
         SqlAlchemyWorkItemRepository(session),
         SqlAlchemyEventRepository(session),
     )
+
+
+def incident_sync_service_for(session: AsyncSession, source: IncidentSource) -> IncidentSyncService:
+    """Built outside a request too: the sync job runner opens its own sessions."""
+    return IncidentSyncService(source, SqlAlchemyServiceIncidentRepository(session))
 
 
 def get_codebase_service(session: SessionDep) -> CodebaseService:

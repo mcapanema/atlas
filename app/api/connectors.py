@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.api.deps import (
     CodeHostSourceDep,
     CredentialServiceDep,
+    DatadogSourceDep,
     DeliveryDataSourceDep,
     SessionDep,
     SyncServiceDep,
@@ -268,6 +269,30 @@ async def sync_github(
     await session.commit()
     request = SyncJobRequest(organization_id, "code", "manual")
     return _start(lambda: jobs.start_code(request, source))
+
+
+# Same job model again: 202 now, then poll GET /datadog/jobs/{job_id}.
+@router.post("/datadog/sync", response_model=SyncJobRead, status_code=status.HTTP_202_ACCEPTED)
+async def sync_datadog(
+    payload: CodeSyncRequest,
+    source: DatadogSourceDep,
+    session: SessionDep,
+    jobs: SyncJobRunnerDep,
+) -> SyncJobRead:
+    service = code_sync_service_for(session, source)
+    try:
+        organization_id = await service.resolve_organization(payload.organization_id)
+    except UnknownOrganizationError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    # Ends the request's read transaction before the job writes.
+    await session.commit()
+    request = SyncJobRequest(organization_id, "datadog", "manual")
+    return _start(lambda: jobs.start_datadog(request, source))
+
+
+@router.get("/datadog/jobs/{job_id}", response_model=SyncJobRead)
+async def datadog_sync_job(job_id: UUID, jobs: SyncJobRunnerDep) -> SyncJobRead:
+    return _job(jobs, job_id)
 
 
 @router.get("/github/jobs/{job_id}", response_model=SyncJobRead)

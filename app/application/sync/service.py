@@ -49,6 +49,8 @@ class SyncPhase(StrEnum):
     CODEBASES = "codebases"
     PULL_REQUESTS = "pull_requests"
     DEPLOYMENTS = "deployments"
+    # The incident sync's phase (`IncidentSyncService`).
+    INCIDENTS = "incidents"
     SNAPSHOTS = "snapshots"
 
 
