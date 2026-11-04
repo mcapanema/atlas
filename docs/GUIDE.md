@@ -290,7 +290,9 @@ A team uses one incident source, never both. In Metric rules, set
 If GitHub and Datadog both report one release, Atlas counts it one time.
 It can do this only when the Datadog deployment event has the commit SHA.
 Make the deploy job send the Git data (repository and commit SHA) to
-Datadog. If the SHA is not there, Atlas counts the release two times.
+Datadog. Send the full 40-character commit SHA. Atlas cannot match a short
+SHA with the SHA from GitHub. If the SHA is not there, Atlas counts the
+release two times.
 
 A team that uses only Datadog has no lead time, because Datadog gives no
 pull requests.

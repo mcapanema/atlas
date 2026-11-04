@@ -53,11 +53,11 @@ computation.
   and a site. Both keys are required on each save. Atlas checks them with
   `GET /api/v1/validate` and then a one-entity catalog read.
 - One sync kind, `datadog`, runs the code sync (Datadog source) and then the
-  incident sync. Auto sync runs it after a successful Linear sync and GitHub
-  sync when Datadog is set up. A failure of this run is only logged.
+  incident sync. Auto sync runs it after a successful Linear sync, and after
+  the GitHub sync whether or not it succeeded, when Datadog is set up. A failure of this run is only logged.
 - A release that both tools report counts once. Before the DORA computation,
-  a Datadog production deployment is dropped when a GitHub production
-  deployment of the same team has the same commit SHA. The GitHub copy stays
+  a Datadog production deployment is dropped when a finished GitHub production
+  deployment (success or failure) of the same team has the same commit SHA. The GitHub copy stays
   because it holds the failure status and the pull requests behind lead time.
   `DoraMetrics.duplicate_deployments` reports how many were dropped.
 
@@ -71,6 +71,13 @@ computation.
 - A failed deployment that also opens an incident still counts twice, as in
   ADR-0025: the incident blames the latest successful deployment. This is the
   same for Linear incidents.
+- ponytail: stored Datadog incidents are never pruned. An incident deleted in
+  Datadog, or later marked as a test, keeps counting. `auto` stays on Datadog
+  after the credentials are removed. Upgrade path: prune the incidents that a
+  full fetch does not return, as ADR-0009 does for work items.
+- ponytail: each sync reads the whole incident list and filters on `modified`
+  in Atlas (about N/100 requests). Upgrade path: `/api/v2/incidents/search`
+  with a time filter.
 - Monitors and SLOs are not read. A separate plan can add them.
 - Atlas only reads from Datadog. It adds no Datadog usage charge, but Datadog
   rate limits apply.

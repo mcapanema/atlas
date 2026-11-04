@@ -134,6 +134,9 @@ class DatadogDataSource:
         return map_tolerantly(nodes, map_deployment, "deployment", vendor="Datadog")
 
     async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
+        # ponytail: reads the whole incident list and filters on `modified`
+        # client-side (about N/100 requests per sync). Use
+        # /api/v2/incidents/search with a time filter if N grows large.
         nodes: list[dict[str, Any]] = []
         offset = 0
         for _ in range(_MAX_PAGES):

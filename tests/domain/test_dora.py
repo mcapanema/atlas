@@ -419,3 +419,12 @@ def test_a_failed_github_deployment_still_absorbs_the_datadog_copy() -> None:
     assert dropped == 1
     assert metrics.failed_deployments == 1
     assert metrics.finished_deployments == 1
+
+
+def test_a_pending_github_deployment_does_not_absorb_the_datadog_copy() -> None:
+    pending = _deploy(1, DeploymentStatus.PENDING, sha="abc")
+    kept, dropped = drop_duplicate_releases([API, DATADOG], [pending, _dd(DATADOG, "abc")])
+    metrics = compute_dora([API, DATADOG], kept, [], [], now=NOW, window_days=30)
+
+    assert dropped == 0
+    assert metrics.finished_deployments == 1

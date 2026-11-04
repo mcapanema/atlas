@@ -70,6 +70,19 @@ async def test_retries_429_honoring_x_ratelimit_reset(recorded_sleeps: list[floa
     assert recorded_sleeps == [4.0]
 
 
+async def test_retry_delay_from_a_header_is_capped(recorded_sleeps: list[float]) -> None:
+    responses = iter(
+        [
+            httpx.Response(429, headers={"X-RateLimit-Reset": "3600"}),
+            httpx.Response(200, json={"a": 1}),
+        ]
+    )
+    client = _client(httpx.MockTransport(lambda _r: next(responses)))
+
+    assert await client.get("/x") == {"a": 1}
+    assert recorded_sleeps == [60.0]
+
+
 async def test_non_2xx_raises_datadog_api_error_with_status_and_errors() -> None:
     client = _client(
         httpx.MockTransport(lambda _r: httpx.Response(403, json={"errors": ["Forbidden"]}))

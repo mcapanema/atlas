@@ -45,7 +45,9 @@ def _services(fields: dict[str, Any] | None) -> tuple[str, ...]:
     value = _field_value(fields, "services")
     if value is None:
         return ()
-    return (value,) if isinstance(value, str) else tuple(value)
+    names = [value] if isinstance(value, str) else value
+    stripped = (name.strip() for name in names if isinstance(name, str))
+    return tuple(name for name in stripped if name)
 
 
 def _severity(attributes: dict[str, Any]) -> str | None:

@@ -26,7 +26,7 @@ restore by its restore time.
 Two tools can report one release. `drop_duplicate_releases` runs before
 `compute_dora`: a production deployment of a Datadog codebase is dropped when
 a production deployment of a GitHub codebase has the same commit SHA after
-strip().casefold() (non-empty, any status). The GitHub copy stays: it carries
+strip().casefold() (non-empty) and finished (success or failure). The GitHub copy stays: it carries
 the failure status and the pull requests behind lead time. A Datadog
 deployment without a SHA cannot be matched and counts. The dropped count is
 `DoraMetrics.duplicate_deployments`.
@@ -168,6 +168,8 @@ def drop_duplicate_releases(
     by_id = {codebase.id: codebase for codebase in codebases}
 
     def release(d: Deployment, source: CodebaseSource) -> str | None:
+        if source is CodebaseSource.GITHUB and (d.status not in _FINISHED or d.finished_at is None):
+            return None
         codebase = by_id.get(d.codebase_id)
         if (
             codebase is None

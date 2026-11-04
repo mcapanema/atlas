@@ -15,6 +15,10 @@ from app.domain.sync.port import DataSourceError
 
 _MAX_ATTEMPTS = 3
 
+# Longest wait a header can ask for: the sync job holds SyncJobRunner.lock and
+# a write transaction while it sleeps.
+_MAX_DELAY_SECONDS = 60.0
+
 # Network failures a retry can outlive. Not retried: a read/write timeout
 # (the vendor accepted the connection and is hanging, so a retry triples the
 # worst case), a pool timeout (each attempt opens a fresh pool, so it
@@ -42,7 +46,7 @@ def _retry_delay(retry_after: str | None, attempt: int) -> float:
     # HTTP-date form falls back to exponential backoff. Parse the date form
     # if a vendor ever starts sending it.
     if retry_after is not None and retry_after.isdigit():
-        return float(retry_after)
+        return min(float(retry_after), _MAX_DELAY_SECONDS)
     return float(2 ** (attempt - 1))
 
 

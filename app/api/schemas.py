@@ -293,7 +293,7 @@ class DatadogCredentialsWrite(BaseModel):
     # Both keys are always required: there is no keep-stored path.
     api_key: Secret
     application_key: Secret
-    site: Literal[DATADOG_SITES]  # type: ignore[valid-type]  # tuple of literals, see DATADOG_SITES
+    site: Literal[DATADOG_SITES]  # type: ignore[valid-type]  # — mypy rejects a tuple of literals; see DATADOG_SITES
 
 
 class OpenRouterCredentialsWrite(BaseModel):

@@ -123,3 +123,16 @@ def test_map_incident_prefers_customer_impact_times() -> None:
 )
 def test_map_incident_severity(attributes: dict[str, Any], expected: str | None) -> None:
     assert map_incident(_incident(**attributes), "datadoghq.com").severity == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ([" api ", "", 3, {"x": 1}, ["web"], "web"], ("api", "web")),
+        ("  ", ()),
+        (" api ", ("api",)),
+    ],
+)
+def test_services_keep_only_non_blank_strings(value: Any, expected: tuple[str, ...]) -> None:
+    fields = {"services": {"value": value}}
+    assert map_incident(_incident(fields=fields), "datadoghq.com").services == expected
