@@ -477,6 +477,11 @@ def test_render_dora_states_values_bands_and_samples() -> None:
     assert "time to restore median=3.0 hours (high, 2 restores)" in text
 
 
+def test_render_dora_names_dropped_duplicates_only_when_any() -> None:
+    assert "left out" not in render_dora(DORA)
+    assert "2 Datadog deployments left out" in render_dora(replace(DORA, duplicate_deployments=2))
+
+
 def test_render_dora_without_band_says_too_few() -> None:
     text = render_dora(
         replace(DORA, lead_time_band=None, lead_time_changes=2, change_failure_band=None)

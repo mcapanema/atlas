@@ -184,6 +184,7 @@ def dora_service_for(session: AsyncSession) -> DoraService:
         SqlAlchemyDeploymentRepository(session),
         SqlAlchemyPullRequestRepository(session),
         SqlAlchemyTeamRepository(session),
+        SqlAlchemyServiceIncidentRepository(session),
     )
 
 

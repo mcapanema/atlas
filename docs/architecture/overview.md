@@ -114,7 +114,10 @@ exception: it is generated in the background and stored (ADR-0023).
   DORA report thresholds (deploy frequency has a band with any mapped
   codebase; lead time, change failure rate and restore wait for
   `health_min_sample` values). `DoraService` (`app/application/metrics/dora.py`)
-  feeds it a team's codebases and the scope's incident-labelled items.
+  feeds it a team's codebases and one incident source per team (the
+  `incident_source` rule: Linear incident-labelled items or Datadog
+  incidents), and drops Datadog deployments that repeat a GitHub release
+  (same commit SHA) so one release or outage counts once.
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo

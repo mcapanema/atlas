@@ -667,6 +667,7 @@ class DoraMetricsRead(BaseModel):
     restore_median_seconds: float | None
     restores: int
     restore_band: DoraBand | None
+    duplicate_deployments: int
 
     @classmethod
     def of(cls, metrics: DoraMetrics) -> "DoraMetricsRead":
@@ -689,6 +690,7 @@ class DoraMetricsRead(BaseModel):
             restore_median_seconds=restore.total_seconds() if restore is not None else None,
             restores=metrics.restores,
             restore_band=metrics.restore_band,
+            duplicate_deployments=metrics.duplicate_deployments,
         )
 
 

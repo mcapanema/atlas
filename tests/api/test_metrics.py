@@ -871,6 +871,7 @@ async def test_dora_for_a_team(
     body = response.json()
     assert body["deployments"] == 1
     assert body["codebases"] == 1
+    assert body["duplicate_deployments"] == 0
     assert "lead_time_median_seconds" in body
 
 
