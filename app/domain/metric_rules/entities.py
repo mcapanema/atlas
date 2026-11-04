@@ -25,6 +25,7 @@ DoneThenCanceled = Literal["delivered", "canceled"]
 LeadTimeStart = Literal["created", "triage_exit"]
 DoneThenReopened = Literal["delivered", "reopened"]
 CanceledThenReopened = Literal["canceled", "reopened"]
+IncidentSource = Literal["auto", "linear", "datadog"]
 RecomputeState = Literal["idle", "running", "failed"]
 
 HEALTH_COMPONENTS = ("predictability", "efficiency", "flow", "stability", "risk")
@@ -44,6 +45,7 @@ _CHOICES: dict[str, tuple[str, ...]] = {
     "lead_time_start": ("created", "triage_exit"),
     "done_then_reopened": ("delivered", "reopened"),
     "canceled_then_reopened": ("canceled", "reopened"),
+    "incident_source": ("auto", "linear", "datadog"),
 }
 MAX_LIST_RULE_ENTRIES = 50
 MAX_HOLIDAYS = 500
@@ -139,6 +141,10 @@ class MetricRules:
     # (DORA is not snapshotted). Upgrade path: a non-snapshot rule set beside
     # MEETING_RULES.
     incident_label_names: tuple[str, ...] = ("incident", "incidente")
+    # Where DORA reads incidents, never both so one outage counts once: "auto"
+    # reads Datadog incidents when any match the team's Datadog services, else
+    # the Linear label.
+    incident_source: IncidentSource = "auto"
     # Delivery-health scoring. Calibrated on live data (review 2026-10-09):
     # flow efficiency read 92-100% everywhere with blocked periods as its
     # only wait signal. Wait states (ADR-0018) are a per-team list, empty by

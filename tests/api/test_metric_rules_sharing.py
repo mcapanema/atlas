@@ -21,6 +21,7 @@ async def test_export_then_import_round_trips(
         f"/api/organizations/{org}/metric-rules", json={"aging_percentile": 80}
     )
     await rules_client.patch(f"/api/teams/{team}/metric-rules", json={"wait_state_names": ["QA"]})
+    await rules_client.patch(f"/api/teams/{team}/metric-rules", json={"incident_source": "datadog"})
     await settle(rules_app)
 
     export = await rules_client.get(f"/api/organizations/{org}/metric-rules/export")
@@ -38,7 +39,7 @@ async def test_export_then_import_round_trips(
         {
             "name": "Platform",
             "external_id": "lin-platform",
-            "overrides": {"wait_state_names": ["QA"]},
+            "overrides": {"wait_state_names": ["QA"], "incident_source": "datadog"},
         }
     ]
     assert org not in json.dumps(exported)  # no Atlas UUIDs travel

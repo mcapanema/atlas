@@ -17,6 +17,7 @@ def _item(*labels: str) -> WorkItem:
 def test_new_rule_defaults_reproduce_todays_behavior() -> None:
     assert DEFAULT_RULES.count_parent_issues is True
     assert DEFAULT_RULES.lead_time_start == "created"
+    assert DEFAULT_RULES.incident_source == "auto"
     assert DEFAULT_RULES.done_then_reopened == "delivered"
     assert DEFAULT_RULES.canceled_then_reopened == "canceled"
     assert DEFAULT_RULES.blocked_label_pattern is False
@@ -55,6 +56,7 @@ def test_json_shaped_collections_normalize_to_tuples() -> None:
             "type_labels",
         ),
         ({"lead_time_start": "started"}, "lead_time_start"),
+        ({"incident_source": "both"}, "incident_source"),
         ({"done_then_reopened": "maybe"}, "done_then_reopened"),
         ({"canceled_then_reopened": "maybe"}, "canceled_then_reopened"),
         ({"blocked_by_relations": "yes"}, "blocked_by_relations"),
@@ -134,3 +136,10 @@ def test_type_of_takes_the_first_mapped_label_else_the_stored_type() -> None:
     assert rules.type_of(_item("Feature")) is WorkItemType.STORY
     assert rules.type_of(_item("Chore")) is WorkItemType.TASK
     assert DEFAULT_RULES.type_of(_item("Bug")) is WorkItemType.TASK
+
+
+def test_a_team_override_of_the_incident_source_resolves() -> None:
+    assert (
+        resolve_rules({"incident_source": "linear"}, {"incident_source": "datadog"}).incident_source
+        == "datadog"
+    )

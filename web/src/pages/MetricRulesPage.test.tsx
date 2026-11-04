@@ -42,6 +42,7 @@ const BUILT_IN: MetricRules = {
   blocked_state_names: [],
   wait_state_names: [],
   incident_label_names: ["incident", "incidente"],
+  incident_source: "auto",
   remaining_state_types: ["triage", "backlog", "unstarted", "started"],
   type_labels: [],
   working_days: [1, 2, 3, 4, 5],
@@ -186,6 +187,21 @@ describe("MetricRulesPage", () => {
     );
     expect(calls.find((call) => call.method === "PATCH")?.url).toBe(
       `/api/organizations/${ORG.id}/metric-rules`,
+    );
+  });
+
+  it("renders the incident source select and saves a change", async () => {
+    const calls = mockApi(view());
+    renderWithClient(<MetricRulesPage />, ["/metric-rules"]);
+
+    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Incident source" }));
+    fireEvent.click(await screen.findByText("Linear label"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(calls.find((call) => call.method === "PATCH")?.body).toEqual({
+        incident_source: "linear",
+      }),
     );
   });
 

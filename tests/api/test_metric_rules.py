@@ -377,3 +377,30 @@ async def test_a_holiday_must_be_a_yyyy_mm_dd_date(
     )
 
     assert response.status_code == 422
+
+
+async def test_incident_source_defaults_to_auto_and_is_a_patchable_team_rule(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    before = (await rules_client.get(f"/api/teams/{team}/metric-rules")).json()
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"incident_source": "datadog"}
+    )
+    await settle(rules_app)
+
+    assert before["effective"]["incident_source"] == "auto"
+    assert response.status_code == 200
+    assert response.json()["effective"]["incident_source"] == "datadog"
+    assert response.json()["inherited"]["incident_source"] == "auto"
+
+
+async def test_patch_rejects_both_as_an_incident_source(rules_client: AsyncClient) -> None:
+    _, team = await create_org_and_team(rules_client)
+
+    response = await rules_client.patch(
+        f"/api/teams/{team}/metric-rules", json={"incident_source": "both"}
+    )
+
+    assert response.status_code == 422
