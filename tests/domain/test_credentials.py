@@ -4,7 +4,7 @@ from app.domain.credentials.entities import Credential, Integration
 
 
 def test_labels() -> None:
-    assert [i.label for i in Integration] == ["Linear", "GitHub", "OpenRouter"]
+    assert [i.label for i in Integration] == ["Linear", "GitHub", "OpenRouter", "Datadog"]
 
 
 def test_hint_is_the_last_four_characters() -> None:
@@ -45,3 +45,27 @@ def test_valid_github_and_openrouter() -> None:
 
 def test_repr_never_shows_the_secret() -> None:
     assert "lin_api_abcd1234" not in repr(Credential(Integration.LINEAR, "lin_api_abcd1234"))
+
+
+def test_datadog_credential_requires_application_key_and_known_site() -> None:
+    with pytest.raises(ValueError, match="application_key"):
+        Credential(Integration.DATADOG, "dd", site="datadoghq.com")
+    with pytest.raises(ValueError, match="site"):
+        Credential(Integration.DATADOG, "dd", application_key="app", site="example.com")
+    with pytest.raises(ValueError, match="site"):
+        Credential(Integration.DATADOG, "dd", application_key="app")
+
+
+def test_application_key_and_site_only_apply_to_datadog() -> None:
+    with pytest.raises(ValueError, match="application_key"):
+        Credential(Integration.GITHUB, "ghp", owner="acme", application_key="app")
+    with pytest.raises(ValueError, match="site"):
+        Credential(Integration.GITHUB, "ghp", owner="acme", site="datadoghq.com")
+
+
+def test_application_key_stays_out_of_the_repr() -> None:
+    credential = Credential(
+        Integration.DATADOG, "api-secret", application_key="app-secret", site="datadoghq.eu"
+    )
+    assert "app-secret" not in repr(credential)
+    assert "api-secret" not in repr(credential)

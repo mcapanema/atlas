@@ -196,3 +196,47 @@ async def test_rejected_key_skips_the_model_check() -> None:
             Credential(Integration.OPENROUTER, "sk", model="m/x")
         )
     assert paths == ["/api/v1/key"]
+
+
+_DATADOG = Credential(Integration.DATADOG, "dd-api", application_key="dd-app", site="datadoghq.eu")
+
+
+async def test_datadog_check_validates_the_api_key_then_the_application_key() -> None:
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.datadoghq.eu"
+        assert request.headers["DD-API-KEY"] == "dd-api"
+        assert request.headers["DD-APPLICATION-KEY"] == "dd-app"
+        seen.append(request.url.path)
+        return httpx.Response(200, json={"valid": True, "data": []})
+
+    await ProviderCredentialVerifier(httpx.MockTransport(answer)).verify(_DATADOG)
+
+    assert seen == ["/api/v1/validate", "/api/v2/catalog/entity"]
+
+
+async def test_datadog_wrong_site_is_a_rejection_naming_the_site() -> None:
+    transport = httpx.MockTransport(lambda r: httpx.Response(403, json={"errors": ["Forbidden"]}))
+    with pytest.raises(CredentialCheckError) as caught:
+        await ProviderCredentialVerifier(transport).verify(_DATADOG)
+    assert "datadoghq.eu" in str(caught.value)
+    assert "Could not verify the Datadog credentials" in str(caught.value)
+
+
+async def test_datadog_bad_application_key_is_a_rejection() -> None:
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/validate":
+            return httpx.Response(200, json={"valid": True})
+        return httpx.Response(403, json={"errors": ["Forbidden"]})
+
+    with pytest.raises(CredentialCheckError, match="Could not verify the Datadog credentials"):
+        await ProviderCredentialVerifier(httpx.MockTransport(answer)).verify(_DATADOG)
+
+
+async def test_datadog_outage_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(retry, "_sleep", _no_sleep)
+    transport = httpx.MockTransport(lambda r: httpx.Response(503))
+    with pytest.raises(DataSourceError) as caught:
+        await ProviderCredentialVerifier(transport).verify(_DATADOG)
+    assert not isinstance(caught.value, CredentialCheckError)

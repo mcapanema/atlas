@@ -43,13 +43,13 @@ and — under its team's rules (`blocked_periods`) — blocked periods for `GET 
 Item Explorer (`/work-items`).
 
 Credentials (`app/domain/credentials/`, ADR-0027) are a separate aggregate:
-one `Credential` per integration (Linear, GitHub, OpenRouter), stored by
+one `Credential` per integration (Linear, GitHub, OpenRouter, Datadog), stored by
 `app/infrastructure/repositories/credentials.py` with its secret fields
 Fernet-encrypted (`app/infrastructure/secrets.py`; the key lives in the key
 file `ATLAS_SECRET_KEY_FILE`). `CredentialService`
 (`app/application/credentials/service.py`) verifies a credential before it
 saves it. The API is write-only — `PUT` and `DELETE`
-`/api/connectors/{linear|github|openrouter}/credentials` — and status
+`/api/connectors/{linear|github|openrouter|datadog}/credentials` — and status
 responses carry a `hint`, never the secret. A credential that cannot be
 decrypted reads as not configured and logs a warning.
 

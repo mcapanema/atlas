@@ -20,6 +20,7 @@ from app.application.sync.service import SyncSummary
 from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType, Persona
 from app.domain.advisor.runs import AdviceRun
 from app.domain.auth.entities import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
+from app.domain.credentials.entities import DATADOG_SITES
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.metrics.dora import DoraBand, DoraMetrics
@@ -236,6 +237,14 @@ class GitHubStatusRead(IntegrationStatusRead):
     running: SyncJobRead | None
 
 
+class DatadogStatusRead(IntegrationStatusRead):
+    # The configured Datadog site; None while unset.
+    site: str | None
+    hint: str | None
+    # The sync job running now, of any kind; as on LinearStatusRead.
+    running: SyncJobRead | None
+
+
 class OpenRouterStatusRead(IntegrationStatusRead):
     # The stored advisor model, or the default while unconfigured.
     model: str
@@ -261,6 +270,15 @@ class GitHubCredentialsWrite(BaseModel):
     # Omitted: keep the stored token (CredentialService.update).
     token: Secret | None = None
     owner: _Label
+
+
+class DatadogCredentialsWrite(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    # Both keys are always required: there is no keep-stored path.
+    api_key: Secret
+    application_key: Secret
+    site: Literal[DATADOG_SITES]  # type: ignore[valid-type]  # tuple of literals, see DATADOG_SITES
 
 
 class OpenRouterCredentialsWrite(BaseModel):

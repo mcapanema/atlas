@@ -210,3 +210,54 @@ async def test_linear_key_is_still_required(
     response = await client.put("/api/connectors/linear/credentials", json={})
 
     assert response.status_code == 422
+
+
+async def test_put_datadog_credentials_stores_and_reports_status(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    response = await client.put(
+        "/api/connectors/datadog/credentials",
+        json={
+            "api_key": "dd-api-key-abcd1234",
+            "application_key": "dd-app-secret",
+            "site": "datadoghq.eu",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "configured": True,
+        "site": "datadoghq.eu",
+        "hint": "…1234",
+        "running": None,
+    }
+    assert "dd-app-secret" not in response.text
+    assert verifier.verified[0].application_key == "dd-app-secret"
+    status = await client.get("/api/connectors/datadog")
+    assert status.json()["site"] == "datadoghq.eu"
+    assert "dd-app-secret" not in status.text
+    deleted = await client.delete("/api/connectors/datadog/credentials")
+    assert deleted.json() == {"configured": False, "site": None, "hint": None, "running": None}
+
+
+async def test_put_datadog_credentials_rejects_unknown_site(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    response = await client.put(
+        "/api/connectors/datadog/credentials",
+        json={"api_key": "dd", "application_key": "app-secret", "site": "example.com"},
+    )
+
+    assert response.status_code == 422
+    assert "app-secret" not in response.text
+    assert verifier.verified == []
+
+
+async def test_put_datadog_credentials_needs_both_keys(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    response = await client.put(
+        "/api/connectors/datadog/credentials", json={"api_key": "dd", "site": "datadoghq.com"}
+    )
+
+    assert response.status_code == 422

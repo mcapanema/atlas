@@ -14,6 +14,8 @@ from app.api.deps import (
 from app.api.schemas import (
     DEFAULT_ADVISOR_MODEL,
     CodeSyncRequest,
+    DatadogCredentialsWrite,
+    DatadogStatusRead,
     GitHubCredentialsWrite,
     GitHubStatusRead,
     LinearCredentialsWrite,
@@ -57,6 +59,16 @@ async def _github_status(service: CredentialService, jobs: SyncJobRunner) -> Git
     return GitHubStatusRead(
         configured=stored is not None,
         owner=stored.owner if stored else None,
+        hint=stored.hint if stored else None,
+        running=_running(jobs),
+    )
+
+
+async def _datadog_status(service: CredentialService, jobs: SyncJobRunner) -> DatadogStatusRead:
+    stored = await service.get(Integration.DATADOG)
+    return DatadogStatusRead(
+        configured=stored is not None,
+        site=stored.site if stored else None,
         hint=stored.hint if stored else None,
         running=_running(jobs),
     )
@@ -207,6 +219,36 @@ async def delete_github_credentials(
 ) -> GitHubStatusRead:
     await service.remove(Integration.GITHUB)
     return await _github_status(service, jobs)
+
+
+@router.get("/datadog", response_model=DatadogStatusRead)
+async def datadog_status(
+    jobs: SyncJobRunnerDep, service: CredentialServiceDep
+) -> DatadogStatusRead:
+    return await _datadog_status(service, jobs)
+
+
+@router.put("/datadog/credentials", response_model=DatadogStatusRead)
+async def put_datadog_credentials(
+    payload: DatadogCredentialsWrite, jobs: SyncJobRunnerDep, service: CredentialServiceDep
+) -> DatadogStatusRead:
+    await service.save(
+        Credential(
+            Integration.DATADOG,
+            payload.api_key,
+            application_key=payload.application_key,
+            site=payload.site,
+        )
+    )
+    return await _datadog_status(service, jobs)
+
+
+@router.delete("/datadog/credentials", response_model=DatadogStatusRead)
+async def delete_datadog_credentials(
+    jobs: SyncJobRunnerDep, service: CredentialServiceDep
+) -> DatadogStatusRead:
+    await service.remove(Integration.DATADOG)
+    return await _datadog_status(service, jobs)
 
 
 # Same job model as the Linear sync: 202 now, then poll GET /github/jobs/{job_id}.

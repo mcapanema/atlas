@@ -18,7 +18,7 @@ connector SDKs. It never imports `app.application` or `app.api`
   connector credentials. The key file is created atomically on first use
   (`app/main.py`'s lifespan calls it at startup) and must be backed up with the DB; losing it means re-entering the credentials.
 - `credential_checks.py` — `ProviderCredentialVerifier`: checks a credential
-  with Linear/GitHub/OpenRouter before it is stored. A rejection raises
+  with Linear/GitHub/OpenRouter/Datadog before it is stored. A rejection raises
   `CredentialCheckError` (422); an outage propagates as `DataSourceError`/
   `AdvisorError` (502), decided by `is_rejection(status)` (defined in `ai/key_check.py`).
 - `repositories/<concept>.py` — the ORM model (`<Concept>Model`) + the

@@ -33,8 +33,10 @@ from app.domain.auth.entities import User
 from app.domain.credentials.entities import Integration
 from app.domain.credentials.port import CredentialVerifier
 from app.domain.credentials.repository import CredentialRepository
-from app.domain.sync.port import CodeHostSource, DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DatadogSource, DeliveryDataSource
 from app.infrastructure.ai.advisor import OpenRouterAdvisor
+from app.infrastructure.connectors.datadog.client import DatadogClient
+from app.infrastructure.connectors.datadog.datasource import DatadogDataSource
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
 from app.infrastructure.connectors.github.datasource import GitHubDataSource
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
@@ -326,6 +328,32 @@ async def get_code_host_source(session: SessionDep) -> CodeHostSource:
 
 
 CodeHostSourceDep = Annotated[CodeHostSource, Depends(get_code_host_source)]
+
+
+DATADOG_NOT_CONFIGURED = (
+    "Datadog connector is not configured; add a Datadog API key, "
+    "application key and site on the Connectors page"
+)
+
+
+async def datadog_source(session: AsyncSession) -> DatadogSource | None:
+    """The Datadog adapter on the stored keys and site, or None while none is stored."""
+    credential = await credential_repository_for(session).get(Integration.DATADOG)
+    # A Datadog credential always carries both; the extra conditions only narrow the types.
+    if credential is None or credential.application_key is None or credential.site is None:
+        return None
+    client = DatadogClient(credential.secret, credential.application_key, credential.site)
+    return DatadogDataSource(client, credential.site)
+
+
+async def get_datadog_source(session: SessionDep) -> DatadogSource:
+    source = await datadog_source(session)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=DATADOG_NOT_CONFIGURED)
+    return source
+
+
+DatadogSourceDep = Annotated[DatadogSource, Depends(get_datadog_source)]
 
 
 def code_sync_service_for(session: AsyncSession, source: CodeHostSource) -> CodeSyncService:

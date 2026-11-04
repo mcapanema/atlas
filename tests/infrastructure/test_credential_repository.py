@@ -47,3 +47,24 @@ async def test_delete_absent_is_a_no_op(session: AsyncSession, tmp_path: Path) -
     repo = SqlAlchemyCredentialRepository(session, cipher_for(tmp_path / "k"))
     await repo.delete(Integration.OPENROUTER)
     assert await repo.get(Integration.OPENROUTER) is None
+
+
+async def test_datadog_application_key_is_encrypted_at_rest(
+    session: AsyncSession, tmp_path: Path
+) -> None:
+    repo = SqlAlchemyCredentialRepository(session, cipher_for(tmp_path / "k"))
+    await repo.save(
+        Credential(Integration.DATADOG, "dd-api", application_key="dd-app", site="datadoghq.eu")
+    )
+    raw = (
+        await session.execute(text("SELECT application_key_ciphertext FROM credentials"))
+    ).scalar_one()
+    assert raw != "dd-app"
+    assert "dd-app" not in raw
+    stored = await repo.get(Integration.DATADOG)
+    assert stored is not None
+    assert (stored.secret, stored.application_key, stored.site) == (
+        "dd-api",
+        "dd-app",
+        "datadoghq.eu",
+    )
