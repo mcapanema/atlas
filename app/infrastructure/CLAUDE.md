@@ -38,7 +38,8 @@ connector SDKs. It never imports `app.application` or `app.api`
 - `connectors/<vendor>/` — one package per external system (e.g.
   `linear/`), containing the vendor API client, pure payload→`Source*`
   mapping functions, and the `DeliveryDataSource` adapter. Vendor payloads
-  and SDK types must never leave this package.
+  and SDK types must never leave this package. `linear/` and `github/` speak
+  GraphQL (shared helpers in `graphql.py`); `datadog/` speaks REST.
 - `ai/` — the LLM adapter (`OpenRouterAdvisor` implementing the Domain
   `AdvisorPort`, calling OpenRouter's chat-completions API with plain httpx —
   no provider SDK) plus `ai/knowledge/*.md`, the versioned knowledge base its

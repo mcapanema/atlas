@@ -5,6 +5,7 @@ from app.domain.codebases.entities import CodebaseSource
 from app.domain.sync.source import (
     SourceCodebase,
     SourceDeployment,
+    SourceIncident,
     SourceProject,
     SourcePullRequest,
     SourceTeam,
@@ -63,3 +64,15 @@ class CodeHostSource(Protocol):
     ) -> list[SourceDeployment]:
         """Every deployment created at or after `since`, in any environment."""
         ...
+
+
+class IncidentSource(Protocol):
+    """Port for an external incident tracker."""
+
+    async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
+        """Every incident modified at or after `since`; test incidents are left out."""
+        ...
+
+
+class DatadogSource(CodeHostSource, IncidentSource, Protocol):
+    """A source that is both a code host (services, deployments) and an incident source."""
