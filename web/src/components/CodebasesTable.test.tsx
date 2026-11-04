@@ -16,12 +16,14 @@ const CODEBASE = {
   last_synced_at: null,
   pull_requests: 4,
   deployments: 2,
+  source: "github" as const,
 };
 
 function mockApi() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
-    if (url === `/api/codebases?organization_id=${ORG}`) return jsonResponse([CODEBASE]);
+    if (url === `/api/codebases?organization_id=${ORG}&source=github`)
+      return jsonResponse([CODEBASE]);
     if (url === "/api/teams")
       return jsonResponse([
         teamFixture,
@@ -42,7 +44,7 @@ describe("CodebasesTable", () => {
   it("lists repositories with the help text", async () => {
     mockApi();
 
-    renderWithClient(<CodebasesTable organizationId={ORG} />);
+    renderWithClient(<CodebasesTable organizationId={ORG} source="github" />);
 
     const link = await screen.findByRole("link", { name: "acme/api" });
     expect(link).toHaveAttribute("href", "https://github.com/acme/api");
@@ -52,7 +54,7 @@ describe("CodebasesTable", () => {
   it("maps a repository to a team", async () => {
     const fetchMock = mockApi();
 
-    renderWithClient(<CodebasesTable organizationId={ORG} />);
+    renderWithClient(<CodebasesTable organizationId={ORG} source="github" />);
     fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Team for acme/api" }));
     expect(screen.queryByTitle("Elsewhere")).not.toBeInTheDocument();
     fireEvent.click(await screen.findByTitle("Platform"));
@@ -69,7 +71,7 @@ describe("CodebasesTable", () => {
   it("saves the production environment on blur only when changed", async () => {
     const fetchMock = mockApi();
 
-    renderWithClient(<CodebasesTable organizationId={ORG} />);
+    renderWithClient(<CodebasesTable organizationId={ORG} source="github" />);
     const input = await screen.findByRole("textbox", {
       name: "Production environment for acme/api",
     });
@@ -94,7 +96,7 @@ describe("CodebasesTable", () => {
       return jsonResponse([teamFixture]);
     });
 
-    renderWithClient(<CodebasesTable organizationId={ORG} />);
+    renderWithClient(<CodebasesTable organizationId={ORG} source="github" />);
     const input = await screen.findByRole("textbox", {
       name: "Production environment for acme/api",
     });

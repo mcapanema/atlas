@@ -1,4 +1,4 @@
-import { Alert, Button, Flex, Form, Input, Popconfirm, Typography } from "antd";
+import { Alert, Button, Flex, Form, Input, Popconfirm, Select, Typography } from "antd";
 import { useState, type ReactNode } from "react";
 
 import { useRemoveCredentials, useSaveCredentials, type Integration } from "../api/connectors";
@@ -9,6 +9,8 @@ interface CredentialField {
   secret?: boolean;
   /** A note under the field. */
   help?: string;
+  /** Renders a Select over these values instead of a text input. */
+  options?: { value: string; label: string }[];
 }
 
 type Values = Record<string, string>;
@@ -32,6 +34,7 @@ function CredentialsForm({
   initial,
   configured,
   hasSettings,
+  keepSecrets,
   saving,
   saved,
   onSave,
@@ -44,12 +47,14 @@ function CredentialsForm({
   configured: boolean;
   /** The form has a non-secret field (GitHub owner, OpenRouter model). */
   hasSettings: boolean;
+  /** A blank secret may be left to keep the stored one (false when every key is required). */
+  keepSecrets: boolean;
   saving: boolean;
   saved: boolean;
   onSave: (values: Values) => void;
   extra: ReactNode;
 }) {
-  const keepable = configured && hasSettings;
+  const keepable = configured && hasSettings && keepSecrets;
   return (
     <Form<Values>
       name={name}
@@ -78,6 +83,8 @@ function CredentialsForm({
               autoComplete="new-password"
               placeholder={secretPlaceholder(configured, keepable)}
             />
+          ) : field.options ? (
+            <Select options={field.options} />
           ) : (
             <Input autoComplete="off" />
           )}
@@ -103,6 +110,7 @@ export function CredentialsSection({
   fields,
   initial,
   status,
+  keepSecrets = true,
 }: {
   integration: Integration;
   /** The provider's name, as in "Could not save the {label} key" (or "credentials"). */
@@ -110,6 +118,8 @@ export function CredentialsSection({
   fields: CredentialField[];
   initial: Values;
   status: { configured: boolean; hint: string | null };
+  /** False when the server needs every secret on each save (Datadog). */
+  keepSecrets?: boolean;
 }) {
   const save = useSaveCredentials(integration);
   const remove = useRemoveCredentials(integration);
@@ -128,6 +138,7 @@ export function CredentialsSection({
         initial={initial}
         configured={status.configured}
         hasSettings={hasSettings}
+        keepSecrets={keepSecrets}
         saving={save.isPending}
         saved={save.isSuccess}
         onSave={(values) => {

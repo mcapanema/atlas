@@ -10,6 +10,7 @@ import {
 } from "../api/connectors";
 import { useOrganizations, type Organization } from "../api/organizations";
 import { AutoSyncCard } from "../components/AutoSyncCard";
+import { DatadogConnectorCard } from "../components/DatadogConnectorCard";
 import { CredentialsSection } from "../components/CredentialsSection";
 import { GitHubConnectorCard } from "../components/GitHubConnectorCard";
 import { OpenRouterCard } from "../components/OpenRouterCard";
@@ -96,10 +97,17 @@ function SyncNow({
   );
 }
 
-/** Another sync is running that this page's Sync now can show: not a GitHub ("code") job. */
+/** Another sync is running that this page's Sync now can show: not a GitHub ("code") or Datadog job. */
 function otherSyncRunning(status: ConnectorStatus | undefined, sync: SyncAction): boolean {
   const running = status?.running;
-  return !!running && running.kind !== "code" && !sync.running && !sync.outcome && !sync.error;
+  return (
+    !!running &&
+    running.kind !== "code" &&
+    running.kind !== "datadog" &&
+    !sync.running &&
+    !sync.outcome &&
+    !sync.error
+  );
 }
 
 function LinearCard({
@@ -183,6 +191,7 @@ function ConnectorsWorkspace({
       />
       {/* Keyed: another organization's outcome must not carry over. */}
       <GitHubConnectorCard key={selectedOrgId} organizationId={selectedOrgId} />
+      <DatadogConnectorCard key={selectedOrgId} organizationId={selectedOrgId} />
       {selectedOrgId && (
         // Keyed: another organization's save result must not carry over.
         <AutoSyncCard key={selectedOrgId} organizationId={selectedOrgId} />
@@ -201,9 +210,10 @@ export function ConnectorsPage() {
       <Typography.Title level={3}>Connectors</Typography.Title>
       <Typography.Paragraph type="secondary">
         Where Atlas gets its delivery data. Sync now pulls the latest from Linear, Sync GitHub pulls
-        pull requests and deployments; auto sync keeps both fresh on a schedule (GitHub after each
-        successful Linear sync, when it is configured). Keys are entered here, checked with the
-        provider before they are saved, and stored encrypted.
+        pull requests and deployments, Sync Datadog pulls services, deployments and incidents; auto
+        sync keeps them fresh on a schedule (GitHub and Datadog after each successful Linear sync,
+        when configured). Keys are entered here, checked with the provider before they are saved,
+        and stored encrypted.
       </Typography.Paragraph>
       {loadError ? (
         <Alert

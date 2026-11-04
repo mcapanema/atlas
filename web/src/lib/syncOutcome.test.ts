@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { codeSyncOutcome, syncOutcome } from "./syncOutcome";
+import { codeSyncOutcome, datadogSyncOutcome, syncOutcome } from "./syncOutcome";
 
 const nothing = { teams: 0, projects: 0, work_items: 0, events: 0, divergences: 0, deleted: 0 };
 
@@ -50,6 +50,14 @@ describe("codeSyncOutcome", () => {
   it("keeps a count of one singular", () => {
     expect(codeSyncOutcome({ codebases: 1, pull_requests: 1, deployments: 1, events: 1 })).toBe(
       "Updated 1 codebase · 1 pull request · 1 deployment · 1 work item event",
+    );
+  });
+});
+
+describe("datadogSyncOutcome", () => {
+  it("names services, deployments and incidents, with singular for one", () => {
+    expect(datadogSyncOutcome({ codebases: 1, deployments: 0, incidents: 1 })).toBe(
+      "Updated 1 service · 0 deployments · 1 incident",
     );
   });
 });

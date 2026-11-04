@@ -25,9 +25,16 @@ function EnvironmentInput({ codebase, save }: { codebase: Codebase; save: Save }
   );
 }
 
-/** Repositories found by the GitHub sync; mapping one to a team switches its sync on. */
-export function CodebasesTable({ organizationId }: { organizationId: string }) {
-  const codebases = useCodebases(organizationId);
+/** Repositories (GitHub) or services (Datadog) found by a sync; mapping one to a team switches its sync on. */
+export function CodebasesTable({
+  organizationId,
+  source,
+}: {
+  organizationId: string;
+  source: Codebase["source"];
+}) {
+  const datadog = source === "datadog";
+  const codebases = useCodebases(organizationId, source);
   const teams = useTeams();
   const update = useUpdateCodebase();
   const teamOptions = (teams.data ?? [])
@@ -59,7 +66,7 @@ export function CodebasesTable({ organizationId }: { organizationId: string }) {
         scroll={{ x: "max-content" }}
         columns={[
           {
-            title: "Repository",
+            title: datadog ? "Service" : "Repository",
             dataIndex: "name",
             render: (name: string, row) =>
               row.url ? (
@@ -93,7 +100,9 @@ export function CodebasesTable({ organizationId }: { organizationId: string }) {
               <EnvironmentInput key={row.production_environment} codebase={row} save={save} />
             ),
           },
-          { title: "Pull requests", dataIndex: "pull_requests", align: "right" },
+          ...(datadog
+            ? []
+            : [{ title: "Pull requests", dataIndex: "pull_requests", align: "right" as const }]),
           { title: "Deployments", dataIndex: "deployments", align: "right" },
           {
             title: "Last synced",
@@ -103,7 +112,7 @@ export function CodebasesTable({ organizationId }: { organizationId: string }) {
         ]}
       />
       <Typography.Text type="secondary">
-        Only repositories mapped to a team are synced.
+        Only {datadog ? "services" : "repositories"} mapped to a team are synced.
       </Typography.Text>
     </Flex>
   );

@@ -12,6 +12,7 @@ export interface Codebase {
   last_synced_at: string | null;
   pull_requests: number;
   deployments: number;
+  source: "github" | "datadog";
 }
 
 interface CodebaseInput {
@@ -19,10 +20,11 @@ interface CodebaseInput {
   production_environment: string;
 }
 
-export function useCodebases(organizationId: string) {
+export function useCodebases(organizationId: string, source: Codebase["source"]) {
   return useQuery({
-    queryKey: ["codebases", organizationId],
-    queryFn: () => apiFetch<Codebase[]>(`/api/codebases?organization_id=${organizationId}`),
+    queryKey: ["codebases", organizationId, source],
+    queryFn: () =>
+      apiFetch<Codebase[]>(`/api/codebases?organization_id=${organizationId}&source=${source}`),
   });
 }
 
