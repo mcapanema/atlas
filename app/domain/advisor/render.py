@@ -141,7 +141,8 @@ def render_dora(dora: DoraMetrics) -> str:
     ]
     if dora.duplicate_deployments:
         lines.append(
-            f"- {dora.duplicate_deployments} Datadog deployments left out: "
+            f"- {dora.duplicate_deployments} Datadog "
+            f"{'deployment' if dora.duplicate_deployments == 1 else 'deployments'} left out: "
             "the same release is already counted from GitHub"
         )
     return "\n".join(lines)

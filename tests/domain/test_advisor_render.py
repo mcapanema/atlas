@@ -480,6 +480,7 @@ def test_render_dora_states_values_bands_and_samples() -> None:
 def test_render_dora_names_dropped_duplicates_only_when_any() -> None:
     assert "left out" not in render_dora(DORA)
     assert "2 Datadog deployments left out" in render_dora(replace(DORA, duplicate_deployments=2))
+    assert "1 Datadog deployment left out" in render_dora(replace(DORA, duplicate_deployments=1))
 
 
 def test_render_dora_without_band_says_too_few() -> None:

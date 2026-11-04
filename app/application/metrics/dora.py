@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -9,7 +10,6 @@ from app.domain.codebases.repository import (
     PullRequestRepository,
 )
 from app.domain.incidents.repository import ServiceIncidentRepository
-from app.domain.metric_rules.entities import MetricRules
 from app.domain.metrics.dora import DoraMetrics, Incident, compute_dora, drop_duplicate_releases
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
 from app.domain.teams.repository import TeamRepository
@@ -55,8 +55,8 @@ class DoraService:
         deployments = await self._deployments.list_for_codebases(ids)
         pull_requests = await self._pull_requests.list_for_codebases(ids)
         incidents = await self._incidents_of(team.organization_id, mapped, scope)
-        kept, duplicates = drop_duplicate_releases(mapped, deployments)
-        return compute_dora(
+        kept, dropped = drop_duplicate_releases(mapped, deployments)
+        metrics = compute_dora(
             mapped,
             kept,
             pull_requests,
@@ -64,8 +64,8 @@ class DoraService:
             now=now or datetime.now(UTC),
             window_days=window_days,
             min_sample=scope.rules.health_min_sample,
-            duplicate_deployments=duplicates,
         )
+        return replace(metrics, duplicate_deployments=dropped)
 
     async def _incidents_of(
         self, organization_id: UUID, mapped: list[Codebase], scope: ScopeSamples
@@ -85,6 +85,9 @@ class DoraService:
         names = {c.name.strip().casefold() for c in mapped if c.source is CodebaseSource.DATADOG}
         if not names:
             return []
+        # ponytail: loads every stored incident of the organization to filter by
+        # service in Python (bounded by the 180-day backfill plus growth); upgrade
+        # path: a service filter on `ServiceIncidentRepository.list`.
         return [
             Incident(i.opened_at, i.restored_at)
             for i in await self._incidents.list(organization_id)
@@ -93,7 +96,7 @@ class DoraService:
 
 
 def _linear_incidents(scope: ScopeSamples) -> list[Incident]:
-    rules: MetricRules = scope.rules
+    rules = scope.rules
     return [
         Incident(sample.created_at, sample.completed_at)
         for item, sample in scope.items_with_samples

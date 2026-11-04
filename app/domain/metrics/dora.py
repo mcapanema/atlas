@@ -308,7 +308,7 @@ def _banded[T](value: T | None, enough: bool, band: Callable[[T], DoraBand]) -> 
     return band(value) if value is not None and enough else None
 
 
-def compute_dora(  # noqa: PLR0913 — four inputs, the clock and three keyword-only knobs
+def compute_dora(
     codebases: Sequence[Codebase],
     deployments: Sequence[Deployment],
     pull_requests: Sequence[PullRequest],
@@ -317,14 +317,12 @@ def compute_dora(  # noqa: PLR0913 — four inputs, the clock and three keyword-
     now: datetime,
     window_days: int = STATS_WINDOW_DAYS,
     min_sample: int = 5,
-    duplicate_deployments: int = 0,
 ) -> DoraMetrics:
     """DORA metrics for one team's codebases over (now - window_days, now].
 
     `incidents` are the team's incidents (the caller leaves out canceled
     ones). Lead time, change failure rate and restore get a band only when
     their sample is at least `min_sample`; with no codebase no band at all.
-    `deployments` are the kept ones (see `drop_duplicate_releases`).
     """
     window = _Window(now - timedelta(days=window_days), now, window_days)
     mapped = bool(codebases)
@@ -358,5 +356,4 @@ def compute_dora(  # noqa: PLR0913 — four inputs, the clock and three keyword-
         restore_band=_banded(
             _median(restores), mapped and len(restores) >= min_sample, restore_band
         ),
-        duplicate_deployments=duplicate_deployments,
     )
