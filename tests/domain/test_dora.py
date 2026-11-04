@@ -1,9 +1,16 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 
-from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.codebases.entities import (
+    Codebase,
+    CodebaseSource,
+    Deployment,
+    DeploymentStatus,
+    PullRequest,
+)
 from app.domain.metrics.dora import (
     DoraBand,
     DoraMetrics,
@@ -11,6 +18,7 @@ from app.domain.metrics.dora import (
     change_failure_band,
     compute_dora,
     deploy_frequency_band,
+    drop_duplicate_releases,
     lead_time_band,
     restore_band,
 )
@@ -336,3 +344,87 @@ def test_codebases_do_not_mix_in_lead_time_failures_and_mapping() -> None:
     assert result.finished_deployments == 2
     # (c) the deployment of an unknown codebase is dropped.
     assert result.deployments == 2
+
+
+DATADOG = Codebase(
+    organization_id=API.organization_id,
+    name="api",
+    external_id="datadog:service:api",
+    source=CodebaseSource.DATADOG,
+)
+WEB = Codebase(
+    organization_id=API.organization_id,
+    name="web",
+    external_id="datadog:service:web",
+    source=CodebaseSource.DATADOG,
+)
+
+
+def _dd(codebase: Codebase, sha: str, env: str = "production") -> Deployment:
+    return replace(_deploy(1, S, env, sha), codebase_id=codebase.id)
+
+
+def test_a_datadog_deployment_with_a_github_sha_is_dropped() -> None:
+    github, copy = _deploy(1, sha="ABC"), _dd(DATADOG, "abc ")
+
+    kept, dropped = drop_duplicate_releases([API, DATADOG], [github, copy])
+
+    assert kept == [github]
+    assert dropped == 1
+
+
+def test_two_datadog_services_deploying_one_github_release_count_once() -> None:
+    github = _deploy(1, sha="abc")
+    copies = [_dd(DATADOG, "abc"), _dd(WEB, "abc")]
+
+    kept, dropped = drop_duplicate_releases([API, DATADOG, WEB], [github, *copies])
+
+    assert kept == [github]
+    assert dropped == 2
+
+
+def test_a_datadog_deployment_without_a_sha_is_kept() -> None:
+    deployments = [_deploy(1, sha=""), _dd(DATADOG, "")]
+
+    kept, dropped = drop_duplicate_releases([API, DATADOG], deployments)
+
+    assert kept == deployments
+    assert dropped == 0
+
+
+def test_only_production_deployments_match() -> None:
+    deployments = [_deploy(1, env="staging", sha="abc"), _dd(DATADOG, "abc")]
+
+    kept, dropped = drop_duplicate_releases([API, DATADOG], deployments)
+
+    assert kept == deployments
+    assert dropped == 0
+
+
+def test_a_datadog_staging_deployment_is_not_dropped() -> None:
+    deployments = [_deploy(1, sha="abc"), _dd(DATADOG, "abc", env="staging")]
+
+    kept, dropped = drop_duplicate_releases([API, DATADOG], deployments)
+
+    assert kept == deployments
+    assert dropped == 0
+
+
+def test_a_failed_github_deployment_still_absorbs_the_datadog_copy() -> None:
+    kept, dropped = drop_duplicate_releases(
+        [API, DATADOG], [_deploy(1, F, sha="abc"), _dd(DATADOG, "abc")]
+    )
+    metrics = compute_dora([API, DATADOG], kept, [], [], now=NOW, window_days=30)
+
+    assert dropped == 1
+    assert metrics.failed_deployments == 1
+    assert metrics.finished_deployments == 1
+
+
+def test_a_pending_github_deployment_does_not_absorb_the_datadog_copy() -> None:
+    pending = _deploy(1, DeploymentStatus.PENDING, sha="abc")
+    kept, dropped = drop_duplicate_releases([API, DATADOG], [pending, _dd(DATADOG, "abc")])
+    metrics = compute_dora([API, DATADOG], kept, [], [], now=NOW, window_days=30)
+
+    assert dropped == 0
+    assert metrics.finished_deployments == 1

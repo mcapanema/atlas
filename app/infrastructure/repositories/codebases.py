@@ -6,7 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
-from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.codebases.entities import (
+    Codebase,
+    CodebaseSource,
+    Deployment,
+    DeploymentStatus,
+    PullRequest,
+)
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
 from app.infrastructure.repositories.batching import chunked
@@ -28,6 +34,9 @@ class CodebaseModel(Base):
     production_environment: Mapped[str] = mapped_column(
         String(255), nullable=False, default="production", server_default="production"
     )
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="github", server_default="github"
+    )
     last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
@@ -40,6 +49,7 @@ class CodebaseModel(Base):
             external_id=self.external_id,
             url=self.url,
             production_environment=self.production_environment,
+            source=CodebaseSource(self.source),
             last_synced_at=self.last_synced_at,
             created_at=self.created_at,
         )
@@ -54,6 +64,7 @@ class CodebaseModel(Base):
             external_id=codebase.external_id,
             url=codebase.url,
             production_environment=codebase.production_environment,
+            source=codebase.source.value,
             last_synced_at=codebase.last_synced_at,
             created_at=codebase.created_at,
         )

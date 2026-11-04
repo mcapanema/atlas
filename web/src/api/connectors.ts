@@ -18,7 +18,7 @@ export interface OpenRouterStatus {
   hint: string | null;
 }
 
-export type Integration = "linear" | "github" | "openrouter";
+export type Integration = "linear" | "github" | "datadog" | "openrouter";
 
 export interface SyncSummary {
   teams: number;
@@ -36,20 +36,32 @@ export interface CodeSummary {
   events: number;
 }
 
+export interface DatadogSummary {
+  codebases: number;
+  deployments: number;
+  incidents: number;
+}
+
 export interface GitHubStatus extends ConnectorStatus {
   owner: string | null;
+}
+
+export interface DatadogStatus extends ConnectorStatus {
+  /** The stored Datadog site; null when unconfigured. */
+  site: string | null;
 }
 
 export interface SyncJob {
   id: string;
   organization_id: string;
-  kind: "organization" | "team" | "code";
+  kind: "organization" | "team" | "code" | "datadog";
   trigger: "manual" | "auto";
   state: "running" | "succeeded" | "failed";
   phase: string | null;
   error: string | null;
   summary: SyncSummary | null;
   code_summary?: CodeSummary | null;
+  datadog_summary?: DatadogSummary | null;
 }
 
 export interface SyncAction {
@@ -59,6 +71,8 @@ export interface SyncAction {
   outcome: SyncSummary | undefined;
   /** What a GitHub sync wrote; undefined for Linear syncs. */
   codeOutcome: CodeSummary | undefined;
+  /** What a Datadog sync wrote; undefined for other syncs. */
+  datadogOutcome: DatadogSummary | undefined;
   error: string | undefined;
   reset: () => void;
 }
@@ -70,6 +84,14 @@ export function useGitHubStatus() {
   return useQuery({
     queryKey: ["connectors", "github"],
     queryFn: () => apiFetch<GitHubStatus>("/api/connectors/github"),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useDatadogStatus() {
+  return useQuery({
+    queryKey: ["connectors", "datadog"],
+    queryFn: () => apiFetch<DatadogStatus>("/api/connectors/datadog"),
     refetchInterval: 15_000,
   });
 }
@@ -94,12 +116,12 @@ const credentialsPath = (integration: Integration) => `/api/connectors/${integra
 
 /**
  * Refetch every status a stored credential decides: the connectors' and the
- * advisor's, and for GitHub the codebases table (the owner may have changed).
+ * advisor's, and for GitHub and Datadog the codebases table (the owner or site may have changed).
  */
 function useRefreshCredentialed(integration: Integration) {
   const queryClient = useQueryClient();
   const keys = [["connectors"], ["advisor", "status"]];
-  if (integration === "github") keys.push(["codebases"]);
+  if (integration === "github" || integration === "datadog") keys.push(["codebases"]);
   return () => Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
 }
 
@@ -176,7 +198,7 @@ function syncView(
   starting: boolean,
   startError: Error | null,
   pollError: Error | null,
-): Pick<SyncAction, "running" | "outcome" | "codeOutcome" | "error"> {
+): Pick<SyncAction, "running" | "outcome" | "codeOutcome" | "datadogOutcome" | "error"> {
   return {
     ...summaries(job),
     running: starting || (job?.state === "running" && !pollError),
@@ -184,9 +206,16 @@ function syncView(
   };
 }
 
-function summaries(job: SyncJob | undefined): Pick<SyncAction, "outcome" | "codeOutcome"> {
-  if (job?.state !== "succeeded") return { outcome: undefined, codeOutcome: undefined };
-  return { outcome: job.summary ?? undefined, codeOutcome: job.code_summary ?? undefined };
+function summaries(
+  job: SyncJob | undefined,
+): Pick<SyncAction, "outcome" | "codeOutcome" | "datadogOutcome"> {
+  if (job?.state !== "succeeded")
+    return { outcome: undefined, codeOutcome: undefined, datadogOutcome: undefined };
+  return {
+    outcome: job.summary ?? undefined,
+    codeOutcome: job.code_summary ?? undefined,
+    datadogOutcome: job.datadog_summary ?? undefined,
+  };
 }
 
 // A 404 means the job is gone (restart): retrying cannot bring it back.
@@ -243,5 +272,19 @@ export function useGitHubSync(): SyncAction {
     // Codebase counts, the status and work item timelines may all have moved.
     () => queryClient.invalidateQueries(),
     "/api/connectors/github/jobs",
+  );
+}
+
+export function useDatadogSync(): SyncAction {
+  const queryClient = useQueryClient();
+  return useSyncAction(
+    (organizationId) =>
+      apiFetch<SyncJob>("/api/connectors/datadog/sync", {
+        method: "POST",
+        body: JSON.stringify({ organization_id: organizationId ?? null }),
+      }),
+    // Services, deployments, incidents and the DORA numbers may all have moved.
+    () => queryClient.invalidateQueries(),
+    "/api/connectors/datadog/jobs",
   );
 }

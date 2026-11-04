@@ -49,6 +49,7 @@ export interface MetricRules {
   blocked_state_names: string[];
   wait_state_names: string[];
   incident_label_names: string[];
+  incident_source: "auto" | "linear" | "datadog";
   remaining_state_types: OpenStateType[];
   type_labels: TypeLabel[];
   sprint_length_days: number;

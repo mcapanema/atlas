@@ -13,13 +13,14 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from app.api.sync_jobs import SyncJob, SyncKind, SyncState, SyncTrigger
+from app.api.sync_jobs import DatadogSyncSummary, SyncJob, SyncKind, SyncState, SyncTrigger
 from app.application.codebases.service import CodebaseOverview
 from app.application.codebases.sync import CodeSyncSummary
 from app.application.sync.service import SyncSummary
 from app.domain.advisor.entities import DeliveryAdvice, MeetingPrep, MeetingType, Persona
 from app.domain.advisor.runs import AdviceRun
 from app.domain.auth.entities import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
+from app.domain.credentials.entities import DATADOG_SITES
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
 from app.domain.metrics.dora import DoraBand, DoraMetrics
@@ -177,8 +178,14 @@ class CodeSyncSummaryRead(BaseModel):
     events: int
 
 
+class DatadogSyncSummaryRead(BaseModel):
+    codebases: int
+    deployments: int
+    incidents: int
+
+
 class SyncJobRead(BaseModel):
-    """A background sync, Linear or code: running, or one of the last finished ones."""
+    """A background sync, Linear, code or Datadog: running, or one of the last finished ones."""
 
     id: UUID
     organization_id: UUID
@@ -195,6 +202,8 @@ class SyncJobRead(BaseModel):
     summary: SyncSummaryRead | None
     # The code-host counts (a code job).
     code_summary: CodeSyncSummaryRead | None
+    # The Datadog counts (a datadog job).
+    datadog_summary: DatadogSyncSummaryRead | None
 
     @classmethod
     def of(cls, job: SyncJob) -> "SyncJobRead":
@@ -217,6 +226,13 @@ class SyncJobRead(BaseModel):
             code_summary=CodeSyncSummaryRead.model_validate(job.summary)
             if isinstance(job.summary, CodeSyncSummary)
             else None,
+            datadog_summary=DatadogSyncSummaryRead(
+                codebases=job.summary.code.codebases,
+                deployments=job.summary.code.deployments,
+                incidents=job.summary.incidents,
+            )
+            if isinstance(job.summary, DatadogSyncSummary)
+            else None,
         )
 
 
@@ -231,6 +247,14 @@ class LinearStatusRead(IntegrationStatusRead):
 class GitHubStatusRead(IntegrationStatusRead):
     # The configured organization or user login; None while unset.
     owner: str | None
+    hint: str | None
+    # The sync job running now, of any kind; as on LinearStatusRead.
+    running: SyncJobRead | None
+
+
+class DatadogStatusRead(IntegrationStatusRead):
+    # The configured Datadog site; None while unset.
+    site: str | None
     hint: str | None
     # The sync job running now, of any kind; as on LinearStatusRead.
     running: SyncJobRead | None
@@ -263,6 +287,15 @@ class GitHubCredentialsWrite(BaseModel):
     owner: _Label
 
 
+class DatadogCredentialsWrite(BaseModel):
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    # Both keys are always required: there is no keep-stored path.
+    api_key: Secret
+    application_key: Secret
+    site: Literal[DATADOG_SITES]  # type: ignore[valid-type]  # — mypy rejects a tuple of literals; see DATADOG_SITES
+
+
 class OpenRouterCredentialsWrite(BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
 
@@ -279,6 +312,7 @@ class CodebaseRead(BaseModel):
     name: str
     url: str | None
     team_id: UUID | None
+    source: str
     production_environment: str
     last_synced_at: datetime | None
     pull_requests: int
@@ -293,6 +327,7 @@ class CodebaseRead(BaseModel):
             name=codebase.name,
             url=codebase.url,
             team_id=codebase.team_id,
+            source=codebase.source.value,
             production_environment=codebase.production_environment,
             last_synced_at=codebase.last_synced_at,
             pull_requests=overview.pull_requests,
@@ -632,6 +667,7 @@ class DoraMetricsRead(BaseModel):
     restore_median_seconds: float | None
     restores: int
     restore_band: DoraBand | None
+    duplicate_deployments: int
 
     @classmethod
     def of(cls, metrics: DoraMetrics) -> "DoraMetricsRead":
@@ -654,6 +690,7 @@ class DoraMetricsRead(BaseModel):
             restore_median_seconds=restore.total_seconds() if restore is not None else None,
             restores=metrics.restores,
             restore_band=metrics.restore_band,
+            duplicate_deployments=metrics.duplicate_deployments,
         )
 
 
@@ -760,6 +797,7 @@ class MetricRulesRead(BaseModel):
     blocked_state_names: list[str]
     wait_state_names: list[str]
     incident_label_names: list[str]
+    incident_source: Literal["auto", "linear", "datadog"]
     remaining_state_types: list[OpenStateType]
     type_labels: list[TypeLabelRead]
     sprint_length_days: int
@@ -817,6 +855,7 @@ class MetricRulesOverridesWrite(BaseModel):
     blocked_state_names: list[str] | None = None
     wait_state_names: list[str] | None = None
     incident_label_names: list[str] | None = None
+    incident_source: Literal["auto", "linear", "datadog"] | None = None
     remaining_state_types: list[OpenStateType] | None = None
     type_labels: list[TypeLabelRead] | None = None
     sprint_length_days: int | None = None

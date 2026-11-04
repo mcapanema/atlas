@@ -6,7 +6,7 @@ import pytest
 
 from app.application.codebases.sync import CodeSyncService, CodeSyncSummary
 from app.application.sync.service import SyncPhase, UnknownOrganizationError
-from app.domain.codebases.entities import Deployment, DeploymentStatus
+from app.domain.codebases.entities import Codebase, CodebaseSource, Deployment, DeploymentStatus
 from app.domain.events.entities import EventType
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceCodebase, SourceDeployment, SourcePullRequest
@@ -511,3 +511,36 @@ async def test_pull_requests_keep_the_normal_window() -> None:
     await h.sync()
 
     assert _since(source, "pull_requests") == NOW - timedelta(days=2)
+
+
+async def test_sync_creates_codebases_with_the_source_of_the_port() -> None:
+    source = InMemoryCodeHostSource(
+        source=CodebaseSource.DATADOG,
+        codebases=[SourceCodebase(external_id="datadog:service:api", name="api")],
+    )
+    h = Harness(source)
+    await h.start()
+
+    await h.sync()
+
+    (stored,) = await h.codebases.list(h.org.id)
+    assert stored.source == CodebaseSource.DATADOG
+
+
+async def test_sync_fetches_only_mapped_codebases_of_its_own_source() -> None:
+    source = InMemoryCodeHostSource(
+        source=CodebaseSource.DATADOG,
+        codebases=[SourceCodebase(external_id="datadog:service:api", name="api")],
+    )
+    h = Harness(source)
+    await h.start()
+    await h.codebases.add(
+        Codebase(organization_id=h.org.id, name="acme/api", external_id="R_1", team_id=h.team_id)
+    )
+    await h.sync()
+    await h.map_all()
+    source.calls.clear()
+
+    await h.sync()
+
+    assert {call[1] for call in source.calls} == {"datadog:service:api"}

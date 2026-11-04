@@ -3,7 +3,13 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.codebases.entities import (
+    Codebase,
+    CodebaseSource,
+    Deployment,
+    DeploymentStatus,
+    PullRequest,
+)
 from app.domain.organizations.entities import Organization
 from app.domain.teams.entities import Team
 from app.infrastructure.repositories.codebases import (
@@ -183,3 +189,19 @@ async def test_oldest_pending_started_at(session: AsyncSession) -> None:
         days=3
     )
     assert await repo.oldest_pending_started_at(a.id, since=t - timedelta(days=1)) is None
+
+
+async def test_codebase_source_survives_a_round_trip(session: AsyncSession) -> None:
+    repository = SqlAlchemyCodebaseRepository(session)
+    codebase = Codebase(
+        organization_id=await _org(session),
+        name="api",
+        external_id="datadog:service:api",
+        source=CodebaseSource.DATADOG,
+    )
+    await repository.add(codebase)
+
+    stored = await repository.get(codebase.id)
+
+    assert stored is not None
+    assert stored.source == CodebaseSource.DATADOG

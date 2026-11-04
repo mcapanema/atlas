@@ -43,24 +43,34 @@ and — under its team's rules (`blocked_periods`) — blocked periods for `GET 
 Item Explorer (`/work-items`).
 
 Credentials (`app/domain/credentials/`, ADR-0027) are a separate aggregate:
-one `Credential` per integration (Linear, GitHub, OpenRouter), stored by
+one `Credential` per integration (Linear, GitHub, OpenRouter, Datadog), stored by
 `app/infrastructure/repositories/credentials.py` with its secret fields
 Fernet-encrypted (`app/infrastructure/secrets.py`; the key lives in the key
 file `ATLAS_SECRET_KEY_FILE`). `CredentialService`
 (`app/application/credentials/service.py`) verifies a credential before it
 saves it. The API is write-only — `PUT` and `DELETE`
-`/api/connectors/{linear|github|openrouter}/credentials` — and status
+`/api/connectors/{linear|github|openrouter|datadog}/credentials` — and status
 responses carry a `hint`, never the secret. A credential that cannot be
 decrypted reads as not configured and logs a warning.
 
 An Organization also owns Codebases (`app/domain/codebases/`, ADR-0024): a
 repository from a code host, mapped to at most one Team and holding its Pull
-Requests and Deployments. Codebases arrive unmapped from a code sync, and an
+Requests and Deployments. `Codebase.source` (`github` or `datadog`, ADR-0029)
+names the system it comes from, and each code sync fetches only the mapped
+codebases of its own source. Codebases arrive unmapped from a code sync, and an
 unmapped codebase is never fetched; `GET /api/codebases?organization_id=`
-lists them with their stored counts, and `PUT /api/codebases/{id}` sets the
+(optional `source=`) lists them with their stored counts, and `PUT /api/codebases/{id}` sets the
 team and the production environment. The code sync links a pull request to
 the work items whose keys it names by REVIEW and MERGED events
 (`CodeSyncService`, `app/application/codebases/sync.py`).
+
+An Organization also holds ServiceIncidents (`app/domain/incidents/`, table
+`service_incidents`): an incident from an incident tracker, with its open and
+restore times, the names of the affected services, and a severity. The
+`IncidentSyncService` (`app/application/incidents/sync.py`) fetches incidents
+since a backfill window and upserts them by external id. An incident keeps the
+organization that first synced it; a later sync from any organization updates
+its fields in place.
 
 Users and their sign-in sessions are the `auth` aggregate
 (`app/domain/auth/`, tables `users` and `auth_sessions`, ADR-0028). A
@@ -104,7 +114,10 @@ exception: it is generated in the background and stored (ADR-0023).
   DORA report thresholds (deploy frequency has a band with any mapped
   codebase; lead time, change failure rate and restore wait for
   `health_min_sample` values). `DoraService` (`app/application/metrics/dora.py`)
-  feeds it a team's codebases and the scope's incident-labelled items.
+  feeds it a team's codebases and one incident source per team (the
+  `incident_source` rule: Linear incident-labelled items or Datadog
+  incidents), and drops Datadog deployments that repeat a GitHub release
+  (same commit SHA) so one release or outage counts once.
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo

@@ -120,3 +120,19 @@ class SourceDeployment:
 
     def __post_init__(self) -> None:
         require_aware("SourceDeployment", started_at=self.started_at, finished_at=self.finished_at)
+
+
+@dataclass(frozen=True)
+class SourceIncident:
+    external_id: str
+    title: str
+    opened_at: datetime
+    # None while the incident is open.
+    restored_at: datetime | None = None
+    # Names of the services the source says were affected.
+    services: tuple[str, ...] = ()
+    severity: str | None = None
+    url: str | None = None
+
+    def __post_init__(self) -> None:
+        require_aware("SourceIncident", opened_at=self.opened_at, restored_at=self.restored_at)

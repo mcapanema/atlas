@@ -19,6 +19,7 @@ from tests.fakes import (
     InMemoryMetricRuleOverridesRepository,
     InMemoryProjectRepository,
     InMemoryPullRequestRepository,
+    InMemoryServiceIncidentRepository,
     InMemoryTeamRepository,
     InMemoryWorkItemRepository,
 )
@@ -211,6 +212,7 @@ async def test_build_context_has_dora_for_a_team_and_none_for_a_project() -> Non
         InMemoryDeploymentRepository(),
         InMemoryPullRequestRepository(),
         teams,
+        InMemoryServiceIncidentRepository(),
     )
     service = AdvisorService(
         MetricsService(work_items, events, rules),

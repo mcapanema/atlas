@@ -23,6 +23,17 @@ restore by its restore time.
   codebase, from the run's first failure to the codebase's next success
   (counted when that success finished in the window).
 
+Two tools can report one release. `drop_duplicate_releases` runs before
+`compute_dora`: a production deployment of a Datadog codebase is dropped when
+a production deployment of a GitHub codebase has the same commit SHA after
+strip().casefold() (non-empty) and finished (success or failure). The GitHub copy stays: it carries
+the failure status and the pull requests behind lead time. A Datadog
+deployment without a SHA cannot be matched and counts. The dropped count is
+`DoraMetrics.duplicate_deployments`.
+
+Incidents come from one source per team, chosen by the caller (the
+`incident_source` metric rule), so one outage logged in two tools counts once.
+
 Durations are wall-clock, not the working calendar (ADR-0017): DORA bands are
 stated in clock time, and outages do not pause on weekends. A band needs at
 least `min_sample` values behind it; deploy frequency has a band whenever the
@@ -42,7 +53,13 @@ from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
-from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.codebases.entities import (
+    Codebase,
+    CodebaseSource,
+    Deployment,
+    DeploymentStatus,
+    PullRequest,
+)
 from app.domain.metrics.stats import percentile
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
 
@@ -106,6 +123,8 @@ class DoraMetrics:
     restore_median: timedelta | None
     restores: int
     restore_band: DoraBand | None
+    # Datadog production deployments dropped as copies of a GitHub release.
+    duplicate_deployments: int = 0
 
 
 def deploy_frequency_band(per_week: float) -> DoraBand:
@@ -140,6 +159,29 @@ class _Window:
 
 def _env(name: str) -> str:
     return name.strip().casefold()
+
+
+def drop_duplicate_releases(
+    codebases: Sequence[Codebase], deployments: Sequence[Deployment]
+) -> tuple[list[Deployment], int]:
+    """(kept deployments, dropped count): Datadog copies of a GitHub release leave."""
+    by_id = {codebase.id: codebase for codebase in codebases}
+
+    def release(d: Deployment, source: CodebaseSource) -> str | None:
+        if source is CodebaseSource.GITHUB and (d.status not in _FINISHED or d.finished_at is None):
+            return None
+        codebase = by_id.get(d.codebase_id)
+        if (
+            codebase is None
+            or codebase.source is not source
+            or _env(codebase.production_environment) != _env(d.environment)
+        ):
+            return None
+        return _env(d.sha) or None
+
+    github = {release(d, CodebaseSource.GITHUB) for d in deployments} - {None}
+    kept = [d for d in deployments if release(d, CodebaseSource.DATADOG) not in github]
+    return kept, len(deployments) - len(kept)
 
 
 @dataclass(frozen=True)

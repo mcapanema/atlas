@@ -16,9 +16,16 @@ class DeploymentStatus(StrEnum):
     FAILURE = "failure"
 
 
+class CodebaseSource(StrEnum):
+    """Which system a codebase comes from."""
+
+    GITHUB = "github"
+    DATADOG = "datadog"
+
+
 @dataclass
 class Codebase:
-    """A source repository in a code host. Unmapped (no team) is never fetched."""
+    """A repository in a code host or a Datadog service. Unmapped (no team) is never fetched."""
 
     organization_id: UUID
     name: str
@@ -27,6 +34,7 @@ class Codebase:
     team_id: UUID | None = None
     production_environment: str = "production"
     last_synced_at: datetime | None = None
+    source: CodebaseSource = CodebaseSource.GITHUB
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)
 

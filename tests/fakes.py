@@ -15,9 +15,16 @@ from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
 from app.domain.auth.entities import AuthSession, User
 from app.domain.auth.repository import SetupAlreadyClaimedError
-from app.domain.codebases.entities import Codebase, Deployment, DeploymentStatus, PullRequest
+from app.domain.codebases.entities import (
+    Codebase,
+    CodebaseSource,
+    Deployment,
+    DeploymentStatus,
+    PullRequest,
+)
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.events.entities import Event, EventType
+from app.domain.incidents.entities import ServiceIncident
 from app.domain.metric_rules.entities import DEFAULT_RULES, RecomputeStatus, RuleOverrides
 from app.domain.organizations.entities import Organization
 from app.domain.people.entities import Person
@@ -26,6 +33,7 @@ from app.domain.snapshots.entities import ForecastSnapshot, MetricSnapshot
 from app.domain.sync.source import (
     SourceCodebase,
     SourceDeployment,
+    SourceIncident,
     SourceProject,
     SourcePullRequest,
     SourceTeam,
@@ -437,7 +445,9 @@ class InMemoryCodeHostSource:
         codebases: list[SourceCodebase] | None = None,
         pull_requests: dict[str, list[SourcePullRequest]] | None = None,
         deployments: dict[str, list[SourceDeployment]] | None = None,
+        source: CodebaseSource = CodebaseSource.GITHUB,
     ) -> None:
+        self.source = source
         self.codebases = codebases or []
         self.pull_requests = pull_requests or {}
         self.deployments = deployments or {}
@@ -722,6 +732,57 @@ class InMemoryPullRequestRepository:
             if p.codebase_id in wanted:
                 counts[p.codebase_id] = counts.get(p.codebase_id, 0) + 1
         return counts
+
+
+class InMemoryServiceIncidentRepository:
+    def __init__(self, incidents: list[ServiceIncident] | None = None) -> None:
+        self._rows: dict[UUID, ServiceIncident] = {i.id: i for i in incidents or []}
+
+    async def add(self, incident: ServiceIncident) -> None:
+        self._rows[incident.id] = incident
+
+    async def update(self, incident: ServiceIncident) -> None:
+        self._rows[incident.id] = incident
+
+    async def get_by_external_ids(self, external_ids: list[str]) -> dict[str, ServiceIncident]:
+        wanted = set(external_ids)
+        return {i.external_id: i for i in self._rows.values() if i.external_id in wanted}
+
+    async def list(self, organization_id: UUID) -> list[ServiceIncident]:
+        return sorted(
+            (i for i in self._rows.values() if i.organization_id == organization_id),
+            key=lambda i: i.opened_at,
+        )
+
+
+class InMemoryIncidentSource:
+    """Configurable IncidentSource; `calls` records each `since`."""
+
+    def __init__(self, incidents: list[SourceIncident] | None = None) -> None:
+        self.incidents = incidents or []
+        self.calls: list[datetime] = []
+
+    async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
+        self.calls.append(since)
+        return self.incidents
+
+
+class InMemoryDatadogSource(InMemoryCodeHostSource):
+    """Configurable DatadogSource: the code-host fake stamped DATADOG, plus incidents."""
+
+    def __init__(
+        self,
+        codebases: list[SourceCodebase] | None = None,
+        deployments: dict[str, list[SourceDeployment]] | None = None,
+        incidents: list[SourceIncident] | None = None,
+    ) -> None:
+        super().__init__(
+            codebases=codebases, deployments=deployments, source=CodebaseSource.DATADOG
+        )
+        self.incidents = incidents or []
+
+    async def fetch_incidents(self, since: datetime) -> list[SourceIncident]:
+        return self.incidents
 
 
 class InMemoryDeploymentRepository:

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.api.deps import (
     CodeHostSourceDep,
     CredentialServiceDep,
+    DatadogSourceDep,
     DeliveryDataSourceDep,
     SessionDep,
     SyncServiceDep,
@@ -14,6 +15,8 @@ from app.api.deps import (
 from app.api.schemas import (
     DEFAULT_ADVISOR_MODEL,
     CodeSyncRequest,
+    DatadogCredentialsWrite,
+    DatadogStatusRead,
     GitHubCredentialsWrite,
     GitHubStatusRead,
     LinearCredentialsWrite,
@@ -57,6 +60,16 @@ async def _github_status(service: CredentialService, jobs: SyncJobRunner) -> Git
     return GitHubStatusRead(
         configured=stored is not None,
         owner=stored.owner if stored else None,
+        hint=stored.hint if stored else None,
+        running=_running(jobs),
+    )
+
+
+async def _datadog_status(service: CredentialService, jobs: SyncJobRunner) -> DatadogStatusRead:
+    stored = await service.get(Integration.DATADOG)
+    return DatadogStatusRead(
+        configured=stored is not None,
+        site=stored.site if stored else None,
         hint=stored.hint if stored else None,
         running=_running(jobs),
     )
@@ -209,6 +222,36 @@ async def delete_github_credentials(
     return await _github_status(service, jobs)
 
 
+@router.get("/datadog", response_model=DatadogStatusRead)
+async def datadog_status(
+    jobs: SyncJobRunnerDep, service: CredentialServiceDep
+) -> DatadogStatusRead:
+    return await _datadog_status(service, jobs)
+
+
+@router.put("/datadog/credentials", response_model=DatadogStatusRead)
+async def put_datadog_credentials(
+    payload: DatadogCredentialsWrite, jobs: SyncJobRunnerDep, service: CredentialServiceDep
+) -> DatadogStatusRead:
+    await service.save(
+        Credential(
+            Integration.DATADOG,
+            payload.api_key,
+            application_key=payload.application_key,
+            site=payload.site,
+        )
+    )
+    return await _datadog_status(service, jobs)
+
+
+@router.delete("/datadog/credentials", response_model=DatadogStatusRead)
+async def delete_datadog_credentials(
+    jobs: SyncJobRunnerDep, service: CredentialServiceDep
+) -> DatadogStatusRead:
+    await service.remove(Integration.DATADOG)
+    return await _datadog_status(service, jobs)
+
+
 # Same job model as the Linear sync: 202 now, then poll GET /github/jobs/{job_id}.
 @router.post("/github/sync", response_model=SyncJobRead, status_code=status.HTTP_202_ACCEPTED)
 async def sync_github(
@@ -226,6 +269,30 @@ async def sync_github(
     await session.commit()
     request = SyncJobRequest(organization_id, "code", "manual")
     return _start(lambda: jobs.start_code(request, source))
+
+
+# Same job model again: 202 now, then poll GET /datadog/jobs/{job_id}.
+@router.post("/datadog/sync", response_model=SyncJobRead, status_code=status.HTTP_202_ACCEPTED)
+async def sync_datadog(
+    payload: CodeSyncRequest,
+    source: DatadogSourceDep,
+    session: SessionDep,
+    jobs: SyncJobRunnerDep,
+) -> SyncJobRead:
+    service = code_sync_service_for(session, source)
+    try:
+        organization_id = await service.resolve_organization(payload.organization_id)
+    except UnknownOrganizationError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    # Ends the request's read transaction before the job writes.
+    await session.commit()
+    request = SyncJobRequest(organization_id, "datadog", "manual")
+    return _start(lambda: jobs.start_datadog(request, source))
+
+
+@router.get("/datadog/jobs/{job_id}", response_model=SyncJobRead)
+async def datadog_sync_job(job_id: UUID, jobs: SyncJobRunnerDep) -> SyncJobRead:
+    return _job(jobs, job_id)
 
 
 @router.get("/github/jobs/{job_id}", response_model=SyncJobRead)

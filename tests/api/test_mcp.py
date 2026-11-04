@@ -574,6 +574,7 @@ def test_dora_json_rebuilds_the_domain_value() -> None:
         restore_median=None,
         restores=0,
         restore_band=None,
+        duplicate_deployments=3,
     )
 
     wire = DoraMetricsRead.of(domain).model_dump(mode="json")

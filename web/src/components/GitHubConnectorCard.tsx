@@ -97,7 +97,9 @@ export function GitHubConnectorCard({ organizationId }: { organizationId: string
         )}
         {status?.configured === false && <SetupAlert />}
         <SyncGitHub organizationId={organizationId} status={status} />
-        {status?.configured && organizationId && <CodebasesTable organizationId={organizationId} />}
+        {status?.configured && organizationId && (
+          <CodebasesTable organizationId={organizationId} source="github" />
+        )}
         {status && <GitHubCredentials status={status} />}
       </Flex>
     </Card>

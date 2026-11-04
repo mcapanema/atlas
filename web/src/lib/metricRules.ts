@@ -202,6 +202,19 @@ export const RULE_GROUPS: RuleGroup[] = [
         control: { kind: "names" },
       },
       {
+        name: "incident_source",
+        label: "Incident source",
+        help: "Where DORA reads incidents. Auto uses Datadog when Datadog incidents exist for the team's services, else the Linear incident label. Never both, so one outage counts once.",
+        control: {
+          kind: "select",
+          options: [
+            { value: "auto", label: "Auto" },
+            { value: "linear", label: "Linear label" },
+            { value: "datadog", label: "Datadog" },
+          ],
+        },
+      },
+      {
         name: "blocked_by_relations",
         label: "Count Linear 'blocked by' relations",
         help: "Off by default: teams often add 'blocked by' to record planned order and start the work anyway. An item is blocked from when a 'blocked by' relation is added until it is removed or the blocker is done or canceled, and again if the blocker reopens. Linear records relation history from about mid-2026; older relations don't count.",

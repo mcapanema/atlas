@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Any
 
+from app.domain.codebases.entities import CodebaseSource
 from app.domain.sync.source import SourceCodebase, SourceDeployment, SourcePullRequest
 from app.infrastructure.connectors.github.client import GitHubAPIError, GitHubGraphQLClient
 from app.infrastructure.connectors.github.mapping import (
@@ -55,6 +56,8 @@ query Deployments($id: ID!, $after: String) {
 
 
 class GitHubDataSource:
+    source = CodebaseSource.GITHUB
+
     def __init__(self, client: GitHubGraphQLClient, owner: str) -> None:
         self._client = client
         self._owner = owner

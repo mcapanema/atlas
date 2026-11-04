@@ -4,14 +4,24 @@ from enum import StrEnum
 
 from app.domain._time import require_aware, utcnow
 
-_LABELS = {"linear": "Linear", "github": "GitHub", "openrouter": "OpenRouter"}
+_LABELS = {"linear": "Linear", "github": "GitHub", "openrouter": "OpenRouter", "datadog": "Datadog"}
 _MIN_HINT_LENGTH = 12
+DATADOG_SITES = (
+    "datadoghq.com",
+    "us3.datadoghq.com",
+    "us5.datadoghq.com",
+    "datadoghq.eu",
+    "ap1.datadoghq.com",
+    "ap2.datadoghq.com",
+    "ddog-gov.com",
+)
 
 
 class Integration(StrEnum):
     LINEAR = "linear"
     GITHUB = "github"
     OPENROUTER = "openrouter"
+    DATADOG = "datadog"
 
     @property
     def label(self) -> str:
@@ -26,6 +36,8 @@ class Credential:
     secret: str = field(repr=False)
     owner: str | None = None  # GitHub only
     model: str | None = None  # OpenRouter only
+    application_key: str | None = field(default=None, repr=False)  # Datadog only
+    site: str | None = None  # Datadog only
     updated_at: datetime = field(default_factory=utcnow)
 
     def __post_init__(self) -> None:
@@ -33,6 +45,10 @@ class Credential:
             raise ValueError("Credential.secret must not be blank")
         self._require("owner", Integration.GITHUB, self.owner)
         self._require("model", Integration.OPENROUTER, self.model)
+        self._require("application_key", Integration.DATADOG, self.application_key)
+        self._require("site", Integration.DATADOG, self.site)
+        if self.site is not None and self.site not in DATADOG_SITES:
+            raise ValueError(f"Credential.site must be one of {', '.join(DATADOG_SITES)}")
         require_aware("Credential", updated_at=self.updated_at)
 
     def _require(self, name: str, owner: Integration, value: str | None) -> None:

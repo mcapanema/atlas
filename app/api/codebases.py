@@ -5,13 +5,17 @@ from fastapi import APIRouter, HTTPException, status
 from app.api.deps import CodebaseServiceDep
 from app.api.schemas import CodebaseRead, CodebaseWrite
 from app.application.codebases.service import UnknownCodebaseError
+from app.domain.codebases.entities import CodebaseSource
 
 router = APIRouter(prefix="/api/codebases", tags=["codebases"])
 
 
 @router.get("", response_model=list[CodebaseRead])
-async def list_codebases(organization_id: UUID, service: CodebaseServiceDep) -> list[CodebaseRead]:
-    return [CodebaseRead.of(overview) for overview in await service.list(organization_id)]
+async def list_codebases(
+    organization_id: UUID, service: CodebaseServiceDep, source: CodebaseSource | None = None
+) -> list[CodebaseRead]:
+    overviews = await service.list(organization_id, source=source)
+    return [CodebaseRead.of(overview) for overview in overviews]
 
 
 # PUT, not PATCH: the body replaces the codebase's whole editable state.

@@ -1,4 +1,4 @@
-"""Automatic Linear and GitHub sync on each organization's schedule (ADR-0014).
+"""Automatic Linear, GitHub and Datadog sync on each organization's schedule (ADR-0014).
 
 One in-process asyncio task (ADR-0002: no queue, no cron) ticks every
 TICK_SECONDS, starting at once so a slot missed while Atlas was off
@@ -9,7 +9,9 @@ a SyncJobRunner job (its own session and transaction). The outcome is recorded o
 second session, so a failed sync's rollback can't erase its own error.
 When GitHub is configured, a Linear sync that succeeds is followed by a code
 sync (a `code` job); its failure logs a warning and does not change the
-recorded outcome, which is the Linear one.
+recorded outcome, which is the Linear one. When Datadog is configured, a
+`datadog` job follows the GitHub one (also after a GitHub failure) and a
+failure of it only logs too.
 An upstream failure (DataSourceError) logs a one-line warning; anything
 else logs a traceback. A failure still consumes its slot: no retry until
 the next one. Each slot is also attempted at most once per process, so a
@@ -36,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.deps import LINEAR_NOT_CONFIGURED, sync_schedule_service_for
 from app.api.sync_jobs import SyncJobRequest, SyncJobRunner
 from app.application.sync_schedules.service import DueSync
-from app.domain.sync.port import CodeHostSource, DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DatadogSource, DeliveryDataSource
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,10 @@ _NEVER = datetime.min.replace(tzinfo=UTC)
 
 
 async def _no_code_source(_session: AsyncSession) -> CodeHostSource | None:
+    return None
+
+
+async def _no_datadog_source(_session: AsyncSession) -> DatadogSource | None:
     return None
 
 
@@ -60,12 +66,16 @@ class AutoSyncRunner:
         code_source_factory: Callable[
             [AsyncSession], Awaitable[CodeHostSource | None]
         ] = _no_code_source,
+        datadog_source_factory: Callable[
+            [AsyncSession], Awaitable[DatadogSource | None]
+        ] = _no_datadog_source,
         tick_seconds: float = TICK_SECONDS,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._source_factory = source_factory
         self._jobs = jobs
         self._code_source_factory = code_source_factory
+        self._datadog_source_factory = datadog_source_factory
         self._tick_seconds = tick_seconds
         self._task: asyncio.Task[None] | None = None
         # The last slot attempted per organization, recorded or not.
@@ -118,6 +128,7 @@ class AutoSyncRunner:
         job = await self._jobs.run(SyncJobRequest(organization_id, "organization", "auto"), source)
         if job.error is None:
             await self._sync_code(organization_id)
+            await self._sync_datadog(organization_id)
         return job.error
 
     async def _sync_code(self, organization_id: UUID) -> None:
@@ -131,6 +142,18 @@ class AutoSyncRunner:
         )
         if job.error is not None:
             logger.warning("Auto code sync of %s failed: %s", organization_id, job.error)
+
+    async def _sync_datadog(self, organization_id: UUID) -> None:
+        """Pull Datadog after the code sync; a failure only logs."""
+        async with self._sessionmaker() as session:
+            datadog_source = await self._datadog_source_factory(session)
+        if datadog_source is None:
+            return
+        job = await self._jobs.run_datadog(
+            SyncJobRequest(organization_id, "datadog", "auto"), datadog_source
+        )
+        if job.error is not None:
+            logger.warning("Auto Datadog sync of %s failed: %s", organization_id, job.error)
 
     async def _record(self, job: DueSync, error: str | None) -> None:
         try:

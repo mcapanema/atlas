@@ -15,6 +15,7 @@ from app.infrastructure.ai.key_check import (
     check_openrouter_model,
     is_rejection,
 )
+from app.infrastructure.connectors.datadog.client import DatadogClient
 from app.infrastructure.connectors.github.client import GitHubGraphQLClient
 from app.infrastructure.connectors.linear.client import LinearGraphQLClient
 from app.infrastructure.connectors.linear.datasource import LinearDataSource
@@ -44,6 +45,8 @@ class ProviderCredentialVerifier:
                 await LinearDataSource(client).fetch_organization_name()
             case Integration.GITHUB:
                 await self._check_github(secret, credential.owner)
+            case Integration.DATADOG:
+                await self._check_datadog(credential)
             case Integration.OPENROUTER:
                 await check_openrouter_key(secret, self._transport)
                 # The entity requires a model for OpenRouter; "" is only for the type checker.
@@ -57,3 +60,23 @@ class ProviderCredentialVerifier:
                 f"Could not verify the GitHub credentials: owner '{owner}' "
                 "was not found or the token can't see it"
             )
+
+    async def _check_datadog(self, credential: Credential) -> None:
+        # The entity requires both fields for Datadog; "" is only for the type checker.
+        site = credential.site or ""
+        client = DatadogClient(
+            credential.secret,
+            credential.application_key or "",
+            site,
+            transport=self._transport,
+        )
+        try:
+            await client.get("/api/v1/validate")
+        except DataSourceError as exc:
+            if is_rejection(exc.status):
+                # A key from another site is rejected the same way as a wrong key.
+                raise CredentialCheckError(
+                    f"Could not verify the Datadog credentials on {site}: {exc}"
+                ) from exc
+            raise
+        await client.get("/api/v2/catalog/entity", {"filter[kind]": "service", "page[limit]": 1})

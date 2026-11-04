@@ -1,4 +1,4 @@
-import type { CodeSummary, SyncSummary } from "../api/connectors";
+import type { CodeSummary, DatadogSummary, SyncSummary } from "../api/connectors";
 
 function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -11,6 +11,16 @@ export function codeSyncOutcome(summary: CodeSummary): string {
     count(summary.pull_requests, "pull request"),
     count(summary.deployments, "deployment"),
     count(summary.events, "work item event"),
+  ];
+  return `Updated ${parts.join(" · ")}`;
+}
+
+/** One line on what a Datadog sync wrote. */
+export function datadogSyncOutcome(summary: DatadogSummary): string {
+  const parts = [
+    count(summary.codebases, "service"),
+    count(summary.deployments, "deployment"),
+    count(summary.incidents, "incident"),
   ];
   return `Updated ${parts.join(" · ")}`;
 }

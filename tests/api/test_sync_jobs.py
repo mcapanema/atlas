@@ -451,6 +451,22 @@ def test_code_job_covers_only_code_requests_of_its_organization() -> None:
     assert not covers(SyncJobRequest(org, "team", "manual", team_id=uuid4()), code)
 
 
+def test_datadog_job_covers_only_a_datadog_job() -> None:
+    org = uuid4()
+    datadog = SyncJobRequest(org, "datadog", "manual")
+    assert covers(datadog, SyncJobRequest(org, "datadog", "auto"))
+    assert not covers(datadog, SyncJobRequest(org, "code", "manual"))
+    assert not covers(SyncJobRequest(org, "code", "manual"), datadog)
+    assert not covers(SyncJobRequest(org, "organization", "manual"), datadog)
+    assert not covers(datadog, SyncJobRequest(org, "organization", "manual"))
+    assert not covers(datadog, SyncJobRequest(uuid4(), "datadog", "manual"))
+
+
+def test_datadog_request_rejects_rebuild() -> None:
+    with pytest.raises(ValueError, match="rebuild"):
+        SyncJobRequest(uuid4(), "datadog", "manual", rebuild=True)
+
+
 def test_code_request_rejects_rebuild() -> None:
     with pytest.raises(ValueError, match="rebuild"):
         SyncJobRequest(uuid4(), "code", "manual", rebuild=True)

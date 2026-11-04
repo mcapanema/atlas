@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import get_codebase_service
-from app.domain.codebases.entities import Codebase
+from app.domain.codebases.entities import Codebase, CodebaseSource
 from app.infrastructure.repositories.codebases import SqlAlchemyCodebaseRepository
 from tests.api.helpers import create_org_and_team
 
@@ -41,6 +41,7 @@ async def test_get_lists_the_organizations_codebases(
             "name": "atlas",
             "url": "https://example.test/acme/atlas",
             "team_id": None,
+            "source": "github",
             "production_environment": "production",
             "last_synced_at": None,
             "pull_requests": 0,
@@ -138,3 +139,26 @@ async def test_put_answers_404_when_the_updated_codebase_is_gone(
 
     assert response.status_code == 404
     assert response.json()["detail"] == f"Codebase {codebase_id} does not exist"
+
+
+async def test_list_codebases_filters_by_source(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    org_id, _ = await create_org_and_team(client)
+    await _seed_codebase(sessionmaker, org_id)
+    async with sessionmaker() as session:
+        await SqlAlchemyCodebaseRepository(session).add(
+            Codebase(
+                organization_id=UUID(org_id),
+                name="api",
+                external_id="datadog:service:api",
+                source=CodebaseSource.DATADOG,
+            )
+        )
+        await session.commit()
+
+    filtered = (await client.get(f"/api/codebases?organization_id={org_id}&source=datadog")).json()
+    everything = (await client.get(f"/api/codebases?organization_id={org_id}")).json()
+
+    assert [row["source"] for row in filtered] == ["datadog"]
+    assert sorted(row["source"] for row in everything) == ["datadog", "github"]

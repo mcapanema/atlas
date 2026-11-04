@@ -44,7 +44,7 @@ entry point `app/cli.py` is the only other one).
   the schema at `/api/openapi.json` (FastAPI's own docs URLs are off, so
   the docs sit behind sign-in); `advisor.py` mounts at `/api/recommendations`
   (named for what it returns); `connectors.py` nests actions per vendor
-  (`POST /api/connectors/linear/sync`, `POST /api/connectors/github/sync`); `metric_rules.py` is prefix-less
+  (`POST /api/connectors/linear/sync`, `POST /api/connectors/github/sync`, `POST /api/connectors/datadog/sync`); `metric_rules.py` is prefix-less
   because it serves both `/api/organizations/{id}/metric-rules` and
   `/api/teams/{id}/metric-rules`; `sync_schedules.py` mounts at
   `/api/organizations` and serves `/{id}/sync-schedule`, nested under the
@@ -70,11 +70,15 @@ entry point `app/cli.py` is the only other one).
   schedule has a due slot by running it through `SyncJobRunner` (own
   session + commit inside `recompute.paused()`; the outcome is recorded in a
   second session; when GitHub is configured, a successful Linear sync is
-  followed by a `code` job whose failure only logs). Every sync entry point runs as a `SyncJobRunner` job,
+  followed by a `code` job whose failure only logs; when Datadog is
+  configured, a `datadog` job follows that, also after a GitHub failure, and
+  its failure only logs). Every sync entry point runs as a `SyncJobRunner` job,
   which holds `SyncJobRunner.lock` and commits inside it — the
   organization sync (`POST /api/connectors/linear/sync`), the team sync
-  (`POST /api/connectors/linear/teams/{team_id}/sync`) and the code sync
-  (`POST /api/connectors/github/sync`, `start_code`) start one and
+  (`POST /api/connectors/linear/teams/{team_id}/sync`), the code sync
+  (`POST /api/connectors/github/sync`, `start_code`) and the Datadog sync
+  (`POST /api/connectors/datadog/sync`, `start_datadog`: services and
+  deployments, then incidents, in one transaction) start one and
   answer `202` with it (`GET /api/connectors/<vendor>/jobs/{job_id}` reads
   it). The runner takes the job's body (`JobBody`); a new sync kind adds a
   `start_*`/`run_*` pair and a `SyncKind` value, never a second runner, or

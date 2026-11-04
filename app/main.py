@@ -38,7 +38,12 @@ from app.api import (
 )
 from app.api.advice_runner import AdviceRunner
 from app.api.auto_sync import AutoSyncRunner
-from app.api.deps import github_code_source, linear_data_source, require_signed_in
+from app.api.deps import (
+    datadog_source,
+    github_code_source,
+    linear_data_source,
+    require_signed_in,
+)
 from app.api.exposure import LocalOnlyMiddleware
 from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
@@ -122,7 +127,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     sync_jobs = SyncJobRunner(sessionmaker, recompute=runner)
     app.state.sync_job_runner = sync_jobs
     auto_sync = AutoSyncRunner(
-        sessionmaker, linear_data_source, jobs=sync_jobs, code_source_factory=github_code_source
+        sessionmaker,
+        linear_data_source,
+        jobs=sync_jobs,
+        code_source_factory=github_code_source,
+        datadog_source_factory=datadog_source,
     )
     app.state.auto_sync_runner = auto_sync
     # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).

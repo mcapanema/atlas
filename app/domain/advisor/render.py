@@ -113,34 +113,39 @@ def render_dora(dora: DoraMetrics) -> str:
     lead, restore = dora.lead_time_median, dora.restore_median
     rate = dora.change_failure_rate
     failed = f"{dora.failed_deployments} of {dora.finished_deployments} deployments"
-    return "\n".join(
-        [
-            f"DORA (trailing {days} calendar days, ending {dora.window_end.date()}):",
-            f"- deploy frequency={dora.deploys_per_week:.1f}/week "
-            f"({dora.deploy_frequency_band}, {dora.deployments} deployments)",
-            _dora_line(
-                "change lead time median",
-                _hours(lead) if lead is not None else None,
-                dora.lead_time_band,
-                f"{dora.lead_time_changes} changes",
-                dora.min_sample,
-            ),
-            _dora_line(
-                "change failure rate",
-                f"{rate:.0%}" if rate is not None else None,
-                dora.change_failure_band,
-                failed if dora.change_failure_band else f"{dora.finished_deployments} deployments",
-                dora.min_sample,
-            ),
-            _dora_line(
-                "time to restore median",
-                _hours(restore) if restore is not None else None,
-                dora.restore_band,
-                f"{dora.restores} restores",
-                dora.min_sample,
-            ),
-        ]
-    )
+    lines = [
+        f"DORA (trailing {days} calendar days, ending {dora.window_end.date()}):",
+        f"- deploy frequency={dora.deploys_per_week:.1f}/week "
+        f"({dora.deploy_frequency_band}, {dora.deployments} deployments)",
+        _dora_line(
+            "change lead time median",
+            _hours(lead) if lead is not None else None,
+            dora.lead_time_band,
+            f"{dora.lead_time_changes} changes",
+            dora.min_sample,
+        ),
+        _dora_line(
+            "change failure rate",
+            f"{rate:.0%}" if rate is not None else None,
+            dora.change_failure_band,
+            failed if dora.change_failure_band else f"{dora.finished_deployments} deployments",
+            dora.min_sample,
+        ),
+        _dora_line(
+            "time to restore median",
+            _hours(restore) if restore is not None else None,
+            dora.restore_band,
+            f"{dora.restores} restores",
+            dora.min_sample,
+        ),
+    ]
+    if dora.duplicate_deployments:
+        lines.append(
+            f"- {dora.duplicate_deployments} Datadog "
+            f"{'deployment' if dora.duplicate_deployments == 1 else 'deployments'} left out: "
+            "the same release is already counted from GitHub"
+        )
+    return "\n".join(lines)
 
 
 _STATE_LIMIT = 8

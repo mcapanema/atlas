@@ -1,4 +1,4 @@
-"""Linear and code-host syncs as in-process background jobs, one at a time.
+"""Linear, code-host and Datadog syncs as in-process background jobs, one at a time.
 
 One asyncio task (ADR-0002: no queue) runs the job. A request while a job
 runs gets that job back when it covers the request (`covers`), or
@@ -9,7 +9,10 @@ inside `recompute.paused()` (a running scope rewrite holds SQLite's write
 lock): a failure or cancel rolls everything back. A cancelled job never
 writes a finish state (CancelledError is not an Exception). A code job
 (`start_code` / `run_code`) runs `CodeSyncService.sync` and captures no
-snapshots: the REVIEW/MERGED events it adds change no metric.
+snapshots: the REVIEW/MERGED events it adds change no metric. A Datadog job
+(`start_datadog` / `run_datadog`) runs `CodeSyncService.sync` on the Datadog
+source (services, deployments), then `IncidentSyncService.sync`, in one
+transaction; it covers only another Datadog job and captures no snapshots.
 
 ponytail: job history lives in memory — the last HISTORY_SIZE finished
 jobs, lost on restart (a client polling a lost job gets 404). Move to a
@@ -29,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import (
     code_sync_service_for,
+    incident_sync_service_for,
     metric_rules_service_for,
     snapshot_service_for,
     sync_schedule_service_for,
@@ -39,13 +43,13 @@ from app.application.codebases.sync import CodeSyncSummary
 from app.application.metric_rules.service import ScopeRef
 from app.application.sync.service import SyncPhase, SyncSummary
 from app.domain._time import utcnow
-from app.domain.sync.port import CodeHostSource, DataSourceError, DeliveryDataSource
+from app.domain.sync.port import CodeHostSource, DatadogSource, DataSourceError, DeliveryDataSource
 
 logger = logging.getLogger(__name__)
 
 HISTORY_SIZE = 20
 
-SyncKind = Literal["organization", "team", "code"]
+SyncKind = Literal["organization", "team", "code", "datadog"]
 SyncTrigger = Literal["manual", "auto"]
 SyncState = Literal["running", "succeeded", "failed"]
 
@@ -61,8 +65,16 @@ class SyncJobRequest:
     def __post_init__(self) -> None:
         if (self.kind == "team") != (self.team_id is not None):
             raise ValueError("a team sync needs a team_id; an organization sync takes none")
-        if self.kind == "code" and self.rebuild:
-            raise ValueError("a code sync has no rebuild")
+        if self.kind in ("code", "datadog") and self.rebuild:
+            raise ValueError(f"a {self.kind} sync has no rebuild")
+
+
+@dataclass(frozen=True)
+class DatadogSyncSummary:
+    """One Datadog job: its services and deployments, then its incidents."""
+
+    code: CodeSyncSummary
+    incidents: int
 
 
 @dataclass
@@ -74,24 +86,26 @@ class SyncJob:
     started_at: datetime = field(default_factory=utcnow)
     finished_at: datetime | None = None
     error: str | None = None
-    summary: SyncSummary | CodeSyncSummary | None = None
+    summary: SyncSummary | CodeSyncSummary | DatadogSyncSummary | None = None
 
 
 # What a job runs inside its session; the runner commits after it.
-JobBody = Callable[[AsyncSession, SyncJob], Awaitable[SyncSummary | CodeSyncSummary]]
+JobBody = Callable[
+    [AsyncSession, SyncJob], Awaitable[SyncSummary | CodeSyncSummary | DatadogSyncSummary]
+]
 
 
 def covers(running: SyncJobRequest, wanted: SyncJobRequest) -> bool:
     """Whether `running` already does everything `wanted` asks for.
 
     Same organization, and: a code sync covers only a code sync, and only a
-    code sync covers one; an organization sync covers a plain organization
+    code sync covers one (likewise a Datadog sync); an organization sync covers a plain organization
     sync and any of its team syncs; a rebuild only by a rebuild; a team sync
     covers only the same team.
     """
     if running.organization_id != wanted.organization_id:
         return False
-    if "code" in (running.kind, wanted.kind):
+    if {"code", "datadog"} & {running.kind, wanted.kind}:
         return running.kind == wanted.kind
     if wanted.rebuild:
         return running.rebuild
@@ -102,7 +116,7 @@ def covers(running: SyncJobRequest, wanted: SyncJobRequest) -> bool:
 
 def kind_label(kind: SyncKind) -> str:
     """How user-facing text names a job's kind: a code job is the GitHub sync."""
-    return "GitHub" if kind == "code" else kind
+    return {"code": "GitHub", "datadog": "Datadog"}.get(kind, kind)
 
 
 class SyncBusyError(Exception):
@@ -146,6 +160,10 @@ class SyncJobRunner:
         """`start` for a code sync (`request.kind == "code"`)."""
         return self._start(request, self._code_body(source))
 
+    def start_datadog(self, request: SyncJobRequest, source: DatadogSource) -> SyncJob:
+        """`start` for a Datadog sync (`request.kind == "datadog"`)."""
+        return self._start(request, self._datadog_body(source))
+
     async def run(self, request: SyncJobRequest, source: DeliveryDataSource) -> SyncJob:
         """Wait for any running job, then run a Linear one to the end (a failure is its state)."""
         return await self._run(request, self._linear_body(source))
@@ -153,6 +171,10 @@ class SyncJobRunner:
     async def run_code(self, request: SyncJobRequest, source: CodeHostSource) -> SyncJob:
         """`run` for a code sync (`request.kind == "code"`)."""
         return await self._run(request, self._code_body(source))
+
+    async def run_datadog(self, request: SyncJobRequest, source: DatadogSource) -> SyncJob:
+        """`run` for a Datadog sync (`request.kind == "datadog"`)."""
+        return await self._run(request, self._datadog_body(source))
 
     def _linear_body(self, source: DeliveryDataSource) -> JobBody:
         return lambda session, job: self._sync(session, job, source)
@@ -166,6 +188,26 @@ class SyncJobRunner:
             return await code_sync_service_for(session, source).sync(
                 job.request.organization_id, on_phase=on_phase
             )
+
+        return body
+
+    @staticmethod
+    def _datadog_body(source: DatadogSource) -> JobBody:
+        async def body(session: AsyncSession, job: SyncJob) -> DatadogSyncSummary:
+            organization_id = job.request.organization_id
+            now = utcnow()  # one instant for both syncs
+
+            def on_phase(phase: SyncPhase) -> None:
+                job.phase = phase
+
+            code = await code_sync_service_for(session, source).sync(
+                organization_id, now=now, on_phase=on_phase
+            )
+            on_phase(SyncPhase.INCIDENTS)
+            incidents = await incident_sync_service_for(session, source).sync(
+                organization_id, now=now
+            )
+            return DatadogSyncSummary(code, incidents.incidents)
 
         return body
 
