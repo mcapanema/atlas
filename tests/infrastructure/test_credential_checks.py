@@ -6,7 +6,7 @@ from app.domain.credentials.entities import Credential, Integration
 from app.domain.credentials.port import CredentialCheckError
 from app.domain.sync.port import DataSourceError
 from app.infrastructure.ai.key_check import is_rejection
-from app.infrastructure.connectors import graphql
+from app.infrastructure.connectors import retry
 from app.infrastructure.credential_checks import ProviderCredentialVerifier
 
 
@@ -46,7 +46,7 @@ async def test_linear_key_rejected() -> None:
 
 
 async def test_linear_outage_is_not_a_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(graphql, "_sleep", _no_sleep)
+    monkeypatch.setattr(retry, "_sleep", _no_sleep)
     transport = httpx.MockTransport(lambda r: httpx.Response(503))
     with pytest.raises(DataSourceError) as caught:
         await ProviderCredentialVerifier(transport).verify(Credential(Integration.LINEAR, "lin"))
