@@ -114,3 +114,12 @@ async def test_non_object_body_raises() -> None:
 
     with pytest.raises(DatadogAPIError, match="not an object"):
         await client.get("/x")
+
+
+async def test_error_without_an_errors_list_omits_the_suffix() -> None:
+    client = _client(httpx.MockTransport(lambda _r: httpx.Response(400, json={"message": "x"})))
+
+    with pytest.raises(DatadogAPIError) as exc_info:
+        await client.get("/x")
+
+    assert str(exc_info.value) == "Datadog API returned HTTP 400"

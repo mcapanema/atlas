@@ -82,8 +82,13 @@ async def send_with_retries(
     vendor: str,
     error: type[DataSourceError],
     transport: httpx.AsyncBaseTransport | None,
+    delay_headers: tuple[str, ...] = ("Retry-After",),
 ) -> httpx.Response:
-    """The last response (callers judge its status); `error` on a network failure."""
+    """The last response (callers judge its status); `error` on a network failure.
+
+    `delay_headers` names the response headers that carry a wait in seconds;
+    the first one present wins.
+    """
     attempt = 1
     while True:
         outcome = await _attempt(send, vendor=vendor, error=error, transport=transport)
@@ -91,8 +96,9 @@ async def send_with_retries(
         if reason is not None and attempt < _MAX_ATTEMPTS:
             retry_after = None
             if isinstance(outcome, httpx.Response):
-                headers = outcome.headers
-                retry_after = headers.get("Retry-After") or headers.get("X-RateLimit-Reset")
+                retry_after = next(
+                    (outcome.headers[h] for h in delay_headers if h in outcome.headers), None
+                )
             delay = _retry_delay(retry_after, attempt)
             logger.warning(
                 "%s API %s; retrying in %.0fs (attempt %d/%d)",

@@ -46,7 +46,11 @@ class DatadogClient:
         self, send: Callable[[httpx.AsyncClient], Awaitable[httpx.Response]]
     ) -> dict[str, Any]:
         response = await send_with_retries(
-            send, vendor="Datadog", error=DatadogAPIError, transport=self._transport
+            send,
+            vendor="Datadog",
+            error=DatadogAPIError,
+            transport=self._transport,
+            delay_headers=("Retry-After", "X-RateLimit-Reset"),
         )
         return self._parse(response)
 
@@ -60,8 +64,10 @@ class DatadogClient:
             raise DatadogAPIError("Datadog response is not JSON") from exc
         if not response.is_success:
             errors = payload.get("errors") if isinstance(payload, dict) else None
-            shown = errors[:_MAX_ERRORS_SHOWN] if isinstance(errors, list) else errors
-            raise DatadogAPIError(f"Datadog API returned HTTP {status}: {shown}", status=status)
+            detail = (
+                f": {errors[:_MAX_ERRORS_SHOWN]}" if isinstance(errors, list) and errors else ""
+            )
+            raise DatadogAPIError(f"Datadog API returned HTTP {status}{detail}", status=status)
         if not isinstance(payload, dict):
             raise DatadogAPIError("Datadog response is not an object")
         return payload

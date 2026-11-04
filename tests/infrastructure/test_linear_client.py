@@ -110,6 +110,23 @@ async def test_execute_retries_5xx_with_exponential_backoff(
     assert recorded_sleeps == [1.0]  # 2 ** (attempt - 1)
 
 
+async def test_execute_ignores_x_ratelimit_reset_for_backoff(
+    recorded_sleeps: list[float],
+) -> None:
+    # GitHub sends X-RateLimit-Reset as an epoch timestamp, not a wait in seconds.
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            return httpx.Response(502, headers={"X-RateLimit-Reset": "1762000000"}, json={})
+        return httpx.Response(200, json={"data": {"ok": True}})
+
+    assert await _client(handler).execute("{ viewer { id } }") == {"ok": True}
+    assert recorded_sleeps == [1.0, 2.0]
+
+
 async def test_execute_gives_up_after_max_attempts(recorded_sleeps: list[float]) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, json={})
