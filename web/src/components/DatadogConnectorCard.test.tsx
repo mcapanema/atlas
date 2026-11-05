@@ -71,6 +71,7 @@ describe("DatadogConnectorCard", () => {
     expect(await screen.findByText("Configured · datadoghq.com")).toBeInTheDocument();
     expect(screen.getByText("…aaaa")).toHaveClass("fig");
     expect(screen.getByText("…bbbb")).toHaveClass("fig");
+    expect(screen.getByText("Keys entered")).toBeInTheDocument();
   });
 
   it("shows the setup alert and disables Sync Datadog while unconfigured", async () => {

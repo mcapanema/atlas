@@ -69,7 +69,7 @@ function StoredCredential({
         {
           key: "saved",
           // Not "Saved" or "Key saved": those are the form's confirmations.
-          label: "Key updated",
+          label: keys.length > 1 ? "Keys entered" : "Key entered",
           children: <span title={formatDateTime(updatedAt)}>{formatRelative(updatedAt)}</span>,
         },
       ]

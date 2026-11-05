@@ -63,7 +63,7 @@ describe("CredentialsSection", () => {
   it("shows no stored key when none is configured", () => {
     renderSection({ configured: false, stored: null, updatedAt: null });
 
-    expect(screen.queryByText("Key updated")).not.toBeInTheDocument();
+    expect(screen.queryByText("Key entered")).not.toBeInTheDocument();
   });
 
   it("shows a missing stored hint as a bare ellipsis", () => {
