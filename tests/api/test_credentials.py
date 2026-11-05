@@ -310,3 +310,17 @@ async def test_datadog_status_hints_both_keys_and_hides_them(
 
     assert (status.json()["hint"], status.json()["application_key_hint"]) == ("…aaaa", "…bbbb")
     assert "dd_app_key_0000bbbb" not in status.text
+
+
+async def test_github_owner_change_keeps_the_key_entry_time(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    await client.put(
+        "/api/connectors/github/credentials", json={"token": "ghp_secret_abcd", "owner": "acme"}
+    )
+    entered = (await client.get("/api/connectors/github")).json()["updated_at"]
+
+    response = await client.put("/api/connectors/github/credentials", json={"owner": "globex"})
+
+    assert response.json()["updated_at"] == entered
+    assert (await client.get("/api/connectors/github")).json()["updated_at"] == entered
