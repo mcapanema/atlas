@@ -51,7 +51,8 @@ file `ATLAS_SECRET_KEY_FILE`). `CredentialService`
 saves it. The API is write-only — `PUT` and `DELETE`
 `/api/connectors/{linear|github|openrouter|datadog}/credentials` — and status
 responses carry a `hint` (Datadog's also an `application_key_hint`) and the
-`updated_at` of the save, never the secret. A credential that cannot be
+`updated_at` of the last key entry (a save that keeps the stored key keeps
+its time), never the secret. A credential that cannot be
 decrypted reads as not configured and logs a warning.
 
 An Organization also owns Codebases (`app/domain/codebases/`, ADR-0024): a
