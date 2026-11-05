@@ -40,8 +40,33 @@ const THREE_DAYS_AGO = new Date(Date.now() - 3 * 24 * 3600_000).toISOString();
 
 const OUTCOME = "Updated 1 team · 2 projects · 3 work items · 42 events · 9 work items removed";
 
+const GITHUB = {
+  configured: true,
+  owner: "acme",
+  hint: "…abcd",
+  updated_at: THREE_DAYS_AGO,
+  running: null,
+};
+const DATADOG = {
+  configured: true,
+  site: "datadoghq.com",
+  hint: "…aaaa",
+  application_key_hint: "…bbbb",
+  updated_at: THREE_DAYS_AGO,
+  running: null,
+};
+
+/** Configured GitHub and Datadog: their status, credentials save and empty tables. */
+function codeHostResponse(url: string): Response | undefined {
+  if (url.startsWith("/api/connectors/github")) return jsonResponse(GITHUB);
+  if (url.startsWith("/api/connectors/datadog")) return jsonResponse(DATADOG);
+  if (url.startsWith("/api/codebases") || url === "/api/teams") return jsonResponse([]);
+  return undefined;
+}
+
 function mockApi({
   configured,
+  codeHosts = false,
   running = false,
   syncPolls = [],
   organizations = [ACME],
@@ -53,6 +78,8 @@ function mockApi({
   putResponse,
   calls = [],
 }: {
+  /** GitHub and Datadog configured (default: GitHub unconfigured, Datadog unanswered). */
+  codeHosts?: boolean;
   githubRunning?: object | null;
   hint?: string | null;
   /** What PUT …/linear/credentials answers; default: stores the key. */
@@ -74,6 +101,8 @@ function mockApi({
   const polls = syncPolls.length > 0 ? [...syncPolls] : [succeededJob()];
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
+    const codeHost = codeHosts ? codeHostResponse(url) : undefined;
+    if (codeHost) return codeHost;
     if (url === "/api/connectors/linear")
       return statusPending
         ? new Promise<Response>(() => {})
@@ -351,6 +380,36 @@ describe("ConnectorsPage", () => {
     // Globex has no schedule: wait for its form, not the loading skeleton.
     expect(await screen.findByText("Not scheduled")).toBeInTheDocument();
     expect(screen.queryByText("Schedule saved")).not.toBeInTheDocument();
+  });
+
+  it("does not carry a GitHub or Datadog save message over to another organization", async () => {
+    mockApi({ configured: true, organizations: [ACME, GLOBEX], codeHosts: true });
+    const card = (title: string) =>
+      screen
+        .getByText(title, { selector: ".ant-card-head-title" })
+        .closest(".ant-card") as HTMLElement;
+
+    renderWithClient(<ConnectorsPage />);
+    await screen.findByRole("combobox", { name: "Organization" });
+    // GitHub keeps its stored token; Datadog needs both keys on every save.
+    fireEvent.click(await within(card("GitHub")).findByRole("button", { name: "Save" }));
+    expect(await within(card("GitHub")).findByText("Saved")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Datadog API key"), {
+      target: { value: "dd_api_key_0000aaaa" },
+    });
+    fireEvent.change(screen.getByLabelText("Application key"), {
+      target: { value: "dd_app_key_0000bbbb" },
+    });
+    fireEvent.click(within(card("Datadog")).getByRole("button", { name: "Save" }));
+    expect(await within(card("Datadog")).findByText("Saved")).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Organization" }));
+    fireEvent.click(await screen.findByTitle("Globex"));
+
+    await waitFor(() =>
+      expect(within(card("GitHub")).queryByText("Saved")).not.toBeInTheDocument(),
+    );
+    expect(within(card("Datadog")).queryByText("Saved")).not.toBeInTheDocument();
   });
 
   it("warns once, at page level, and disables sync when not configured", async () => {
