@@ -239,7 +239,8 @@ class SyncJobRead(BaseModel):
 class CredentialStatusRead(IntegrationStatusRead):
     # The last characters of the stored key; None while unset.
     hint: str | None
-    # When the stored credential was last saved; None while unset.
+    # When the stored key was last entered; a save that keeps the key keeps
+    # this time. None while unset.
     updated_at: datetime | None
 
 

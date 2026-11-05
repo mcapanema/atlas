@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from app.application.credentials.service import CredentialService, NoStoredCredentialError
@@ -81,3 +83,37 @@ async def test_update_with_a_new_secret_replaces_it() -> None:
     stored = await repo.get(Integration.OPENROUTER)
     assert stored is not None
     assert (stored.secret, stored.model) == ("sk-or-new-secret", "m/b")
+
+
+_ENTERED = datetime(2026, 11, 1, 12, tzinfo=UTC)
+
+
+async def _github_key_entered_at(
+    when: datetime,
+) -> tuple[CredentialService, InMemoryCredentialRepository]:
+    repo = InMemoryCredentialRepository()
+    service = CredentialService(repo, FakeCredentialVerifier())
+    await service.save(
+        Credential(Integration.GITHUB, "ghp_stored_secret", owner="acme", updated_at=when)
+    )
+    return service, repo
+
+
+async def test_update_that_keeps_the_key_keeps_its_time() -> None:
+    service, repo = await _github_key_entered_at(_ENTERED)
+
+    await service.update(Integration.GITHUB, None, owner="globex")
+
+    stored = await repo.get(Integration.GITHUB)
+    assert stored is not None
+    assert (stored.owner, stored.updated_at) == ("globex", _ENTERED)
+
+
+async def test_update_with_a_new_key_moves_its_time() -> None:
+    service, repo = await _github_key_entered_at(_ENTERED)
+
+    await service.update(Integration.GITHUB, "ghp_new_secret_0000", owner="acme")
+
+    stored = await repo.get(Integration.GITHUB)
+    assert stored is not None
+    assert stored.updated_at > _ENTERED
