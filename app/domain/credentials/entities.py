@@ -60,5 +60,13 @@ class Credential:
 
     @property
     def hint(self) -> str:
-        """A short tail of the secret; bare when the secret is too short to show any of it."""
-        return "…" + self.secret[-4:] if len(self.secret) >= _MIN_HINT_LENGTH else "…"
+        return _hint(self.secret)
+
+    @property
+    def application_key_hint(self) -> str | None:
+        return _hint(self.application_key) if self.application_key is not None else None
+
+
+def _hint(secret: str) -> str:
+    """A short tail of the secret; bare when the secret is too short to show any of it."""
+    return "…" + secret[-4:] if len(secret) >= _MIN_HINT_LENGTH else "…"

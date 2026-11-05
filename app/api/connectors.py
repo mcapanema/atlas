@@ -51,6 +51,7 @@ async def _linear_status(service: CredentialService, jobs: SyncJobRunner) -> Lin
     return LinearStatusRead(
         configured=stored is not None,
         hint=stored.hint if stored else None,
+        updated_at=stored.updated_at if stored else None,
         running=_running(jobs),
     )
 
@@ -61,6 +62,7 @@ async def _github_status(service: CredentialService, jobs: SyncJobRunner) -> Git
         configured=stored is not None,
         owner=stored.owner if stored else None,
         hint=stored.hint if stored else None,
+        updated_at=stored.updated_at if stored else None,
         running=_running(jobs),
     )
 
@@ -71,6 +73,8 @@ async def _datadog_status(service: CredentialService, jobs: SyncJobRunner) -> Da
         configured=stored is not None,
         site=stored.site if stored else None,
         hint=stored.hint if stored else None,
+        application_key_hint=stored.application_key_hint if stored else None,
+        updated_at=stored.updated_at if stored else None,
         running=_running(jobs),
     )
 
@@ -81,6 +85,7 @@ async def _openrouter_status(service: CredentialService) -> OpenRouterStatusRead
         configured=stored is not None,
         model=(stored.model if stored else None) or DEFAULT_ADVISOR_MODEL,
         hint=stored.hint if stored else None,
+        updated_at=stored.updated_at if stored else None,
     )
 
 

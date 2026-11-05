@@ -67,7 +67,7 @@ function GitHubCredentials({ status }: { status: GitHubStatus }) {
       integration="github"
       label="GitHub"
       fields={[
-        { name: "token", label: "GitHub token", secret: true },
+        { name: "token", label: "GitHub token", secret: true, stored: status.hint },
         { name: "owner", label: "Owner (organization or user)" },
       ]}
       initial={{ owner: status.owner ?? "" }}

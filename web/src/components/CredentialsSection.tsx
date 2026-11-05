@@ -1,12 +1,25 @@
-import { Alert, Button, Flex, Form, Input, Popconfirm, Select, Typography } from "antd";
-import { useState, type ReactNode } from "react";
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Flex,
+  Form,
+  Input,
+  Popconfirm,
+  Select,
+  Typography,
+} from "antd";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useRemoveCredentials, useSaveCredentials, type Integration } from "../api/connectors";
+import { formatDateTime, formatRelative } from "../lib/dates";
 
 interface CredentialField {
   name: string;
   label: string;
   secret?: boolean;
+  /** A secret field's stored value as its hint ("…" plus its last 4 characters). */
+  stored?: string | null;
   /** A note under the field. */
   help?: string;
   /** Renders a Select over these values instead of a text input. */
@@ -14,6 +27,55 @@ interface CredentialField {
 }
 
 type Values = Record<string, string>;
+
+/** A hint of "…" alone: the key is too short to show any of it (`_MIN_HINT_LENGTH`, app/domain/credentials/entities.py). */
+function StoredHint({ hint }: { hint: string | null | undefined }) {
+  return (
+    <span>
+      <Typography.Text className="fig">{hint ?? "…"}</Typography.Text>
+      {hint === "…" && <Typography.Text type="secondary"> (key too short to show)</Typography.Text>}
+    </span>
+  );
+}
+
+/** Re-renders the caller once a minute, so a relative time stays current. */
+function useMinuteTick() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+}
+
+/** Which key is stored (its tail only) and when it was entered. */
+function StoredCredential({
+  fields,
+  updatedAt,
+}: {
+  fields: CredentialField[];
+  updatedAt: string | null;
+}) {
+  useMinuteTick();
+  const keys = fields
+    .filter((field) => field.secret)
+    .map((field) => ({
+      key: field.name,
+      // Not the bare field label: the empty input below carries that one.
+      label: `Stored ${field.label}`,
+      children: <StoredHint hint={field.stored} />,
+    }));
+  const saved = updatedAt
+    ? [
+        {
+          key: "saved",
+          // Not "Saved" or "Key saved": those are the form's confirmations.
+          label: keys.length > 1 ? "Keys entered" : "Key entered",
+          children: <span title={formatDateTime(updatedAt)}>{formatRelative(updatedAt)}</span>,
+        },
+      ]
+    : [];
+  return <Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[...keys, ...saved]} />;
+}
 
 /** A stored secret with settings beside it may be left blank: the server keeps it. */
 function secretPlaceholder(configured: boolean, keepable: boolean) {
@@ -117,7 +179,7 @@ export function CredentialsSection({
   label: string;
   fields: CredentialField[];
   initial: Values;
-  status: { configured: boolean; hint: string | null };
+  status: { configured: boolean; hint: string | null; updated_at: string | null };
   /** False when the server needs every secret on each save (Datadog). */
   keepSecrets?: boolean;
 }) {
@@ -129,6 +191,7 @@ export function CredentialsSection({
   const hasSettings = fields.some((field) => !field.secret);
   return (
     <Flex vertical gap="middle">
+      {status.configured && <StoredCredential fields={fields} updatedAt={status.updated_at} />}
       {/* Keyed so every save or removal resets the fields and empties the secret ones,
           even when the new key's hint matches the old one's. */}
       <CredentialsForm

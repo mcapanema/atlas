@@ -15,6 +15,20 @@ def test_short_secret_hides_its_hint() -> None:
     assert Credential(Integration.LINEAR, "short_key").hint == "…"
 
 
+def test_application_key_hint_is_its_last_four_characters() -> None:
+    credential = Credential(
+        Integration.DATADOG,
+        "dd_api_key_0000aaaa",
+        application_key="dd_app_key_0000bbbb",
+        site="datadoghq.com",
+    )
+    assert (credential.hint, credential.application_key_hint) == ("…aaaa", "…bbbb")
+
+
+def test_application_key_hint_is_none_without_an_application_key() -> None:
+    assert Credential(Integration.LINEAR, "lin_api_abcd1234").application_key_hint is None
+
+
 @pytest.mark.parametrize("secret", ["", "   "])
 def test_blank_secret_is_rejected(secret: str) -> None:
     with pytest.raises(ValueError, match="secret"):

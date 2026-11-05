@@ -29,14 +29,21 @@ class CredentialService:
         owner: str | None = None,
         model: str | None = None,
     ) -> None:
-        """Save the credential; a None secret keeps the stored one, checked again like a new one."""
+        """Save the credential; a None secret keeps the stored one, checked again like a new one.
+
+        A kept secret keeps its `updated_at` too: that time says when the key was entered.
+        """
         if secret is None:
             stored = await self._repository.get(integration)
             if stored is None:
                 raise NoStoredCredentialError(
                     f"No {integration.label} key is stored yet; enter one"
                 )
-            secret = stored.secret
+            kept = Credential(
+                integration, stored.secret, owner=owner, model=model, updated_at=stored.updated_at
+            )
+            await self.save(kept)
+            return
         await self.save(Credential(integration, secret, owner=owner, model=model))
 
     async def remove(self, integration: Integration) -> None:

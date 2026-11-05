@@ -23,7 +23,7 @@ from app.domain.sync.source import (
     SourceWorkItem,
 )
 from app.domain.work_items.entities import WorkItemType
-from tests.api.helpers import create_org_and_team, settle, store_credential
+from tests.api.helpers import create_org_and_team, settle, store_credential, stored_status
 from tests.fakes import FakeDataSource
 
 
@@ -94,14 +94,19 @@ async def test_status_reports_unconfigured(client: AsyncClient) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False, "hint": None, "running": None}
+    assert response.json() == {
+        "configured": False,
+        "hint": None,
+        "updated_at": None,
+        "running": None,
+    }
 
 
 async def test_status_reports_configured(client: AsyncClient, linear_configured: None) -> None:
     response = await client.get("/api/connectors/linear")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": True, "hint": "…1234", "running": None}
+    assert stored_status(response.json()) == {"configured": True, "hint": "…1234", "running": None}
 
 
 async def test_sync_returns_409_when_unconfigured(client: AsyncClient) -> None:

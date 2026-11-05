@@ -144,3 +144,11 @@ async def remove_credential(
     async with sessionmaker() as session:
         await SqlAlchemyCredentialRepository(session, cipher).delete(integration)
         await session.commit()
+
+
+def stored_status(body: dict[str, object]) -> dict[str, object]:
+    """A configured connector status without its save time, after checking that time is aware."""
+    saved = body.pop("updated_at")
+    assert isinstance(saved, str)
+    assert datetime.fromisoformat(saved).tzinfo is not None
+    return body

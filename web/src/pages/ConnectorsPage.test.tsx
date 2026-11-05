@@ -36,10 +36,37 @@ function succeededJob() {
   );
 }
 
+const THREE_DAYS_AGO = new Date(Date.now() - 3 * 24 * 3600_000).toISOString();
+
 const OUTCOME = "Updated 1 team · 2 projects · 3 work items · 42 events · 9 work items removed";
+
+const GITHUB = {
+  configured: true,
+  owner: "acme",
+  hint: "…abcd",
+  updated_at: THREE_DAYS_AGO,
+  running: null,
+};
+const DATADOG = {
+  configured: true,
+  site: "datadoghq.com",
+  hint: "…aaaa",
+  application_key_hint: "…bbbb",
+  updated_at: THREE_DAYS_AGO,
+  running: null,
+};
+
+/** Configured GitHub and Datadog: their status, credentials save and empty tables. */
+function codeHostResponse(url: string): Response | undefined {
+  if (url.startsWith("/api/connectors/github")) return jsonResponse(GITHUB);
+  if (url.startsWith("/api/connectors/datadog")) return jsonResponse(DATADOG);
+  if (url.startsWith("/api/codebases") || url === "/api/teams") return jsonResponse([]);
+  return undefined;
+}
 
 function mockApi({
   configured,
+  codeHosts = false,
   running = false,
   syncPolls = [],
   organizations = [ACME],
@@ -51,6 +78,8 @@ function mockApi({
   putResponse,
   calls = [],
 }: {
+  /** GitHub and Datadog configured (default: GitHub unconfigured, Datadog unanswered). */
+  codeHosts?: boolean;
   githubRunning?: object | null;
   hint?: string | null;
   /** What PUT …/linear/credentials answers; default: stores the key. */
@@ -68,26 +97,37 @@ function mockApi({
   scheduleAfterSync?: object | null;
 }) {
   let synced = false;
-  let linear = { configured, hint };
+  let linear = { configured, hint, updated_at: configured ? THREE_DAYS_AGO : null };
   const polls = syncPolls.length > 0 ? [...syncPolls] : [succeededJob()];
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
+    const codeHost = codeHosts ? codeHostResponse(url) : undefined;
+    if (codeHost) return codeHost;
     if (url === "/api/connectors/linear")
       return statusPending
         ? new Promise<Response>(() => {})
         : jsonResponse({ ...linear, running: running ? job("running", "auto") : githubRunning });
     if (url === "/api/connectors/linear/credentials") {
       calls.push(`${init?.method} ${url} ${(init?.body as string | undefined) ?? ""}`.trim());
-      if (init?.method === "DELETE") linear = { configured: false, hint: null };
+      if (init?.method === "DELETE") linear = { configured: false, hint: null, updated_at: null };
       else if (putResponse) return putResponse;
       else {
         const { api_key } = JSON.parse(init?.body as string) as { api_key: string };
-        linear = { configured: true, hint: `…${api_key.slice(-4)}` };
+        linear = {
+          configured: true,
+          hint: `…${api_key.slice(-4)}`,
+          updated_at: new Date().toISOString(),
+        };
       }
       return jsonResponse({ ...linear, running: null });
     }
     if (url === "/api/connectors/openrouter")
-      return jsonResponse({ configured: true, model: "anthropic/claude-sonnet-5", hint: "…or00" });
+      return jsonResponse({
+        configured: true,
+        model: "anthropic/claude-sonnet-5",
+        hint: "…or00",
+        updated_at: THREE_DAYS_AGO,
+      });
     if (url === "/api/connectors/github")
       return jsonResponse({ configured: false, owner: null, running: githubRunning });
     if (url === "/api/organizations")
@@ -138,7 +178,8 @@ describe("ConnectorsPage", () => {
     fireEvent.change(field, { target: { value: "lin_api_new1" } });
     fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
 
-    expect(await screen.findByText("Configured · …new1")).toBeInTheDocument();
+    expect(await within(linearCard()).findByText("…new1")).toBeInTheDocument();
+    expect(within(linearCard()).getByText("Configured")).toBeInTheDocument();
     expect(calls).toEqual(['PUT /api/connectors/linear/credentials {"api_key":"lin_api_new1"}']);
     expect(screen.getByLabelText("Linear API key")).toHaveValue("");
     expect(screen.getByText("Key saved")).toBeInTheDocument();
@@ -170,6 +211,23 @@ describe("ConnectorsPage", () => {
 
     expect(await within(linearCard()).findByText("Not configured")).toBeInTheDocument();
     expect(calls).toEqual(["DELETE /api/connectors/linear/credentials"]);
+    expect(within(linearCard()).queryByText("…abcd")).not.toBeInTheDocument();
+    expect(within(linearCard()).queryByText("Key entered")).not.toBeInTheDocument();
+  });
+
+  it("shows the new save time when a key with the same ending replaces the stored one", async () => {
+    mockApi({ configured: true, hint: "…abcd" });
+
+    renderWithClient(<ConnectorsPage />);
+    expect(await within(linearCard()).findByText("3 days ago")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Linear API key"), {
+      target: { value: "lin_api_other_abcd" },
+    });
+    fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
+
+    expect(await within(linearCard()).findByText("a few seconds ago")).toBeInTheDocument();
+    expect(within(linearCard()).getByText("Key entered")).toBeInTheDocument();
+    expect(within(linearCard()).getByText("…abcd")).toBeInTheDocument();
   });
 
   it("never shows the stored key", async () => {
@@ -188,7 +246,7 @@ describe("ConnectorsPage", () => {
     renderWithClient(<ConnectorsPage />);
 
     expect(await screen.findByText("AI advisor (OpenRouter)")).toBeInTheDocument();
-    expect(await screen.findByText("Configured · …or00")).toBeInTheDocument();
+    expect(await screen.findByText("…or00")).toBeInTheDocument();
   });
 
   it("shows configured status and the sync outcome in one line", async () => {
@@ -196,7 +254,7 @@ describe("ConnectorsPage", () => {
 
     renderWithClient(<ConnectorsPage />);
 
-    expect(await screen.findByText("Configured · …abcd")).toBeInTheDocument();
+    expect(await within(linearCard()).findByText("…abcd")).toBeInTheDocument();
     const button = await screen.findByRole("button", { name: /Sync now/ });
     await waitFor(() => expect(button).toBeEnabled());
 
@@ -263,6 +321,25 @@ describe("ConnectorsPage", () => {
     expect(screen.queryByText(/Sync now shows its result/)).not.toBeInTheDocument();
   });
 
+  it("renders each connector card once, also after the page updates", async () => {
+    mockApi({ configured: true });
+
+    const { container } = renderWithClient(<ConnectorsPage />);
+    await screen.findByRole("combobox", { name: "Organization" });
+    await screen.findByText("Auto sync");
+    // A saved key refetches the statuses and renders the cards again.
+    fireEvent.change(screen.getByLabelText("Linear API key"), {
+      target: { value: "lin_api_new1" },
+    });
+    fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
+    await screen.findByText("Key saved");
+
+    const titles = [...container.querySelectorAll(".ant-card-head-title")].map(
+      (title) => title.textContent,
+    );
+    expect(titles).toEqual(["Linear", "GitHub", "Datadog", "Auto sync", "AI advisor (OpenRouter)"]);
+  });
+
   it("hides the running-sync hint once this page's own sync has finished", async () => {
     mockApi({ configured: true, running: true });
 
@@ -303,6 +380,36 @@ describe("ConnectorsPage", () => {
     // Globex has no schedule: wait for its form, not the loading skeleton.
     expect(await screen.findByText("Not scheduled")).toBeInTheDocument();
     expect(screen.queryByText("Schedule saved")).not.toBeInTheDocument();
+  });
+
+  it("does not carry a GitHub or Datadog save message over to another organization", async () => {
+    mockApi({ configured: true, organizations: [ACME, GLOBEX], codeHosts: true });
+    const card = (title: string) =>
+      screen
+        .getByText(title, { selector: ".ant-card-head-title" })
+        .closest(".ant-card") as HTMLElement;
+
+    renderWithClient(<ConnectorsPage />);
+    await screen.findByRole("combobox", { name: "Organization" });
+    // GitHub keeps its stored token; Datadog needs both keys on every save.
+    fireEvent.click(await within(card("GitHub")).findByRole("button", { name: "Save" }));
+    expect(await within(card("GitHub")).findByText("Saved")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Datadog API key"), {
+      target: { value: "dd_api_key_0000aaaa" },
+    });
+    fireEvent.change(screen.getByLabelText("Application key"), {
+      target: { value: "dd_app_key_0000bbbb" },
+    });
+    fireEvent.click(within(card("Datadog")).getByRole("button", { name: "Save" }));
+    expect(await within(card("Datadog")).findByText("Saved")).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Organization" }));
+    fireEvent.click(await screen.findByTitle("Globex"));
+
+    await waitFor(() =>
+      expect(within(card("GitHub")).queryByText("Saved")).not.toBeInTheDocument(),
+    );
+    expect(within(card("Datadog")).queryByText("Saved")).not.toBeInTheDocument();
   });
 
   it("warns once, at page level, and disables sync when not configured", async () => {
