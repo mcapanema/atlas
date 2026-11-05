@@ -30,6 +30,12 @@ describe("CredentialsSection", () => {
     expect(screen.getByText("2 hours ago")).toBeInTheDocument();
   });
 
+  it("labels the stored key apart from the field that replaces it", () => {
+    renderSection();
+
+    expect(screen.getByText("Stored Linear API key")).toBeInTheDocument();
+  });
+
   it("says a short key is stored even when no characters can show", () => {
     renderSection({ stored: "…" });
 

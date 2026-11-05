@@ -50,7 +50,8 @@ function StoredCredential({
     .filter((field) => field.secret)
     .map((field) => ({
       key: field.name,
-      label: field.label,
+      // Not the bare field label: the empty input below carries that one.
+      label: `Stored ${field.label}`,
       children: <StoredHint hint={field.stored} />,
     }));
   const saved = updatedAt
