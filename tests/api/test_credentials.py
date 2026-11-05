@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ from app.domain.credentials.port import CredentialCheckError
 from app.domain.sync.port import DataSourceError
 from app.infrastructure.connectors.github.client import GITHUB_GRAPHQL_URL
 from app.infrastructure.credential_checks import ProviderCredentialVerifier
+from tests.api.helpers import stored_status
 from tests.fakes import FakeCredentialVerifier
 
 
@@ -28,7 +30,7 @@ async def test_put_linear_credentials_strips_and_reports_hint(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"configured": True, "hint": "…1234", "running": None}
+    assert stored_status(response.json()) == {"configured": True, "hint": "…1234", "running": None}
     assert verifier.verified[0].secret == "lin_api_abcd1234"
     status = await client.get("/api/connectors/linear")
     assert status.json()["hint"] == "…1234"
@@ -96,14 +98,20 @@ async def test_github_credentials_need_an_owner(
         json={"token": "ghp_0000000abcd", "owner": " acme "},
     )
 
-    assert response.json() == {
+    assert stored_status(response.json()) == {
         "configured": True,
         "owner": "acme",
         "hint": "…abcd",
         "running": None,
     }
     deleted = await client.delete("/api/connectors/github/credentials")
-    assert deleted.json() == {"configured": False, "owner": None, "hint": None, "running": None}
+    assert deleted.json() == {
+        "configured": False,
+        "owner": None,
+        "hint": None,
+        "updated_at": None,
+        "running": None,
+    }
 
 
 async def test_openrouter_status_defaults_the_model(
@@ -114,6 +122,7 @@ async def test_openrouter_status_defaults_the_model(
         "configured": False,
         "model": "anthropic/claude-sonnet-5",
         "hint": None,
+        "updated_at": None,
     }
 
     await client.put(
@@ -121,7 +130,7 @@ async def test_openrouter_status_defaults_the_model(
         json={"api_key": "sk-or-v1-xxxx9876", "model": "openai/gpt-5"},
     )
 
-    assert (await client.get("/api/connectors/openrouter")).json() == {
+    assert stored_status((await client.get("/api/connectors/openrouter")).json()) == {
         "configured": True,
         "model": "openai/gpt-5",
         "hint": "…9876",
@@ -141,7 +150,7 @@ async def test_github_owner_changes_without_the_token(
     response = await client.put("/api/connectors/github/credentials", json={"owner": "globex"})
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert stored_status(response.json()) == {
         "configured": True,
         "owner": "globex",
         "hint": "…abcd",
@@ -161,7 +170,11 @@ async def test_openrouter_model_changes_without_the_key(
         "/api/connectors/openrouter/credentials", json={"model": "openai/gpt-5"}
     )
 
-    assert response.json() == {"configured": True, "model": "openai/gpt-5", "hint": "…9876"}
+    assert stored_status(response.json()) == {
+        "configured": True,
+        "model": "openai/gpt-5",
+        "hint": "…9876",
+    }
 
 
 async def test_kept_github_token_rejected_for_a_new_owner_keeps_the_old_one(
@@ -225,10 +238,11 @@ async def test_put_datadog_credentials_stores_and_reports_status(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    assert stored_status(response.json()) == {
         "configured": True,
         "site": "datadoghq.eu",
         "hint": "…1234",
+        "application_key_hint": "…cret",
         "running": None,
     }
     assert "dd-app-secret" not in response.text
@@ -237,7 +251,14 @@ async def test_put_datadog_credentials_stores_and_reports_status(
     assert status.json()["site"] == "datadoghq.eu"
     assert "dd-app-secret" not in status.text
     deleted = await client.delete("/api/connectors/datadog/credentials")
-    assert deleted.json() == {"configured": False, "site": None, "hint": None, "running": None}
+    assert deleted.json() == {
+        "configured": False,
+        "site": None,
+        "hint": None,
+        "application_key_hint": None,
+        "updated_at": None,
+        "running": None,
+    }
 
 
 async def test_put_datadog_credentials_rejects_unknown_site(
@@ -261,3 +282,31 @@ async def test_put_datadog_credentials_needs_both_keys(
     )
 
     assert response.status_code == 422
+
+
+async def test_status_reports_when_the_key_was_saved(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    await client.put("/api/connectors/linear/credentials", json={"api_key": "lin_api_abcd1234"})
+
+    status = (await client.get("/api/connectors/linear")).json()
+
+    assert datetime.fromisoformat(status["updated_at"]).tzinfo is not None
+
+
+async def test_datadog_status_hints_both_keys_and_hides_them(
+    client: AsyncClient, verifier: FakeCredentialVerifier
+) -> None:
+    await client.put(
+        "/api/connectors/datadog/credentials",
+        json={
+            "api_key": "dd_api_key_0000aaaa",
+            "application_key": "dd_app_key_0000bbbb",
+            "site": "datadoghq.com",
+        },
+    )
+
+    status = await client.get("/api/connectors/datadog")
+
+    assert (status.json()["hint"], status.json()["application_key_hint"]) == ("…aaaa", "…bbbb")
+    assert "dd_app_key_0000bbbb" not in status.text

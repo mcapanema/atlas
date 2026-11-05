@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.api.deps import GITHUB_NOT_CONFIGURED, get_code_host_source, get_delivery_data_source
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.sync.source import SourceCodebase, SourceTeam
-from tests.api.helpers import settle, store_credential
+from tests.api.helpers import settle, store_credential, stored_status
 from tests.fakes import FakeDataSource, InMemoryCodeHostSource
 
 
@@ -41,7 +41,13 @@ async def test_status_unconfigured_without_credentials(rules_client: AsyncClient
     response = await rules_client.get("/api/connectors/github")
 
     assert response.status_code == 200
-    assert response.json() == {"configured": False, "owner": None, "hint": None, "running": None}
+    assert response.json() == {
+        "configured": False,
+        "owner": None,
+        "hint": None,
+        "updated_at": None,
+        "running": None,
+    }
 
 
 async def test_status_reports_configured_with_owner(
@@ -49,7 +55,7 @@ async def test_status_reports_configured_with_owner(
 ) -> None:
     response = await rules_client.get("/api/connectors/github")
 
-    assert response.json() == {
+    assert stored_status(response.json()) == {
         "configured": True,
         "owner": "acme",
         "hint": "…1234",

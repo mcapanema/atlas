@@ -50,7 +50,8 @@ file `ATLAS_SECRET_KEY_FILE`). `CredentialService`
 (`app/application/credentials/service.py`) verifies a credential before it
 saves it. The API is write-only — `PUT` and `DELETE`
 `/api/connectors/{linear|github|openrouter|datadog}/credentials` — and status
-responses carry a `hint`, never the secret. A credential that cannot be
+responses carry a `hint` (Datadog's also an `application_key_hint`) and the
+`updated_at` of the save, never the secret. A credential that cannot be
 decrypted reads as not configured and logs a warning.
 
 An Organization also owns Codebases (`app/domain/codebases/`, ADR-0024): a

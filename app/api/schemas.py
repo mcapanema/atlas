@@ -236,34 +236,38 @@ class SyncJobRead(BaseModel):
         )
 
 
-class LinearStatusRead(IntegrationStatusRead):
+class CredentialStatusRead(IntegrationStatusRead):
     # The last characters of the stored key; None while unset.
     hint: str | None
+    # When the stored credential was last saved; None while unset.
+    updated_at: datetime | None
+
+
+class LinearStatusRead(CredentialStatusRead):
     # The sync job running now, manual or automatic; a new request either
     # gets it back (it covers the request) or a 409.
     running: SyncJobRead | None
 
 
-class GitHubStatusRead(IntegrationStatusRead):
+class GitHubStatusRead(CredentialStatusRead):
     # The configured organization or user login; None while unset.
     owner: str | None
-    hint: str | None
     # The sync job running now, of any kind; as on LinearStatusRead.
     running: SyncJobRead | None
 
 
-class DatadogStatusRead(IntegrationStatusRead):
+class DatadogStatusRead(CredentialStatusRead):
     # The configured Datadog site; None while unset.
     site: str | None
-    hint: str | None
+    # The last characters of the stored application key; None while unset.
+    application_key_hint: str | None
     # The sync job running now, of any kind; as on LinearStatusRead.
     running: SyncJobRead | None
 
 
-class OpenRouterStatusRead(IntegrationStatusRead):
+class OpenRouterStatusRead(CredentialStatusRead):
     # The stored advisor model, or the default while unconfigured.
     model: str
-    hint: str | None
 
 
 DEFAULT_ADVISOR_MODEL = "anthropic/claude-sonnet-5"
