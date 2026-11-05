@@ -79,8 +79,13 @@ function DatadogCredentials({ status }: { status: DatadogStatus }) {
       integration="datadog"
       label="Datadog"
       fields={[
-        { name: "api_key", label: "Datadog API key", secret: true },
-        { name: "application_key", label: "Application key", secret: true },
+        { name: "api_key", label: "Datadog API key", secret: true, stored: status.hint },
+        {
+          name: "application_key",
+          label: "Application key",
+          secret: true,
+          stored: status.application_key_hint,
+        },
         { name: "site", label: "Site", options: SITES },
       ]}
       initial={{ site: status.site ?? SITES[0].value }}

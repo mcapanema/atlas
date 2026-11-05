@@ -7,6 +7,7 @@ import { renderWithClient } from "../test/render";
 import { GitHubConnectorCard } from "./GitHubConnectorCard";
 
 const ORG = "11111111-1111-1111-1111-111111111111";
+const SAVED = "2026-11-01T12:00:00Z";
 
 const job = (state: string, extra: object = {}) => ({
   id: "job1",
@@ -40,7 +41,13 @@ function mockApi({
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = requestUrl(input);
     if (url === "/api/connectors/github")
-      return jsonResponse({ configured, owner: configured ? "acme" : null, hint: null, running });
+      return jsonResponse({
+        configured,
+        owner: configured ? "acme" : null,
+        hint: configured ? "…abcd" : null,
+        updated_at: configured ? SAVED : null,
+        running,
+      });
     if (url === "/api/connectors/github/credentials" && init?.method === "PUT")
       return (
         putResponse ??
@@ -60,6 +67,15 @@ afterEach(() => {
 });
 
 describe("GitHubConnectorCard", () => {
+  it("shows the owner in the badge and the stored token next to its field", async () => {
+    mockApi({ configured: true });
+
+    renderWithClient(<GitHubConnectorCard organizationId={ORG} />);
+
+    expect(await screen.findByText("Configured · acme")).toBeInTheDocument();
+    expect(screen.getByText("…abcd")).toHaveClass("fig");
+  });
+
   it("shows the setup alert while GitHub is unconfigured", async () => {
     mockApi({ configured: false });
 

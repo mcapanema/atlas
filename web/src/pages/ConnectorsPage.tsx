@@ -122,9 +122,10 @@ function LinearCard({
   loading: boolean;
 }) {
   const configured = status?.configured ?? false;
-  // A dot plus a word: the state never rides on color alone.
+  // A dot plus a word: the state never rides on color alone. The key's hint
+  // shows beside its field.
   const badge = configured ? (
-    <Badge status="success" text={`Configured · ${status?.hint ?? "…"}`} />
+    <Badge status="success" text="Configured" />
   ) : (
     <Badge status="default" text="Not configured" />
   );
@@ -142,7 +143,9 @@ function LinearCard({
           <CredentialsSection
             integration="linear"
             label="Linear"
-            fields={[{ name: "api_key", label: "Linear API key", secret: true }]}
+            fields={[
+              { name: "api_key", label: "Linear API key", secret: true, stored: status.hint },
+            ]}
             initial={{}}
             status={status}
           />

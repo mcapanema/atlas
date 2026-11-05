@@ -9,7 +9,12 @@ const MODEL = "anthropic/claude-sonnet-5";
 
 function mockApi({
   configured,
-  status = jsonResponse({ configured, model: MODEL, hint: configured ? "…or00" : null }),
+  status = jsonResponse({
+    configured,
+    model: MODEL,
+    hint: configured ? "…or00" : null,
+    updated_at: configured ? "2026-11-01T12:00:00Z" : null,
+  }),
   removeResponse = jsonResponse({ configured: false, model: MODEL, hint: null }),
   putResponses = [],
 }: {
@@ -190,7 +195,8 @@ describe("OpenRouterCard", () => {
 
     expect(await screen.findByText("Could not remove the OpenRouter key")).toBeInTheDocument();
     expect(screen.getByText("boom")).toBeInTheDocument();
-    expect(screen.getByText("Configured · …or00")).toBeInTheDocument();
+    expect(screen.getByText("Configured")).toBeInTheDocument();
+    expect(screen.getByText("…or00")).toBeInTheDocument();
   });
 
   it("shows an error instead of a badge when the status fails to load", async () => {

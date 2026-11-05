@@ -17,9 +17,10 @@ function SetupAlert() {
 export function OpenRouterCard() {
   const query = useOpenRouterStatus();
   const status = query.data;
-  // A dot plus a word: the state never rides on color alone.
+  // A dot plus a word: the state never rides on color alone. The key's hint
+  // shows beside its field.
   const badge = status?.configured ? (
-    <Badge status="success" text={`Configured · ${status.hint ?? "…"}`} />
+    <Badge status="success" text="Configured" />
   ) : (
     <Badge status="default" text="Not configured" />
   );
@@ -47,7 +48,12 @@ export function OpenRouterCard() {
             integration="openrouter"
             label="OpenRouter"
             fields={[
-              { name: "api_key", label: "OpenRouter API key", secret: true },
+              {
+                name: "api_key",
+                label: "OpenRouter API key",
+                secret: true,
+                stored: status.hint,
+              },
               {
                 name: "model",
                 label: "Model",

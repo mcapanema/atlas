@@ -45,7 +45,9 @@ function mockApi({ configured, running = null }: { configured: boolean; running?
       return jsonResponse({
         configured,
         site: configured ? "datadoghq.com" : null,
-        hint: configured ? "…p_x" : null,
+        hint: configured ? "…aaaa" : null,
+        application_key_hint: configured ? "…bbbb" : null,
+        updated_at: configured ? "2026-11-01T12:00:00Z" : null,
         running,
       });
     if (url === "/api/connectors/datadog/credentials" && init?.method === "PUT")
@@ -61,6 +63,16 @@ function mockApi({ configured, running = null }: { configured: boolean; running?
 afterEach(() => vi.restoreAllMocks());
 
 describe("DatadogConnectorCard", () => {
+  it("shows the site in the badge and both stored keys", async () => {
+    mockApi({ configured: true });
+
+    renderWithClient(<DatadogConnectorCard organizationId={ORG} />);
+
+    expect(await screen.findByText("Configured · datadoghq.com")).toBeInTheDocument();
+    expect(screen.getByText("…aaaa")).toHaveClass("fig");
+    expect(screen.getByText("…bbbb")).toHaveClass("fig");
+  });
+
   it("shows the setup alert and disables Sync Datadog while unconfigured", async () => {
     mockApi({ configured: false });
 
