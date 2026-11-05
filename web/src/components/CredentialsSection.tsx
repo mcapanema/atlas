@@ -9,7 +9,7 @@ import {
   Select,
   Typography,
 } from "antd";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useRemoveCredentials, useSaveCredentials, type Integration } from "../api/connectors";
 import { formatDateTime, formatRelative } from "../lib/dates";
@@ -28,7 +28,7 @@ interface CredentialField {
 
 type Values = Record<string, string>;
 
-/** A hint of "…" alone: the key is under 12 characters, so none of it shows. */
+/** A hint of "…" alone: the key is too short to show any of it (`_MIN_HINT_LENGTH`, app/domain/credentials/entities.py). */
 function StoredHint({ hint }: { hint: string | null | undefined }) {
   return (
     <span>
@@ -38,7 +38,16 @@ function StoredHint({ hint }: { hint: string | null | undefined }) {
   );
 }
 
-/** Which key is stored (its tail only) and when it was saved. */
+/** Re-renders the caller once a minute, so a relative time stays current. */
+function useMinuteTick() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+}
+
+/** Which key is stored (its tail only) and when it was entered. */
 function StoredCredential({
   fields,
   updatedAt,
@@ -46,6 +55,7 @@ function StoredCredential({
   fields: CredentialField[];
   updatedAt: string | null;
 }) {
+  useMinuteTick();
   const keys = fields
     .filter((field) => field.secret)
     .map((field) => ({
@@ -58,8 +68,8 @@ function StoredCredential({
     ? [
         {
           key: "saved",
-          // Not "Saved": that is the form's own confirmation after a save.
-          label: "Last saved",
+          // Not "Saved" or "Key saved": those are the form's confirmations.
+          label: "Key updated",
           children: <span title={formatDateTime(updatedAt)}>{formatRelative(updatedAt)}</span>,
         },
       ]

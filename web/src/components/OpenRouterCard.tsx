@@ -18,7 +18,7 @@ export function OpenRouterCard() {
   const query = useOpenRouterStatus();
   const status = query.data;
   // A dot plus a word: the state never rides on color alone. The key's hint
-  // shows beside its field.
+  // shows above the form.
   const badge = status?.configured ? (
     <Badge status="success" text="Configured" />
   ) : (

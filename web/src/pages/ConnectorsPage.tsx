@@ -123,7 +123,7 @@ function LinearCard({
 }) {
   const configured = status?.configured ?? false;
   // A dot plus a word: the state never rides on color alone. The key's hint
-  // shows beside its field.
+  // shows above the form.
   const badge = configured ? (
     <Badge status="success" text="Configured" />
   ) : (

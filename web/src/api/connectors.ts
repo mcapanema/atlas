@@ -7,7 +7,7 @@ export interface ConnectorStatus {
   configured: boolean;
   /** "…" plus the stored key's last 4 characters; null when unconfigured. */
   hint: string | null;
-  /** When the stored key was last saved; null when unconfigured. */
+  /** When the stored key was last entered; null when unconfigured. */
   updated_at: string | null;
   /** The sync job running right now, started by anyone. */
   running: SyncJob | null;
@@ -18,6 +18,7 @@ export interface OpenRouterStatus {
   /** The stored advisor model, or the default when unconfigured. */
   model: string;
   hint: string | null;
+  /** When the stored key was last entered; null when unconfigured. */
   updated_at: string | null;
 }
 

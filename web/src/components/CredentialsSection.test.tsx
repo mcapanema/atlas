@@ -1,5 +1,5 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithClient } from "../test/render";
 import { CredentialsSection } from "./CredentialsSection";
@@ -11,7 +11,7 @@ function renderSection({
   stored = "…y7ll",
   updatedAt = SAVED,
 }: { configured?: boolean; stored?: string | null; updatedAt?: string | null } = {}) {
-  renderWithClient(
+  return renderWithClient(
     <CredentialsSection
       integration="linear"
       label="Linear"
@@ -22,7 +22,25 @@ function renderSection({
   );
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
 describe("CredentialsSection", () => {
+  it("keeps the relative time current while the page stays open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { unmount } = renderSection({ updatedAt: new Date().toISOString() });
+    expect(screen.getByText("a few seconds ago")).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(2 * 60_000));
+
+    expect(screen.getByText("2 minutes ago")).toBeInTheDocument();
+    const clear = vi.spyOn(globalThis, "clearInterval");
+    unmount();
+    expect(clear).toHaveBeenCalled();
+  });
+
   it("shows which key is stored and when it was saved", () => {
     renderSection();
 
@@ -45,7 +63,7 @@ describe("CredentialsSection", () => {
   it("shows no stored key when none is configured", () => {
     renderSection({ configured: false, stored: null, updatedAt: null });
 
-    expect(screen.queryByText("Last saved")).not.toBeInTheDocument();
+    expect(screen.queryByText("Key updated")).not.toBeInTheDocument();
   });
 
   it("shows a missing stored hint as a bare ellipsis", () => {

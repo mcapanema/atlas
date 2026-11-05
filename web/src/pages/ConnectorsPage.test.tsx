@@ -183,7 +183,7 @@ describe("ConnectorsPage", () => {
     expect(await within(linearCard()).findByText("Not configured")).toBeInTheDocument();
     expect(calls).toEqual(["DELETE /api/connectors/linear/credentials"]);
     expect(within(linearCard()).queryByText("…abcd")).not.toBeInTheDocument();
-    expect(within(linearCard()).queryByText("Last saved")).not.toBeInTheDocument();
+    expect(within(linearCard()).queryByText("Key updated")).not.toBeInTheDocument();
   });
 
   it("shows the new save time when a key with the same ending replaces the stored one", async () => {
@@ -197,6 +197,7 @@ describe("ConnectorsPage", () => {
     fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
 
     expect(await within(linearCard()).findByText("a few seconds ago")).toBeInTheDocument();
+    expect(within(linearCard()).getByText("Key updated")).toBeInTheDocument();
     expect(within(linearCard()).getByText("…abcd")).toBeInTheDocument();
   });
 
