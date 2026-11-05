@@ -189,12 +189,13 @@ function ConnectorsWorkspace({
         organizationId={selectedOrgId}
         loading={loading}
       />
-      {/* Keyed: another organization's outcome must not carry over. */}
-      <GitHubConnectorCard key={selectedOrgId} organizationId={selectedOrgId} />
-      <DatadogConnectorCard key={selectedOrgId} organizationId={selectedOrgId} />
+      {/* Keyed: another organization's outcome must not carry over. Siblings
+          need distinct keys, or React keeps stale copies on the next render. */}
+      <GitHubConnectorCard key={`github:${selectedOrgId}`} organizationId={selectedOrgId} />
+      <DatadogConnectorCard key={`datadog:${selectedOrgId}`} organizationId={selectedOrgId} />
       {selectedOrgId && (
         // Keyed: another organization's save result must not carry over.
-        <AutoSyncCard key={selectedOrgId} organizationId={selectedOrgId} />
+        <AutoSyncCard key={`auto-sync:${selectedOrgId}`} organizationId={selectedOrgId} />
       )}
       <OpenRouterCard />
     </Flex>

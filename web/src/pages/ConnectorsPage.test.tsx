@@ -263,6 +263,25 @@ describe("ConnectorsPage", () => {
     expect(screen.queryByText(/Sync now shows its result/)).not.toBeInTheDocument();
   });
 
+  it("renders each connector card once, also after the page updates", async () => {
+    mockApi({ configured: true });
+
+    const { container } = renderWithClient(<ConnectorsPage />);
+    await screen.findByRole("combobox", { name: "Organization" });
+    await screen.findByText("Auto sync");
+    // A saved key refetches the statuses and renders the cards again.
+    fireEvent.change(screen.getByLabelText("Linear API key"), {
+      target: { value: "lin_api_new1" },
+    });
+    fireEvent.click(within(linearForm()).getByRole("button", { name: "Save key" }));
+    await screen.findByText("Key saved");
+
+    const titles = [...container.querySelectorAll(".ant-card-head-title")].map(
+      (title) => title.textContent,
+    );
+    expect(titles).toEqual(["Linear", "GitHub", "Datadog", "Auto sync", "AI advisor (OpenRouter)"]);
+  });
+
   it("hides the running-sync hint once this page's own sync has finished", async () => {
     mockApi({ configured: true, running: true });
 
