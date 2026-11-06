@@ -192,7 +192,9 @@ class MetricRules:
     # Open state types whose items count as forecast remaining.
     remaining_state_types: tuple[StateType, ...] = OPEN_STATE_TYPES
     # Label -> work-item type, first match wins (Linear has no type field).
-    type_labels: tuple[tuple[str, WorkItemType], ...] = ()
+    # The built-in list maps "bug", so the Bugs section works out of the box
+    # (ADR-0030); a workspace or team list replaces it whole.
+    type_labels: tuple[tuple[str, WorkItemType], ...] = (("bug", WorkItemType.BUG),)
     # Meetings: a retrospective covers the team's last sprint unless a
     # window is asked for. Changes no metric (MEETING_RULES).
     sprint_length_days: int = 14
@@ -239,6 +241,12 @@ class MetricRules:
     def is_incident_label(self, name: str) -> bool:
         """Whether a label named `name` marks an incident under these rules."""
         return _named(name, pattern=False, listed=self.incident_label_names)
+
+    def bug_labels(self) -> tuple[str, ...]:
+        """The type_labels labels that map to bug, in list order."""
+        return tuple(
+            label for label, work_type in self.type_labels if work_type is WorkItemType.BUG
+        )
 
     def type_of(self, item: WorkItem) -> WorkItemType:
         """The item's type: its first type_labels hit among its labels, else its stored type.

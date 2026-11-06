@@ -45,3 +45,6 @@ node_modules
 
 # Personal Claude Code memory (session tooling)
 CLAUDE.local.md
+
+# Local design documents (not committed)
+docs/designs/

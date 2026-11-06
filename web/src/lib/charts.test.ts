@@ -2,6 +2,7 @@ import { describe, expect, it, test } from "vitest";
 
 import { snapshotsFixture } from "../test/fixtures";
 import {
+  buildBugFlowOption,
   buildCfdOption,
   buildForecastOption,
   buildLeadTimeDistributionOption,
@@ -269,4 +270,63 @@ test("lead time trend passes through null percentiles for snapshots with no data
   const series = option.series as { data: (number | null)[] }[];
   expect(series[0].data).toEqual([null]);
   expect(series[1].data).toEqual([null]);
+});
+
+describe("buildBugFlowOption", () => {
+  const bugBuckets = [
+    { start: "2026-06-26T00:00:00Z", end: "2026-07-03T00:00:00Z", created: 4, completed: 2 },
+    { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", created: 1, completed: 3 },
+  ];
+
+  interface BugSeries extends Series {
+    type: string;
+    symbol?: string;
+    endLabel?: { show: boolean; formatter: string };
+  }
+
+  it("draws completed bugs as bars and created bugs as a line with symbols", () => {
+    const series = buildBugFlowOption(bugBuckets, 7).series as BugSeries[];
+
+    expect(series.map((s) => [s.name, s.type])).toEqual([
+      ["Completed", "bar"],
+      ["Created", "line"],
+    ]);
+    expect(series[0].data).toEqual([2, 3]);
+    expect(series[1].data).toEqual([4, 1]);
+    expect(series[1].symbol).toBe("circle");
+    expect(series[1].endLabel).toMatchObject({ show: true, formatter: "{a}" });
+  });
+
+  it("puts the legend below the plot and names the axis", () => {
+    const option = buildBugFlowOption(bugBuckets, 7, "dark");
+
+    expect(option.legend).toMatchObject({ bottom: 0 });
+    expect(option.yAxis).toMatchObject({ name: "bugs" });
+  });
+
+  it("names both counts and the bucket range in the axis tooltip", () => {
+    const tooltip = buildBugFlowOption(bugBuckets, 7).tooltip as {
+      trigger: string;
+      formatter: (p: { dataIndex: number }[]) => string;
+    };
+
+    expect(tooltip.trigger).toBe("axis");
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toBe(
+      "03-07-2026 – 10-07-2026<br/>1 created · 3 completed<br/>One bug can count in both series.",
+    );
+  });
+
+  it("names only the day for a daily bucket", () => {
+    const tooltip = buildBugFlowOption(bugBuckets, 1).tooltip as {
+      formatter: (p: { dataIndex: number }[]) => string;
+    };
+
+    expect(tooltip.formatter([{ dataIndex: 0 }])).toMatch(/^03-07-2026<br\/>/);
+  });
+
+  it("has empty series for no buckets", () => {
+    const series = buildBugFlowOption([], 7).series as BugSeries[];
+
+    expect(series.map((s) => s.data)).toEqual([[], []]);
+  });
 });

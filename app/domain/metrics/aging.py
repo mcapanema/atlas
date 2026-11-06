@@ -13,11 +13,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from app.domain.metric_rules.entities import DEFAULT_RULES
+from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cycle_time import cycle_times
 from app.domain.metrics.samples import FlowSample, in_progress
 from app.domain.metrics.stats import percentile
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import WorkItem, WorkItemType
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,8 @@ class AgingItem:
     blocked: bool = False
     # Past the median (P50) cycle time of the same aging history.
     over_median: bool = False
+    # The effective type under the item's team's rules (MetricRules.type_of).
+    type: WorkItemType = WorkItemType.TASK
 
 
 @dataclass(frozen=True)
@@ -82,18 +84,25 @@ def compute_aging_wip(
     now: datetime,
     aging_percentile: int = DEFAULT_RULES.aging_percentile,
     history_days: int = DEFAULT_RULES.aging_history_days,
+    stream_rules: Sequence[MetricRules] | None = None,
 ) -> AgingWip:
     """Age of every item in progress at `now` (started, not completed).
 
     The reference lines are `aging_reference` at the team percentile and at
     P50; over_percentile and over_median are False everywhere when nothing
-    completed in the aging history.
+    completed in the aging history. `stream_rules[i]` (the rules of
+    `items_with_samples[i]`) set each item's effective type; omitted, an
+    item keeps its stored type.
     """
+    if stream_rules and len(stream_rules) != len(items_with_samples):
+        raise ValueError(
+            f"stream_rules has {len(stream_rules)} entries for {len(items_with_samples)} items"
+        )
     samples = [sample for _, sample in items_with_samples]
     limit = aging_reference(samples, now=now, pct=aging_percentile, history_days=history_days)
     median = aging_reference(samples, now=now, pct=50, history_days=history_days)
     aging: list[AgingItem] = []
-    for item, sample in items_with_samples:
+    for index, (item, sample) in enumerate(items_with_samples):
         if not in_progress(sample, now) or sample.started_at is None:
             continue
         age = sample.elapsed(sample.started_at, now)
@@ -107,6 +116,7 @@ def compute_aging_wip(
                 assignee=item.assignee,
                 blocked=sample.blocked_now,
                 over_median=median is not None and age > median,
+                type=stream_rules[index].type_of(item) if stream_rules else item.type,
             )
         )
     aging.sort(key=lambda a: a.age, reverse=True)

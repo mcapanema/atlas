@@ -33,7 +33,9 @@ with `Project.team_id` only its home team; each Work Item
 accumulates immutable Events (state changes, assignments, blocks — including raw label and blocker changes and state types on transitions, ADR-0011). An Organization
 also owns People (`app/domain/people/`); a Work Item points at its assignee
 Person by `assignee_id`, and the shown name (the manager's display-name
-override, else the source name) resolves on load (ADR-0021). `GET
+override, else the source name) resolves on load (ADR-0021). A Work Item
+also stores its source priority (`WorkItemPriority`: urgent, high, medium,
+low, none), NULL while unknown (ADR-0030). `GET
 /api/people` and `PATCH /api/people/{id}` serve the People table on the
 Organizations page (`/organizations`), where display names are edited.
 Events are the source of truth everything analytical derives from. One pure
@@ -120,6 +122,17 @@ exception: it is generated in the background and stored (ADR-0023).
   `incident_source` rule: Linear incident-labelled items or Datadog
   incidents), and drops Datadog deployments that repeat a GitHub release
   (same commit SHA) so one release or outage counts once.
+  Bugs (`bugs.py`, ADR-0030) reads a team's samples for items whose
+  effective type is `bug` (the `type_labels` rule) over one window: bugs
+  created (by creation date; canceled-before-done bugs count nowhere) and
+  completed; new bugs per non-bug item completed (bugs left out of the
+  denominator); bug share (bugs completed ÷ all completed); created vs.
+  completed buckets on the throughput bucketing (`windows.bucketing`); and
+  bug lead time by priority (median lead time, plus bugs open at the window
+  end and the oldest one's age) in an "All bugs" row and one row per
+  priority. Its state (`ok`, `no_mapping`, `no_matches`) tells a missing
+  bug mapping from a mapping that matches no item. Bugs are not DORA
+  incidents.
   The VISION's Flow Velocity and Flow Load are throughput and WIP under
   Flow Framework names — deliberately not duplicated as separate metrics.
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
@@ -149,8 +162,8 @@ All three share one scope pipeline: `app/api/scope.py` validates the scope
 `ScopeSampleLoader` (`app/application/scope.py`) assembles work items +
 events once per request. Served from `GET /api/metrics`,
 `/api/metrics/history`, `/api/metrics/lead-time-distribution`,
-`/api/metrics/health`, `/api/metrics/dora` (team scope only; 422 for a
-project), `/api/forecasts`, and `/api/recommendations` (`POST` starts a
+`/api/metrics/health`, `/api/metrics/dora` and `/api/metrics/bugs` (team
+scope only; 422 for a project; neither applies the type filter), `/api/forecasts`, and `/api/recommendations` (`POST` starts a
 stored background run and answers 202 — 409 until the OpenRouter key is saved on the Connectors page,
 ADR-0005; `GET` reads the latest stored run for the same scope, persona and
 window, or `null`, with no key needed). `GET /api/metrics/overview`
@@ -183,8 +196,8 @@ scales, weights and evidence floor, timezone, working days, holidays, chart
 bucketing, forecast history and remaining, label → type mapping — is a field
 of `MetricRules` (`app/domain/metric_rules/entities.py`). Defaults are the
 previous built-in behavior, except the blocked sources (blocked-named
-states and listed labels only, ADR-0026), the health floor (ADR-0015) and durations counting Monday-to-Friday working days
-(ADR-0017).
+states and listed labels only, ADR-0026), the health floor (ADR-0015), durations counting Monday-to-Friday working days
+(ADR-0017), and the label `bug` mapping to the bug type (ADR-0030).
 `metric_rule_overrides` stores sparse override layers per organization
 (the workspace default) and per team; `MetricRulesResolver`
 (`app/application/metric_rules/resolver.py`) resolves built-in ⊕ workspace
@@ -292,8 +305,9 @@ of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events (named by the blocker's current identifier, and each sync renames
 stored ones, so a blocker moved to another team still pairs its add with
-its resolve), state types on transitions, and each issue's labels, parent and
-current assignee as a `SourcePerson` (Linear user id, name, email; a blank
+its resolve), state types on transitions, and each issue's labels, priority (Linear's
+0–4 mapped to `WorkItemPriority`; an unknown value is stored as NULL with a
+warning), parent and current assignee as a `SourcePerson` (Linear user id, name, email; a blank
 name reads as unassigned) — an email or handle Linear uses as the name is
 turned into "First Last" (ADR-0011); the team's metric rules decide at read
 time what counts as blocked (labels, workflow-state names, relations),

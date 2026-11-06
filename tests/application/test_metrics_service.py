@@ -9,7 +9,7 @@ from app.domain.metric_rules.entities import RuleOverrides
 from app.domain.metrics.samples import derive_flow_sample
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import WorkItem, WorkItemType
 from tests.fakes import (
     InMemoryEventRepository,
     InMemoryMetricRuleOverridesRepository,
@@ -430,3 +430,77 @@ async def test_history_is_dated_by_the_scope_teams_last_sync() -> None:
     by_project = await service.get_flow_history(project_id=project.id, now=NOW)
 
     assert (by_team.data_as_of, by_project.data_as_of) == (synced, synced)
+
+
+def _bug_service(
+    team: Team, items: list[WorkItem], events: list[Event], *, team_overrides: dict[str, object]
+) -> MetricsService:
+    overrides = RuleOverrides(organization_id=ORG, team_id=team.id, overrides=team_overrides)
+    return MetricsService(
+        InMemoryWorkItemRepository(items),
+        InMemoryEventRepository(events),
+        MetricRulesResolver(
+            InMemoryMetricRuleOverridesRepository([overrides]),
+            InMemoryTeamRepository([team]),
+            InMemoryProjectRepository(),
+        ),
+        teams=InMemoryTeamRepository([team]),
+    )
+
+
+async def test_bug_metrics_read_the_teams_type_labels() -> None:
+    team = Team(organization_id=ORG, name="Platform")
+    bug = WorkItem(team_id=team.id, title="Crash", labels=("Defeito",))
+    service = _bug_service(
+        team,
+        [bug],
+        [_event(bug, EventType.CREATED, 3)],
+        team_overrides={"type_labels": [{"label": "defeito", "type": "bug"}]},
+    )
+
+    metrics = await service.get_bug_metrics(team_id=team.id, window_days=30, now=NOW)
+
+    assert (metrics.state, metrics.created, metrics.bug_labels) == ("ok", 1, ("defeito",))
+
+
+async def test_bug_metrics_are_dated_by_the_newest_event_or_the_last_sync() -> None:
+    synced = NOW - timedelta(hours=5)
+    team = Team(organization_id=ORG, name="Platform", last_synced_at=synced)
+    bug = WorkItem(team_id=team.id, title="Crash", labels=("Bug",))
+
+    def created(recorded_hours_ago: int) -> Event:
+        return Event(
+            work_item_id=bug.id,
+            type=EventType.CREATED,
+            occurred_at=NOW - timedelta(days=3),
+            recorded_at=NOW - timedelta(hours=recorded_hours_ago),
+        )
+
+    by_event = await _bug_service(team, [bug], [created(1)], team_overrides={}).get_bug_metrics(
+        team_id=team.id, window_days=30, now=NOW
+    )
+    by_sync = await _bug_service(team, [bug], [created(24)], team_overrides={}).get_bug_metrics(
+        team_id=team.id, window_days=30, now=NOW
+    )
+
+    assert by_event.data_as_of == NOW - timedelta(hours=1)
+    assert by_sync.data_as_of == synced
+
+
+async def test_aging_wip_reads_the_effective_type() -> None:
+    team = Team(organization_id=ORG, name="Platform")
+    bug = WorkItem(team_id=team.id, title="Crash", labels=("Bug",))
+    task = _item(team.id)
+    events = [
+        event
+        for item in (bug, task)
+        for event in (_event(item, EventType.CREATED, 5), _event(item, EventType.STARTED, 4))
+    ]
+    service = MetricsService(
+        InMemoryWorkItemRepository([bug, task]), InMemoryEventRepository(events)
+    )
+
+    aging = await service.get_aging_wip(team_id=team.id, now=NOW)
+
+    types = {a.work_item_id: a.type for a in aging.items}
+    assert types == {bug.id: WorkItemType.BUG, task.id: WorkItemType.TASK}

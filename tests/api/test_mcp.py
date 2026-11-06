@@ -32,6 +32,7 @@ from app.domain.metrics.aging import AgingItem, AgingWip
 from app.domain.metrics.dora import DoraMetrics
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceTeam
+from app.domain.work_items.entities import WorkItemType
 from app.main import _RedactSecret, create_app
 from tests.api.helpers import (
     create_org_and_team,
@@ -496,6 +497,7 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 assignee="Ada Lovelace",
                 blocked=True,
                 over_median=reference is not None,
+                type=WorkItemType.BUG,
             ),
             AgingItem(
                 work_item_id=uuid4(),
@@ -531,12 +533,39 @@ def test_aging_json_rebuilds_the_domain_value(reference: timedelta | None) -> No
                 assignee=item.assignee,
                 blocked=item.blocked,
                 over_median=item.over_median,
+                type=item.type,
             )
             for item in domain.items
         ],
     ).model_dump(mode="json")
 
     assert _aging_from_json(wire) == domain
+
+
+def test_aging_json_without_a_type_reads_as_a_task() -> None:
+    wire = {
+        "now": "2026-10-09T12:00:00Z",
+        "cycle_time_percentile_seconds": None,
+        "cycle_time_median_seconds": None,
+        "percentile": 85,
+        "history_days": 90,
+        "items": [
+            {
+                "work_item_id": str(uuid4()),
+                "title": "Docs",
+                "state": "Review",
+                "age_seconds": 60.0,
+                "over_percentile": False,
+                "assignee": None,
+                "blocked": False,
+                "over_median": False,
+            }
+        ],
+    }
+
+    [item] = _aging_from_json(wire).items
+
+    assert item.type is WorkItemType.TASK
 
 
 async def test_dora_tool_renders_the_endpoint(

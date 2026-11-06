@@ -25,7 +25,30 @@ def test_new_rule_defaults_reproduce_todays_behavior() -> None:
     # ADR-0026: only explicit sources (states, listed labels) count by default.
     assert DEFAULT_RULES.blocked_by_relations is False
     assert DEFAULT_RULES.remaining_state_types == OPEN_STATE_TYPES
-    assert DEFAULT_RULES.type_labels == ()
+
+
+def test_type_labels_default_maps_bug() -> None:
+    # ADR-0030: the one default that differs from the original behavior.
+    assert DEFAULT_RULES.type_labels == (("bug", WorkItemType.BUG),)
+
+
+def test_a_type_labels_override_without_bug_drops_the_default() -> None:
+    rules = resolve_rules({"type_labels": [{"label": "Feature", "type": "story"}]})
+
+    assert rules.type_of(_item("Bug")) is WorkItemType.TASK
+    assert rules.bug_labels() == ()
+
+
+def test_bug_labels_lists_only_the_labels_mapped_to_bug() -> None:
+    rules = MetricRules(
+        type_labels=(
+            ("Feature", WorkItemType.STORY),
+            ("defeito", WorkItemType.BUG),
+            ("Bug", WorkItemType.BUG),
+        )
+    )
+
+    assert rules.bug_labels() == ("defeito", "Bug")
 
 
 def test_json_shaped_collections_normalize_to_tuples() -> None:
@@ -135,7 +158,8 @@ def test_type_of_takes_the_first_mapped_label_else_the_stored_type() -> None:
     assert rules.type_of(_item("Feature", "Bug")) is WorkItemType.BUG
     assert rules.type_of(_item("Feature")) is WorkItemType.STORY
     assert rules.type_of(_item("Chore")) is WorkItemType.TASK
-    assert DEFAULT_RULES.type_of(_item("Bug")) is WorkItemType.TASK
+    assert DEFAULT_RULES.type_of(_item("Bug")) is WorkItemType.BUG
+    assert DEFAULT_RULES.type_of(_item("Chore")) is WorkItemType.TASK
 
 
 def test_a_team_override_of_the_incident_source_resolves() -> None:

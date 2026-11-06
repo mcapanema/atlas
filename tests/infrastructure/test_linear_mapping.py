@@ -7,7 +7,8 @@ import pytest
 
 from app.domain.events.entities import EventType
 from app.domain.sync.source import SourcePerson
-from app.domain.work_items.entities import StateType
+from app.domain.work_items.entities import StateType, WorkItemPriority
+from app.infrastructure.connectors.linear import mapping
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
     map_history_entry,
@@ -666,3 +667,57 @@ def test_map_issue_without_identifier_has_no_key() -> None:
     node = {k: v for k, v in ISSUE_NODE.items() if k != "identifier"}
 
     assert map_issue(node, {}).key is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (0, WorkItemPriority.NONE),
+        (1, WorkItemPriority.URGENT),
+        (2, WorkItemPriority.HIGH),
+        (3, WorkItemPriority.MEDIUM),
+        (4, WorkItemPriority.LOW),
+        (2.0, WorkItemPriority.HIGH),
+        (None, None),
+    ],
+)
+def test_map_issue_maps_linear_priority(value: object, expected: WorkItemPriority | None) -> None:
+    assert map_issue({**ISSUE_NODE, "priority": value}).priority is expected
+
+
+def test_map_issue_without_priority_reads_unknown_and_does_not_warn(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mapping, "_warned_priorities", set())
+
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
+        item = map_issue(ISSUE_NODE)
+
+    assert item.priority is None
+    assert not caplog.records
+
+
+@pytest.mark.parametrize("value", [7, 2.5, True, "high", [1]])
+def test_map_issue_keeps_an_issue_with_an_unknown_priority(
+    value: object, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mapping, "_warned_priorities", set())
+
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
+        item = map_issue({**ISSUE_NODE, "priority": value})
+
+    assert item.external_id == ISSUE_NODE["id"]
+    assert item.priority is None
+    assert len(caplog.records) == 1
+
+
+def test_an_unknown_priority_warns_once_per_value(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mapping, "_warned_priorities", set())
+
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
+        map_issue({**ISSUE_NODE, "priority": 7})
+        map_issue({**ISSUE_NODE, "id": "i2", "priority": 7})
+
+    assert len(caplog.records) == 1

@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 
-import type { DailyFlowCount, DurationBin, ThroughputBucket } from "../lib/charts";
+import type { BugBucket, DailyFlowCount, DurationBin, ThroughputBucket } from "../lib/charts";
 import { apiFetch } from "./client";
 
-export type { DailyFlowCount, DurationBin, ThroughputBucket };
+export type { BugBucket, DailyFlowCount, DurationBin, ThroughputBucket };
 
 export interface DurationStats {
   p50_seconds: number;
@@ -115,6 +115,8 @@ export interface AgingItem {
   blocked: boolean;
   /** Past the median (P50) cycle time of the aging history. */
   over_median: boolean;
+  /** The work-item type under the team's type rules, e.g. "bug". */
+  type: string;
 }
 
 export interface AgingWip {
@@ -233,5 +235,55 @@ export function useDora(teamId: string | undefined, filters: MetricsFilters = {}
     queryKey: ["metrics", "dora", teamId, filters],
     enabled: params !== null,
     queryFn: () => apiFetch<DoraMetrics>(`/api/metrics/dora?${params}`),
+  });
+}
+
+/** Bugs fixed in the window (median lead time) and open at its end. */
+export interface FixStats {
+  fixed: number;
+  /** Null only when nothing was fixed. */
+  median_seconds: number | null;
+  open: number;
+  oldest_open_seconds: number | null;
+}
+
+export interface PriorityFix extends FixStats {
+  priority: "urgent" | "high" | "medium" | "low" | "none";
+}
+
+/** The Bugs section (ADR-0030); no_mapping and no_matches carry zeros and empty lists. */
+export interface BugMetrics {
+  state: "ok" | "no_mapping" | "no_matches";
+  /** The labels that map to the bug type, as stored. */
+  bug_labels: string[];
+  window_start: string;
+  window_end: string;
+  bucket_days: number;
+  buckets: BugBucket[];
+  created: number;
+  completed: number;
+  non_bug_completed: number;
+  all_completed: number;
+  /** New bugs per non-bug item completed; null when no non-bug item completed. */
+  per_item: number | null;
+  /** Bugs completed over all items completed; null when nothing completed. */
+  share: number | null;
+  min_sample: number;
+  all_bugs: FixStats;
+  /** Urgent, high, medium, low, none — always five rows in the ok state. */
+  priorities: PriorityFix[];
+  /** Bugs in the All bugs row whose priority is unknown. */
+  unknown_priority: number;
+  data_as_of: string | null;
+}
+
+/** Team scope only. The type filter never applies: it would remove one side of each ratio. */
+export function useBugMetrics(teamId: string | undefined, filters: MetricsFilters = {}) {
+  const params = { ...filters, types: undefined };
+  const search = teamId ? metricsParams({ teamId }, params) : null;
+  return useQuery({
+    queryKey: ["metrics", "bugs", teamId, params],
+    enabled: search !== null,
+    queryFn: () => apiFetch<BugMetrics>(`/api/metrics/bugs?${search}`),
   });
 }

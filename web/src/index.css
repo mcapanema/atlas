@@ -207,6 +207,31 @@ h5 {
 :root:not([data-theme="dark"]) .aging-blocked {
   color: color-mix(in srgb, var(--ant-color-warning-text) 75%, black);
 }
+/* The bug slot follows the blocked slot; a different shape, so not color alone. */
+.aging-bug-slot {
+  display: inline-flex;
+  justify-content: center;
+  width: 1em;
+}
+.aging-bug {
+  color: var(--ant-color-text-secondary);
+}
+.aging-bug:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+/* The Bugs section: ratios, then the chart beside the lead-time table. */
+.bugs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.bugs-section__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .health-badge {
   display: inline-flex;
   align-items: center;

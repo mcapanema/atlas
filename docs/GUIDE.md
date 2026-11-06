@@ -40,8 +40,12 @@ numbers. It never makes a number.
     The state with the most time is the bottleneck.
   - The four **DORA** metrics and their bands, if a repository is mapped to
     the team.
-  - Aging WIP: each item's owner, a stop icon on blocked items, and age
-    flags (> P50 / > P85).
+  - **Bugs**: new bugs per non-bug item completed, bug share, bugs created
+    vs. completed, and bug lead time by priority. An item is a bug when a
+    label that Metric rules maps to `bug` is on it (the default maps the
+    label `bug`).
+  - Aging WIP: each item's owner, a stop icon on blocked items, a bug icon
+    on bug items, and age flags (> P50 / > P85).
   - A Monte Carlo forecast of completion.
 
   **Sync team** gets new data from Linear for this team only.

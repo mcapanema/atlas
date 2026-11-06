@@ -158,6 +158,7 @@ export const agingWipFixture = {
       assignee: "Ada Lovelace",
       blocked: false,
       over_median: true,
+      type: "task",
     },
   ],
 };
@@ -243,6 +244,48 @@ export const doraFixture = {
   restore_band: "high",
 };
 
+const fixRow = (fixed: number, open: number) => ({
+  fixed,
+  median_seconds: fixed > 0 ? 172800 : null,
+  open,
+  oldest_open_seconds: open > 0 ? 432000 : null,
+});
+
+/** A `/api/metrics/bugs` body in the ok state; override fields per test. */
+export function bugMetricsFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    state: "ok",
+    bug_labels: ["bug"],
+    window_start: "2026-06-10T00:00:00Z",
+    window_end: "2026-07-10T00:00:00Z",
+    bucket_days: 7,
+    buckets: [
+      { start: "2026-06-26T00:00:00Z", end: "2026-07-03T00:00:00Z", created: 8, completed: 14 },
+      { start: "2026-07-03T00:00:00Z", end: "2026-07-10T00:00:00Z", created: 6, completed: 16 },
+    ],
+    // Consistent counts: 14 / 45 = 0.31 and 30 / 75 = 40%, neither of which
+    // collides with metricsFixture's rendered figures.
+    created: 14,
+    completed: 30,
+    non_bug_completed: 45,
+    all_completed: 75,
+    per_item: 0.31,
+    share: 0.4,
+    min_sample: 5,
+    all_bugs: fixRow(30, 6),
+    priorities: [
+      { priority: "urgent", ...fixRow(2, 1) },
+      { priority: "high", ...fixRow(20, 2) },
+      { priority: "medium", ...fixRow(8, 2) },
+      { priority: "low", ...fixRow(0, 0) },
+      { priority: "none", ...fixRow(0, 1) },
+    ],
+    unknown_priority: 0,
+    data_as_of: "2026-07-09T22:00:00Z",
+    ...overrides,
+  };
+}
+
 /** A `/api/metrics/overview` body built from the per-concept fixtures. */
 export function overviewFixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -280,6 +323,9 @@ export function mockMetricsFetch(extraRoutes: Record<string, unknown> = {}) {
     }
     if (url.startsWith("/api/metrics/dora")) {
       return Promise.resolve(jsonResponse(doraFixture));
+    }
+    if (url.startsWith("/api/metrics/bugs")) {
+      return Promise.resolve(jsonResponse(bugMetricsFixture()));
     }
     if (url.startsWith("/api/metrics/health")) {
       return Promise.resolve(jsonResponse(healthFixture));

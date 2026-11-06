@@ -11,7 +11,7 @@ from datetime import datetime
 from app.domain._time import require_aware
 from app.domain.codebases.entities import DeploymentStatus
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import StateType, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItemPriority, WorkItemType
 
 
 @dataclass(frozen=True)
@@ -76,6 +76,8 @@ class SourceWorkItem:
     assignee: SourcePerson | None = None
     # The item's human-readable key in the source, e.g. "OPS-123".
     key: str | None = None
+    # None when the source sent none or an unknown value.
+    priority: WorkItemPriority | None = None
 
 
 @dataclass(frozen=True)

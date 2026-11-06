@@ -84,6 +84,7 @@ def _aging_from_json(data: dict[str, Any]) -> AgingWip:
                 assignee=item.assignee,
                 blocked=item.blocked,
                 over_median=item.over_median,
+                type=item.type,
             )
             for item in dto.items
         ),
