@@ -244,5 +244,5 @@ async def test_labels_endpoint_and_new_read_fields(
     assert (item["state_type"], item["labels"], item["type"]) == (
         "unstarted",
         ["Bug", "Urgent"],
-        "task",
+        "bug",  # the built-in type_labels maps "bug" (ADR-0030)
     )

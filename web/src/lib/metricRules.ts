@@ -333,7 +333,7 @@ export const RULE_GROUPS: RuleGroup[] = [
       {
         name: "type_labels",
         label: "Type from labels",
-        help: "An item takes the type of the first mapped label it carries; otherwise it stays a task. Drives the type filter on every dashboard.",
+        help: 'An item takes the type of the first mapped label it carries; otherwise it stays a task. Drives the type filter on every dashboard. Items mapped to bug count in the Bugs section of the Team page. The built-in default maps the label "bug".',
         control: { kind: "typeLabels" },
       },
     ],
