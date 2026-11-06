@@ -18,7 +18,7 @@ from app.domain.sync.source import (
     SourceTeam,
     SourceWorkItem,
 )
-from app.domain.work_items.entities import StateType, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItemPriority, WorkItemType
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,41 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
         events=tuple(events),
         # .get: the field is optional — a node without it must not be dropped as malformed.
         url=node.get("url"),
+        priority=_priority(node.get("priority")),
     )
+
+
+# Linear's priority numbers. ponytail: only the current priority is stored, so
+# a bug escalated after its fix reads under its new priority. Upgrade path:
+# Linear history fromPriority / toPriority.
+_PRIORITIES = {
+    0: WorkItemPriority.NONE,
+    1: WorkItemPriority.URGENT,
+    2: WorkItemPriority.HIGH,
+    3: WorkItemPriority.MEDIUM,
+    4: WorkItemPriority.LOW,
+}
+# ponytail: warned once per value per process, as _warned_codes.
+_warned_priorities: set[str] = set()
+
+
+def _priority(value: object) -> WorkItemPriority | None:
+    """The domain priority of Linear's (Float) priority; None when absent or unknown."""
+    if value is None:
+        return None
+    priority = None
+    if isinstance(value, int | float) and not isinstance(value, bool) and value == int(value):
+        priority = _PRIORITIES.get(int(value))
+    if priority is None:
+        _warn_unknown_priority(value)
+    return priority
+
+
+def _warn_unknown_priority(value: object) -> None:
+    key = repr(value)
+    if key not in _warned_priorities:
+        _warned_priorities.add(key)
+        logger.warning("Ignoring unknown Linear priority %s", key)
 
 
 # Linear state types outside the shared StateType vocabulary, by meaning: a

@@ -70,6 +70,7 @@ query Issues($after: String, $filter: IssueFilter) {{
       title
       url
       assignee {{ id name email }}
+      priority
       createdAt
       completedAt
       canceledAt
