@@ -12,7 +12,7 @@ from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.cfd import DailyFlowCount, daily_flow_counts
 from app.domain.metrics.samples import FlowSample, derive_flow_sample
 from app.domain.metrics.throughput import ThroughputBucket, bucketed_throughput
-from app.domain.metrics.windows import CHART_WINDOW_DAYS
+from app.domain.metrics.windows import CHART_WINDOW_DAYS, bucketing
 
 
 @dataclass(frozen=True)
@@ -25,18 +25,6 @@ class FlowHistory:
     buckets: tuple[ThroughputBucket, ...]
     bucket_days: int
     data_as_of: datetime | None
-
-
-def _bucketing(window_days: int, daily_max_days: int) -> tuple[int, int]:
-    """(count, bucket_days) for the window — daily up to `daily_max_days`, else weekly.
-
-    Weekly count rounds up so the buckets cover the whole window (the oldest
-    is clipped to the window start); flooring dropped up to 6 days of
-    completions the Throughput tile still counted.
-    """
-    if window_days <= daily_max_days:
-        return window_days, 1
-    return -(-window_days // 7), 7
 
 
 def compute_flow_history(
@@ -70,7 +58,7 @@ def compute_flow_history(
     recorded = [event.recorded_at for stream in event_streams for event in stream]
     if synced_at is not None:
         recorded.append(synced_at)
-    count, bucket_days = _bucketing(window_days, rules.daily_bucket_max_days)
+    count, bucket_days = bucketing(window_days, rules.daily_bucket_max_days)
     return FlowHistory(
         window_start=window_start,
         window_end=now,
