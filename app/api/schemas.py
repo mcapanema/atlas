@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -23,8 +23,9 @@ from app.domain.auth.entities import MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH
 from app.domain.credentials.entities import DATADOG_SITES
 from app.domain.events.entities import EventType
 from app.domain.metric_rules.entities import DEFAULT_RULES
+from app.domain.metrics.bugs import BugMetrics, BugState, FixStats
 from app.domain.metrics.dora import DoraBand, DoraMetrics
-from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemType
+from app.domain.work_items.entities import DEFAULT_STATE, StateType, WorkItemPriority, WorkItemType
 
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
@@ -622,6 +623,8 @@ class AgingItemRead(BaseModel):
     assignee: str | None
     blocked: bool
     over_median: bool
+    # The effective type under the team's rules; older payloads read as task.
+    type: WorkItemType = WorkItemType.TASK
 
 
 class AgingWipRead(BaseModel):
@@ -652,6 +655,84 @@ class StateTimesRead(BaseModel):
     states: list[StateTimeRead]
     bottleneck: str | None
     bottleneck_team: str | None
+
+
+def _seconds(duration: timedelta | None) -> float | None:
+    return duration.total_seconds() if duration is not None else None
+
+
+class BugBucketRead(BaseModel):
+    start: datetime
+    end: datetime
+    created: int
+    completed: int
+
+
+class FixStatsRead(BaseModel):
+    fixed: int
+    median_seconds: float | None
+    open: int
+    oldest_open_seconds: float | None
+
+    @classmethod
+    def of(cls, stats: FixStats) -> "FixStatsRead":
+        return cls(
+            fixed=stats.fixed,
+            median_seconds=_seconds(stats.median),
+            open=stats.open,
+            oldest_open_seconds=_seconds(stats.oldest_open),
+        )
+
+
+class PriorityFixRead(FixStatsRead):
+    priority: WorkItemPriority
+
+
+class BugMetricsRead(BaseModel):
+    state: BugState
+    bug_labels: list[str]
+    window_start: datetime
+    window_end: datetime
+    bucket_days: int
+    buckets: list[BugBucketRead]
+    created: int
+    completed: int
+    non_bug_completed: int
+    all_completed: int
+    per_item: float | None
+    share: float | None
+    min_sample: int
+    all_bugs: FixStatsRead
+    priorities: list[PriorityFixRead]
+    unknown_priority: int
+    data_as_of: datetime | None
+
+    @classmethod
+    def of(cls, metrics: BugMetrics) -> "BugMetricsRead":
+        return cls(
+            state=metrics.state,
+            bug_labels=list(metrics.bug_labels),
+            window_start=metrics.window_start,
+            window_end=metrics.window_end,
+            bucket_days=metrics.bucket_days,
+            buckets=[
+                BugBucketRead.model_validate(b, from_attributes=True) for b in metrics.buckets
+            ],
+            created=metrics.created,
+            completed=metrics.completed,
+            non_bug_completed=metrics.non_bug_completed,
+            all_completed=metrics.all_completed,
+            per_item=metrics.per_item,
+            share=metrics.share,
+            min_sample=metrics.min_sample,
+            all_bugs=FixStatsRead.of(metrics.all_bugs),
+            priorities=[
+                PriorityFixRead(priority=priority, **FixStatsRead.of(stats).model_dump())
+                for priority, stats in metrics.priorities
+            ],
+            unknown_priority=metrics.unknown_priority,
+            data_as_of=metrics.data_as_of,
+        )
 
 
 class DoraMetricsRead(BaseModel):
