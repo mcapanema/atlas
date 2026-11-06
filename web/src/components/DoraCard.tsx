@@ -7,6 +7,7 @@ import { windowLabel } from "../lib/metricsFilters";
 import { formatSeconds } from "../lib/duration";
 import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { ChartCard } from "./ChartCard";
+import { SampleNote } from "./SampleNote";
 import { StatCard } from "./StatCard";
 
 const BAND_WORD: Record<DoraBand, string> = {
@@ -40,7 +41,11 @@ function Detail({
   children: ReactNode;
 }) {
   if (band === null) {
-    return <span className="dora-detail">{`Too few ${tooFew} (${sample} of ${min})`}</span>;
+    return (
+      <span className="dora-detail">
+        <SampleNote sample={sample} min={min} noun={tooFew} />
+      </span>
+    );
   }
   return (
     <span className="dora-detail">

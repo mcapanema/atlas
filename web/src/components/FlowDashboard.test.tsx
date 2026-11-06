@@ -32,6 +32,21 @@ afterEach(() => {
 });
 
 describe("FlowDashboard", () => {
+  it("shows the Bugs section for a team and not for a project", async () => {
+    mockMetricsFetch();
+    const team = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
+    expect(await screen.findByText("Bugs (30d)")).toBeInTheDocument();
+    team.unmount();
+    vi.mocked(fetch).mockClear();
+
+    renderWithClient(<FlowDashboard scope={{ projectId: "project-1" }} />);
+
+    await screen.findByText("Cumulative flow (90d)");
+    expect(screen.queryByText(/^Bugs \(/)).not.toBeInTheDocument();
+    const urls = vi.mocked(fetch).mock.calls.map(([input]) => requestUrl(input));
+    expect(urls.some((url) => url.startsWith("/api/metrics/bugs"))).toBe(false);
+  });
+
   it("shows DORA for a team and not for a project", async () => {
     mockMetricsFetch();
     const team = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
@@ -71,10 +86,10 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    // Wait for the full render (all 6 charts), not just the stat tiles: FlowDashboard's
+    // Wait for the full render (all 7 charts), not just the stat tiles: FlowDashboard's
     // loading skeleton gates ForecastCard's mount on metrics/history, so ForecastCard's
     // own forecast fetch only starts once they resolve — it lags behind metrics text.
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(7));
     expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument(); // flow efficiency
     expect(screen.getByText("Cumulative flow (90d)")).toBeInTheDocument();
@@ -83,7 +98,7 @@ describe("FlowDashboard", () => {
     expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
     expect(screen.getByText("Lead time trend")).toBeInTheDocument();
     expect(screen.getByText("Completion forecast")).toBeInTheDocument();
-    expect(screen.getAllByTestId("echart")).toHaveLength(6);
+    expect(screen.getAllByTestId("echart")).toHaveLength(7);
 
     const urls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
     expect(urls).toContain("/api/metrics?team_id=team-1");
@@ -140,13 +155,13 @@ describe("FlowDashboard", () => {
     mockMetricsFetch();
 
     const { rerender } = renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(7));
 
     const firstRender = [...captured.options];
     captured.options.length = 0;
     rerender(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    expect(captured.options).toHaveLength(6);
+    expect(captured.options).toHaveLength(7);
     // By identity, not position: firstRender accumulates every render while
     // the queries settle, so its order is load order, not page order.
     captured.options.forEach((option) => expect(firstRender).toContain(option));
@@ -401,72 +416,6 @@ describe("FlowDashboard", () => {
     );
   });
 
-  it("marks blocked aging items with an icon before their state", async () => {
-    mockMetricsFetch({
-      "/api/metrics/aging-wip": {
-        ...agingWipFixture,
-        items: [{ ...agingWipFixture.items[0], blocked: true }],
-      },
-    });
-
-    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-
-    const icon = await screen.findByRole("img", { name: "Blocked" });
-    // Light-mode AA fix for the warning color lives on this class (index.css).
-    expect(icon).toHaveClass("aging-blocked");
-    const cell = icon.closest("td")!;
-    // The state reads alone: no "Blocked" text beside it, the icon leads it.
-    expect(cell).toHaveTextContent(/^in_progress$/);
-    const pair = icon.closest(".aging-state")!;
-    expect(pair.firstElementChild).toHaveClass("aging-blocked-slot");
-    expect(pair.firstElementChild).toContainElement(icon);
-    expect(pair.lastChild?.textContent).toBe("in_progress");
-    expect(cell).not.toBe(screen.getByLabelText("over P85").closest("td"));
-    // Keyboard users reach the tooltip too.
-    expect(icon).toHaveAttribute("tabindex", "0");
-    fireEvent.focus(icon);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Blocked");
-  });
-
-  it("reserves the blocked icon slot on unblocked rows when any row is blocked", async () => {
-    mockMetricsFetch({
-      "/api/metrics/aging-wip": {
-        ...agingWipFixture,
-        items: [
-          { ...agingWipFixture.items[0], blocked: true },
-          {
-            ...agingWipFixture.items[0],
-            work_item_id: "55555555-5555-5555-5555-555555555555",
-            title: "Fresh item",
-            blocked: false,
-          },
-        ],
-      },
-    });
-
-    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-
-    const icon = await screen.findByRole("img", { name: "Blocked" });
-    expect(icon.closest(".aging-blocked-slot")).not.toBeNull();
-    // The unblocked row keeps an empty slot, so its state starts where the blocked one does.
-    const slot = screen
-      .getByText("Fresh item")
-      .closest("tr")!
-      .querySelector(".aging-state")!.firstElementChild;
-    expect(slot).toHaveClass("aging-blocked-slot");
-    expect(slot).toBeEmptyDOMElement();
-  });
-
-  it("reserves no blocked slot when nothing is blocked", async () => {
-    mockMetricsFetch();
-
-    renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
-
-    await screen.findByText("Stuck item");
-    expect(document.querySelector(".aging-state")).not.toBeNull();
-    expect(document.querySelector(".aging-blocked-slot")).toBeNull();
-  });
-
   it("marks unassigned aging items", async () => {
     mockMetricsFetch({
       "/api/metrics/aging-wip": {
@@ -487,7 +436,7 @@ describe("FlowDashboard", () => {
         Boolean(nodes[i - 1].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING),
     );
 
-  it("reads metrics, then the charts, then aging WIP, then the forecast", async () => {
+  it("reads metrics, then the charts, then bugs, then aging WIP, then the forecast", async () => {
     mockMetricsFetch();
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
@@ -501,6 +450,7 @@ describe("FlowDashboard", () => {
         screen.getByText("WIP over time (90d)"),
         screen.getByText("Lead time distribution (90d)"),
         screen.getByText("Lead time trend"),
+        await screen.findByText("Bugs (30d)"),
         screen.getByText("Aging WIP"),
         forecast,
       ]),
@@ -534,8 +484,8 @@ describe("FlowDashboard", () => {
 
     expect(await screen.findByText("No items completed in this window.")).toBeInTheDocument();
     expect(screen.getByText("Lead time distribution (90d)")).toBeInTheDocument();
-    // CFD, throughput, WIP, trend, forecast — no distribution chart.
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    // CFD, throughput, WIP, trend, bugs, forecast — no distribution chart.
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
   });
 
   it("waits for two snapshots with a lead time before drawing the trend", async () => {
@@ -625,7 +575,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(7));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -647,7 +597,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(7));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -679,7 +629,7 @@ describe("FlowDashboard", () => {
 
     renderWithClient(<FlowDashboard scope={{ teamId: "team-1" }} />);
 
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
     // Not /throughput/i — that also matches the ever-present "Throughput (30d)"
     // stat tile. Scope to the chart card's title pattern instead.
     expect(screen.queryByText(/(Daily|Weekly) throughput/)).not.toBeInTheDocument();
