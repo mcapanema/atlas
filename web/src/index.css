@@ -186,12 +186,19 @@ h5 {
 .aging-age {
   white-space: nowrap;
 }
-/* Fixed-width home for the Blocked icon, reserved on every row when any row
-   is blocked, so state text starts at one x. */
-.aging-blocked-slot {
+/* One icon slot, sized to the icon kinds any row shows and reserved on every
+   row, so state text starts at one x. Icons pack toward the state, so a lone
+   icon sits in the same place whatever its kind. */
+.aging-flags {
   display: inline-flex;
-  justify-content: center;
-  width: 1em;
+  justify-content: flex-end;
+  gap: 4px;
+  width: calc(var(--aging-flags) * 1em + (var(--aging-flags) - 1) * 4px);
+}
+/* The baseline of an empty slot pushed the text down: align the cell content
+   to the top, so every row's state sits at one y. */
+.aging-state {
+  vertical-align: top;
 }
 .aging-blocked {
   color: var(--ant-color-warning-text);
@@ -207,12 +214,7 @@ h5 {
 :root:not([data-theme="dark"]) .aging-blocked {
   color: color-mix(in srgb, var(--ant-color-warning-text) 75%, black);
 }
-/* The bug slot follows the blocked slot; a different shape, so not color alone. */
-.aging-bug-slot {
-  display: inline-flex;
-  justify-content: center;
-  width: 1em;
-}
+/* The bug icon follows the blocked icon; a different shape, so not color alone. */
 .aging-bug {
   color: var(--ant-color-text-secondary);
 }

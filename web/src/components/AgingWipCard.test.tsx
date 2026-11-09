@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { AgingItem } from "../api/metrics";
@@ -38,7 +38,7 @@ describe("AgingWipCard", () => {
     // The state reads alone: no "Blocked" text beside it, the icon leads it.
     expect(cell).toHaveTextContent(/^in_progress$/);
     const pair = icon.closest(".aging-state")!;
-    expect(pair.firstElementChild).toHaveClass("aging-blocked-slot");
+    expect(pair.firstElementChild).toHaveClass("aging-flags");
     expect(pair.firstElementChild).toContainElement(icon);
     expect(pair.lastChild?.textContent).toBe("in_progress");
     expect(cell).not.toBe(screen.getByLabelText("over P85").closest("td"));
@@ -48,64 +48,61 @@ describe("AgingWipCard", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Blocked");
   });
 
-  it("reserves the blocked icon slot on unblocked rows when any row is blocked", async () => {
-    renderCard([{ ...agingWipFixture.items[0], blocked: true }, fresh]);
-
-    const icon = await screen.findByRole("img", { name: "Blocked" });
-    expect(icon.closest(".aging-blocked-slot")).not.toBeNull();
-    // The unblocked row keeps an empty slot, so its state starts where the blocked one does.
-    const slot = screen
-      .getByText("Fresh item")
-      .closest("tr")!
-      .querySelector(".aging-state")!.firstElementChild;
-    expect(slot).toHaveClass("aging-blocked-slot");
-    expect(slot).toBeEmptyDOMElement();
-  });
-
-  it("reserves no blocked slot when nothing is blocked", async () => {
-    renderCard(agingWipFixture.items);
-
-    await screen.findByText("Stuck item");
-    expect(document.querySelector(".aging-state")).not.toBeNull();
-    expect(document.querySelector(".aging-blocked-slot")).toBeNull();
-  });
-
   it("marks a bug with a bug icon", async () => {
     renderCard([{ ...fresh, type: "bug" }]);
 
     const icon = await screen.findByRole("img", { name: "Bug" });
     expect(icon).toHaveClass("aging-bug");
-    expect(icon.closest(".aging-bug-slot")).not.toBeNull();
+    expect(icon.closest(".aging-flags")).not.toBeNull();
     expect(icon).toHaveAttribute("tabindex", "0");
     fireEvent.focus(icon);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Bug");
   });
 
-  it("puts a blocked bug's bug icon after its blocked icon", async () => {
+  it("puts a lone icon next to the state, whatever its kind", async () => {
+    renderCard([
+      { ...agingWipFixture.items[0], blocked: true },
+      { ...fresh, type: "bug" },
+    ]);
+
+    const blocked = await screen.findByRole("img", { name: "Blocked" });
+    const bug = screen.getByRole("img", { name: "Bug" });
+    // One slot packs its icons toward the state, so a lone icon of either kind sits at one x.
+    for (const icon of [blocked, bug]) {
+      const flags = icon.closest(".aging-flags")!;
+      expect(flags.lastElementChild).toContainElement(icon);
+      expect(flags).toHaveStyle({ "--aging-flags": "2" });
+    }
+  });
+
+  it("orders a blocked bug's icons blocked, then bug", async () => {
     renderCard([{ ...fresh, type: "bug", blocked: true }]);
 
-    const bug = await screen.findByRole("img", { name: "Bug" });
-    const pair = bug.closest(".aging-state")!;
-    expect([...pair.children].map((child) => child.className)).toEqual([
-      "aging-blocked-slot",
-      "aging-bug-slot",
-    ]);
-    expect(pair.lastChild?.textContent).toBe("in_progress");
+    const flags = (await screen.findByRole("img", { name: "Bug" })).closest(".aging-flags")!;
+    expect(
+      within(flags as HTMLElement)
+        .getAllByRole("img")
+        .map((icon) => icon.getAttribute("aria-label")),
+    ).toEqual(["Blocked", "Bug"]);
+    expect(flags.parentElement!.lastChild?.textContent).toBe("in_progress");
   });
 
-  it("reserves the bug slot on other rows when any row is a bug", async () => {
-    renderCard([{ ...agingWipFixture.items[0], type: "bug" }, fresh]);
+  it("reserves one icon slot when only blocked rows exist", async () => {
+    renderCard([{ ...agingWipFixture.items[0], blocked: true }, fresh]);
 
-    await screen.findByRole("img", { name: "Bug" });
-    const slot = screen.getByText("Fresh item").closest("tr")!.querySelector(".aging-bug-slot");
-    expect(slot).toBeEmptyDOMElement();
+    await screen.findByRole("img", { name: "Blocked" });
+    // The other row keeps an empty slot, so its state starts where the blocked one does.
+    const empty = screen.getByText("Fresh item").closest("tr")!.querySelector(".aging-flags");
+    expect(empty).toBeEmptyDOMElement();
+    expect(empty).toHaveStyle({ "--aging-flags": "1" });
   });
 
-  it("renders no bug slot when no row is a bug", async () => {
+  it("renders no icon slot when no row is blocked or a bug", async () => {
     renderCard([fresh]);
 
     await screen.findByText("Fresh item");
-    expect(document.querySelector(".aging-bug-slot")).toBeNull();
+    expect(document.querySelector(".aging-state")).not.toBeNull();
+    expect(document.querySelector(".aging-flags")).toBeNull();
   });
 
   it("explains the bug icon in the card help", async () => {

@@ -1,6 +1,7 @@
 import { BugOutlined, StopOutlined } from "@ant-design/icons";
 import { Table, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 
 import type { AgingItem } from "../api/metrics";
@@ -62,8 +63,7 @@ function agingColumns({
   thresholdSeconds,
   medianSeconds,
   slot,
-  blockedSlot,
-  bugSlot,
+  flagSlots,
 }: {
   percentile: number;
   historyDays: number;
@@ -72,10 +72,8 @@ function agingColumns({
   medianSeconds: number | null;
   /** Some row is flagged: every row reserves the flag slot, so ages share a right edge. */
   slot: boolean;
-  /** Some row is blocked: every row reserves the icon slot, so states share a left edge. */
-  blockedSlot: boolean;
-  /** Some row is a bug: its slot follows the blocked slot, reserved the same way. */
-  bugSlot: boolean;
+  /** Icon kinds (blocked, bug) any row shows: every row reserves that width, so states share a left edge. */
+  flagSlots: number;
 }): ColumnsType<AgingItem> {
   return [
     {
@@ -94,17 +92,13 @@ function agingColumns({
       dataIndex: "state",
       render: (state: string, item) => (
         <span className="aging-state">
-          {blockedSlot && (
-            <span className="aging-blocked-slot">
+          {flagSlots > 0 && (
+            <span className="aging-flags" style={{ "--aging-flags": flagSlots } as CSSProperties}>
               {item.blocked && (
                 <Tooltip title="Blocked" trigger={["hover", "focus"]}>
                   <StopOutlined className="aging-blocked" aria-label="Blocked" tabIndex={0} />
                 </Tooltip>
               )}
-            </span>
-          )}
-          {bugSlot && (
-            <span className="aging-bug-slot">
               {item.type === "bug" && (
                 <Tooltip title="Bug" trigger={["hover", "focus"]}>
                   <BugOutlined className="aging-bug" aria-label="Bug" tabIndex={0} />
@@ -172,8 +166,9 @@ export function AgingWipCard({
           thresholdSeconds,
           medianSeconds,
           slot: items.some((item) => item.over_percentile || item.over_median),
-          blockedSlot: items.some((item) => item.blocked),
-          bugSlot: items.some((item) => item.type === "bug"),
+          flagSlots:
+            Number(items.some((item) => item.blocked)) +
+            Number(items.some((item) => item.type === "bug")),
         })}
         dataSource={items}
       />
