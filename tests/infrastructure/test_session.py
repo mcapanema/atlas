@@ -1,10 +1,26 @@
+import asyncio
+import logging
 import shutil
 import sqlite3
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 
-from app.infrastructure.database.session import build_sessionmaker
+from app.infrastructure.database.session import build_sessionmaker, set_sqlite_journal_mode
+
+
+def _header_mode(db: Path) -> int:
+    """Byte 18 of the SQLite header: 1 = rollback journal, 2 = WAL."""
+    return db.read_bytes()[18]
+
+
+def _wal_database(db: Path) -> None:
+    raw = sqlite3.connect(db)
+    raw.execute("PRAGMA journal_mode=WAL")
+    raw.execute("CREATE TABLE t (x INTEGER)")
+    raw.commit()
+    raw.close()
 
 
 async def test_build_sessionmaker_enables_fk_enforcement_and_wal(tmp_path: Path) -> None:
@@ -76,4 +92,75 @@ async def test_delete_mode_reader_survives_a_writer_that_outgrows_the_cache(
         )
         assert (await reader.execute(text("SELECT count(*) FROM t"))).scalar() == 0
         await writer.rollback()
+    await sessionmaker.kw["bind"].dispose()
+
+
+async def test_build_sessionmaker_converts_before_any_connection_opens(tmp_path: Path) -> None:
+    db = tmp_path / "shared.db"
+    _wal_database(db)
+    sessionmaker = build_sessionmaker(f"sqlite+aiosqlite:///{db}", journal_mode="delete")
+    assert _header_mode(db) == 1
+    await sessionmaker.kw["bind"].dispose()
+
+
+async def test_build_sessionmaker_creates_a_missing_database_in_the_requested_mode(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "fresh.db"
+    sessionmaker = build_sessionmaker(f"sqlite+aiosqlite:///{db}", journal_mode="wal")
+    async with sessionmaker() as session:
+        assert (await session.execute(text("PRAGMA journal_mode"))).scalar() == "wal"
+    await sessionmaker.kw["bind"].dispose()
+
+
+def test_build_sessionmaker_fails_when_another_connection_blocks_the_switch(
+    tmp_path: Path,
+) -> None:
+    db = tmp_path / "busy.db"
+    _wal_database(db)
+    holder = sqlite3.connect(db)
+    holder.execute("SELECT count(*) FROM t").fetchall()  # a WAL connection holds SHARED while open
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            build_sessionmaker(f"sqlite+aiosqlite:///{db}", journal_mode="delete")
+    finally:
+        holder.close()
+
+
+def test_set_sqlite_journal_mode_ignores_non_file_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # a relative-path bug would create a file here
+    set_sqlite_journal_mode("postgresql+asyncpg://atlas@localhost/atlas", "delete")
+    set_sqlite_journal_mode("sqlite+aiosqlite:///:memory:", "delete")
+    set_sqlite_journal_mode("sqlite+aiosqlite://", "delete")
+    assert list(tmp_path.iterdir()) == []
+
+
+async def test_new_connections_survive_a_wal_switch_behind_the_pool(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The 2026-11-09 incident: the file went to WAL while the pool held a
+    # connection, and every new pooled connection failed to leave WAL.
+    db = tmp_path / "flipped.db"
+    sessionmaker = build_sessionmaker(f"sqlite+aiosqlite:///{db}", journal_mode="delete")
+    async with sessionmaker() as setup:
+        await setup.execute(text("CREATE TABLE t (x INTEGER)"))
+        await setup.commit()
+
+    async with sessionmaker() as held:
+        await held.execute(text("SELECT 1"))
+        outside = sqlite3.connect(db)
+        outside.execute("PRAGMA journal_mode=WAL")
+        outside.close()
+        await held.execute(text("SELECT count(*) FROM t"))  # held now has the file open as WAL
+
+        async def count() -> int | None:
+            async with sessionmaker() as session:
+                return (await session.execute(text("SELECT count(*) FROM t"))).scalar()
+
+        with caplog.at_level(logging.WARNING, logger="app.infrastructure.database.session"):
+            assert await asyncio.gather(*(count() for _ in range(4))) == [0, 0, 0, 0]
+    assert "wal" in caplog.text
+    assert "delete" in caplog.text
     await sessionmaker.kw["bind"].dispose()
