@@ -71,8 +71,24 @@ describe("AgingWipCard", () => {
     for (const icon of [blocked, bug]) {
       const flags = icon.closest(".aging-flags")!;
       expect(flags.firstElementChild).toContainElement(icon);
-      expect(flags).toHaveStyle({ "--aging-flags": "2" });
     }
+  });
+
+  it("reserves one icon width, not one per icon kind, so a lone icon sits by its state", async () => {
+    renderCard([
+      { ...agingWipFixture.items[0], blocked: true },
+      { ...fresh, type: "bug" },
+      { ...fresh, work_item_id: "66666666-6666-6666-6666-666666666666", title: "Plain item" },
+    ]);
+
+    await screen.findByRole("img", { name: "Blocked" });
+    // The slot's width is CSS's one-icon minimum (index.css), never sized to both icon kinds.
+    const slots = document.querySelectorAll(".aging-flags");
+    expect(slots).toHaveLength(3);
+    for (const slot of slots) expect(slot).not.toHaveAttribute("style");
+    expect(
+      screen.getByText("Plain item").closest("tr")!.querySelector(".aging-flags"),
+    ).toBeEmptyDOMElement();
   });
 
   it("orders a blocked bug's icons blocked, then bug", async () => {
@@ -94,7 +110,6 @@ describe("AgingWipCard", () => {
     // The other row keeps an empty slot, so its state starts where the blocked one does.
     const empty = screen.getByText("Fresh item").closest("tr")!.querySelector(".aging-flags");
     expect(empty).toBeEmptyDOMElement();
-    expect(empty).toHaveStyle({ "--aging-flags": "1" });
   });
 
   it("renders no icon slot when no row is blocked or a bug", async () => {

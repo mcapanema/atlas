@@ -186,14 +186,13 @@ h5 {
 .aging-age {
   white-space: nowrap;
 }
-/* One icon slot, sized to the icon kinds any row shows and reserved on every
-   row, so state text starts at one x. Icons pack to the left edge, so a lone
-   icon sits in the same place whatever its kind. */
+/* One icon wide, reserved on every row when any row has an icon, so state text
+   starts at one x and a lone icon of either kind sits 6px from its state. A
+   blocked bug shows both icons, and only its row's text moves right. */
 .aging-flags {
   display: inline-flex;
-  justify-content: flex-start;
   gap: 4px;
-  width: calc(var(--aging-flags) * 1em + (var(--aging-flags) - 1) * 4px);
+  min-width: 1em;
 }
 /* The baseline of an empty slot pushed the text down: align the cell content
    to the top, so every row's state sits at one y. */
