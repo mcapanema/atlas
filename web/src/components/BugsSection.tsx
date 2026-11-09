@@ -57,14 +57,13 @@ const COLUMN_HELP = {
 const RATIO_HELP = {
   perItem:
     "New bugs ÷ items completed that are not bugs. Bugs are left out of the denominator, so a bug sprint does not lower it. " +
-    "Read it as bug inflow for each item delivered: 0.25 means about 1 new bug for every 4 items delivered. " +
-    "Lower is better. A rising value means bugs arrive faster than the team delivers other work. " +
-    "Teams report bugs differently, so compare it with this team's earlier periods, not with other teams. " +
-    "It shows inflow, not cause.",
+    "0.25 means about 1 new bug for every 4 non-bug items completed. " +
+    "A rising value means more bugs for each non-bug item completed, or fewer non-bug items completed: check Bugs created. " +
+    "Compare it with this team's earlier periods, not with other teams. It shows inflow, not cause.",
   share:
     "Bugs completed ÷ all items completed in the window: the share of completed work that was bug fixes. " +
-    "The total counts bugs and non-bug items, so its total is larger than the denominator of New bugs per non-bug item completed. " +
-    "20% means 1 in 5 items done was a bug fix. A high share means bug work takes capacity from planned work. " +
+    "Its total includes the bugs completed, so it is larger than the non-bug count in the ratio beside it. " +
+    "20% means 1 in 5 completed items was a bug fix. " +
     "A low share is good only when Bugs created also stays low: a team that leaves bugs open also has a low share.",
 };
 

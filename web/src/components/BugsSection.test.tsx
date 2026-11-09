@@ -171,13 +171,14 @@ describe("BugsSection", () => {
     ["Oldest open", "reads lower than its calendar age in Linear"],
     [
       "New bugs per non-bug item completed",
-      "0.25 means about 1 new bug for every 4 items delivered",
+      "0.25 means about 1 new bug for every 4 non-bug items completed",
     ],
-    ["New bugs per non-bug item completed", "compare it with this team's earlier periods"],
     [
-      "Bug share",
-      "so its total is larger than the denominator of New bugs per non-bug item completed",
+      "New bugs per non-bug item completed",
+      "A rising value means more bugs for each non-bug item completed, or fewer non-bug items completed",
     ],
+    ["New bugs per non-bug item completed", "Compare it with this team's earlier periods"],
+    ["Bug share", "Its total includes the bugs completed, so it is larger than the non-bug count"],
     ["Bug share", "A low share is good only when Bugs created also stays low"],
   ])("explains %s on focus", async (label, help) => {
     renderSection();
