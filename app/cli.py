@@ -9,6 +9,7 @@ the environment, so it stays out of shell history and process lists.
 import argparse
 import asyncio
 import getpass
+import sqlite3
 import sys
 import threading
 from collections.abc import AsyncIterator, Callable
@@ -77,6 +78,8 @@ async def _database() -> AsyncIterator[AsyncSession]:
             "Can't use the database: ATLAS_DATABASE_URL is not a usable database URL."
         ) from None
     except ImportError as exc:  # the URL names a driver that isn't installed
+        raise _CliError(f"Can't use the database: {_reason(exc)}") from exc
+    except sqlite3.OperationalError as exc:  # the journal-mode switch: unopenable or locked
         raise _CliError(f"Can't use the database: {_reason(exc)}") from exc
     try:
         async with sessionmaker() as session:

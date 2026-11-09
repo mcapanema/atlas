@@ -368,7 +368,9 @@ cross Docker Desktop's VM, so only one of them may run at a time; the
 Makefile's `local-db-free` guard enforces this. The container runs SQLite in
 rollback-journal mode (`ATLAS_SQLITE_JOURNAL_MODE=delete`) because WAL's
 memory-mapped `-shm` file is unreliable on the bind mount; local runs keep
-WAL.
+WAL. Atlas switches the file's journal mode at startup, before it opens any
+pooled connection, because leaving WAL fails while any other connection has
+the file open; a mode change at run time only logs a warning.
 
 ## Chat access (MCP)
 
