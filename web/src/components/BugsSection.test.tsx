@@ -162,7 +162,7 @@ describe("BugsSection", () => {
   });
 
   it.each([
-    ["Created vs. completed", "Windows of 21 days or fewer bucket per day"],
+    ["Created vs. completed", "Metric rules set the longest window that buckets per day."],
     ["Bug lead time by priority", "in working days on the team calendar"],
     ["Priority", "current priority in Linear"],
     ["Median", "Half of them took less."],
@@ -174,6 +174,20 @@ describe("BugsSection", () => {
 
     fireEvent.focus(await screen.findByText(label));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(help);
+  });
+
+  it.each([
+    [7, "bugs completed in each week of the window", "The oldest week is shorter"],
+    [1, "bugs completed in each day of the window", null],
+  ])("names the chart's bucket from the data (%i days)", async (bucketDays, bucket, oldest) => {
+    // The day/week cut-over is a team rule (daily_bucket_max_days), so the help reads the data.
+    renderSection({ bucket_days: bucketDays });
+
+    fireEvent.focus(await screen.findByText("Created vs. completed"));
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(bucket);
+    if (oldest) expect(tip).toHaveTextContent(oldest);
+    else expect(tip).not.toHaveTextContent("oldest week");
   });
 
   it("hides the chart for a single bucket", async () => {

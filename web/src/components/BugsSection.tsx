@@ -30,8 +30,16 @@ const PRIORITY_LABEL: Record<PriorityFix["priority"], string> = {
   none: "No priority",
 };
 
-const FLOW_HELP =
-  "Bugs created (by creation date) and bugs completed in each bucket of the window. Windows of 21 days or fewer bucket per day; longer windows bucket per week, and the oldest bucket is shorter when the window isn't a whole number of weeks. One bug can count in both series.";
+/** The chart help; the day/week cut-over is a team rule (daily_bucket_max_days), so it reads the data. */
+function flowHelp(bucketDays: number): string {
+  const weekly = bucketDays > 1;
+  return (
+    `Bugs created (by creation date) and bugs completed in each ${weekly ? "week" : "day"} of the window. ` +
+    "Metric rules set the longest window that buckets per day." +
+    (weekly ? " The oldest week is shorter when the window isn't a whole number of weeks." : "") +
+    " One bug can count in both series."
+  );
+}
 
 const FIX_HELP =
   "Lead time of the bugs completed in the window, from arrival to done, in working days on the team calendar (set in Metric rules). Rows group bugs by their current priority in Linear; All bugs also counts bugs whose priority is unknown.";
@@ -114,7 +122,7 @@ function BugFlowChart({ data }: { data: BugMetrics }) {
   return (
     <>
       <Typography.Text strong>
-        <HelpLabel label="Created vs. completed" help={FLOW_HELP} />
+        <HelpLabel label="Created vs. completed" help={flowHelp(data.bucket_days)} />
       </Typography.Text>
       <EChart option={option} />
     </>
