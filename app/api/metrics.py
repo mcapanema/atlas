@@ -8,6 +8,7 @@ from app.api.deps import DoraServiceDep, MetricsServiceDep, SnapshotServiceDep
 from app.api.schemas import (
     AgingItemRead,
     AgingWipRead,
+    BugMetricsRead,
     DeliveryHealthRead,
     DoraMetricsRead,
     DurationStatsRead,
@@ -203,6 +204,30 @@ async def get_dora_metrics(
     return DoraMetricsRead.of(result)
 
 
+@router.get("/bugs", response_model=BugMetricsRead)
+async def get_bug_metrics(
+    service: MetricsServiceDep,
+    scope: ScopeDep,
+    filters: ItemFiltersDep,
+    period: PeriodDep,
+    window_days: int = Query(default=STATS_WINDOW_DAYS, ge=1, le=365),
+) -> BugMetricsRead:
+    """A team's Bugs section (ADR-0030). The type filter does not apply: it would
+    remove one side of each ratio. Excluded states apply."""
+    if scope.team_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Bug metrics are per team; provide team_id",
+        )
+    samples, now, period_days = await _period_samples(
+        service, scope, ItemFilters(None, filters.exclude_states), period
+    )
+    result = await service.get_bug_metrics(
+        team_id=scope.team_id, scope=samples, window_days=period_days or window_days, now=now
+    )
+    return BugMetricsRead.of(result)
+
+
 @router.get("/history", response_model=FlowHistoryRead)
 async def get_flow_history(
     service: MetricsServiceDep,
@@ -335,6 +360,7 @@ async def get_aging_wip(
                 assignee=item.assignee,
                 blocked=item.blocked,
                 over_median=item.over_median,
+                type=item.type,
             )
             for item in aging.items
         ],

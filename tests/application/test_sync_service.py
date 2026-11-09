@@ -22,7 +22,7 @@ from app.domain.sync.source import (
     SourceWorkItem,
 )
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItem, WorkItemPriority, WorkItemType
 from tests.fakes import (
     FakeDataSource,
     InMemoryEventRepository,
@@ -176,6 +176,51 @@ async def test_changed_url_is_updated() -> None:
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
     assert item.url == "https://linear.app/b/E-1"
+
+
+async def test_first_sync_stores_priority() -> None:
+    source = full_source()
+    source.work_items = [
+        dataclasses.replace(source.work_items[0], priority=WorkItemPriority.URGENT)
+    ]
+    harness = Harness(source)
+
+    await harness.service.sync(await seed_org(harness))
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.priority is WorkItemPriority.URGENT
+
+
+async def test_resync_backfills_priority_on_item_synced_without_one() -> None:
+    source = full_source()
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)  # stored with priority=None, as before this field
+    source.work_items = [dataclasses.replace(source.work_items[0], priority=WorkItemPriority.NONE)]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.priority is WorkItemPriority.NONE
+
+
+async def test_changed_priority_is_updated() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], priority=WorkItemPriority.LOW)]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = [dataclasses.replace(source.work_items[0], priority=WorkItemPriority.HIGH)]
+
+    summary = await harness.service.sync(org_id)
+
+    assert summary.work_items == 1
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.priority is WorkItemPriority.HIGH
 
 
 def assigned(source: FakeDataSource, person: SourcePerson | None, index: int = 0) -> None:

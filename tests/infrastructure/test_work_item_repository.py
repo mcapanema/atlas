@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItem, WorkItemPriority, WorkItemType
 from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
@@ -331,3 +331,23 @@ async def test_get_by_keys_returns_one_item_per_key(session: AsyncSession) -> No
     found = await repo.get_by_keys(["OPS-1"], team_ids={team_id})
 
     assert list(found) == ["OPS-1"]
+
+
+async def test_priority_roundtrips_including_unknown_and_none(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_id = await _team_id(session)
+    items = [
+        WorkItem(team_id=team_id, title="Urgent", priority=WorkItemPriority.URGENT),
+        WorkItem(team_id=team_id, title="No priority", priority=WorkItemPriority.NONE),
+        WorkItem(team_id=team_id, title="Unknown"),
+    ]
+    for item in items:
+        await repo.add(item)
+
+    fetched = [await repo.get(item.id) for item in items]
+
+    assert [f.priority if f else "missing" for f in fetched] == [
+        WorkItemPriority.URGENT,
+        WorkItemPriority.NONE,
+        None,
+    ]

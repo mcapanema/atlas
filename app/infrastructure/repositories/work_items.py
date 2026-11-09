@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 from sqlalchemy.types import Uuid
 
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
+from app.domain.work_items.entities import StateType, WorkItem, WorkItemPriority, WorkItemType
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
 from app.infrastructure.repositories.batching import chunked
@@ -32,6 +32,8 @@ class WorkItemModel(Base):
     key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     state_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # NULL means unknown (WorkItem.priority).
+    priority: Mapped[str | None] = mapped_column(String(16), nullable=True)
     labels: Mapped[list[str]] = mapped_column(
         JSON, nullable=False, default=list, server_default=text("'[]'")
     )
@@ -66,6 +68,7 @@ class WorkItemModel(Base):
             parent_id=self.parent_id,
             assignee=self.assignee_name,
             assignee_id=self.assignee_id,
+            priority=WorkItemPriority(self.priority) if self.priority else None,
         )
 
     @classmethod
@@ -85,6 +88,7 @@ class WorkItemModel(Base):
             labels=list(work_item.labels),
             parent_id=work_item.parent_id,
             assignee_id=work_item.assignee_id,
+            priority=work_item.priority.value if work_item.priority else None,
         )
 
 

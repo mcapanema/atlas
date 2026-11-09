@@ -1,11 +1,15 @@
 """`python -m app.cli reset-password` — the terminal way back in (ADR-0028)."""
 
 import asyncio
+import threading
+import time
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
+import aiosqlite
+import aiosqlite.core
 import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -206,6 +210,39 @@ def test_unopenable_database_is_a_clear_error(
     assert err.startswith("Can't use the database: ")
     assert "migrate" not in err
     assert str(tmp_path) not in err
+
+
+def _aiosqlite_workers() -> list[threading.Thread]:
+    return [t for t in threading.enumerate() if t.name.endswith("(_connection_worker_thread)")]
+
+
+def test_a_failed_connect_leaves_no_worker_error_behind(
+    tmp_path: Path,
+    settings_env: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # On a failed connect aiosqlite queues its worker's stop without awaiting it.
+    # A 50 ms queue item ahead of the stop plays a slow runner: unless the CLI
+    # waits, asyncio.run closes the loop first and the worker raises "Event loop
+    # is closed" in its thread (the flaky CI error).
+    stop = aiosqlite.core.Connection.stop
+
+    def slow_stop(self: aiosqlite.Connection) -> asyncio.Future[object] | None:
+        self._tx.put_nowait((None, lambda: time.sleep(0.05)))
+        return stop(self)
+
+    errors: list[BaseException | None] = []
+    monkeypatch.setattr(aiosqlite.core.Connection, "stop", slow_stop)
+    monkeypatch.setattr(threading, "excepthook", lambda args: errors.append(args.exc_value))
+    settings_env(database_url=f"sqlite+aiosqlite:///{tmp_path / 'no-such-dir' / 'atlas.db'}")
+
+    assert main(["reset-password", "ana@acme.com"], read_password=_no_prompt) == 1
+    capsys.readouterr()
+
+    for worker in _aiosqlite_workers():
+        worker.join(timeout=2)
+    assert errors == []
 
 
 def test_reason_skips_blank_lines() -> None:

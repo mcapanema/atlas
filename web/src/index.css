@@ -186,12 +186,18 @@ h5 {
 .aging-age {
   white-space: nowrap;
 }
-/* Fixed-width home for the Blocked icon, reserved on every row when any row
-   is blocked, so state text starts at one x. */
-.aging-blocked-slot {
+/* One icon wide, reserved on every row when any row has an icon, so state text
+   starts at one x and a lone icon of either kind sits 6px from its state. A
+   blocked bug shows both icons, and only its row's text moves right. */
+.aging-flags {
   display: inline-flex;
-  justify-content: center;
-  width: 1em;
+  gap: 4px;
+  min-width: 1em;
+}
+/* The baseline of an empty slot pushed the text down: align the cell content
+   to the top, so every row's state sits at one y. */
+.aging-state {
+  vertical-align: top;
 }
 .aging-blocked {
   color: var(--ant-color-warning-text);
@@ -206,6 +212,26 @@ h5 {
    the icon well clear of the 3:1 non-text floor; dark mode already passes. */
 :root:not([data-theme="dark"]) .aging-blocked {
   color: color-mix(in srgb, var(--ant-color-warning-text) 75%, black);
+}
+/* The bug icon follows the blocked icon; a different shape, so not color alone. */
+.aging-bug {
+  color: var(--ant-color-text-secondary);
+}
+.aging-bug:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+/* The Bugs section: ratios, then the chart beside the lead-time table. */
+.bugs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.bugs-section__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .health-badge {
   display: inline-flex;

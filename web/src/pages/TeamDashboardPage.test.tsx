@@ -56,10 +56,10 @@ describe("TeamDashboardPage", () => {
     fireEvent.mouseDown(await screen.findByRole("combobox"));
     fireEvent.click(await screen.findByTitle("Platform"));
 
-    // Wait for the full render (all 5 charts): FlowDashboard's loading skeleton gates
+    // Wait for the full render (all 6 charts): FlowDashboard's loading skeleton gates
     // ForecastCard's mount on metrics/history, so its own forecast fetch starts later
     // and can still be pending when just the stat tiles have appeared.
-    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(5));
+    await waitFor(() => expect(screen.getAllByTestId("echart")).toHaveLength(6));
     expect(screen.getByText("Throughput (30d)")).toBeInTheDocument();
   });
 

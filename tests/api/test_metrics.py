@@ -931,3 +931,135 @@ async def test_overview_dora_ignores_item_filters(
     for body in (filtered["dora"], route):
         del body["window_start"], body["window_end"]  # each request reads the clock
     assert filtered["dora"] == route
+
+
+async def _seed_item(
+    client: AsyncClient,
+    team_id: str,
+    *,
+    type_: str,
+    events: tuple[tuple[str, int], ...],
+    state: str = "Todo",
+) -> None:
+    item = (
+        await client.post(
+            "/api/work-items",
+            json={"team_id": team_id, "title": "Item", "type": type_, "state": state},
+        )
+    ).json()
+    for event_type, days in events:
+        await client.post(
+            "/api/events",
+            json={"work_item_id": item["id"], "type": event_type, "occurred_at": days_ago(days)},
+        )
+
+
+async def _seed_bug_team(client: AsyncClient) -> str:
+    team_id = await create_team(client)
+    await _seed_item(client, team_id, type_="bug", events=(("created", 3),))
+    await _seed_item(client, team_id, type_="bug", events=(("created", 20), ("completed", 5)))
+    await _seed_item(
+        client, team_id, type_="bug", events=(("created", 4),), state="Duplicate review"
+    )
+    await _seed_item(client, team_id, type_="story", events=(("created", 30), ("completed", 2)))
+    return team_id
+
+
+async def test_bug_metrics_for_a_team(client: AsyncClient) -> None:
+    team_id = await _seed_bug_team(client)
+
+    response = await client.get(f"/api/metrics/bugs?team_id={team_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {
+        "state",
+        "bug_labels",
+        "window_start",
+        "window_end",
+        "bucket_days",
+        "buckets",
+        "created",
+        "completed",
+        "non_bug_completed",
+        "all_completed",
+        "per_item",
+        "share",
+        "min_sample",
+        "all_bugs",
+        "priorities",
+        "unknown_priority",
+        "data_as_of",
+    }
+    assert (body["state"], body["bug_labels"]) == ("ok", ["bug"])
+    assert (body["created"], body["completed"], body["non_bug_completed"]) == (3, 1, 1)
+    assert body["per_item"] == 3.0
+    assert body["share"] == 0.5
+    assert body["bucket_days"] == 7
+    assert set(body["buckets"][0]) == {"start", "end", "created", "completed"}
+    assert body["all_bugs"]["fixed"] == 1
+    assert isinstance(body["all_bugs"]["median_seconds"], float)
+    assert isinstance(body["all_bugs"]["oldest_open_seconds"], float)
+    assert [row["priority"] for row in body["priorities"]] == [
+        "urgent",
+        "high",
+        "medium",
+        "low",
+        "none",
+    ]
+    assert body["priorities"][0]["median_seconds"] is None
+    assert body["unknown_priority"] == 3  # REST-created items have no priority
+
+
+async def test_bug_metrics_ignore_the_type_filter(client: AsyncClient) -> None:
+    team_id = await _seed_bug_team(client)
+
+    plain = await client.get(f"/api/metrics/bugs?team_id={team_id}")
+    filtered = await client.get(f"/api/metrics/bugs?team_id={team_id}&types=story")
+
+    counts = ("created", "completed", "non_bug_completed", "all_completed", "per_item", "share")
+    assert [filtered.json()[k] for k in counts] == [plain.json()[k] for k in counts]
+    assert filtered.json()["completed"] == 1
+
+
+async def test_bug_metrics_honor_excluded_states(client: AsyncClient) -> None:
+    team_id = await _seed_bug_team(client)
+
+    response = await client.get(
+        f"/api/metrics/bugs?team_id={team_id}&exclude_states=duplicate%20review"
+    )
+
+    assert response.json()["created"] == 2
+
+
+async def test_bug_metrics_follow_an_explicit_period(client: AsyncClient) -> None:
+    team_id = await _seed_bug_team(client)
+    start, end = days_ago(10)[:10], days_ago(4)[:10]
+
+    response = await client.get(f"/api/metrics/bugs?team_id={team_id}&start={start}&end={end}")
+
+    body = response.json()
+    assert body["window_start"].startswith(start)
+    assert body["window_end"].startswith(days_ago(3)[:10])
+    assert (body["completed"], body["all_completed"]) == (1, 1)
+    assert body["bucket_days"] == 1
+
+
+async def test_bug_metrics_reject_a_project_scope(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    project = await client.post("/api/projects", json={"team_id": team_id, "name": "P"})
+
+    response = await client.get(f"/api/metrics/bugs?project_id={project.json()['id']}")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Bug metrics are per team; provide team_id"
+
+
+async def test_aging_wip_items_carry_their_type(client: AsyncClient) -> None:
+    team_id = await create_team(client)
+    await _seed_item(client, team_id, type_="bug", events=(("created", 5), ("started", 4)))
+
+    response = await client.get(f"/api/metrics/aging-wip?team_id={team_id}")
+
+    [item] = response.json()["items"]
+    assert item["type"] == "bug"

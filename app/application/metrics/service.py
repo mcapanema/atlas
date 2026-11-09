@@ -7,6 +7,7 @@ from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.scope import ScopeData, ScopeSampleLoader, ScopeSamples
 from app.domain.events.repository import EventRepository
 from app.domain.metrics.aging import AgingWip, compute_aging_wip
+from app.domain.metrics.bugs import BugMetrics, compute_bug_metrics
 from app.domain.metrics.distribution import (
     LeadTimeDistribution,
     compute_lead_time_distribution,
@@ -192,6 +193,36 @@ class MetricsService:
             now=at,
             aging_percentile=scope.rules.aging_percentile,
             history_days=scope.rules.aging_history_days,
+            stream_rules=scope.stream_rules,
+        )
+
+    async def get_bug_metrics(
+        self,
+        *,
+        team_id: UUID,
+        window_days: int = STATS_WINDOW_DAYS,
+        now: datetime | None = None,
+        scope: ScopeSamples | None = None,
+    ) -> BugMetrics:
+        """The team's Bugs section (ADR-0030) over the window ending at `now`.
+
+        Dated like the flow charts: the newest ingested event or the team's
+        last sync, whichever is later.
+        """
+        at = now if now is not None else datetime.now(UTC)
+        if scope is None:
+            scope = await self._scope.load(team_id=team_id)
+        recorded = [event.recorded_at for stream in scope.streams for event in stream]
+        synced_at = await self._synced_at(team_id, None)
+        if synced_at is not None:
+            recorded.append(synced_at)
+        return compute_bug_metrics(
+            scope.items_with_samples,
+            scope.stream_rules,
+            team_rules=scope.rules,
+            now=at,
+            window_days=window_days,
+            data_as_of=max(recorded, default=None),
         )
 
     async def get_delivery_health(

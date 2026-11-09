@@ -18,6 +18,16 @@ class WorkItemType(StrEnum):
     OTHER = "other"
 
 
+class WorkItemPriority(StrEnum):
+    """Normalized priority. Source numbers (Linear's 0-4) map onto these in the connector."""
+
+    URGENT = "urgent"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    NONE = "none"
+
+
 class StateType(StrEnum):
     """A workflow state's category — the vocabulary Linear (and most trackers) share."""
 
@@ -59,6 +69,9 @@ class WorkItem:
     assignee_id: UUID | None = None
     # The item's human-readable key in its source, e.g. OPS-123.
     key: str | None = None
+    # None means unknown (not synced yet, an unknown source value, or created
+    # through the REST API); NONE means the source says "no priority".
+    priority: WorkItemPriority | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)
 

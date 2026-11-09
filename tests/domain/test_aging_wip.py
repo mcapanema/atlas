@@ -2,9 +2,12 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+
+from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.aging import compute_aging_wip
 from app.domain.metrics.samples import FlowSample
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import WorkItem, WorkItemType
 
 NOW = datetime(2026, 7, 10, tzinfo=UTC)
 
@@ -115,3 +118,37 @@ def test_items_blocked_in_the_past_are_not_flagged() -> None:
     aging = compute_aging_wip([(item, lifted)], now=NOW)
 
     assert aging.items[0].blocked is False
+
+
+def test_stream_rules_set_each_items_effective_type() -> None:
+    bug = _pair("Bug", started_days=3, completed_days=None)
+    bug = (replace(bug[0], labels=("Bug",)), bug[1])
+    task = _pair("Task", started_days=2, completed_days=None)
+    no_mapping = MetricRules(type_labels=())
+
+    aging = compute_aging_wip([bug, task], now=NOW, stream_rules=[DEFAULT_RULES, no_mapping])
+
+    assert [(a.title, a.type) for a in aging.items] == [
+        ("Bug", WorkItemType.BUG),
+        ("Task", WorkItemType.TASK),
+    ]
+
+
+def test_without_stream_rules_the_type_is_the_stored_type() -> None:
+    labelled, stored = (_pair(t, started_days=3, completed_days=None) for t in ("A", "B"))
+    labelled = (replace(labelled[0], labels=("Bug",)), labelled[1])
+    stored = (replace(stored[0], type=WorkItemType.SPIKE), stored[1])
+
+    aging = compute_aging_wip([labelled, stored], now=NOW)
+
+    assert {a.title: a.type for a in aging.items} == {
+        "A": WorkItemType.TASK,
+        "B": WorkItemType.SPIKE,
+    }
+
+
+def test_mismatched_stream_rules_raise() -> None:
+    doing = _pair("Doing", started_days=3, completed_days=None)
+
+    with pytest.raises(ValueError, match="stream_rules"):
+        compute_aging_wip([doing, doing], now=NOW, stream_rules=[DEFAULT_RULES])

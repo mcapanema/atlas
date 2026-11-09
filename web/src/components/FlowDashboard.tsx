@@ -1,8 +1,5 @@
-import { StopOutlined } from "@ant-design/icons";
-import { Alert, Col, Row, Skeleton, Space, Table, Tooltip, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert, Col, Row, Skeleton, Space } from "antd";
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 
 import {
   useAgingWip,
@@ -11,7 +8,6 @@ import {
   useFlowMetrics,
   useLeadTimeDistribution,
   useStateTimes,
-  type AgingItem,
   type DurationStats,
   type FlowHistory,
   type FlowMetrics,
@@ -32,139 +28,16 @@ import { STALE_AFTER_HOURS, stalenessHours } from "../lib/freshness";
 import { isRanged, periodText, windowLabel } from "../lib/metricsFilters";
 import { CHART_WINDOW_DAYS, STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
+import { AgingWipCard } from "./AgingWipCard";
+import { BugsSection } from "./BugsSection";
 import { ChartCard } from "./ChartCard";
 import { EChart } from "./EChart";
 import { TeamDoraCard } from "./DoraCard";
 import { ForecastCard } from "./ForecastCard";
 import { HealthPanel } from "./HealthPanel";
-import { HelpLabel } from "./HelpLabel";
-import { SlottedTitle } from "./SlottedTitle";
 import { LeadTimeCharts } from "./LeadTimeCharts";
 import { StatCard } from "./StatCard";
 import { StateTimeCard } from "./StateTimeCard";
-
-/** "the last day" / "the last 90 days" — the aging history window, in prose. */
-function lastDays(days: number): string {
-  return days === 1 ? "the last day" : `the last ${days} days`;
-}
-
-/** The Age header's help. At a P50 team percentile the two lines coincide: one flag. */
-function ageHelp(
-  percentile: number,
-  historyDays: number,
-  medianSeconds: number,
-  thresholdSeconds: number,
-): string {
-  const median = `Flagged > P50 past the median cycle time (${formatSeconds(medianSeconds)})`;
-  const team =
-    percentile === 50
-      ? ""
-      : ` and > P${percentile} past P${percentile} (${formatSeconds(thresholdSeconds)})`;
-  return `Time in progress. ${median}${team}, over ${lastDays(historyDays)}.`;
-}
-
-/** The card help's flag sentence; one flag when the team percentile is the median. */
-function agingFlagsHelp(percentile: number, historyDays: number): string {
-  const median = `An item's age is flagged > P50 when it has been in progress longer than half the items completed in ${lastDays(historyDays)} took`;
-  const team =
-    percentile === 50 ? "" : `, and > P${percentile} when longer than ${percentile}% of them`;
-  return `${median}${team} (the team's aging percentile and history, set in Metric rules).`;
-}
-
-/** One flag per row: past the team percentile (red) wins over past the median (yellow). */
-function AgeFlag({ item, percentile }: { item: AgingItem; percentile: number }) {
-  if (item.over_percentile) {
-    return (
-      <span className="delta delta--bad" role="img" aria-label={`over P${percentile}`}>
-        &gt; P{percentile}
-      </span>
-    );
-  }
-  if (item.over_median) {
-    return (
-      <span className="delta delta--warn" role="img" aria-label="over P50">
-        &gt; P50
-      </span>
-    );
-  }
-  return null;
-}
-
-function agingColumns({
-  percentile,
-  historyDays,
-  thresholdSeconds,
-  medianSeconds,
-  slot,
-  blockedSlot,
-}: {
-  percentile: number;
-  historyDays: number;
-  thresholdSeconds: number | null;
-  /** Null exactly when thresholdSeconds is: both come from the same history. */
-  medianSeconds: number | null;
-  /** Some row is flagged: every row reserves the flag slot, so ages share a right edge. */
-  slot: boolean;
-  /** Some row is blocked: every row reserves the icon slot, so states share a left edge. */
-  blockedSlot: boolean;
-}): ColumnsType<AgingItem> {
-  return [
-    {
-      title: "Title",
-      dataIndex: "title",
-      render: (title, item) => <Link to={`/work-items/${item.work_item_id}`}>{title}</Link>,
-    },
-    {
-      title: "Owner",
-      dataIndex: "assignee",
-      render: (assignee: string | null) =>
-        assignee ?? <Typography.Text type="secondary">Unassigned</Typography.Text>,
-    },
-    {
-      title: "State",
-      dataIndex: "state",
-      render: (state: string, item) => (
-        <span className="aging-state">
-          {blockedSlot && (
-            <span className="aging-blocked-slot">
-              {item.blocked && (
-                <Tooltip title="Blocked" trigger={["hover", "focus"]}>
-                  <StopOutlined className="aging-blocked" aria-label="Blocked" tabIndex={0} />
-                </Tooltip>
-              )}
-            </span>
-          )}
-          {state}
-        </span>
-      ),
-    },
-    {
-      title: (
-        <SlottedTitle slot={slot}>
-          {thresholdSeconds === null || medianSeconds === null ? (
-            "Age"
-          ) : (
-            <HelpLabel
-              label="Age"
-              help={ageHelp(percentile, historyDays, medianSeconds, thresholdSeconds)}
-            />
-          )}
-        </SlottedTitle>
-      ),
-      align: "right",
-      render: (_, item) => (
-        <span className="aging-age">
-          <span className="fig">{formatSeconds(item.age_seconds)}</span>
-          {slot && (
-            <span className="delta-slot">
-              <AgeFlag item={item} percentile={percentile} />
-            </span>
-          )}
-        </span>
-      ),
-    },
-  ];
-}
 
 function duration(stats: DurationStats | null, key: keyof DurationStats): string {
   return stats ? formatSeconds(stats[key]) : "—";
@@ -322,42 +195,6 @@ function FlowCharts({
   );
 }
 
-function AgingWipCard({
-  items,
-  percentile,
-  historyDays,
-  thresholdSeconds,
-  medianSeconds,
-}: {
-  items: AgingItem[];
-  percentile: number;
-  historyDays: number;
-  thresholdSeconds: number | null;
-  medianSeconds: number | null;
-}) {
-  return (
-    <ChartCard
-      label="Aging WIP"
-      help={`Items currently in progress, oldest first. ${agingFlagsHelp(percentile, historyDays)} A stop icon before the state marks an item whose blocked label, state, relation or event is still open (what counts as blocked is set in Metric rules).`}
-    >
-      <Table
-        size="small"
-        rowKey="work_item_id"
-        pagination={false}
-        columns={agingColumns({
-          percentile,
-          historyDays,
-          thresholdSeconds,
-          medianSeconds,
-          slot: items.some((item) => item.over_percentile || item.over_median),
-          blockedSlot: items.some((item) => item.blocked),
-        })}
-        dataSource={items}
-      />
-    </ChartCard>
-  );
-}
-
 export function FlowDashboard({
   scope,
   filters = {},
@@ -380,8 +217,8 @@ export function FlowDashboard({
     return <Skeleton active />;
   }
 
-  // Metrics, then the charts that explain them, then what's stuck and when
-  // it lands.
+  // Metrics, then the charts that explain them, then the team's bugs, then
+  // what's stuck and when it lands.
   return (
     <Space direction="vertical" style={{ width: "100%" }} size="large">
       <StaleDataAlert history={history.data} />
@@ -400,6 +237,7 @@ export function FlowDashboard({
         snapshots={snapshots.data}
         chartLabel={windowLabel(filters, CHART_WINDOW_DAYS)}
       />
+      <BugsSection teamId={scope.teamId} filters={filters} />
       {stateTimes.data && stateTimes.data.states.length > 0 && (
         <StateTimeCard data={stateTimes.data} />
       )}

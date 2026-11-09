@@ -28,6 +28,14 @@ export interface ThroughputBucket {
   completed: number;
 }
 
+/** Bugs created and completed in one bucket — start exclusive, end inclusive. */
+export interface BugBucket {
+  start: string;
+  end: string;
+  created: number;
+  completed: number;
+}
+
 export interface DurationBin {
   start_days: number;
   end_days: number;
@@ -154,11 +162,7 @@ export function buildThroughputOption(
       formatter: (params: unknown) => {
         const { dataIndex } = params as { dataIndex: number };
         const bucket = buckets[dataIndex];
-        const when =
-          bucketDays === 1
-            ? formatDay(bucket.end)
-            : `${formatDay(bucket.start)} – ${formatDay(bucket.end)}`;
-        return `${when}<br/>${bucket.completed} completed`;
+        return `${bucketWhen(bucket, bucketDays)}<br/>${bucket.completed} completed`;
       },
     },
     grid: { left: 64, right: 16, top: 24, bottom: 32 },
@@ -171,6 +175,61 @@ export function buildThroughputOption(
       "Completed",
       buckets.map((b) => b.completed),
     ),
+  };
+}
+
+/** A bucket's date: the day itself, or the range a multi-day bucket covers. */
+function bucketWhen(bucket: { start: string; end: string }, bucketDays: number): string {
+  return bucketDays === 1
+    ? formatDay(bucket.end)
+    : `${formatDay(bucket.start)} – ${formatDay(bucket.end)}`;
+}
+
+/** Bugs completed (bars) against bugs created (a line with symbols): marks differ, not only color. */
+export function buildBugFlowOption(
+  buckets: BugBucket[],
+  bucketDays: number,
+  mode: ThemeMode = "light",
+): EChartsOption {
+  const n = neutrals(mode);
+  return {
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: unknown) => {
+        const [{ dataIndex }] = params as { dataIndex: number }[];
+        const bucket = buckets[dataIndex];
+        return `${bucketWhen(bucket, bucketDays)}<br/>${bucket.created} created · ${bucket.completed} completed<br/>One bug can count in both series.`;
+      },
+    },
+    legend: { bottom: 0, textStyle: { color: n.inkSecondary } },
+    // right 72: room for the "Created" end label.
+    grid: { left: 48, right: 72, top: 24, bottom: 48 },
+    xAxis: dayAxis(
+      buckets.map((b) => formatDay(b.end)),
+      n,
+    ),
+    yAxis: valueAxis(n, "bugs"),
+    series: [
+      {
+        name: "Completed",
+        type: "bar",
+        color: SERIES.done,
+        barMaxWidth: 24,
+        itemStyle: { borderRadius: [4, 4, 0, 0] },
+        data: buckets.map((b) => b.completed),
+      },
+      {
+        name: "Created",
+        type: "line",
+        color: SERIES.todo,
+        symbol: "circle",
+        symbolSize: 7,
+        lineStyle: { width: 2 },
+        // Yellow sits below 3:1 on white: the end label and legend are the relief.
+        endLabel: { show: true, formatter: "{a}", color: n.inkSecondary },
+        data: buckets.map((b) => b.created),
+      },
+    ],
   };
 }
 
