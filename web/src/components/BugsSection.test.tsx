@@ -180,7 +180,7 @@ describe("BugsSection", () => {
     ["New bugs per non-bug item completed", "Compare it with this team's earlier periods"],
     ["Bug share", "Its total includes the bugs completed, so it is larger than the non-bug count"],
     ["Bug share", "A low share is good only when Bugs created also stays low"],
-  ])("explains %s on focus", async (label, help) => {
+  ])("explains %s on focus: %s", async (label, help) => {
     renderSection();
 
     fireEvent.focus(await screen.findByText(label));
