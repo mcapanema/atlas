@@ -30,14 +30,27 @@ const PRIORITY_LABEL: Record<PriorityFix["priority"], string> = {
   none: "No priority",
 };
 
-const OPEN_HELP =
-  "At the end of the period (today when no period is set). For a past period, the aging table still shows today.";
+const FLOW_HELP =
+  "Bugs created (by creation date) and bugs completed in each bucket of the window. Windows of 21 days or fewer bucket per day; longer windows bucket per week, and the oldest bucket is shorter when the window isn't a whole number of weeks. One bug can count in both series.";
+
+const FIX_HELP =
+  "Lead time of the bugs completed in the window, from arrival to done, in working days on the team calendar (set in Metric rules). Rows group bugs by their current priority in Linear; All bugs also counts bugs whose priority is unknown.";
+
+const COLUMN_HELP = {
+  priority: "The bug's current priority in Linear. No priority means none is set there.",
+  median:
+    "Median lead time of the bugs fixed in the window, in working days. Half of them took less.",
+  fixed: "Bugs completed in the window.",
+  open: "Bugs not completed or canceled at the end of the period (today when no period is set). For a past period, the aging table still shows today.",
+  oldestOpen:
+    "Age of the oldest open bug since it arrived, in working days on the team calendar, so it reads lower than its calendar age in Linear. Measured at the end of the period (today when no period is set).",
+};
 
 function cardHelp(dataAsOf: string | null): string {
   const asOf = dataAsOf ? ` Data as of ${formatDateTime(dataAsOf)}.` : "";
   return (
     "Bugs are items the team's type rules (Metric rules) classify as bugs. A bug counts as created on its creation date, even when its label was added later, and a bug canceled before completion counts nowhere. One bug can count in both chart series. " +
-    '"Oldest open" ages from arrival; the aging table ages from the start of work. The numbers are a lower bound when bugs miss their label.' +
+    "The numbers are a lower bound when bugs miss their label." +
     asOf
   );
 }
@@ -90,7 +103,9 @@ function BugFlowChart({ data }: { data: BugMetrics }) {
   if (data.buckets.length <= 1) return null;
   return (
     <>
-      <Typography.Text strong>Created vs. completed</Typography.Text>
+      <Typography.Text strong>
+        <HelpLabel label="Created vs. completed" help={FLOW_HELP} />
+      </Typography.Text>
       <EChart option={option} />
     </>
   );
@@ -106,9 +121,9 @@ function fixColumns(min: number): ColumnsType<FixRow> {
     <span className="fig">{seconds === null ? "—" : formatSeconds(seconds)}</span>
   );
   return [
-    { title: "Priority", dataIndex: "label" },
+    { title: <HelpLabel label="Priority" help={COLUMN_HELP.priority} />, dataIndex: "label" },
     {
-      title: "Median",
+      title: <HelpLabel label="Median" help={COLUMN_HELP.median} />,
       align: "right",
       render: (_, row) => (
         <>
@@ -118,19 +133,19 @@ function fixColumns(min: number): ColumnsType<FixRow> {
       ),
     },
     {
-      title: "Fixed",
+      title: <HelpLabel label="Fixed" help={COLUMN_HELP.fixed} />,
       dataIndex: "fixed",
       align: "right",
       render: (n: number) => <span className="fig">{n}</span>,
     },
     {
-      title: <HelpLabel label="Open" help={OPEN_HELP} />,
+      title: <HelpLabel label="Open" help={COLUMN_HELP.open} />,
       dataIndex: "open",
       align: "right",
       render: (n: number) => <span className="fig">{n}</span>,
     },
     {
-      title: <HelpLabel label="Oldest open" help={OPEN_HELP} />,
+      title: <HelpLabel label="Oldest open" help={COLUMN_HELP.oldestOpen} />,
       dataIndex: "oldest_open_seconds",
       align: "right",
       render: (seconds: number | null) => figure(seconds),
@@ -149,7 +164,9 @@ function BugFixTable({ data }: { data: BugMetrics }) {
   ];
   return (
     <>
-      <Typography.Text strong>Bug lead time by priority</Typography.Text>
+      <Typography.Text strong>
+        <HelpLabel label="Bug lead time by priority" help={FIX_HELP} />
+      </Typography.Text>
       <Table
         size="small"
         rowKey="key"

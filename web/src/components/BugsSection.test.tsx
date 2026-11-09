@@ -151,6 +151,21 @@ describe("BugsSection", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(/Data as of \S+ \d\d:\d\d\.$/);
   });
 
+  it.each([
+    ["Created vs. completed", "Windows of 21 days or fewer bucket per day"],
+    ["Bug lead time by priority", "in working days on the team calendar"],
+    ["Priority", "current priority in Linear"],
+    ["Median", "Half of them took less."],
+    ["Fixed", "Bugs completed in the window."],
+    ["Open", "Bugs not completed or canceled at the end of the period"],
+    ["Oldest open", "reads lower than its calendar age in Linear"],
+  ])("explains %s on focus", async (label, help) => {
+    renderSection();
+
+    fireEvent.focus(await screen.findByText(label));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(help);
+  });
+
   it("hides the chart for a single bucket", async () => {
     renderSection({ buckets: [bugMetricsFixture().buckets[0]] });
 
