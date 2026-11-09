@@ -59,7 +59,7 @@ describe("AgingWipCard", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Bug");
   });
 
-  it("puts a lone icon next to the state, whatever its kind", async () => {
+  it("puts a lone icon first in its slot, whatever its kind", async () => {
     renderCard([
       { ...agingWipFixture.items[0], blocked: true },
       { ...fresh, type: "bug" },
@@ -67,10 +67,10 @@ describe("AgingWipCard", () => {
 
     const blocked = await screen.findByRole("img", { name: "Blocked" });
     const bug = screen.getByRole("img", { name: "Bug" });
-    // One slot packs its icons toward the state, so a lone icon of either kind sits at one x.
+    // One slot packs its icons to the left, so a lone icon of either kind sits at one x.
     for (const icon of [blocked, bug]) {
       const flags = icon.closest(".aging-flags")!;
-      expect(flags.lastElementChild).toContainElement(icon);
+      expect(flags.firstElementChild).toContainElement(icon);
       expect(flags).toHaveStyle({ "--aging-flags": "2" });
     }
   });
