@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import getpass
 import sys
+import threading
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from uuid import UUID
@@ -38,6 +39,23 @@ def _reason(error: BaseException) -> str:
     """The first non-blank line of the error's text, or its class name."""
     lines = (line.strip() for line in str(error).splitlines())
     return next((line for line in lines if line), type(error).__name__)
+
+
+async def _join_sqlite_workers() -> None:
+    """Wait for aiosqlite's worker threads to exit while the event loop is open.
+
+    On a failed connect, aiosqlite (0.22.1) queues its worker's stop without
+    awaiting it. asyncio.run can then close the loop before the worker reports
+    back, and the worker raises "Event loop is closed" in its thread. After a
+    clean run, dispose() has already stopped every worker, so this returns at once.
+    """
+    workers = [
+        thread
+        for thread in threading.enumerate()
+        if thread.name.endswith("(_connection_worker_thread)")
+    ]
+    for worker in workers:
+        await asyncio.to_thread(worker.join, 1.0)
 
 
 def _has_users_table(session: Session) -> bool:
@@ -78,6 +96,7 @@ async def _database() -> AsyncIterator[AsyncSession]:
         # cleanup must not replace it.
         with suppress(DBAPIError, OSError):
             await engine.dispose()
+        await _join_sqlite_workers()
 
 
 async def _find_user(email: str) -> UUID:
