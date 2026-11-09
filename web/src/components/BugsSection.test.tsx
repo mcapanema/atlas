@@ -56,10 +56,20 @@ describe("BugsSection", () => {
 
     expect(
       await screen.findByText(
-        "No item carries the label(s) defeito, Bug. Does the team mark bugs with another label?",
+        "No bug found up to the end of this period for the label(s) defeito, Bug. If the team marks bugs with another label, map it in Metric rules.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Bug lead time by priority")).not.toBeInTheDocument();
+  });
+
+  it("shows bug inflow and outflow as tiles", async () => {
+    renderSection();
+
+    const tile = (title: string) => screen.getByText(title).closest(".stat")!;
+    await screen.findByText("Bugs created");
+    expect(tile("Bugs created").querySelector(".stat__value")).toHaveTextContent(/^14$/);
+    // The same count as the All bugs Fixed column, which also reads 30.
+    expect(tile("Bugs fixed").querySelector(".stat__value")).toHaveTextContent(/^30$/);
   });
 
   it("flags a main number below the evidence floor", async () => {

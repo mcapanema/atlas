@@ -89,6 +89,16 @@ function BugRatios({ data }: { data: BugMetrics }) {
         </span>
         <FloorNote sample={data.all_completed} min={min} noun="completed items" />
       </StatCard>
+      <StatCard
+        title="Bugs created"
+        value={data.created}
+        help="Bugs created in the window, by creation date: the inflow. A bug canceled before it was done counts nowhere."
+      />
+      <StatCard
+        title="Bugs fixed"
+        value={data.completed}
+        help="Bugs completed in the window: the outflow. The same count as the Fixed column of All bugs."
+      />
     </div>
   );
 }
@@ -189,7 +199,7 @@ function SetupAlert({ data, teamId }: { data: BugMetrics; teamId: string }) {
   const message =
     data.state === "no_mapping"
       ? "No label counts as a bug for this team."
-      : `No item carries the label(s) ${data.bug_labels.join(", ")}. Does the team mark bugs with another label?`;
+      : `No bug found up to the end of this period for the label(s) ${data.bug_labels.join(", ")}. If the team marks bugs with another label, map it in Metric rules.`;
   return (
     <Alert
       type="info"
