@@ -54,6 +54,19 @@ const COLUMN_HELP = {
     "Age of the oldest open bug since it arrived, in working days on the team calendar, so it reads lower than its calendar age in Linear. Measured at the end of the period (today when no period is set).",
 };
 
+const RATIO_HELP = {
+  perItem:
+    "New bugs ÷ items completed that are not bugs. Bugs are left out of the denominator, so a bug sprint does not lower it. " +
+    "0.25 means about 1 new bug for every 4 non-bug items completed. " +
+    "A rising value means more bugs for each non-bug item completed, or fewer non-bug items completed: check Bugs created. " +
+    "Compare it with this team's earlier periods, not with other teams. It shows inflow, not cause.",
+  share:
+    "Bugs completed ÷ all items completed in the window: the share of completed work that was bug fixes. " +
+    "Its total includes the bugs completed, so it is larger than the non-bug count in the ratio beside it. " +
+    "20% means 1 in 5 completed items was a bug fix. " +
+    "A low share is good only when Bugs created also stays low: a team that leaves bugs open also has a low share.",
+};
+
 function cardHelp(dataAsOf: string | null): string {
   const asOf = dataAsOf ? ` Data as of ${formatDateTime(dataAsOf)}.` : "";
   return (
@@ -80,7 +93,7 @@ function BugRatios({ data }: { data: BugMetrics }) {
       <StatCard
         title="New bugs per non-bug item completed"
         value={data.per_item === null ? "—" : data.per_item.toFixed(2)}
-        help="New bugs ÷ items completed that are not bugs. Bugs are left out of the denominator, so a bug sprint does not lower it."
+        help={RATIO_HELP.perItem}
       >
         <span className="dora-detail">
           {data.created} bugs / {data.non_bug_completed} non-bug items
@@ -90,7 +103,7 @@ function BugRatios({ data }: { data: BugMetrics }) {
       <StatCard
         title="Bug share"
         value={data.share === null ? "—" : `${Math.round(data.share * 100)}%`}
-        help="Bugs completed ÷ all items completed in the window: the share of completed work that was bug fixes."
+        help={RATIO_HELP.share}
       >
         <span className="dora-detail">
           {data.completed} of {data.all_completed}
