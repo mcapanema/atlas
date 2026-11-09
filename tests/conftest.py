@@ -16,7 +16,7 @@ import app.infrastructure.repositories  # noqa: F401  # registers ORM models on 
 from app.config import get_settings
 from app.domain.auth.passwords import hash_password
 from app.infrastructure.database.base import Base
-from app.infrastructure.database.session import enable_sqlite_pragmas
+from app.infrastructure.database.session import build_sessionmaker, enable_sqlite_pragmas
 from app.main import create_app
 
 ADMIN_EMAIL = "admin@atlas.test"
@@ -94,11 +94,12 @@ async def file_sessionmaker(tmp_path: Path) -> AsyncIterator[async_sessionmaker[
     runner): the single shared in-memory connection above can't isolate
     their transactions.
     """
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'atlas.db'}")
-    enable_sqlite_pragmas(engine)
+    # build_sessionmaker, as in production: it switches the file to WAL before the pool opens.
+    file_sessionmaker = build_sessionmaker(f"sqlite+aiosqlite:///{tmp_path / 'atlas.db'}")
+    engine = file_sessionmaker.kw["bind"]
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield async_sessionmaker(engine, expire_on_commit=False)
+    yield file_sessionmaker
     await engine.dispose()
 
 

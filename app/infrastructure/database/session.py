@@ -30,13 +30,10 @@ def set_sqlite_journal_mode(database_url: str, journal_mode: SqliteJournalMode) 
         return
     connection = sqlite3.connect(url.database)
     try:
-        mode = connection.execute(f"PRAGMA journal_mode={journal_mode}").fetchone()[0]
+        # A blocked switch raises "database is locked" here: startup fails loudly.
+        connection.execute(f"PRAGMA journal_mode={journal_mode}")
     finally:
         connection.close()
-    if mode != journal_mode:
-        raise sqlite3.OperationalError(
-            f"database is locked: can't switch to {journal_mode} journal mode (still {mode})"
-        )
 
 
 def enable_sqlite_pragmas(engine: AsyncEngine, *, journal_mode: SqliteJournalMode = "wal") -> None:
@@ -61,7 +58,7 @@ def enable_sqlite_pragmas(engine: AsyncEngine, *, journal_mode: SqliteJournalMod
         # another connection. A restart converts the file back.
         cursor.execute("PRAGMA journal_mode")
         mode = cursor.fetchone()[0]
-        if mode != journal_mode:
+        if mode not in (journal_mode, "memory"):  # an in-memory DB is always "memory"
             logger.warning(
                 "SQLite database is in %s journal mode, not the configured %s: another"
                 " process changed it; restart Atlas to convert it back",
