@@ -169,6 +169,16 @@ describe("BugsSection", () => {
     ["Fixed", "Bugs completed in the window."],
     ["Open", "Bugs not completed or canceled at the end of the period"],
     ["Oldest open", "reads lower than its calendar age in Linear"],
+    [
+      "New bugs per non-bug item completed",
+      "0.25 means about 1 new bug for every 4 items delivered",
+    ],
+    ["New bugs per non-bug item completed", "compare it with this team's earlier periods"],
+    [
+      "Bug share",
+      "so its total is larger than the denominator of New bugs per non-bug item completed",
+    ],
+    ["Bug share", "A low share is good only when Bugs created also stays low"],
   ])("explains %s on focus", async (label, help) => {
     renderSection();
 

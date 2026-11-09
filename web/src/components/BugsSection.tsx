@@ -54,6 +54,20 @@ const COLUMN_HELP = {
     "Age of the oldest open bug since it arrived, in working days on the team calendar, so it reads lower than its calendar age in Linear. Measured at the end of the period (today when no period is set).",
 };
 
+const RATIO_HELP = {
+  perItem:
+    "New bugs ÷ items completed that are not bugs. Bugs are left out of the denominator, so a bug sprint does not lower it. " +
+    "Read it as bug inflow for each item delivered: 0.25 means about 1 new bug for every 4 items delivered. " +
+    "Lower is better. A rising value means bugs arrive faster than the team delivers other work. " +
+    "Teams report bugs differently, so compare it with this team's earlier periods, not with other teams. " +
+    "It shows inflow, not cause.",
+  share:
+    "Bugs completed ÷ all items completed in the window: the share of completed work that was bug fixes. " +
+    "The total counts bugs and non-bug items, so its total is larger than the denominator of New bugs per non-bug item completed. " +
+    "20% means 1 in 5 items done was a bug fix. A high share means bug work takes capacity from planned work. " +
+    "A low share is good only when Bugs created also stays low: a team that leaves bugs open also has a low share.",
+};
+
 function cardHelp(dataAsOf: string | null): string {
   const asOf = dataAsOf ? ` Data as of ${formatDateTime(dataAsOf)}.` : "";
   return (
@@ -80,7 +94,7 @@ function BugRatios({ data }: { data: BugMetrics }) {
       <StatCard
         title="New bugs per non-bug item completed"
         value={data.per_item === null ? "—" : data.per_item.toFixed(2)}
-        help="New bugs ÷ items completed that are not bugs. Bugs are left out of the denominator, so a bug sprint does not lower it."
+        help={RATIO_HELP.perItem}
       >
         <span className="dora-detail">
           {data.created} bugs / {data.non_bug_completed} non-bug items
@@ -90,7 +104,7 @@ function BugRatios({ data }: { data: BugMetrics }) {
       <StatCard
         title="Bug share"
         value={data.share === null ? "—" : `${Math.round(data.share * 100)}%`}
-        help="Bugs completed ÷ all items completed in the window: the share of completed work that was bug fixes."
+        help={RATIO_HELP.share}
       >
         <span className="dora-detail">
           {data.completed} of {data.all_completed}
