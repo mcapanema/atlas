@@ -10,7 +10,11 @@ from pathlib import Path
 import pytest
 
 from app.infrastructure.database import lease as lease_module
-from app.infrastructure.database.lease import DatabaseInUseError, acquire_sqlite_lease
+from app.infrastructure.database.lease import (
+    DatabaseInUseError,
+    LeaseFileError,
+    acquire_sqlite_lease,
+)
 
 
 def _url(tmp_path: Path) -> str:
@@ -170,3 +174,31 @@ def test_missing_directory_gives_a_no_op_lease(tmp_path: Path) -> None:
     lease = acquire_sqlite_lease(f"sqlite+aiosqlite:///{tmp_path / 'no-such-dir' / 'atlas.db'}")
     assert lease.path is None
     assert not (tmp_path / "no-such-dir").exists()
+
+
+def test_in_use_message_names_the_remaining_wait(tmp_path: Path) -> None:
+    _write_lease(_lease_path(tmp_path), host="docker-abc", pid=1, heartbeat=1000.0)
+    with pytest.raises(DatabaseInUseError) as caught:
+        acquire_sqlite_lease(_url(tmp_path), now=lambda: 1000.0 + 60)
+    message = str(caught.value)
+    assert "If it is running, stop it first (Docker: make docker-down)." in message
+    assert "If it already stopped, wait 30 s" in message
+    assert str(_lease_path(tmp_path)) in message
+
+
+def test_in_use_message_never_asks_for_a_zero_wait(tmp_path: Path) -> None:
+    _write_lease(_lease_path(tmp_path), host="docker-abc", pid=1, heartbeat=1000.0)
+    with pytest.raises(DatabaseInUseError, match=r"wait 1 s"):
+        acquire_sqlite_lease(_url(tmp_path), now=lambda: 1000.0 + 89.6)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_unwritable_directory_is_a_lease_file_error(tmp_path: Path) -> None:
+    tmp_path.chmod(0o500)
+    try:
+        with pytest.raises(
+            LeaseFileError, match=r"Can't write the SQLite lease file .*atlas\.db\.lease"
+        ):
+            acquire_sqlite_lease(_url(tmp_path))
+    finally:
+        tmp_path.chmod(0o700)

@@ -25,7 +25,7 @@ from app.application.auth.service import UnknownUserError
 from app.application.auth.users import UserService
 from app.config import SqliteJournalMode, get_settings
 from app.domain.auth.entities import normalize_email, require_valid_password
-from app.infrastructure.database.lease import DatabaseInUseError, SqliteLease, acquire_sqlite_lease
+from app.infrastructure.database.lease import SqliteLease, SqliteLeaseError, acquire_sqlite_lease
 from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.repositories.auth import (
     SqlAlchemyAuthSessionRepository,
@@ -67,7 +67,7 @@ def _has_users_table(session: Session) -> bool:
 def _lease(database_url: str) -> SqliteLease:
     try:
         return acquire_sqlite_lease(database_url)
-    except DatabaseInUseError as exc:
+    except SqliteLeaseError as exc:  # in use, or the lease file can't be written
         raise _CliError(f"Can't use the database: {exc}") from exc
     except (ArgumentError, ValueError):  # build_sessionmaker reports the bad URL, without its text
         return SqliteLease(None)

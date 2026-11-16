@@ -11,6 +11,7 @@ fresh; another process refuses to start while that lease is live.
 
 import json
 import logging
+import math
 import os
 import socket
 import threading
@@ -30,8 +31,16 @@ RENEW_SECONDS = 30.0
 _TICK_SECONDS = 1.0  # how often the renew thread checks the wall clock
 
 
-class DatabaseInUseError(RuntimeError):
+class SqliteLeaseError(RuntimeError):
+    """The lease on a SQLite file can't be taken; the message says why."""
+
+
+class DatabaseInUseError(SqliteLeaseError):
     """Another live Atlas process holds the SQLite file's lease."""
+
+
+class LeaseFileError(SqliteLeaseError):
+    """The lease file can't be written, usually a read-only data directory."""
 
 
 class _Owner:
@@ -90,7 +99,13 @@ class SqliteLease:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         if path is not None:
-            self._write()
+            try:
+                self._write()
+            except OSError as exc:
+                raise LeaseFileError(
+                    f"Can't write the SQLite lease file {path}: {exc.strerror or exc}."
+                    f" Atlas needs write access to {path.parent}."
+                ) from exc
             self._thread = threading.Thread(
                 target=self._renew_loop, args=(renew_every,), name="sqlite-lease", daemon=True
             )
@@ -166,10 +181,12 @@ def acquire_sqlite_lease(
     if owner is not None and _shares_with(owner):
         return SqliteLease(None)
     other_host = owner is not None and owner.host != socket.gethostname()
-    if owner is not None and other_host and current - owner.heartbeat < LEASE_TTL_SECONDS:
+    age = current - owner.heartbeat if owner is not None else 0.0
+    if owner is not None and other_host and age < LEASE_TTL_SECONDS:
+        remaining = max(1, math.ceil(LEASE_TTL_SECONDS - age))
         raise DatabaseInUseError(
             f"{database} is in use by another Atlas process ({owner.host}, pid {owner.pid},"
-            f" seen {current - owner.heartbeat:.0f} s ago). Stop it first (Docker: make"
-            f" docker-down). If it crashed, wait {LEASE_TTL_SECONDS:.0f} s or delete {lease_path}."
+            f" seen {age:.0f} s ago). If it is running, stop it first (Docker: make"
+            f" docker-down). If it already stopped, wait {remaining} s or delete {lease_path}."
         )
     return SqliteLease(lease_path, now=now, renew_every=renew_every)

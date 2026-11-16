@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -362,3 +363,22 @@ def test_password_never_comes_from_argv() -> None:
         main(["reset-password", "a@b.co", "--password", "x"])
 
     assert exit_info.value.code == 2
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_unwritable_data_directory_is_a_clear_error(
+    tmp_path: Path, settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "data" / "atlas.db"
+    db.parent.mkdir()
+    asyncio.run(_seed(f"sqlite+aiosqlite:///{db}"))
+    db.parent.chmod(0o500)
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+    try:
+        code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+    finally:
+        db.parent.chmod(0o700)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("Can't use the database: Can't write the SQLite lease file")
