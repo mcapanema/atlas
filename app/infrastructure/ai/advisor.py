@@ -314,6 +314,18 @@ def _render_feedback(feedback: Sequence[AdviceFeedback]) -> str:
     return "\n".join(lines)
 
 
+def _http_error_text(response: httpx.Response) -> str:
+    """`OpenRouter returned HTTP 402: <reason>`, the reason from the `error.message` body."""
+    text = f"OpenRouter returned HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        return text
+    error = payload.get("error") if isinstance(payload, dict) else None
+    reason = error.get("message") if isinstance(error, dict) else None
+    return f"{text}: {reason}" if isinstance(reason, str) and reason else text
+
+
 def _message_content(response: httpx.Response) -> str:
     """Validate the chat-completions envelope before indexing into it."""
     try:
@@ -378,10 +390,14 @@ class OpenRouterAdvisor:
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 json=body,
             )
-            response.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.error("OpenRouter request failed: %s", describe_http_error(exc))
-            raise AdvisorError(f"OpenRouter request failed: {describe_http_error(exc)}") from exc
+            detail = describe_http_error(exc)
+            logger.error("OpenRouter request failed: %s", detail)
+            raise AdvisorError(f"OpenRouter request failed: {detail}") from exc
+        if not response.is_success:
+            text = _http_error_text(response)
+            logger.error("%s", text)
+            raise AdvisorError(text)
         return _message_content(response)
 
     async def advise(
