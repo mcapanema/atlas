@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -277,3 +278,36 @@ def test_machine_id_per_platform(
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: system)
     assert lease_module._machine_id() == expected
+
+
+def test_takes_over_a_lease_from_far_in_the_future(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A hand-edited lease, or a VM clock that jumped ahead and then stopped.
+    _write_lease(_lease_path(tmp_path), host="docker-abc", pid=1, heartbeat=1000.0 + 90)
+    with caplog.at_level(logging.WARNING):
+        lease = acquire_sqlite_lease(_url(tmp_path), now=lambda: 1000.0)
+    assert json.loads(_lease_path(tmp_path).read_text())["host"] == socket.gethostname()
+    assert "in the future" in caplog.text
+    lease.release()
+
+
+def _wait_for(condition: Callable[[], bool], what: str) -> None:
+    deadline = time.monotonic() + 1
+    while not condition():
+        assert time.monotonic() < deadline, what
+        time.sleep(0.01)
+
+
+def test_renewal_survives_a_failed_write(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    lease = acquire_sqlite_lease(_url(tmp_path), renew_every=0.01)
+    try:
+        with caplog.at_level(logging.WARNING):
+            _lease_path(tmp_path).unlink()
+            _lease_path(tmp_path).mkdir()  # os.replace can't put a file over a directory
+            _wait_for(lambda: "Can't renew the SQLite lease" in caplog.text, "no renew warning")
+        assert not (tmp_path / "atlas.db.lease.tmp").exists()
+        _lease_path(tmp_path).rmdir()
+        _wait_for(_lease_path(tmp_path).is_file, "the renew thread stopped")
+    finally:
+        lease.release()

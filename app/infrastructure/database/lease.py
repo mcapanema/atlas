@@ -106,6 +106,24 @@ def _shares_with(owner: _Owner) -> bool:
     return owner.machine == _machine_id() and owner.pid != os.getpid() and _pid_alive(owner.pid)
 
 
+def _is_live(owner: _Owner, current: float, lease_path: Path) -> bool:
+    """True while another host's heartbeat is less than LEASE_TTL_SECONDS away, either side.
+
+    A heartbeat that far in the future (a hand-edited lease, or a VM clock that
+    jumped ahead and stopped) would otherwise block starts until our clock
+    caught up.
+    """
+    ahead = owner.heartbeat - current
+    if ahead >= LEASE_TTL_SECONDS:
+        logger.warning(
+            "Taking over the SQLite lease %s: its heartbeat is %.0f s in the future",
+            lease_path,
+            ahead,
+        )
+        return False
+    return current - owner.heartbeat < LEASE_TTL_SECONDS
+
+
 class SqliteLease:
     """A held lease on one SQLite file; ``path`` is None for a no-op lease."""
 
@@ -209,10 +227,10 @@ def acquire_sqlite_lease(
     if owner is not None and _shares_with(owner):
         return SqliteLease(None)
     other_host = owner is not None and owner.machine != _machine_id()
-    # Clamped: a writer clock ahead of ours (the Docker VM) gives a heartbeat
-    # "in the future", which is still a live lease.
-    age = max(0.0, current - owner.heartbeat) if owner is not None else 0.0
-    if owner is not None and other_host and age < LEASE_TTL_SECONDS:
+    if owner is not None and other_host and _is_live(owner, current, lease_path):
+        # Clamped: a writer clock a little ahead of ours (the Docker VM) gives a
+        # heartbeat "in the future".
+        age = max(0.0, current - owner.heartbeat)
         remaining = max(1, math.ceil(LEASE_TTL_SECONDS - age))
         raise DatabaseInUseError(
             f"{database} is in use by another Atlas process ({owner.host}, pid {owner.pid},"
