@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
 from app.config import get_settings
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.lease import acquire_sqlite_lease
 
 config = context.config
 if config.config_file_name is not None:
@@ -41,4 +42,9 @@ async def run_async_migrations() -> None:
 
 if context.is_offline_mode():
     raise SystemExit("Offline migrations are not supported for Atlas.")
-asyncio.run(run_async_migrations())
+# The image runs `alembic upgrade head && uvicorn`: release before uvicorn starts.
+lease = acquire_sqlite_lease(get_settings().database_url)
+try:
+    asyncio.run(run_async_migrations())
+finally:
+    lease.release()

@@ -23,8 +23,9 @@ from sqlalchemy.orm import Session
 
 from app.application.auth.service import UnknownUserError
 from app.application.auth.users import UserService
-from app.config import get_settings
+from app.config import SqliteJournalMode, get_settings
 from app.domain.auth.entities import normalize_email, require_valid_password
+from app.infrastructure.database.lease import SqliteLease, SqliteLeaseError, acquire_sqlite_lease
 from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.repositories.auth import (
     SqlAlchemyAuthSessionRepository,
@@ -63,14 +64,33 @@ def _has_users_table(session: Session) -> bool:
     return inspect(session.connection()).has_table("users")
 
 
+def _lease(database_url: str) -> SqliteLease:
+    try:
+        return acquire_sqlite_lease(database_url)
+    except SqliteLeaseError as exc:  # in use, or the lease file can't be written
+        raise _CliError(f"Can't use the database: {exc}") from exc
+    except (ArgumentError, ValueError):  # build_sessionmaker reports the bad URL, without its text
+        return SqliteLease(None)
+
+
 @asynccontextmanager
 async def _database() -> AsyncIterator[AsyncSession]:
     """One session on the configured database; the engine is disposed afterwards."""
     settings = get_settings()
+    lease = _lease(settings.database_url)
     try:
-        sessionmaker = build_sessionmaker(
-            settings.database_url, journal_mode=settings.sqlite_journal_mode
-        )
+        async with _session(settings.database_url, settings.sqlite_journal_mode) as session:
+            yield session
+    finally:
+        lease.release()
+
+
+@asynccontextmanager
+async def _session(
+    database_url: str, journal_mode: SqliteJournalMode
+) -> AsyncIterator[AsyncSession]:
+    try:
+        sessionmaker = build_sessionmaker(database_url, journal_mode=journal_mode)
     except (ArgumentError, InvalidRequestError, ValueError):
         # A bad URL, port or sync driver. The text can hold the password: never
         # show or chain it.

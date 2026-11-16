@@ -364,8 +364,16 @@ per-dialect. Alembic manages schema migrations.
 
 The database file is `data/atlas.db`, used by local runs and bind-mounted into
 the Compose container, so both see the same data. SQLite's file locks don't
-cross Docker Desktop's VM, so only one of them may run at a time; the
-Makefile's `local-db-free` guard enforces this. The container runs SQLite in
+cross Docker Desktop's VM, so only one of them may run at a time. A lease
+file, `data/atlas.db.lease`, enforces this at every entry point (server, CLI,
+Alembic): each process writes its owner and a heartbeat there before it opens
+the database, and a process on the other side refuses to start while that
+lease is live. A second process on the same host (the CLI beside the server,
+via `docker compose exec`) shares the file, because one kernel's SQLite locks
+work. A crashed process's lease is taken over at once by a restart on the
+same host, and goes stale after `LEASE_TTL_SECONDS` for the other side (see
+`app/infrastructure/database/lease.py`). The Makefile's `local-db-free` check
+only gives the same answer earlier, before a build. The container runs SQLite in
 rollback-journal mode (`ATLAS_SQLITE_JOURNAL_MODE=delete`) because WAL's
 memory-mapped `-shm` file is unreliable on the bind mount; local runs keep
 WAL. Atlas switches the file's journal mode at startup, before it opens any

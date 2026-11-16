@@ -1,6 +1,8 @@
 """`python -m app.cli reset-password` — the terminal way back in (ADR-0028)."""
 
 import asyncio
+import json
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -245,6 +247,39 @@ def test_a_failed_connect_leaves_no_worker_error_behind(
     assert errors == []
 
 
+def test_database_in_use_is_a_clear_error(
+    tmp_path: Path, settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "atlas.db"
+    asyncio.run(_seed(f"sqlite+aiosqlite:///{db}"))
+    Path(f"{db}.lease").write_text(
+        json.dumps({"token": "other", "host": "docker-abc", "pid": 1, "heartbeat": time.time()})
+    )
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("Can't use the database: ")
+    assert "make docker-down" in err
+    assert asyncio.run(_stored(f"sqlite+aiosqlite:///{db}"))[0] == PASSWORD_HASH
+
+
+def test_reset_password_releases_its_lease(
+    tmp_path: Path, settings_env: Callable[..., None]
+) -> None:
+    db = tmp_path / "atlas.db"
+    asyncio.run(_seed(f"sqlite+aiosqlite:///{db}"))
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+
+    assert (
+        main(["reset-password", "ana@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD))
+        == 0
+    )
+    assert not Path(f"{db}.lease").exists()
+
+
 def test_reason_skips_blank_lines() -> None:
     assert _reason(Exception("\n  \nreal reason\nmore")) == "real reason"
     assert _reason(ValueError("")) == "ValueError"
@@ -328,3 +363,22 @@ def test_password_never_comes_from_argv() -> None:
         main(["reset-password", "a@b.co", "--password", "x"])
 
     assert exit_info.value.code == 2
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_unwritable_data_directory_is_a_clear_error(
+    tmp_path: Path, settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "data" / "atlas.db"
+    db.parent.mkdir()
+    asyncio.run(_seed(f"sqlite+aiosqlite:///{db}"))
+    db.parent.chmod(0o500)
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+    try:
+        code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+    finally:
+        db.parent.chmod(0o700)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("Can't use the database: Can't write the SQLite lease file")
