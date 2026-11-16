@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable
 
 import httpx
@@ -173,7 +174,9 @@ async def test_execute_does_not_retry_non_transient_transport_errors(
         calls += 1
         raise error
 
-    with pytest.raises(LinearAPIError, match=f"request failed: {type(error).__name__}: {error}"):
+    with pytest.raises(
+        LinearAPIError, match=re.escape(f"request failed: {type(error).__name__}: {error}")
+    ):
         await _client(handler).execute("{ viewer { id } }")
 
     assert calls == 1
