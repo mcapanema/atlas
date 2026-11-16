@@ -145,8 +145,12 @@ class SqliteLease:
             "heartbeat": self._heartbeat,
         }
         tmp = self.path.with_name(f"{self.path.name}.tmp")
-        tmp.write_text(json.dumps(record))
-        os.replace(tmp, self.path)
+        try:
+            tmp.write_text(json.dumps(record))
+            os.replace(tmp, self.path)
+        except OSError:
+            tmp.unlink(missing_ok=True)  # don't leave a half-done write behind
+            raise
 
     def _renew_loop(self, renew_every: float) -> None:
         assert self.path is not None  # noqa: S101 — narrow for mypy; only held leases renew
@@ -205,7 +209,9 @@ def acquire_sqlite_lease(
     if owner is not None and _shares_with(owner):
         return SqliteLease(None)
     other_host = owner is not None and owner.machine != _machine_id()
-    age = current - owner.heartbeat if owner is not None else 0.0
+    # Clamped: a writer clock ahead of ours (the Docker VM) gives a heartbeat
+    # "in the future", which is still a live lease.
+    age = max(0.0, current - owner.heartbeat) if owner is not None else 0.0
     if owner is not None and other_host and age < LEASE_TTL_SECONDS:
         remaining = max(1, math.ceil(LEASE_TTL_SECONDS - age))
         raise DatabaseInUseError(
