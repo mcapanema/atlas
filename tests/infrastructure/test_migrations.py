@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -13,6 +14,7 @@ from sqlalchemy import create_engine, text
 import app.infrastructure.repositories  # noqa: F401  # registers ORM models on Base.metadata
 from app.config import get_settings
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.lease import DatabaseInUseError
 
 
 def test_upgrade_head_matches_orm_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,3 +204,39 @@ def test_migration_drops_assignee_names_on_populated_db(
 
     assert assignee_ids == [None]
     assert people == 0
+
+
+def _foreign_lease(db_path: Path) -> None:
+    """A live lease of another process: the Compose container, seen just now."""
+    Path(f"{db_path}.lease").write_text(
+        json.dumps({"token": "other", "host": "docker-abc", "pid": 1, "heartbeat": time.time()})
+    )
+
+
+def test_upgrade_refuses_a_database_another_process_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "held.db"
+    _foreign_lease(db_path)
+    monkeypatch.setenv("ATLAS_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(DatabaseInUseError):
+            command.upgrade(Config("alembic.ini"), "head")
+    finally:
+        get_settings.cache_clear()
+    assert not db_path.exists()
+
+
+def test_upgrade_releases_the_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The image runs `alembic upgrade head && uvicorn`: a lease left behind
+    # would lock the server out of its own container.
+    db_path = tmp_path / "released.db"
+    monkeypatch.setenv("ATLAS_DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    get_settings.cache_clear()
+    try:
+        command.upgrade(Config("alembic.ini"), "head")
+    finally:
+        get_settings.cache_clear()
+    assert db_path.exists()
+    assert not Path(f"{db_path}.lease").exists()

@@ -18,7 +18,7 @@ services:
       ATLAS_SECRET_KEY_FILE: /app/data/atlas.key
     volumes:
       # ponytail: one database shared with local runs, so one side at a time
-      # (SQLite's file locks don't cross Docker's VM; the Makefile guards it).
+      # (SQLite's file locks don't cross Docker's VM; data/atlas.db.lease guards it).
       # On a Linux host the container writes data/ as root; upgrade path is
       # `user: "<host uid>:<host gid>"` here if that bites.
       - ./data:/app/data

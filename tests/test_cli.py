@@ -1,6 +1,7 @@
 """`python -m app.cli reset-password` — the terminal way back in (ADR-0028)."""
 
 import asyncio
+import json
 import threading
 import time
 from collections.abc import Callable
@@ -243,6 +244,39 @@ def test_a_failed_connect_leaves_no_worker_error_behind(
     for worker in _aiosqlite_workers():
         worker.join(timeout=2)
     assert errors == []
+
+
+def test_database_in_use_is_a_clear_error(
+    tmp_path: Path, settings_env: Callable[..., None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "atlas.db"
+    asyncio.run(_seed(f"sqlite+aiosqlite:///{db}"))
+    Path(f"{db}.lease").write_text(
+        json.dumps({"token": "other", "host": "docker-abc", "pid": 1, "heartbeat": time.time()})
+    )
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+
+    code = main(["reset-password", "ana@acme.com"], read_password=_no_prompt)
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("Can't use the database: ")
+    assert "make docker-down" in err
+    assert asyncio.run(_stored(f"sqlite+aiosqlite:///{db}"))[0] == PASSWORD_HASH
+
+
+def test_reset_password_releases_its_lease(
+    tmp_path: Path, settings_env: Callable[..., None]
+) -> None:
+    db = tmp_path / "atlas.db"
+    asyncio.run(_seed(f"sqlite+aiosqlite:///{db}"))
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+
+    assert (
+        main(["reset-password", "ana@acme.com"], read_password=_reader(NEW_PASSWORD, NEW_PASSWORD))
+        == 0
+    )
+    assert not Path(f"{db}.lease").exists()
 
 
 def test_reason_skips_blank_lines() -> None:

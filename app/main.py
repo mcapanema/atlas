@@ -51,6 +51,7 @@ from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
 from app.domain.auth.throttle import SignInThrottle
 from app.domain.sync.port import DataSourceError
+from app.infrastructure.database.lease import acquire_sqlite_lease
 from app.infrastructure.database.session import build_sessionmaker
 from app.infrastructure.secrets import cipher_for
 from app.infrastructure.static import mount_spa
@@ -109,11 +110,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Create (or check) the credential key now: a corrupt key file fails
     # startup with its path, not every request that touches a credential.
     cipher_for(settings.secret_key_file)
-    sessionmaker = build_sessionmaker(
-        settings.database_url,
-        echo=settings.db_echo,
-        journal_mode=settings.sqlite_journal_mode,
-    )
+    # Before the journal-mode switch: a second process on a shared SQLite file
+    # must fail here, not flip the mode under the one already running.
+    lease = acquire_sqlite_lease(settings.database_url)
+    try:
+        sessionmaker = build_sessionmaker(
+            settings.database_url,
+            echo=settings.db_echo,
+            journal_mode=settings.sqlite_journal_mode,
+        )
+    except BaseException:
+        lease.release()
+        raise
     app.state.sessionmaker = sessionmaker
     runner = RecomputeRunner(sessionmaker)
     app.state.recompute_runner = runner
@@ -158,6 +166,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         engine = sessionmaker.kw["bind"]
         assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
         await engine.dispose()
+        lease.release()
 
 
 def create_app() -> FastAPI:

@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import re
+import time
 from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
@@ -19,10 +21,45 @@ from app.domain.advisor.runs import AdviceRun, RunStatus, run_params
 from app.domain.organizations.entities import Organization
 from app.domain.sync.source import SourceTeam
 from app.infrastructure.database.base import Base
+from app.infrastructure.database.lease import DatabaseInUseError
 from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
 from app.infrastructure.repositories.organizations import SqlAlchemyOrganizationRepository
 from app.main import create_app, lifespan
 from tests.fakes import FakeDataSource
+
+
+def _lease_file(db: Path) -> Path:
+    return db.with_name(f"{db.name}.lease")
+
+
+def _hold_foreign_lease(db: Path) -> None:
+    """A live lease of another process: the Compose container, seen just now."""
+    _lease_file(db).write_text(
+        json.dumps({"token": "other", "host": "docker-abc", "pid": 1, "heartbeat": time.time()})
+    )
+
+
+async def test_lifespan_refuses_a_database_another_process_holds(
+    settings_env: Callable[..., None], tmp_path: Path
+) -> None:
+    db = tmp_path / "lifespan.db"
+    _hold_foreign_lease(db)
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+    with pytest.raises(DatabaseInUseError):
+        async with lifespan(create_app()):
+            pass
+    assert not db.exists()
+
+
+async def test_lifespan_releases_its_lease_on_shutdown(
+    settings_env: Callable[..., None], tmp_path: Path
+) -> None:
+    db = tmp_path / "lifespan.db"
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+    with mock.patch.object(AutoSyncRunner, "tick", autospec=True, return_value=0):
+        async with lifespan(create_app()):
+            assert _lease_file(db).exists()
+    assert not _lease_file(db).exists()
 
 
 async def test_lifespan_disposes_the_engine_on_shutdown(

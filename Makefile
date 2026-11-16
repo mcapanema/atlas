@@ -116,8 +116,10 @@ docker-logs: ## Tail Docker container logs
 	docker compose logs -f
 
 # data/atlas.db is shared with the Compose app, and SQLite's file locks don't
-# cross Docker's VM: two processes on it can corrupt it. `docker-up` needs
-# no guard here, because port 8000 is already taken by a local server.
+# cross Docker's VM: two processes on it can corrupt it. The lease file
+# (app/infrastructure/database/lease.py) is the guard; this check only says
+# so before a build. `docker-up` needs no check here, because port 8000 is
+# already taken by a local server.
 local-db-free:
 	@if [ -n "$$(docker compose ps --status running --quiet app 2>/dev/null)" ]; then \
 		echo "Atlas is running in Docker and uses the same data/atlas.db; stop it first: make docker-down"; \
