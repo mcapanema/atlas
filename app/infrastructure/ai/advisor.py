@@ -35,6 +35,9 @@ from app.infrastructure.http_errors import describe_http_error
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Longest OpenRouter error reason put in an AdvisorError (shown in the UI).
+_MAX_REASON_CHARS = 200
+
 # Hard bounds on the LLM loop (review 2026-10-04, F4): a reply's billable
 # length, list sizes the prompts promise, learned-guidance size, and how
 # much feedback one reflection reads. The token budget and HTTP timeout are
@@ -315,7 +318,11 @@ def _render_feedback(feedback: Sequence[AdviceFeedback]) -> str:
 
 
 def _http_error_text(response: httpx.Response) -> str:
-    """`OpenRouter returned HTTP 402: <reason>`, the reason from the `error.message` body."""
+    """`OpenRouter returned HTTP 402: <reason>`, the reason from the `error.message` body.
+
+    The reason is shown in the UI and the log, so it is folded to one line
+    and cut at _MAX_REASON_CHARS.
+    """
     text = f"OpenRouter returned HTTP {response.status_code}"
     try:
         payload = response.json()
@@ -323,7 +330,11 @@ def _http_error_text(response: httpx.Response) -> str:
         return text
     error = payload.get("error") if isinstance(payload, dict) else None
     reason = error.get("message") if isinstance(error, dict) else None
-    return f"{text}: {reason}" if isinstance(reason, str) and reason else text
+    if not isinstance(reason, str) or not (reason := " ".join(reason.split())):
+        return text
+    if len(reason) > _MAX_REASON_CHARS:
+        reason = reason[: _MAX_REASON_CHARS - 1] + "…"
+    return f"{text}: {reason}"
 
 
 def _message_content(response: httpx.Response) -> str:

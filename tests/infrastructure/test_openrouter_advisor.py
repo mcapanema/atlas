@@ -180,12 +180,29 @@ async def test_advise_rejects_a_redirect_answer() -> None:
 
 
 async def test_advise_logs_the_http_status(caplog: pytest.LogCaptureFixture) -> None:
-    advisor = _advisor_returning(httpx.Response(503, json={}))
+    body = {"error": {"message": "provider down"}}
+    advisor = _advisor_returning(httpx.Response(503, json=body))
 
     with pytest.raises(AdvisorError):
         await advisor.advise(_context())
 
-    assert "OpenRouter returned HTTP 503" in caplog.text
+    assert "OpenRouter returned HTTP 503: provider down" in caplog.text
+
+
+async def test_advise_http_error_reason_is_one_bounded_line() -> None:
+    reason = "This model's maximum context length is exceeded.\n\n  Details:  " + "x" * 300
+    advisor = _advisor_returning(httpx.Response(400, json={"error": {"message": reason}}))
+
+    with pytest.raises(AdvisorError) as caught:
+        await advisor.advise(_context())
+
+    text = str(caught.value)
+    assert text.startswith(
+        "OpenRouter returned HTTP 400: This model's maximum context length is exceeded. Details: x"
+    )
+    assert "\n" not in text
+    assert text.endswith("…")
+    assert len(text) <= len("OpenRouter returned HTTP 400: ") + 200
 
 
 def _advisor_returning(response: httpx.Response) -> OpenRouterAdvisor:

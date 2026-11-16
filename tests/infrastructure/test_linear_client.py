@@ -159,7 +159,7 @@ async def test_execute_does_not_retry_4xx_other_than_429() -> None:
         httpx.WriteTimeout("write timed out"),
         httpx.PoolTimeout("pool timed out"),
         httpx.UnsupportedProtocol("unsupported protocol 'ftp://'"),
-        httpx.ProxyError("proxy refused"),
+        httpx.ProxyError("proxy (403) refused [x]"),  # regex metacharacters match literally
         httpx.LocalProtocolError("illegal header"),
     ],
     ids=lambda error: type(error).__name__,
