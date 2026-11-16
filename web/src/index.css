@@ -217,6 +217,13 @@ h5 {
 .aging-bug {
   color: var(--ant-color-text-secondary);
 }
+/* Evidence-floor icon beside a table figure; its tooltip and aria-label hold the note. */
+.floor-icon {
+  margin-right: 6px;
+  color: var(--ant-color-text-secondary);
+  cursor: help;
+}
+.floor-icon:focus-visible,
 .aging-bug:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 2px;

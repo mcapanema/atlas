@@ -1,4 +1,5 @@
-import { Alert, Col, Row, Table, Typography } from "antd";
+import { ExclamationCircleOutlined } from "@ant-design/icons";
+import { Alert, Col, Row, Table, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -13,6 +14,7 @@ import {
 import { buildBugFlowOption } from "../lib/charts";
 import { formatDateTime } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
+import { sampleNoteText } from "../lib/sampleNote";
 import { windowLabel } from "../lib/metricsFilters";
 import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
@@ -83,6 +85,17 @@ function FloorNote({ sample, min, noun }: { sample: number; min: number; noun: s
     <span className="dora-detail">
       <SampleNote sample={sample} min={min} noun={noun} />
     </span>
+  );
+}
+
+/** The same floor as FloorNote, as an icon beside a table figure: a note would break the row. */
+function FloorIcon({ sample, min, noun }: { sample: number; min: number; noun: string }) {
+  if (sample <= 0 || sample >= min) return null;
+  const note = sampleNoteText(sample, min, noun);
+  return (
+    <Tooltip title={note} trigger={["hover", "focus"]}>
+      <ExclamationCircleOutlined className="floor-icon" aria-label={note} tabIndex={0} />
+    </Tooltip>
   );
 }
 
@@ -158,8 +171,8 @@ function fixColumns(min: number): ColumnsType<FixRow> {
       align: "right",
       render: (_, row) => (
         <>
+          <FloorIcon sample={row.fixed} min={min} noun="fixed bugs" />
           {figure(row.median_seconds)}
-          <FloorNote sample={row.fixed} min={min} noun="fixed bugs" />
         </>
       ),
     },
