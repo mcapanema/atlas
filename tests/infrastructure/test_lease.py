@@ -6,7 +6,6 @@ import socket
 import subprocess
 import sys
 import time
-import uuid
 from pathlib import Path
 
 import pytest
@@ -254,14 +253,10 @@ def test_written_lease_names_its_machine(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("system", "expected"),
-    [("Darwin", f"{uuid.getnode():012x}"), ("Linux", socket.gethostname())],
+    [("Darwin", "darwin"), ("Linux", socket.gethostname())],
 )
 def test_machine_id_per_platform(
     monkeypatch: pytest.MonkeyPatch, system: str, expected: str
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: system)
-    lease_module._machine_id.cache_clear()
-    try:
-        assert lease_module._machine_id() == expected
-    finally:
-        lease_module._machine_id.cache_clear()
+    assert lease_module._machine_id() == expected

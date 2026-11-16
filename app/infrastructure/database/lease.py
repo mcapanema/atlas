@@ -9,7 +9,6 @@ process writes ``<db>.lease`` (owner + heartbeat) and a renew thread keeps it
 fresh; another process refuses to start while that lease is live.
 """
 
-import functools
 import json
 import logging
 import math
@@ -45,18 +44,19 @@ class LeaseFileError(SqliteLeaseError):
     """The lease file can't be written, usually a read-only data directory."""
 
 
-@functools.cache
 def _machine_id() -> str:
-    """What "the same host" means for a lease; cached, so it can't change mid-process.
+    """What "the same host" means for a lease.
 
-    macOS renames the host with the network (DHCP, .local names), so there
-    the hardware MAC stands in. Elsewhere the hostname: a container's is its
-    id, the same across a restart and new on a recreate.
+    macOS renames the host with the network (DHCP, .local names), and hides
+    the MAC from processes (uuid.getnode() reads 02:00:00:00:00:00), so there
+    it is a constant: the only other side of the bind mount is a Linux
+    container. Elsewhere the hostname: a container's is its id, the same
+    across a restart and new on a recreate.
     """
     # platform.system(), not sys.platform: mypy narrows the latter per OS and
     # flags the other branch as unreachable.
     if platform.system() == "Darwin":
-        return f"{uuid.getnode():012x}"
+        return "darwin"
     return socket.gethostname()
 
 
@@ -183,7 +183,7 @@ def acquire_sqlite_lease(
     now: Callable[[], float] = time.time,
     renew_every: float = RENEW_SECONDS,
 ) -> SqliteLease:
-    """Take the lease on a SQLite file, or raise DatabaseInUseError; a no-op lease elsewhere.
+    """Take the lease on a SQLite file, or raise a SqliteLeaseError; a no-op lease elsewhere.
 
     A URL that names no file (Postgres, in-memory) or a file in a missing
     directory gets a no-op lease: the latter lets SQLite report its own
