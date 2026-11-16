@@ -98,6 +98,7 @@ describe("BugsSection", () => {
     renderSection();
 
     const icon = await screen.findByRole("img", { name: "Too few fixed bugs (2 of 5)" });
+    // jsdom has no layout: the class pins the hook; .median-cell's nowrap in index.css does the work.
     expect(icon.closest("td")).toHaveClass("median-cell");
   });
 

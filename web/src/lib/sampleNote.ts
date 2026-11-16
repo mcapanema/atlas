@@ -1,5 +1,5 @@
 /** Whether a sample is worth a note: above zero (zero shows a dash) and below the floor. */
-export function belowFloor(sample: number, min: number): boolean {
+export function showsFloorNote(sample: number, min: number): boolean {
   return sample > 0 && sample < min;
 }
 

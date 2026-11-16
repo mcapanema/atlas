@@ -15,7 +15,7 @@ import { buildBugFlowOption } from "../lib/charts";
 import { formatDateTime } from "../lib/dates";
 import { formatSeconds } from "../lib/duration";
 import { windowLabel } from "../lib/metricsFilters";
-import { belowFloor, sampleNoteText } from "../lib/sampleNote";
+import { sampleNoteText, showsFloorNote } from "../lib/sampleNote";
 import { STATS_WINDOW_DAYS } from "../lib/windows";
 import { useThemeMode } from "../theme/context";
 import { ChartCard } from "./ChartCard";
@@ -80,7 +80,7 @@ function cardHelp(dataAsOf: string | null): string {
 
 /** A note under a figure whose sample is above zero but below the evidence floor. */
 function FloorNote({ sample, min, noun }: { sample: number; min: number; noun: string }) {
-  if (!belowFloor(sample, min)) return null;
+  if (!showsFloorNote(sample, min)) return null;
   return (
     <span className="dora-detail">
       <SampleNote sample={sample} min={min} noun={noun} />
@@ -90,7 +90,7 @@ function FloorNote({ sample, min, noun }: { sample: number; min: number; noun: s
 
 /** The same floor as FloorNote, as an icon beside a table figure: a note would break the row. */
 function FloorIcon({ sample, min, noun }: { sample: number; min: number; noun: string }) {
-  if (!belowFloor(sample, min)) return null;
+  if (!showsFloorNote(sample, min)) return null;
   const note = sampleNoteText(sample, min, noun);
   return (
     <Tooltip title={note} trigger={["hover", "focus"]}>

@@ -223,15 +223,15 @@ h5 {
   color: var(--ant-color-text-secondary);
   cursor: help;
 }
-/* A narrow table must not wrap the floor icon above its figure. */
-.median-cell {
-  white-space: nowrap;
-}
 .floor-icon:focus-visible,
 .aging-bug:focus-visible {
   outline: 2px solid var(--ant-color-primary);
   outline-offset: 2px;
   border-radius: 50%;
+}
+/* A narrow table must not wrap the floor icon above its figure. */
+.median-cell {
+  white-space: nowrap;
 }
 /* The Bugs section: ratios, then the chart beside the lead-time table. */
 .bugs-section {
