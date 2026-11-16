@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import pytest
@@ -32,8 +33,12 @@ def _write_lease(
     pid: int,
     heartbeat: float,
     token: str = "other",  # noqa: S107 — a lease token, not a password
+    machine: str | None = None,
 ) -> None:
-    path.write_text(json.dumps({"token": token, "host": host, "pid": pid, "heartbeat": heartbeat}))
+    record: dict[str, object] = {"token": token, "host": host, "pid": pid, "heartbeat": heartbeat}
+    if machine is not None:
+        record["machine"] = machine
+    path.write_text(json.dumps(record))
 
 
 def test_acquire_writes_a_lease_and_release_removes_it(tmp_path: Path) -> None:
@@ -69,7 +74,11 @@ def test_takes_over_a_stale_lease_of_another_host(tmp_path: Path) -> None:
 def test_takes_over_a_lease_from_its_own_host_and_pid(tmp_path: Path) -> None:
     # A restarted container: same hostname, and often the same pid.
     _write_lease(
-        _lease_path(tmp_path), host=socket.gethostname(), pid=os.getpid(), heartbeat=time.time()
+        _lease_path(tmp_path),
+        host=socket.gethostname(),
+        machine=lease_module._machine_id(),
+        pid=os.getpid(),
+        heartbeat=time.time(),
     )
     acquire_sqlite_lease(_url(tmp_path)).release()
 
@@ -78,7 +87,11 @@ def test_takes_over_a_lease_whose_pid_is_dead_on_this_host(tmp_path: Path) -> No
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()
     _write_lease(
-        _lease_path(tmp_path), host=socket.gethostname(), pid=dead.pid, heartbeat=time.time()
+        _lease_path(tmp_path),
+        host=socket.gethostname(),
+        machine=lease_module._machine_id(),
+        pid=dead.pid,
+        heartbeat=time.time(),
     )
     acquire_sqlite_lease(_url(tmp_path)).release()
 
@@ -89,7 +102,11 @@ def test_shares_a_live_lease_of_its_own_host(tmp_path: Path) -> None:
     alive = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         _write_lease(
-            _lease_path(tmp_path), host=socket.gethostname(), pid=alive.pid, heartbeat=time.time()
+            _lease_path(tmp_path),
+            host=socket.gethostname(),
+            machine=lease_module._machine_id(),
+            pid=alive.pid,
+            heartbeat=time.time(),
         )
         lease = acquire_sqlite_lease(_url(tmp_path))
         assert lease.path is None
@@ -202,3 +219,48 @@ def test_unwritable_directory_is_a_lease_file_error(tmp_path: Path) -> None:
             acquire_sqlite_lease(_url(tmp_path))
     finally:
         tmp_path.chmod(0o700)
+
+
+def test_same_machine_with_a_new_hostname_takes_over_a_dead_owner(tmp_path: Path) -> None:
+    # macOS renames the host with the network (DHCP, .local names).
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    _write_lease(
+        _lease_path(tmp_path),
+        host="old-name.local",
+        machine=lease_module._machine_id(),
+        pid=dead.pid,
+        heartbeat=time.time(),
+    )
+    acquire_sqlite_lease(_url(tmp_path)).release()
+
+
+def test_reads_a_lease_without_a_machine_key(tmp_path: Path) -> None:
+    _write_lease(_lease_path(tmp_path), host="docker-abc", pid=1, heartbeat=time.time())
+    with pytest.raises(DatabaseInUseError, match="docker-abc"):
+        acquire_sqlite_lease(_url(tmp_path))
+
+
+def test_machine_id_is_stable_within_a_process() -> None:
+    assert lease_module._machine_id() == lease_module._machine_id()
+
+
+def test_written_lease_names_its_machine(tmp_path: Path) -> None:
+    lease = acquire_sqlite_lease(_url(tmp_path))
+    assert json.loads(_lease_path(tmp_path).read_text())["machine"] == lease_module._machine_id()
+    lease.release()
+
+
+@pytest.mark.parametrize(
+    ("system", "expected"),
+    [("Darwin", f"{uuid.getnode():012x}"), ("Linux", socket.gethostname())],
+)
+def test_machine_id_per_platform(
+    monkeypatch: pytest.MonkeyPatch, system: str, expected: str
+) -> None:
+    monkeypatch.setattr(lease_module.platform, "system", lambda: system)
+    lease_module._machine_id.cache_clear()
+    try:
+        assert lease_module._machine_id() == expected
+    finally:
+        lease_module._machine_id.cache_clear()

@@ -9,10 +9,12 @@ process writes ``<db>.lease`` (owner + heartbeat) and a renew thread keeps it
 fresh; another process refuses to start while that lease is live.
 """
 
+import functools
 import json
 import logging
 import math
 import os
+import platform
 import socket
 import threading
 import time
@@ -43,17 +45,38 @@ class LeaseFileError(SqliteLeaseError):
     """The lease file can't be written, usually a read-only data directory."""
 
 
+@functools.cache
+def _machine_id() -> str:
+    """What "the same host" means for a lease; cached, so it can't change mid-process.
+
+    macOS renames the host with the network (DHCP, .local names), so there
+    the hardware MAC stands in. Elsewhere the hostname: a container's is its
+    id, the same across a restart and new on a recreate.
+    """
+    # platform.system(), not sys.platform: mypy narrows the latter per OS and
+    # flags the other branch as unreachable.
+    if platform.system() == "Darwin":
+        return f"{uuid.getnode():012x}"
+    return socket.gethostname()
+
+
 class _Owner:
-    def __init__(self, token: str, host: str, pid: int, heartbeat: float) -> None:
-        self.token, self.host, self.pid, self.heartbeat = token, host, pid, heartbeat
+    def __init__(self, token: str, host: str, machine: str, pid: int, heartbeat: float) -> None:
+        self.token, self.host, self.machine = token, host, machine
+        self.pid, self.heartbeat = pid, heartbeat
 
 
 def _read_owner(path: Path) -> _Owner | None:
     """The lease's owner; None when there is no lease or it can't be read."""
     try:
         data = json.loads(path.read_text())
+        host = str(data["host"])
         return _Owner(
-            str(data["token"]), str(data["host"]), int(data["pid"]), float(data["heartbeat"])
+            str(data["token"]),
+            host,
+            str(data.get("machine", host)),  # leases from before "machine" existed
+            int(data["pid"]),
+            float(data["heartbeat"]),
         )
     except FileNotFoundError:
         return None
@@ -80,7 +103,7 @@ def _shares_with(owner: _Owner) -> bool:
     leaves the owner's lease alone. A dead pid, or our own (a container
     restart reuses pid 1), is a crashed owner to take over.
     """
-    return owner.host == socket.gethostname() and owner.pid != os.getpid() and _pid_alive(owner.pid)
+    return owner.machine == _machine_id() and owner.pid != os.getpid() and _pid_alive(owner.pid)
 
 
 class SqliteLease:
@@ -117,6 +140,7 @@ class SqliteLease:
         record = {
             "token": self._token,
             "host": socket.gethostname(),
+            "machine": _machine_id(),
             "pid": os.getpid(),
             "heartbeat": self._heartbeat,
         }
@@ -180,7 +204,7 @@ def acquire_sqlite_lease(
     current = now()
     if owner is not None and _shares_with(owner):
         return SqliteLease(None)
-    other_host = owner is not None and owner.host != socket.gethostname()
+    other_host = owner is not None and owner.machine != _machine_id()
     age = current - owner.heartbeat if owner is not None else 0.0
     if owner is not None and other_host and age < LEASE_TTL_SECONDS:
         remaining = max(1, math.ceil(LEASE_TTL_SECONDS - age))
