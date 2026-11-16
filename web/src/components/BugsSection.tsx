@@ -169,6 +169,7 @@ function fixColumns(min: number): ColumnsType<FixRow> {
     {
       title: <HelpLabel label="Median" help={COLUMN_HELP.median} />,
       align: "right",
+      className: "median-cell",
       render: (_, row) => (
         <>
           <FloorIcon sample={row.fixed} min={min} noun="fixed bugs" />

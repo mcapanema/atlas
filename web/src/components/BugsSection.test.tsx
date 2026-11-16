@@ -94,6 +94,13 @@ describe("BugsSection", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Too few fixed bugs (2 of 5)");
   });
 
+  it("keeps the floor icon on the same line as the median", async () => {
+    renderSection();
+
+    const icon = await screen.findByRole("img", { name: "Too few fixed bugs (2 of 5)" });
+    expect(icon.closest("td")).toHaveClass("median-cell");
+  });
+
   it("shows no floor icon at zero fixed bugs or at the floor", async () => {
     renderSection({
       all_bugs: fixRow(5, 1),
