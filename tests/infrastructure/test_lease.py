@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from app.infrastructure.database import lease as lease_module
 from app.infrastructure.database.lease import DatabaseInUseError, acquire_sqlite_lease
 
 
@@ -78,17 +79,38 @@ def test_takes_over_a_lease_whose_pid_is_dead_on_this_host(tmp_path: Path) -> No
     acquire_sqlite_lease(_url(tmp_path)).release()
 
 
-def test_refuses_a_lease_whose_pid_is_alive_on_this_host(tmp_path: Path) -> None:
+def test_shares_a_live_lease_of_its_own_host(tmp_path: Path) -> None:
+    # `docker compose exec app python -m app.cli ...` beside the running server:
+    # one kernel, so SQLite's own locks work; the owner keeps its lease.
     alive = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         _write_lease(
             _lease_path(tmp_path), host=socket.gethostname(), pid=alive.pid, heartbeat=time.time()
         )
-        with pytest.raises(DatabaseInUseError):
-            acquire_sqlite_lease(_url(tmp_path))
+        lease = acquire_sqlite_lease(_url(tmp_path))
+        assert lease.path is None
+        lease.release()
+        assert json.loads(_lease_path(tmp_path).read_text())["token"] == "other"
     finally:
         alive.kill()
         alive.wait()
+
+
+def test_renews_by_wall_clock_after_a_sleep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A laptop sleep stops the monotonic clock that Event.wait uses: renewal must
+    # follow the wall clock, or a live lease looks stale right after wake-up.
+    monkeypatch.setattr(lease_module, "_TICK_SECONDS", 0.01)
+    times = iter([1000.0, 1000.0])
+    lease = acquire_sqlite_lease(_url(tmp_path), now=lambda: next(times, 5000.0))
+    try:
+        deadline = time.monotonic() + 1
+        while json.loads(_lease_path(tmp_path).read_text())["heartbeat"] != 5000.0:
+            assert time.monotonic() < deadline, "no renewal after the wall clock jumped"
+            time.sleep(0.01)
+    finally:
+        lease.release()
 
 
 def test_unreadable_lease_is_taken_over(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

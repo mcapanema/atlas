@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 # several renewals, so its owner is gone.
 LEASE_TTL_SECONDS = 90.0
 RENEW_SECONDS = 30.0
+_TICK_SECONDS = 1.0  # how often the renew thread checks the wall clock
 
 
 class DatabaseInUseError(RuntimeError):
@@ -62,12 +63,15 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _may_take_over(owner: _Owner, now: float) -> bool:
-    if owner.host == socket.gethostname() and (
-        owner.pid == os.getpid() or not _pid_alive(owner.pid)
-    ):
-        return True  # a restart on the same host: the old process is gone
-    return now - owner.heartbeat >= LEASE_TTL_SECONDS
+def _shares_with(owner: _Owner) -> bool:
+    """True when ``owner`` is a live process on this host.
+
+    One kernel means SQLite's own locks work, so a second process here (the
+    CLI beside the server, via `docker compose exec`) may use the file; it
+    leaves the owner's lease alone. A dead pid, or our own (a container
+    restart reuses pid 1), is a crashed owner to take over.
+    """
+    return owner.host == socket.gethostname() and owner.pid != os.getpid() and _pid_alive(owner.pid)
 
 
 class SqliteLease:
@@ -94,11 +98,12 @@ class SqliteLease:
 
     def _write(self) -> None:
         assert self.path is not None  # noqa: S101 — narrow for mypy; only held leases write
+        self._heartbeat = self._now()
         record = {
             "token": self._token,
             "host": socket.gethostname(),
             "pid": os.getpid(),
-            "heartbeat": self._now(),
+            "heartbeat": self._heartbeat,
         }
         tmp = self.path.with_name(f"{self.path.name}.tmp")
         tmp.write_text(json.dumps(record))
@@ -106,7 +111,11 @@ class SqliteLease:
 
     def _renew_loop(self, renew_every: float) -> None:
         assert self.path is not None  # noqa: S101 — narrow for mypy; only held leases renew
-        while not self._stop.wait(renew_every):
+        # Wake often and renew by the wall clock: Event.wait's monotonic clock
+        # stops while a laptop sleeps, and a lease must not look stale after wake-up.
+        while not self._stop.wait(min(_TICK_SECONDS, renew_every)):
+            if self._now() - self._heartbeat < renew_every:
+                continue
             owner = _read_owner(self.path)
             if owner is not None and owner.token != self._token:
                 logger.error("Another process took over the SQLite lease %s", self.path)
@@ -154,7 +163,10 @@ def acquire_sqlite_lease(
     # at once. Upgrade path: O_EXCL create plus a stale-lease rename.
     owner = _read_owner(lease_path)
     current = now()
-    if owner is not None and not _may_take_over(owner, current):
+    if owner is not None and _shares_with(owner):
+        return SqliteLease(None)
+    other_host = owner is not None and owner.host != socket.gethostname()
+    if owner is not None and other_host and current - owner.heartbeat < LEASE_TTL_SECONDS:
         raise DatabaseInUseError(
             f"{database} is in use by another Atlas process ({owner.host}, pid {owner.pid},"
             f" seen {current - owner.heartbeat:.0f} s ago). Stop it first (Docker: make"

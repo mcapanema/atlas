@@ -32,4 +32,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# exec: uvicorn replaces sh as PID 1, so `docker stop`'s SIGTERM reaches it and
+# its shutdown releases data/atlas.db.lease (sh doesn't pass signals on).
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
