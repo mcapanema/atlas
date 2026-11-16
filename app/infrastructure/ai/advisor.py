@@ -31,6 +31,7 @@ from app.domain.advisor.entities import (
 from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
 from app.domain.advisor.render import render_context, render_meeting_context
 from app.domain.metrics.windows import CHART_WINDOW_DAYS
+from app.infrastructure.http_errors import describe_http_error
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -379,8 +380,8 @@ class OpenRouterAdvisor:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.error("OpenRouter request failed: %s", exc)
-            raise AdvisorError(f"OpenRouter request failed: {exc}") from exc
+            logger.error("OpenRouter request failed: %s", describe_http_error(exc))
+            raise AdvisorError(f"OpenRouter request failed: {describe_http_error(exc)}") from exc
         return _message_content(response)
 
     async def advise(

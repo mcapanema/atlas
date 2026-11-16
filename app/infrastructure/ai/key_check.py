@@ -4,6 +4,7 @@ import httpx
 
 from app.domain.advisor.port import AdvisorError
 from app.domain.credentials.port import CredentialCheckError
+from app.infrastructure.http_errors import describe_http_error
 
 OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
@@ -30,7 +31,7 @@ async def _get(
         async with httpx.AsyncClient(transport=transport, timeout=10.0) as http:
             response = await http.get(url, headers=headers, params=params)
     except httpx.HTTPError as exc:
-        raise AdvisorError(f"OpenRouter request failed: {exc}") from exc
+        raise AdvisorError(f"OpenRouter request failed: {describe_http_error(exc)}") from exc
     status = response.status_code
     if status == 200:
         return response

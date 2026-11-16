@@ -140,6 +140,20 @@ async def test_advise_raises_advisor_error_on_api_error() -> None:
         await advisor.advise(_context())
 
 
+async def test_advise_names_the_error_class_when_a_timeout_has_no_message() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(AdvisorError, match=r"^OpenRouter request failed: ReadTimeout$"):
+        await advisor.advise(_context())
+
+
 def _advisor_returning(response: httpx.Response) -> OpenRouterAdvisor:
     return OpenRouterAdvisor(
         api_key="test-key",
