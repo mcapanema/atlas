@@ -13,6 +13,10 @@ connector SDKs. It never imports `app.application` or `app.api`
   once per app lifecycle (in `app/main.py`'s lifespan), not per-request. It
   sets the SQLite journal mode once, before the pool opens; the `connect`
   hook only enforces foreign keys and warns when the file's mode differs.
+- `database/lease.py` — `acquire_sqlite_lease(database_url)`: the
+  cross-process guard on a SQLite file (file locks don't cross Docker's
+  VM). Every composition root takes it before `build_sessionmaker` and
+  releases it on shutdown.
 - `database/types.py` — cross-dialect column types. `UTCDateTime` wraps
   `DateTime(timezone=True)` to reattach UTC after SQLite's naive read;
   every persisted timestamp column uses it.
