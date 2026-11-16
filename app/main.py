@@ -154,19 +154,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await stack.enter_async_context(mcp.session_manager.run())
             yield
     finally:
-        # Cancel before the first await: a task cancelled while it checks out
-        # a pool connection orphans it, so never let one start just to stop it.
-        resume.cancel()
-        interrupted.cancel()
-        await auto_sync.close()
-        await sync_jobs.close()
-        await advice_runner.close()
-        await asyncio.gather(resume, interrupted, return_exceptions=True)
-        await runner.close()
-        engine = sessionmaker.kw["bind"]
-        assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
-        await engine.dispose()
-        lease.release()
+        try:
+            # Cancel before the first await: a task cancelled while it checks out
+            # a pool connection orphans it, so never let one start just to stop it.
+            resume.cancel()
+            interrupted.cancel()
+            await auto_sync.close()
+            await sync_jobs.close()
+            await advice_runner.close()
+            await asyncio.gather(resume, interrupted, return_exceptions=True)
+            await runner.close()
+            engine = sessionmaker.kw["bind"]
+            assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
+            await engine.dispose()
+        finally:
+            # Even after a failed shutdown step: a lease left behind would refuse
+            # the other side's next start for LEASE_TTL_SECONDS.
+            lease.release()
 
 
 def create_app() -> FastAPI:

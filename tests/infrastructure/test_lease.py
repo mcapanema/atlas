@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import platform
 import socket
 import subprocess
 import sys
@@ -258,7 +259,7 @@ def test_written_lease_names_its_machine(tmp_path: Path) -> None:
 def test_machine_id_per_platform(
     monkeypatch: pytest.MonkeyPatch, system: str, expected: str
 ) -> None:
-    monkeypatch.setattr(lease_module.platform, "system", lambda: system)
+    monkeypatch.setattr(platform, "system", lambda: system)
     lease_module._machine_id.cache_clear()
     try:
         assert lease_module._machine_id() == expected

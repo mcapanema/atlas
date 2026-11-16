@@ -62,6 +62,28 @@ async def test_lifespan_releases_its_lease_on_shutdown(
     assert not _lease_file(db).exists()
 
 
+async def test_lifespan_releases_its_lease_when_shutdown_fails(
+    settings_env: Callable[..., None], tmp_path: Path
+) -> None:
+    db = tmp_path / "lifespan.db"
+    settings_env(database_url=f"sqlite+aiosqlite:///{db}")
+    real_dispose = AsyncEngine.dispose
+
+    async def dispose_then_fail(self: AsyncEngine, close: bool = True) -> None:
+        # Fail the last shutdown step after its real work, so no connection leaks.
+        await real_dispose(self, close)
+        raise RuntimeError("boom")
+
+    with (
+        mock.patch.object(AutoSyncRunner, "tick", autospec=True, return_value=0),
+        mock.patch.object(AsyncEngine, "dispose", dispose_then_fail),
+        pytest.raises(RuntimeError, match="boom"),
+    ):
+        async with lifespan(create_app()):
+            pass
+    assert not _lease_file(db).exists()
+
+
 async def test_lifespan_disposes_the_engine_on_shutdown(
     settings_env: Callable[..., None], tmp_path: Path
 ) -> None:
