@@ -308,20 +308,25 @@ your teams. It gives meeting briefs for daily standups, retrospectives,
 reviews and planning. It also has tools for more detail and a tool that
 gets new data.
 
-### 1. Turn on the endpoint
+### 1. Make a token
 
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(24))"   # generate a token
-echo 'ATLAS_MCP_TOKEN=<paste-it>' >> .env
-make run
-```
+Open **Setup → AI access** and click **Create token**. Give the token a
+name, for example the name of the client. Then choose the access:
+
+- **Read**: the client reads data and runs syncs.
+- **Read and change settings**: the client can also change metric rules,
+  the sync schedule, people and codebase mapping.
+
+Atlas shows the token one time. Copy it before you click **Done**. If you
+lose a token, revoke it and make a new one. Each token belongs to the user
+who made it. To disconnect a client at once, revoke its token on the same
+page.
 
 The MCP endpoint is at `http://localhost:8000/mcp/<token>/`. The slash at
-the end is necessary. To turn off the endpoint, leave `ATLAS_MCP_TOKEN`
-empty.
+the end is necessary.
 
-**Do not share the full URL. Anyone with the URL can read your delivery
-data.**
+**Do not share the full URL. Anyone with the URL can use the access of the
+token.**
 
 ### 2. Make it available to cloud clients (claude.ai, ChatGPT)
 
@@ -331,6 +336,9 @@ run a tunnel:
 ```bash
 cloudflared tunnel --url http://localhost:8000   # or: ngrok http 8000
 ```
+
+In development (`make dev`), point the tunnel at the backend port 8000, not at
+the Vite port.
 
 Copy the HTTPS origin that the tunnel shows. Your connector URL is
 `https://<origin>/mcp/<token>/`.
@@ -347,7 +355,7 @@ The token is the only credential for the endpoint.
 ### 3. Connect a client
 
 - **claude.ai / Claude Desktop**: go to Settings → Connectors → *Add custom
-  connector*, and paste the URL. No OAuth is necessary.
+  connector*, and paste the connector URL. No OAuth is necessary.
 - **Claude Code**: run `claude mcp add --transport http atlas
   http://localhost:8000/mcp/<token>/`. On this machine, you do not need a
   tunnel.
@@ -357,16 +365,34 @@ The token is the only credential for the endpoint.
 
 ### 4. Use it
 
-Tools:
+Read tools (every token):
 
 - `list_scopes`
 - `meeting_brief`: one call that gives a full summary.
 - `aging_wip`
 - `list_work_items`
+- `work_item`: one work item with its timeline.
 - `forecast`: supports what-if values for `remaining` and `target_date`.
+- `forecast_accuracy`
+- `flow_trend`
+- `bug_metrics`
 - `dora`: the four DORA metrics of a team and their bands, if a repository
   is mapped to the team.
+- `get_metric_rules`
+- `get_sync_schedule`
+- `list_people`
+- `list_codebases`
+- `connector_status`: shows if a connector is configured. It never shows a key.
 - `run_sync`
+
+Change settings (read-write tokens only). Before a change, the agent shows
+the current value and the change, and waits for your confirmation.
+
+- `update_metric_rules`
+- `recompute_metric_history`
+- `set_sync_schedule`
+- `set_person_display_name`
+- `map_codebase`
 
 Prompts: `daily_standup`, `retrospective`, `planning`. Select a prompt in
 the prompt menu of the client, and it uses the tools for you.

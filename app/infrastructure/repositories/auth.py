@@ -1,13 +1,24 @@
 from datetime import datetime
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, delete, func, select
+from sqlalchemy import (
+    Boolean,
+    CursorResult,
+    ForeignKey,
+    Integer,
+    String,
+    delete,
+    func,
+    select,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
-from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.entities import AuthSession, McpAccess, McpToken, User
 from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
@@ -171,5 +182,88 @@ class SqlAlchemyAuthSessionRepository:
     async def delete_expired(self, now: datetime) -> None:
         await self._session.execute(
             delete(AuthSessionModel).where(AuthSessionModel.expires_at <= now)
+        )
+        await self._session.flush()
+
+
+class McpTokenModel(Base):
+    __tablename__ = "mcp_tokens"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    access: Mapped[str] = mapped_column(String(16), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    hint: Mapped[str] = mapped_column(String(4), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+    def to_domain(self) -> McpToken:
+        return McpToken(
+            id=self.id,
+            user_id=self.user_id,
+            name=self.name,
+            access=McpAccess(self.access),
+            token_hash=self.token_hash,
+            hint=self.hint,
+            created_at=self.created_at,
+            last_used_at=self.last_used_at,
+        )
+
+    @classmethod
+    def from_domain(cls, token: McpToken) -> "McpTokenModel":
+        return cls(
+            id=token.id,
+            user_id=token.user_id,
+            name=token.name,
+            access=token.access.value,
+            token_hash=token.token_hash,
+            hint=token.hint,
+            created_at=token.created_at,
+            last_used_at=token.last_used_at,
+        )
+
+
+class SqlAlchemyMcpTokenRepository:
+    """SQLAlchemy adapter for the McpTokenRepository port."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, token: McpToken) -> None:
+        self._session.add(McpTokenModel.from_domain(token))
+        await self._session.flush()
+
+    async def get_by_hash(self, token_hash: str) -> McpToken | None:
+        # A query, not session.get: a row the database cascaded away must not
+        # come back from the identity map.
+        result = await self._session.execute(
+            select(McpTokenModel).where(McpTokenModel.token_hash == token_hash)
+        )
+        model = result.scalar_one_or_none()
+        return model.to_domain() if model is not None else None
+
+    async def list_for_user(self, user_id: UUID) -> list[McpToken]:
+        result = await self._session.execute(
+            select(McpTokenModel)
+            .where(McpTokenModel.user_id == user_id)
+            .order_by(McpTokenModel.created_at.desc())
+        )
+        return [model.to_domain() for model in result.scalars()]
+
+    async def delete(self, token_id: UUID, user_id: UUID) -> bool:
+        result = await self._session.execute(
+            delete(McpTokenModel).where(
+                McpTokenModel.id == token_id, McpTokenModel.user_id == user_id
+            )
+        )
+        await self._session.flush()
+        return cast(CursorResult[Any], result).rowcount > 0
+
+    async def touch(self, token_id: UUID, when: datetime) -> None:
+        await self._session.execute(
+            update(McpTokenModel).where(McpTokenModel.id == token_id).values(last_used_at=when)
         )
         await self._session.flush()

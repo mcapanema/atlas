@@ -5,7 +5,8 @@ API to loopback. A request is local when its
 Host is a loopback name and no proxy forwarded it. Anything else — a tunnel
 (cloudflared and ngrok add X-Forwarded-For; cloudflared also keeps the
 public Host), a LAN client, a DNS-rebinding page — may reach only the MCP
-mount, whose secret path is its credential (ADR-0012).
+mount, where a user's token in the path is the credential (ADR-0012,
+ADR-0032).
 """
 
 import re
@@ -46,15 +47,23 @@ def is_local(scope: Scope) -> bool:
 
 
 class LocalOnlyMiddleware:
-    """403 (HTTP) / close 1008 (websocket) for non-local requests outside the MCP prefix."""
+    """403 (HTTP) / close 1008 (websocket) for non-local requests outside the MCP mount."""
 
     def __init__(self, app: ASGIApp, public_prefix: str | None = None) -> None:
         self._app = app
         self._public_prefix = public_prefix
 
     def _is_public(self, path: str) -> bool:
+        """Under `<prefix>/<segment>/` only — the MCP mount's shape.
+
+        `/mcp`, `/mcp/` and `/mcp/<token>` miss the mount and would reach the
+        SPA catch-all, so they stay local-only.
+        """
         prefix = self._public_prefix
-        return prefix is not None and (path == prefix or path.startswith(prefix + "/"))
+        if prefix is None or not path.startswith(prefix + "/"):
+            return False
+        segment, slash, _ = path.removeprefix(prefix + "/").partition("/")
+        return bool(segment and slash)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         guarded = scope["type"] in ("http", "websocket")  # lifespan passes through

@@ -1111,3 +1111,27 @@ class UserCreate(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     new_password: _Password
+
+
+class McpTokenRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    access: Literal["read", "read_write"]
+    hint: str
+    created_at: datetime
+    last_used_at: datetime | None
+
+
+class McpTokenCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    access: Literal["read", "read_write"] = "read"
+
+
+class McpTokenIssuedRead(McpTokenRead):
+    """The only response that carries the secret."""
+
+    token: str

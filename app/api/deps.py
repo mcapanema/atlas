@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.advisor.runs import AdviceRunService
 from app.application.advisor.service import AdvisorService
+from app.application.auth.mcp_tokens import McpTokenService
 from app.application.auth.service import AuthService
 from app.application.auth.users import UserService
 from app.application.codebases.service import CodebaseService
@@ -46,6 +47,7 @@ from app.infrastructure.credential_checks import ProviderCredentialVerifier
 from app.infrastructure.repositories.advice_runs import SqlAlchemyAdviceRunRepository
 from app.infrastructure.repositories.auth import (
     SqlAlchemyAuthSessionRepository,
+    SqlAlchemyMcpTokenRepository,
     SqlAlchemyUserRepository,
 )
 from app.infrastructure.repositories.codebases import (
@@ -446,7 +448,9 @@ SyncScheduleServiceDep = Annotated[SyncScheduleService, Depends(get_sync_schedul
 
 SESSION_COOKIE = "atlas_session"
 # The MCP facade's in-process REST calls carry this header with
-# app.state.internal_token, so its tools work with no user (ADR-0028).
+# app.state.internal_token. Tool calls do not run as the token's user: the gate
+# picks the server for the access level, and REST sees an internal caller, so
+# writes made through MCP are not attributed to a user (ADR-0028, ADR-0032).
 INTERNAL_HEADER = "X-Atlas-Internal"
 
 
@@ -471,6 +475,17 @@ def get_user_service(request: Request, session: SessionDep) -> UserService:
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+
+
+def mcp_token_service_for(session: AsyncSession) -> McpTokenService:
+    return McpTokenService(SqlAlchemyMcpTokenRepository(session))
+
+
+def get_mcp_token_service(session: SessionDep) -> McpTokenService:
+    return mcp_token_service_for(session)
+
+
+McpTokenServiceDep = Annotated[McpTokenService, Depends(get_mcp_token_service)]
 
 
 async def get_current_user(request: Request, auth: AuthServiceDep) -> User:
