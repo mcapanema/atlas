@@ -2,14 +2,15 @@
 
 The `client`/`test_app` fixtures don't run the app lifespan, but the MCP
 session manager must be running — so these tests build their own app and
-enter `session_manager.run()` explicitly. The MCP client is wired to the
-app in-process via an httpx ASGITransport factory.
+enter `session_manager.run()` of each MCP server explicitly. The MCP client
+is wired to the app in-process via an httpx ASGITransport factory, with a
+token from `create_mcp_token`.
 """
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable, Iterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -21,11 +22,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api import mcp_server
 from app.api.deps import get_delivery_data_source
+from app.api.mcp_client import call_api
 from app.api.mcp_server import _aging_from_json, _dora_from_json
 from app.api.schemas import AgingItemRead, AgingWipRead, DoraMetricsRead
 from app.domain.metrics.aging import AgingItem, AgingWip
@@ -35,6 +38,7 @@ from app.domain.sync.source import SourceTeam
 from app.domain.work_items.entities import WorkItemType
 from app.main import _RedactSecret, create_app
 from tests.api.helpers import (
+    create_mcp_token,
     create_org_and_team,
     create_team,
     days_ago,
@@ -44,12 +48,10 @@ from tests.api.helpers import (
 )
 from tests.fakes import FakeDataSource
 
-TOKEN = "test-token-0123456789abcdefghij"
-
 
 @pytest.fixture(autouse=True)
 def _drop_token_masks() -> Iterator[None]:
-    """create_app() masks the token on the global uvicorn.access logger; undo it per test."""
+    """create_app() masks MCP tokens on the global uvicorn.access logger; undo it per test."""
     yield
     access = logging.getLogger("uvicorn.access")
     for mask in [f for f in access.filters if isinstance(f, _RedactSecret)]:
@@ -57,19 +59,17 @@ def _drop_token_masks() -> Iterator[None]:
 
 
 @asynccontextmanager
-async def running_app(
-    sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
-) -> AsyncIterator[FastAPI]:
-    settings_env(mcp_token=TOKEN)
+async def running_app(sessionmaker: async_sessionmaker[AsyncSession]) -> AsyncIterator[FastAPI]:
     app = create_app()
     app.state.sessionmaker = sessionmaker
-    async with app.state.mcp.session_manager.run():
+    async with AsyncExitStack() as stack:
+        for server in app.state.mcp_servers.values():
+            await stack.enter_async_context(server.session_manager.run())
         yield app
 
 
 @asynccontextmanager
-async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
+async def mcp_session(app: FastAPI, token: str) -> AsyncIterator[ClientSession]:
     # mcp 2.x's streamable_http_client takes an httpx2.AsyncClient (the SDK's
     # own vendored httpx fork), not a plain httpx.AsyncClient — everything
     # else in this file still talks to the app via regular httpx.
@@ -78,7 +78,7 @@ async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
             transport=httpx2.ASGITransport(app=app),
             follow_redirects=True,
         ) as http_client,
-        streamable_http_client(f"http://test/mcp/{TOKEN}/", http_client=http_client) as (
+        streamable_http_client(f"http://test/mcp/{token}/", http_client=http_client) as (
             read,
             write,
         ),
@@ -89,15 +89,22 @@ async def mcp_session(app: FastAPI) -> AsyncIterator[ClientSession]:
 
 
 @asynccontextmanager
-async def seed_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
-    """A signed-in REST client for seeding data; the MCP tools themselves need no user."""
-    _, token = await sign_in(app.state.sessionmaker)
+async def seed_client(app: FastAPI, *, is_admin: bool = False) -> AsyncIterator[httpx.AsyncClient]:
+    """A signed-in REST client for seeding data; the MCP tools need a token, not a session."""
+    _, token = await sign_in(app.state.sessionmaker, is_admin=is_admin)
     async with httpx.AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://localhost",
         cookies={"atlas_session": token},
     ) as client:
         yield client
+
+
+async def raw_mcp_post(app: FastAPI, token: str) -> httpx.Response:
+    """A bare POST to the MCP endpoint — enough to tell a served token from a refused one."""
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
+        return await client.post(f"/mcp/{token}/", json={})
 
 
 def tool_text(result: object) -> str:
@@ -107,22 +114,64 @@ def tool_text(result: object) -> str:
     return content.text
 
 
-def test_no_mcp_route_without_token(settings_env: Callable[..., None]) -> None:
-    settings_env(mcp_token="")
-    app = create_app()
-
-    assert getattr(app.state, "mcp", None) is None
-    # Route check, not a request: the SPA catch-all (if web/dist exists
-    # locally) would otherwise answer and muddy a status-code assertion.
-    assert not [r for r in app.routes if getattr(r, "path", "").startswith("/mcp")]
-
-
-async def test_uvicorn_access_log_masks_the_token(
+async def test_a_valid_token_reaches_the_mcp_server(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
+) -> None:
+    async with running_app(sessionmaker) as app:
+        token = await create_mcp_token(sessionmaker)
+        async with mcp_session(app, token) as session:
+            tools = await session.list_tools()
+
+    assert "list_scopes" in [t.name for t in tools.tools]
+
+
+async def test_an_unknown_token_is_404(sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    async with running_app(sessionmaker) as app:
+        response = await raw_mcp_post(app, "atlas_mcp_nope")
+
+    assert (response.status_code, response.text) == (404, "Not Found")
+
+
+async def test_a_revoked_token_stops_working_at_once(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        issued = (await client.post("/api/mcp-tokens", json={"name": "Claude"})).json()
+        async with mcp_session(app, issued["token"]) as session:
+            assert not (await session.call_tool("list_scopes", {})).is_error
+
+        revoked = await client.delete(f"/api/mcp-tokens/{issued['id']}")
+        response = await raw_mcp_post(app, issued["token"])
+
+    assert revoked.status_code == 204
+    assert response.status_code == 404
+
+
+async def test_removing_a_user_ends_their_mcp_tokens(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with running_app(sessionmaker) as app, seed_client(app, is_admin=True) as admin:
+        token = await create_mcp_token(sessionmaker, email="leaver@atlas.test")
+        users = (await admin.get("/api/users")).json()
+        [leaver] = [u for u in users if u["email"] == "leaver@atlas.test"]
+        served = await raw_mcp_post(app, token)
+
+        removed = await admin.delete(f"/api/users/{leaver['id']}")
+        response = await raw_mcp_post(app, token)
+
+    assert served.status_code != 404
+    assert removed.status_code == 204
+    assert response.status_code == 404
+
+
+async def test_uvicorn_access_log_masks_every_mcp_token(
+    sessionmaker: async_sessionmaker[AsyncSession],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
+        tokens = [
+            await create_mcp_token(sessionmaker, email=f"agent{n}@atlas.test") for n in (1, 2)
+        ]
         # log_config=None: keep pytest's logging (uvicorn would replace the
         # handlers); the real access logger still formats the real request.
         server = uvicorn.Server(
@@ -136,7 +185,8 @@ async def test_uvicorn_access_log_masks_the_token(
         try:
             with caplog.at_level(logging.INFO, logger="uvicorn.access"):
                 async with httpx.AsyncClient(trust_env=False) as client:
-                    await client.post(f"http://127.0.0.1:{port}/mcp/{TOKEN}/", json={})
+                    for token in tokens:
+                        await client.post(f"http://127.0.0.1:{port}/mcp/{token}/", json={})
         finally:
             server.should_exit = True
             async with asyncio.timeout(10):
@@ -146,32 +196,30 @@ async def test_uvicorn_access_log_masks_the_token(
     # running_app (and is removed by the autouse _drop_token_masks fixture).
     # Only the server's access log: the client-side httpx logger echoes the URL.
     access = "\n".join(r.getMessage() for r in caplog.records if r.name == "uvicorn.access")
-    assert TOKEN not in access
-    assert "/mcp/***/" in access
+    assert not [token for token in tokens if token in access]
+    assert access.count("/mcp/***/") == 2
 
 
-async def test_wrong_token_is_not_served(
-    sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
-) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as client:
-            response = await client.post("/mcp/wrong-token/", json={})
-    # 404 normally; 405 if a local web/dist build made the SPA catch-all
-    # answer the path (StaticFiles rejects POST). Never 200.
-    assert response.status_code in (404, 405)
+@pytest.mark.parametrize(
+    # The second would reach GET /api/organizations if it were not quoted.
+    "team_id",
+    ["x/../y", "../organizations?"],
+)
+async def test_call_api_quotes_path_values(test_app: FastAPI, team_id: str) -> None:
+    with pytest.raises(ToolError, match=r"^Atlas API (404|422):"):
+        await call_api(
+            test_app, "GET", "/api/teams/{team_id}/metric-rules", path={"team_id": team_id}
+        )
 
 
 async def test_list_scopes_tool(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             await create_team(client)
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             tools = await session.list_tools()
             assert "list_scopes" in [t.name for t in tools.tools]
 
@@ -183,22 +231,10 @@ async def test_list_scopes_tool(
             assert "(sprint 14d)" in text  # the team's sprint_length_days rule
 
 
-async def test_mcp_tools_work_without_any_user(
-    sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
-) -> None:
-    # An upgraded install has data and no users yet: MCP must keep working.
-    async with running_app(sessionmaker, settings_env) as app, mcp_session(app) as session:
-        result = await session.call_tool("list_scopes", {})
-
-    assert not result.is_error, tool_text(result)
-
-
 async def test_list_scopes_names_every_team_of_a_project(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             org_id, home = await create_org_and_team(client)
             other = (
@@ -213,7 +249,7 @@ async def test_list_scopes_names_every_team_of_a_project(
                     json={"team_id": team_id, "title": "x", "project_id": project},
                 )
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             text = tool_text(await session.call_tool("list_scopes", {}))
 
     assert f"- {project}  Apollo (teams {home}, {other})" in text
@@ -221,13 +257,12 @@ async def test_list_scopes_names_every_team_of_a_project(
 
 async def test_meeting_brief_composes_digest(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             team_id = await create_team(client)
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             result = await session.call_tool("meeting_brief", {"team_id": team_id})
             assert not result.is_error
             text = tool_text(result)
@@ -239,11 +274,10 @@ async def test_meeting_brief_composes_digest(
 
 async def test_meeting_brief_scope_errors_surface(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:  # noqa: SIM117
+    async with running_app(sessionmaker) as app:  # noqa: SIM117
         # mcp_session must nest because it depends on the app from running_app.
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             # No scope at all -> the REST 422 detail must reach the model.
             result = await session.call_tool("meeting_brief", {})
             assert result.is_error
@@ -260,9 +294,8 @@ async def test_meeting_brief_scope_errors_surface(
 
 async def test_drilldown_tools(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             team_id = await create_team(client)
             item = await client.post(
@@ -270,7 +303,7 @@ async def test_drilldown_tools(
             )
             assert item.status_code == 201
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             items = await session.call_tool("list_work_items", {"team_id": team_id})
             assert not items.is_error
             assert "Fix login flake" in tool_text(items)
@@ -288,14 +321,13 @@ async def test_drilldown_tools(
 
 async def test_run_sync_surfaces_unconfigured_connector(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             org = await client.post("/api/organizations", json={"name": "Acme"})
             org_id = org.json()["id"]
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             result = await session.call_tool("run_sync", {"organization_id": org_id})
             assert result.is_error
             # The 409-until-configured detail must reach the model verbatim.
@@ -323,17 +355,17 @@ async def _run_sync(app: FastAPI, source: FakeDataSource) -> CallToolResult:
     app.dependency_overrides[get_delivery_data_source] = lambda: source
     async with seed_client(app) as client:
         org_id = (await client.post("/api/organizations", json={"name": "Acme"})).json()["id"]
-    async with mcp_session(app) as session:
+    token = await create_mcp_token(app.state.sessionmaker)
+    async with mcp_session(app, token) as session:
         return await session.call_tool("run_sync", {"organization_id": org_id})
 
 
 async def test_run_sync_waits_for_the_job_and_reports_counts(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         source = FakeDataSource(teams=[SourceTeam(external_id="lt1", name="Platform")])
 
         result = await _run_sync(app, source)
@@ -347,11 +379,10 @@ async def test_run_sync_waits_for_the_job_and_reports_counts(
 
 async def test_run_sync_reports_a_failed_job_as_a_tool_error(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         result = await _run_sync(app, _FailingSource())
 
     assert result.is_error
@@ -361,12 +392,11 @@ async def test_run_sync_reports_a_failed_job_as_a_tool_error(
 
 async def test_run_sync_returns_still_running_after_the_wait(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(mcp_server, "RUN_SYNC_WAIT_SECONDS", 0.05)
     monkeypatch.setattr(mcp_server, "RUN_SYNC_POLL_SECONDS", 0.01)
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         source = _BlockingSource()
 
         result = await _run_sync(app, source)
@@ -381,11 +411,10 @@ async def test_run_sync_returns_still_running_after_the_wait(
 
 async def test_meeting_prompts(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
     async with (
-        running_app(sessionmaker, settings_env) as app,
-        mcp_session(app) as session,
+        running_app(sessionmaker) as app,
+        mcp_session(app, await create_mcp_token(sessionmaker)) as session,
     ):
         prompts = await session.list_prompts()
         names = [p.name for p in prompts.prompts]
@@ -400,11 +429,10 @@ async def test_meeting_prompts(
 
 async def test_retrospective_prompt_defaults_to_the_teams_sprint(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
     async with (
-        running_app(sessionmaker, settings_env) as app,
-        mcp_session(app) as session,
+        running_app(sessionmaker) as app,
+        mcp_session(app, await create_mcp_token(sessionmaker)) as session,
     ):
         default = await session.get_prompt("retrospective", {"team": "Platform"})
         asked = await session.get_prompt("retrospective", {"team": "Platform", "sprint_days": "21"})
@@ -437,10 +465,9 @@ async def _seed_item(
 
 async def test_meeting_brief_names_the_aging_history(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
     # Review focus 5: the real tool path, not just the helpers.
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             org_id, team_id = await create_org_and_team(client)
             await use_calendar_days(sessionmaker, org_id)
@@ -449,7 +476,7 @@ async def test_meeting_brief_names_the_aging_history(
             )
             await _seed_item(client, team_id, "Stuck", ("created", 10), ("started", 6))
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             result = await session.call_tool("meeting_brief", {"team_id": team_id})
             assert not result.is_error
             text = tool_text(result)
@@ -463,16 +490,15 @@ async def test_meeting_brief_names_the_aging_history(
 
 async def test_aging_wip_tool_caps_at_fifty_without_pointing_at_itself(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
     # Review focus 4: the full-list tool must not tell the model to call itself.
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             team_id = await create_team(client)
             for n in range(51):
                 await _seed_item(client, team_id, f"Item {n}", ("created", 5), ("started", 3))
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             result = await session.call_tool("aging_wip", {"team_id": team_id})
             assert not result.is_error
             lines = tool_text(result).splitlines()
@@ -570,13 +596,12 @@ def test_aging_json_without_a_type_reads_as_a_task() -> None:
 
 async def test_dora_tool_renders_the_endpoint(
     sessionmaker: async_sessionmaker[AsyncSession],
-    settings_env: Callable[..., None],
 ) -> None:
-    async with running_app(sessionmaker, settings_env) as app:
+    async with running_app(sessionmaker) as app:
         async with seed_client(app) as client:
             team_id = await create_team(client)
 
-        async with mcp_session(app) as session:
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             result = await session.call_tool("dora", {"team_id": team_id})
             assert not result.is_error
             # a team without a mapped codebase: the one-line mapping hint, not a 500

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -13,6 +14,7 @@ from fastapi.responses import JSONResponse
 from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.types import ASGIApp
 
 from app.api import (
     advisor,
@@ -46,10 +48,12 @@ from app.api.deps import (
     require_signed_in,
 )
 from app.api.exposure import LocalOnlyMiddleware
+from app.api.mcp_gate import McpGate
 from app.api.recompute import RecomputeRunner
 from app.api.sync_jobs import SyncJobRunner
 from app.config import get_settings
 from app.domain.advisor.port import AdvisorError
+from app.domain.auth.entities import McpAccess
 from app.domain.auth.throttle import SignInThrottle
 from app.domain.sync.port import DataSourceError
 from app.infrastructure.database.lease import acquire_sqlite_lease
@@ -60,27 +64,27 @@ from app.infrastructure.static import mount_spa
 logger = logging.getLogger(__name__)
 
 
-class _RedactSecret(logging.Filter):
-    """Masks a secret in log-record arguments — the MCP token in uvicorn's access log."""
+# An MCP token rides in the request path, which uvicorn logs per request.
+_MCP_PATH = re.compile(r"/mcp/[^/\s\"?]+")
 
-    def __init__(self, secret: str) -> None:
-        super().__init__()
-        self._secret = secret
+
+class _RedactSecret(logging.Filter):
+    """Masks every MCP token in log-record arguments — uvicorn's access log."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple):
             record.args = tuple(
-                arg.replace(self._secret, "***") if isinstance(arg, str) else arg
+                _MCP_PATH.sub("/mcp/***", arg) if isinstance(arg, str) else arg
                 for arg in record.args
             )
         return True
 
 
-def _mask_in_access_log(secret: str) -> None:
+def _mask_in_access_log() -> None:
     access = logging.getLogger("uvicorn.access")
     for stale in [f for f in access.filters if isinstance(f, _RedactSecret)]:
         access.removeFilter(stale)  # create_app() runs once per test app
-    access.addFilter(_RedactSecret(secret))
+    access.addFilter(_RedactSecret())
 
 
 # Credentials entered on the Connectors page replaced these env keys (ADR-0027).
@@ -114,13 +118,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Before the journal-mode switch: a second process on a shared SQLite file
     # must fail here, not flip the mode under the one already running.
     lease = acquire_sqlite_lease(settings.database_url)
+    # Each MCP server's session manager must run for its streamable-HTTP app
+    # to accept requests. Entered before the background tasks start and
+    # closed after they stop: entering and closing await, and an await lets a
+    # pending task begin the pool checkout the finally below must not cut off.
+    mcp_managers = AsyncExitStack()
     try:
         sessionmaker = build_sessionmaker(
             settings.database_url,
             echo=settings.db_echo,
             journal_mode=settings.sqlite_journal_mode,
         )
+        for mcp in app.state.mcp_servers.values():
+            await mcp_managers.enter_async_context(mcp.session_manager.run())
     except BaseException:
+        await mcp_managers.aclose()
         lease.release()
         raise
     app.state.sessionmaker = sessionmaker
@@ -146,14 +158,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Ticks at once: a slot missed while Atlas was off syncs now (ADR-0014).
     auto_sync.start()
     try:
-        async with AsyncExitStack() as stack:
-            # The MCP session manager only exists when ATLAS_MCP_TOKEN is set
-            # (create_app skips the mount otherwise) and must run for the
-            # streamable-HTTP endpoint to accept requests.
-            mcp = getattr(app.state, "mcp", None)
-            if mcp is not None:
-                await stack.enter_async_context(mcp.session_manager.run())
-            yield
+        yield
     finally:
         try:
             # Cancel before the first await: a task cancelled while it checks out
@@ -165,6 +170,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await advice_runner.close()
             await asyncio.gather(resume, interrupted, return_exceptions=True)
             await runner.close()
+            await mcp_managers.aclose()
             engine = sessionmaker.kw["bind"]
             assert isinstance(engine, AsyncEngine)  # noqa: S101 — narrow Any for mypy; always true
             await engine.dispose()
@@ -270,31 +276,32 @@ def create_app() -> FastAPI:
         logger.error("Advisor failure on %s %s: %s", request.method, request.url.path, exc)
         return JSONResponse(status_code=502, content={"detail": f"Advisor error: {exc}"})
 
-    settings = get_settings()
-    # UI and API to this machine only; the MCP mount (if any) to anyone
-    # holding its secret URL — the documented tunnel exposes nothing else.
-    app.add_middleware(
-        LocalOnlyMiddleware,
-        public_prefix=f"/mcp/{settings.mcp_token}" if settings.mcp_token else None,
-    )
-    if settings.mcp_token:
-        # The token rides in the request path, which uvicorn logs per request.
-        _mask_in_access_log(settings.mcp_token)
-        # Secret-URL auth: connector UIs (claude.ai, ChatGPT) can't send
-        # custom headers, so the token rides in the path. No token, no route.
-        mcp = mcp_server.build_mcp_server(app)
-        app.state.mcp = mcp
-        # mcp 2.x moved these transport-mode kwargs off the MCPServer
-        # constructor onto streamable_http_app() itself.
-        app.mount(
-            f"/mcp/{settings.mcp_token}",
-            mcp.streamable_http_app(
-                stateless_http=True,
-                json_response=True,
-                streamable_http_path="/",
-                transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
-            ),
+    if get_settings().mcp_token:
+        logger.warning(
+            "ATLAS_MCP_TOKEN is no longer used; create a token on the AI access page "
+            "(Setup → AI access)."
         )
+    # UI and API to this machine only; the MCP mount to anyone holding a
+    # user's MCP token — the documented tunnel exposes nothing else.
+    app.add_middleware(LocalOnlyMiddleware, public_prefix="/mcp")
+    _mask_in_access_log()
+    # One server per access level; McpGate checks the token in the path and
+    # forwards to the matching one (ADR-0032).
+    app.state.mcp_servers = {
+        access: mcp_server.build_mcp_server(app, access) for access in McpAccess
+    }
+    # mcp 2.x moved these transport-mode kwargs off the MCPServer
+    # constructor onto streamable_http_app() itself.
+    streamable_apps: dict[McpAccess, ASGIApp] = {
+        access: mcp.streamable_http_app(
+            stateless_http=True,
+            json_response=True,
+            streamable_http_path="/",
+            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+        )
+        for access, mcp in app.state.mcp_servers.items()
+    }
+    app.mount("/mcp/{token}", McpGate(app, streamable_apps))
 
     mount_spa(app)  # catch-all — must be registered after all API routers
     return app

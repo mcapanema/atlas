@@ -5,7 +5,8 @@ API to loopback. A request is local when its
 Host is a loopback name and no proxy forwarded it. Anything else — a tunnel
 (cloudflared and ngrok add X-Forwarded-For; cloudflared also keeps the
 public Host), a LAN client, a DNS-rebinding page — may reach only the MCP
-mount, whose secret path is its credential (ADR-0012).
+mount, where a user's token in the path is the credential (ADR-0012,
+ADR-0032).
 """
 
 import re

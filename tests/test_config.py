@@ -1,3 +1,5 @@
+import logging
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -5,6 +7,7 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.infrastructure.ai.advisor import DEFAULT_MAX_TOKENS, DEFAULT_TIMEOUT_SECONDS
+from app.main import create_app
 
 # Scrubbed from the real environment so a developer's shell or CI can't
 # leak into assertions.
@@ -87,51 +90,20 @@ def test_real_env_var_beats_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert Settings(_env_file=env_file).db_echo is False
 
 
-_GOOD_TOKEN = "test-token-0123456789abcdefghij"
-
-
-def test_mcp_token_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = Settings(_env_file=None)
-
-    assert settings.mcp_token is None
-
-    monkeypatch.setenv("ATLAS_MCP_TOKEN", _GOOD_TOKEN)
-    assert Settings(_env_file=None).mcp_token == _GOOD_TOKEN
-
-
-def test_an_empty_mcp_token_disables_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ATLAS_MCP_TOKEN", "")
-
-    assert Settings(_env_file=None).mcp_token == ""
-
-
-@pytest.mark.parametrize(
-    "token",
-    [
-        "sekret",  # short
-        "x" * 23,  # one under the floor
-        "{path}" + "x" * 30,  # Starlette would read a path parameter: matches anything
-        "a/b" + "x" * 30,  # a second path segment
-        "with space" + "x" * 30,
-    ],
-)
-def test_mcp_token_must_be_a_long_url_safe_segment(
-    monkeypatch: pytest.MonkeyPatch, token: str
+def test_a_leftover_mcp_token_env_var_logs_a_warning(
+    settings_env: Callable[..., None], caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setenv("ATLAS_MCP_TOKEN", token)
+    settings_env(mcp_token="test-token-0123456789abcdefghij")
 
-    with pytest.raises(ValidationError, match="ATLAS_MCP_TOKEN"):
-        Settings(_env_file=None)
+    with caplog.at_level(logging.WARNING, logger="app.main"):
+        create_app()
 
-
-def test_a_rejected_mcp_token_is_not_echoed_in_the_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    secret = "my-secret-token-1"
-    monkeypatch.setenv("ATLAS_MCP_TOKEN", secret)
-
-    with pytest.raises(ValidationError) as excinfo:
-        Settings(_env_file=None)
-
-    assert secret not in str(excinfo.value)
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "app.main" and r.levelno == logging.WARNING
+    ]
+    assert len([w for w in warnings if "AI access" in w]) == 1
 
 
 def test_advisor_bounds_default_to_the_adapters() -> None:

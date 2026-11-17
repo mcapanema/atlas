@@ -385,10 +385,16 @@ the file open; a mode change at run time only logs a warning.
 
 ## Chat access (MCP)
 
-`app/api/mcp_server.py` mounts an MCP (Model Context Protocol) server inside
-the monolith at `/mcp/<ATLAS_MCP_TOKEN>` — Streamable HTTP, stateless, secret-
-URL auth (connector UIs cannot send custom headers). It is a Presentation-
-layer facade: every tool calls the REST API in-process and reformats the DTO
+`app/api/mcp_server.py` builds an MCP (Model Context Protocol) server inside
+the monolith, served at `/mcp/<token>/` — Streamable HTTP, stateless. Each
+user creates their own tokens on the AI access page, with `read` or
+`read_write` access; Atlas stores only a hash. `McpGate`
+(`app/api/mcp_gate.py`) checks the token in the path and forwards to one of
+two servers, one per access level; an unknown or revoked token gets 404
+(ADR-0032). The token rides in the path because connector UIs cannot send
+custom headers. The server is a Presentation-
+layer facade: every tool calls the REST API in-process (`call_api` in
+`app/api/mcp_client.py`) and reformats the DTO
 as compact text, so analytics logic and error semantics live in exactly one
 place. Those in-process calls carry `X-Atlas-Internal` with a per-process
 random token (`app.state.internal_token`), which `require_signed_in`

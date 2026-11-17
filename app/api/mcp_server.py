@@ -7,23 +7,24 @@ semantics (409-until-configured, 502 upstream) are reused, never
 re-implemented. Tools return compact text, not raw JSON: chat-client
 context windows are the scarce resource this module is designed around.
 
-Mounted at /mcp/<ATLAS_MCP_TOKEN> by create_app(); the token is the only
-authentication (claude.ai and ChatGPT connector UIs cannot send custom
-headers — the secret has to live in the URL).
+Served at /mcp/<token>/ by create_app(), one server per access level;
+`McpGate` (mcp_gate.py) checks the user's token and picks the server
+(ADR-0032). The token rides in the URL because claude.ai and ChatGPT
+connector UIs cannot send custom headers.
 """
 
 import asyncio
 from datetime import timedelta
 from typing import Any
 
-import httpx
 from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from app.api.deps import INTERNAL_HEADER
+from app.api.mcp_client import call_api, drop_none
 from app.api.schemas import AgingWipRead, DoraMetricsRead
 from app.domain.advisor.render import quote_title, render_aging, render_dora
+from app.domain.auth.entities import McpAccess
 from app.domain.metrics.aging import AgingItem, AgingWip
 from app.domain.metrics.dora import DoraMetrics
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
@@ -41,10 +42,6 @@ _INSTRUCTIONS = (
 # sync, short of a chat client's tool-call timeout.
 RUN_SYNC_WAIT_SECONDS = 45.0
 RUN_SYNC_POLL_SECONDS = 1.0
-
-
-def _params(**kwargs: Any) -> dict[str, Any]:
-    return {key: value for key, value in kwargs.items() if value is not None}
 
 
 def _render_health(health: dict[str, Any]) -> str:
@@ -94,45 +91,15 @@ def _aging_from_json(data: dict[str, Any]) -> AgingWip:
     )
 
 
-async def _api(
-    app: FastAPI,
-    method: str,
-    path: str,
-    *,
-    params: dict[str, Any] | None = None,
-    json: dict[str, Any] | None = None,
-) -> Any:
-    """Call Atlas's own REST API in-process; raise the error detail on 4xx/5xx."""
-    # ponytail: a fresh in-process client per tool call — pool one on
-    # app.state if tool latency ever matters.
-    transport = httpx.ASGITransport(app=app)
-    # A loopback Host: LocalOnlyMiddleware serves in-process tool calls as local.
-    # The internal header stands in for a session: tools work with no user (ADR-0028).
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://localhost",
-        headers={INTERNAL_HEADER: app.state.internal_token},
-    ) as client:
-        response = await client.request(method, path, params=params, json=json)
-    if response.status_code >= 400:
-        try:
-            detail = response.json().get("detail", response.text)
-        except ValueError:
-            detail = response.text
-        # mcp 2.x masks any exception that isn't ToolError/ResourceError/MCPError
-        # before it reaches the client (see mcp/server/mcpserver/tools/base.py) —
-        # ToolError is what carries the REST error detail through to the model.
-        raise ToolError(f"Atlas API {response.status_code}: {detail}")
-    return response.json()
-
-
 async def _wait_for_job(app: FastAPI, job: dict[str, Any]) -> dict[str, Any]:
     """Poll a sync job until it finishes or RUN_SYNC_WAIT_SECONDS pass; its last read."""
     loop = asyncio.get_running_loop()
     deadline = loop.time() + RUN_SYNC_WAIT_SECONDS
     while job["state"] == "running" and loop.time() < deadline:
         await asyncio.sleep(RUN_SYNC_POLL_SECONDS)
-        job = await _api(app, "GET", f"/api/connectors/linear/jobs/{job['id']}")
+        job = await call_api(
+            app, "GET", "/api/connectors/linear/jobs/{job_id}", path={"job_id": job["id"]}
+        )
     return job
 
 
@@ -206,12 +173,12 @@ def _add_dora_tool(mcp: MCPServer, app: FastAPI) -> None:
         """The team's DORA metrics — deploy frequency, change lead time, change
         failure rate and time to restore — with their DORA bands. Team only.
         """
-        data = await _api(app, "GET", "/api/metrics/dora", params={"team_id": team_id})
+        data = await call_api(app, "GET", "/api/metrics/dora", params={"team_id": team_id})
         return render_dora(_dora_from_json(data))
 
 
-def build_mcp_server(app: FastAPI) -> MCPServer:
-    """The MCP server, its tools closing over the FastAPI app they front."""
+def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
+    """The MCP server for one access level, its tools closing over the FastAPI app they front."""
     # mcp 2.x: FastMCP was renamed to MCPServer, and the transport-mode
     # kwargs (stateless_http, json_response, streamable_http_path,
     # transport_security) moved off the constructor onto
@@ -224,7 +191,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
     # (the default), rejecting any Host header outside
     # 127.0.0.1/localhost/::1 — but this server is mounted inside Atlas's
     # own app under whatever hostname Atlas is deployed at, never bound to
-    # its own localhost socket. The secret path token is the actual auth
+    # its own localhost socket. The per-user path token is the actual auth
     # boundary (see module docstring), so the allowlist has no
     # deployment-specific value here.
     mcp = MCPServer(
@@ -240,9 +207,9 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         Call this first to resolve a team or project name into the id the
         other tools require.
         """
-        orgs = await _api(app, "GET", "/api/organizations")
-        teams = await _api(app, "GET", "/api/teams")
-        projects = await _api(app, "GET", "/api/projects")
+        orgs = await call_api(app, "GET", "/api/organizations")
+        teams = await call_api(app, "GET", "/api/teams")
+        projects = await call_api(app, "GET", "/api/projects")
         lines = ["Organizations:"]
         lines += [f"- {o['id']}  {o['name']}" for o in orgs] or ["- (none)"]
         lines.append("Teams:")
@@ -268,17 +235,17 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         planning before reaching for any drill-down tool. For a retrospective,
         pass the team's sprint length (shown by list_scopes) as window_days.
         """
-        scope = _params(team_id=team_id, project_id=project_id)
-        context = await _api(
+        scope = drop_none(team_id=team_id, project_id=project_id)
+        context = await call_api(
             app,
             "GET",
             "/api/recommendations/context",
             params={**scope, "window_days": window_days},
         )
-        health = await _api(
+        health = await call_api(
             app, "GET", "/api/metrics/health", params={**scope, "window_days": window_days}
         )
-        aging = await _api(app, "GET", "/api/metrics/aging-wip", params=scope)
+        aging = await call_api(app, "GET", "/api/metrics/aging-wip", params=scope)
         return "\n\n".join(
             [
                 context["context"],
@@ -295,11 +262,11 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         scope's configured aging percentile of cycle time or blocked right now — the 'what is
         stuck' view for a daily standup. Provide exactly one of team_id/project_id.
         """
-        aging = await _api(
+        aging = await call_api(
             app,
             "GET",
             "/api/metrics/aging-wip",
-            params=_params(team_id=team_id, project_id=project_id),
+            params=drop_none(team_id=team_id, project_id=project_id),
         )
         return render_aging(_aging_from_json(aging), limit=50)
 
@@ -313,11 +280,11 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         """Page through a scope's work items (id, state, type, title).
         Use ids from here with the Atlas web UI or for follow-up questions.
         """
-        page = await _api(
+        page = await call_api(
             app,
             "GET",
             "/api/work-items",
-            params=_params(team_id=team_id, project_id=project_id, limit=limit, offset=offset),
+            params=drop_none(team_id=team_id, project_id=project_id, limit=limit, offset=offset),
         )
         if not page["items"]:
             return "No work items in scope."
@@ -342,11 +309,11 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         `window_days` defaults to the team's forecast history rule.
         Provide exactly one of team_id/project_id.
         """
-        data = await _api(
+        data = await call_api(
             app,
             "GET",
             "/api/forecasts",
-            params=_params(
+            params=drop_none(
                 team_id=team_id,
                 project_id=project_id,
                 remaining=remaining,
@@ -377,7 +344,7 @@ def build_mcp_server(app: FastAPI) -> MCPServer:
         it is still running then, call run_sync again later: the second
         call attaches to the running sync instead of starting another.
         """
-        job = await _api(
+        job = await call_api(
             app,
             "POST",
             "/api/connectors/linear/sync",
