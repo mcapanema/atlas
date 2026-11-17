@@ -18,7 +18,7 @@ from app.domain.sync.source import (
     SourceTeam,
     SourceWorkItem,
 )
-from app.domain.work_items.entities import StateType, WorkItemPriority, WorkItemType
+from app.domain.work_items.entities import Iteration, StateType, WorkItemPriority, WorkItemType
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +181,21 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
         # .get: the field is optional — a node without it must not be dropped as malformed.
         url=node.get("url"),
         priority=_priority(node.get("priority")),
+        iteration=_iteration(node),
+    )
+
+
+def _iteration(node: dict[str, Any]) -> Iteration | None:
+    """The issue's cycle as an Iteration; None when it has none."""
+    cycle = node.get("cycle")
+    if not cycle:
+        return None
+    # Linear cycles often have no name: fall back to "Cycle <number>".
+    return Iteration(
+        external_id=cycle["id"],
+        name=cycle.get("name") or f"Cycle {cycle['number']}",
+        starts_at=datetime.fromisoformat(cycle["startsAt"]),
+        ends_at=datetime.fromisoformat(cycle["endsAt"]),
     )
 
 

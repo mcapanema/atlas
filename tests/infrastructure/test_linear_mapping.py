@@ -7,7 +7,7 @@ import pytest
 
 from app.domain.events.entities import EventType
 from app.domain.sync.source import SourcePerson
-from app.domain.work_items.entities import StateType, WorkItemPriority
+from app.domain.work_items.entities import Iteration, StateType, WorkItemPriority
 from app.infrastructure.connectors.linear import mapping
 from app.infrastructure.connectors.linear.mapping import (
     HISTORY_PAGE_SIZE,
@@ -721,3 +721,35 @@ def test_an_unknown_priority_warns_once_per_value(
         map_issue({**ISSUE_NODE, "id": "i2", "priority": 7})
 
     assert len(caplog.records) == 1
+
+
+CYCLE = {
+    "id": "c38",
+    "name": None,
+    "number": 38,
+    "startsAt": "2026-11-04T03:00:00.000Z",
+    "endsAt": "2026-11-18T03:00:00.000Z",
+}
+
+
+def test_map_issue_maps_the_cycle_to_an_iteration() -> None:
+    item = map_issue({**ISSUE_NODE, "cycle": CYCLE})
+
+    assert item.iteration == Iteration(
+        "c38",
+        "Cycle 38",
+        datetime(2026, 11, 4, 3, tzinfo=UTC),
+        datetime(2026, 11, 18, 3, tzinfo=UTC),
+    )
+
+
+def test_map_issue_keeps_a_named_cycle_name() -> None:
+    item = map_issue({**ISSUE_NODE, "cycle": {**CYCLE, "name": "Hardening"}})
+
+    assert item.iteration is not None
+    assert item.iteration.name == "Hardening"
+
+
+def test_map_issue_without_a_cycle_has_no_iteration() -> None:
+    assert map_issue({**ISSUE_NODE, "cycle": None}).iteration is None
+    assert map_issue(ISSUE_NODE).iteration is None  # field absent
