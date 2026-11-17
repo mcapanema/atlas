@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
+from app.api.mcp_analytics_tools import add_analytics_tools
 from app.api.mcp_client import call_api, drop_none
 from app.api.mcp_config_tools import add_config_read_tools
 from app.api.schemas import AgingWipRead, DoraMetricsRead
@@ -202,6 +203,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     )
     _add_dora_tool(mcp, app)
     add_config_read_tools(mcp, app)
+    add_analytics_tools(mcp, app)
 
     @mcp.tool()
     async def list_scopes() -> str:
