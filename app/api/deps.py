@@ -448,7 +448,9 @@ SyncScheduleServiceDep = Annotated[SyncScheduleService, Depends(get_sync_schedul
 
 SESSION_COOKIE = "atlas_session"
 # The MCP facade's in-process REST calls carry this header with
-# app.state.internal_token, so its tools work with no user (ADR-0028).
+# app.state.internal_token. Tool calls do not run as the token's user: the gate
+# picks the server for the access level, and REST sees an internal caller, so
+# writes made through MCP are not attributed to a user (ADR-0028, ADR-0032).
 INTERNAL_HEADER = "X-Atlas-Internal"
 
 

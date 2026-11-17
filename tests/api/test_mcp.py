@@ -56,9 +56,10 @@ from tests.fakes import FakeDataSource
 def _drop_token_masks() -> Iterator[None]:
     """create_app() masks MCP tokens on the global uvicorn.access logger; undo it per test."""
     yield
-    access = logging.getLogger("uvicorn.access")
-    for mask in [f for f in access.filters if isinstance(f, _RedactSecret)]:
-        access.removeFilter(mask)
+    for name in ("uvicorn.access", "uvicorn.error"):
+        logger = logging.getLogger(name)
+        for mask in [f for f in logger.filters if isinstance(f, _RedactSecret)]:
+            logger.removeFilter(mask)
 
 
 @asynccontextmanager
@@ -135,6 +136,43 @@ async def test_an_unknown_token_is_404(sessionmaker: async_sessionmaker[AsyncSes
     assert (response.status_code, response.text) == (404, "Not Found")
 
 
+def test_the_token_mask_covers_every_uvicorn_logger() -> None:
+    create_app()
+    for name in ("uvicorn.access", "uvicorn.error"):
+        masks = [f for f in logging.getLogger(name).filters if isinstance(f, _RedactSecret)]
+        assert len(masks) == 1, name
+
+
+async def test_a_websocket_with_an_unknown_token_is_closed_not_answered_over_http(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    sent: list[dict[str, object]] = []
+
+    async def receive() -> dict[str, object]:
+        return {"type": "websocket.connect"}
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    scope = {
+        "type": "websocket",
+        "path": "/mcp/nope/",
+        "raw_path": b"/mcp/nope/",
+        "headers": [(b"host", b"localhost")],
+        "query_string": b"",
+        "root_path": "",
+        "scheme": "ws",
+        "server": ("localhost", 80),
+        "client": ("127.0.0.1", 1),
+        "subprotocols": [],
+    }
+    async with running_app(sessionmaker) as app:
+        await app(scope, receive, send)  # type: ignore[arg-type]
+
+    assert [m["type"] for m in sent] == ["websocket.close"]
+    assert sent[0]["code"] == 1008
+
+
 async def test_a_revoked_token_stops_working_at_once(
     sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -162,6 +200,7 @@ async def test_removing_a_user_ends_their_mcp_tokens(
         removed = await admin.delete(f"/api/users/{leaver['id']}")
         response = await raw_mcp_post(app, token)
 
+    assert served.status_code < 500
     assert served.status_code != 404
     assert removed.status_code == 204
     assert response.status_code == 404

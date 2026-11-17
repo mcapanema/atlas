@@ -81,10 +81,12 @@ class _RedactSecret(logging.Filter):
 
 
 def _mask_in_access_log() -> None:
-    access = logging.getLogger("uvicorn.access")
-    for stale in [f for f in access.filters if isinstance(f, _RedactSecret)]:
-        access.removeFilter(stale)  # create_app() runs once per test app
-    access.addFilter(_RedactSecret())
+    # uvicorn.error logs rejected websockets with the full path.
+    for name in ("uvicorn.access", "uvicorn.error"):
+        target = logging.getLogger(name)
+        for stale in [f for f in target.filters if isinstance(f, _RedactSecret)]:
+            target.removeFilter(stale)  # create_app() runs once per test app
+        target.addFilter(_RedactSecret())
 
 
 # Credentials entered on the Connectors page replaced these env keys (ADR-0027).

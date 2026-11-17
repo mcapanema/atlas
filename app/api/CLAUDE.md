@@ -102,7 +102,9 @@ entry point `app/cli.py` is the only other one).
   (`mcp_gate.py`) at `/mcp/{token}` (before `mount_spa`); the gate checks
   the user's token and forwards to the server for its access level
   (ADR-0032). `lifespan` must run each server's
-  `session_manager.run()` for it to serve.
+  `session_manager.run()` for it to serve. A tool registered outside
+  `add_config_write_tools` is visible to read tokens; the annotation test in
+  `tests/api/test_mcp_coverage.py` enforces the split.
 - **Auth** (ADR-0028): every router except `health` and `auth` is
   included in `create_app()` with `require_signed_in` (a valid
   `atlas_session` cookie, else 401); `tests/api/test_auth_guard.py` fails on

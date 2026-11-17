@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from fastapi import FastAPI
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.websockets import WebSocketClose
 
 from app.api.deps import mcp_token_service_for
 from app.domain.auth.entities import McpAccess
@@ -38,6 +39,9 @@ class McpGate:
                 await session.rollback()
                 logger.warning("Could not record when an MCP token was last used")
         if access is None:
+            if scope["type"] != "http":
+                await WebSocketClose(code=1008)(scope, receive, send)  # policy violation
+                return
             # The same answer as any unknown path: a wrong token reveals nothing.
             await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
             return

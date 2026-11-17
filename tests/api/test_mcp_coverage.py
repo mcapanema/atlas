@@ -101,3 +101,19 @@ async def test_every_mcp_tool_is_in_the_guide() -> None:
     guide = GUIDE.read_text()
     missing = [t.name for t in await server.list_tools() if f"`{t.name}`" not in guide]
     assert not missing, f"Add to docs/GUIDE.md section 'Use it': {missing}"
+
+
+async def test_write_tools_are_only_on_the_read_write_server() -> None:
+    # A tool registered outside add_config_write_tools is visible to read tokens.
+    servers = create_app().state.mcp_servers
+    read = {t.name: t for t in await servers[McpAccess.READ].list_tools()}
+    both = {t.name: t for t in await servers[McpAccess.READ_WRITE].list_tools()}
+
+    # run_sync syncs data, not settings: it is on both servers by design (ADR-0032).
+    writes = {n for n, t in read.items() if not (t.annotations and t.annotations.read_only_hint)}
+    assert writes == {"run_sync"}
+    assert set(read) < set(both)
+    for name in set(both) - set(read):
+        annotations = both[name].annotations
+        assert annotations is not None, name
+        assert annotations.read_only_hint is False, name

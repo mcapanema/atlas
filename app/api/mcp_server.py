@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import FastAPI
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import ToolAnnotations
 
 from app.api.mcp_analytics_tools import add_analytics_tools
 from app.api.mcp_client import call_api, drop_none
@@ -30,6 +31,10 @@ from app.domain.auth.entities import McpAccess
 from app.domain.metrics.aging import AgingItem, AgingWip
 from app.domain.metrics.dora import DoraMetrics
 from app.domain.metrics.windows import STATS_WINDOW_DAYS
+
+_READ_ONLY = ToolAnnotations(read_only_hint=True)
+# run_sync writes synced data, not settings: it is on both servers (ADR-0032).
+_SYNC = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True)
 
 _INSTRUCTIONS = (
     "Atlas is a delivery-intelligence platform for Engineering Managers: "
@@ -175,7 +180,7 @@ def _register_prompts(mcp: MCPServer) -> None:
 
 
 def _add_dora_tool(mcp: MCPServer, app: FastAPI) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=_READ_ONLY)
     async def dora(team_id: str) -> str:
         """The team's DORA metrics — deploy frequency, change lead time, change
         failure rate and time to restore — with their DORA bands. Team only.
@@ -219,7 +224,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     _add_config_tools(mcp, app, access)
     add_analytics_tools(mcp, app)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_READ_ONLY)
     async def list_scopes() -> str:
         """List all organizations, teams, and projects with their ids.
 
@@ -241,7 +246,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
         ] or ["- (none)"]
         return "\n".join(lines)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_READ_ONLY)
     async def meeting_brief(
         team_id: str | None = None,
         project_id: str | None = None,
@@ -275,7 +280,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
             ]
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_READ_ONLY)
     async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
         """Every in-progress item with its age, flagged when older than the
         scope's configured aging percentile of cycle time or blocked right now — the 'what is
@@ -289,7 +294,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
         )
         return render_aging(_aging_from_json(aging), limit=50)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_READ_ONLY)
     async def list_work_items(
         team_id: str | None = None,
         project_id: str | None = None,
@@ -314,7 +319,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
         lines.append(f"Showing {len(page['items'])} of {page['total']} (offset {offset}).")
         return "\n".join(lines)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_READ_ONLY)
     async def forecast(
         team_id: str | None = None,
         project_id: str | None = None,
@@ -354,7 +359,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
             lines.append(f"Confidence of hitting target_date: {data['confidence']:.2f}")
         return "\n".join(lines)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_SYNC)
     async def run_sync(organization_id: str) -> str:
         """Pull fresh data from the connected issue tracker (Linear) for an
         organization (id from list_scopes), then capture analytics

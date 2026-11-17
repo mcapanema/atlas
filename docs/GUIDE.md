@@ -337,6 +337,9 @@ run a tunnel:
 cloudflared tunnel --url http://localhost:8000   # or: ngrok http 8000
 ```
 
+In development (`make dev`), point the tunnel at the backend port 8000, not at
+the Vite port.
+
 Copy the HTTPS origin that the tunnel shows. Your connector URL is
 `https://<origin>/mcp/<token>/`.
 
