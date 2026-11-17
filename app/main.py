@@ -24,6 +24,7 @@ from app.api import (
     forecasts,
     health,
     mcp_server,
+    mcp_tokens,
     meetings,
     metric_rules,
     metrics,
@@ -215,6 +216,7 @@ def create_app() -> FastAPI:
         metric_rules.router,
         sync_schedules.router,
         users.router,
+        mcp_tokens.router,
     ):
         app.include_router(router, dependencies=[Depends(require_signed_in)])
 

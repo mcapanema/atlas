@@ -13,7 +13,7 @@ from uuid import UUID
 
 from app.domain.advisor.entities import AdviceFeedback, Persona, PersonaGuidance
 from app.domain.advisor.runs import AdviceRun, RunStatus
-from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.entities import AuthSession, McpToken, User
 from app.domain.auth.repository import SetupAlreadyClaimedError
 from app.domain.codebases.entities import (
     Codebase,
@@ -123,6 +123,33 @@ class InMemoryUserRepository:
         if self._setup_claimed:
             raise SetupAlreadyClaimedError("first-run setup is already done")
         self._setup_claimed = True
+
+
+class InMemoryMcpTokenRepository:
+    def __init__(self) -> None:
+        self._tokens: dict[UUID, McpToken] = {}
+        self.touches: list[tuple[UUID, datetime]] = []
+
+    async def add(self, token: McpToken) -> None:
+        self._tokens[token.id] = token
+
+    async def get_by_hash(self, token_hash: str) -> McpToken | None:
+        return next((t for t in self._tokens.values() if t.token_hash == token_hash), None)
+
+    async def list_for_user(self, user_id: UUID) -> list[McpToken]:
+        owned = [t for t in self._tokens.values() if t.user_id == user_id]
+        return sorted(owned, key=lambda t: t.created_at, reverse=True)
+
+    async def delete(self, token_id: UUID, user_id: UUID) -> bool:
+        token = self._tokens.get(token_id)
+        if token is None or token.user_id != user_id:
+            return False
+        del self._tokens[token_id]
+        return True
+
+    async def touch(self, token_id: UUID, when: datetime) -> None:
+        self.touches.append((token_id, when))
+        self._tokens[token_id].last_used_at = when
 
 
 class InMemoryAuthSessionRepository:
