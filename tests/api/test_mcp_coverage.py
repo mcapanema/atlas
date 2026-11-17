@@ -1,40 +1,18 @@
 """Every /api route is an explicit MCP decision: a tool calls it, or NOT_FOR_MCP names it."""
 
 import ast
-from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any
 
 from fastapi import FastAPI
 
 from app.api.mcp_coverage import NOT_FOR_MCP
 from app.domain.auth.entities import McpAccess
 from app.main import create_app
+from tests.api._routes import Pair, api_routes
 
 ROOT = Path(__file__).resolve().parents[2]
 API_DIR = ROOT / "app" / "api"
 GUIDE = ROOT / "docs" / "GUIDE.md"
-Pair = tuple[str, str]
-
-
-def _flat_routes(routes: Iterable[Any]) -> Iterator[Any]:
-    # FastAPI 0.156 keeps include_router() results as nested `_IncludedRouter`
-    # branches; their `effective_candidates()` carry the prefixed path and methods.
-    for route in routes:
-        if hasattr(route, "effective_candidates"):
-            yield from _flat_routes(route.effective_candidates())
-        else:
-            yield route
-
-
-def api_routes(app: FastAPI) -> set[Pair]:
-    return {
-        (method, route.path)
-        for route in _flat_routes(app.routes)
-        if getattr(route, "methods", None) and route.path.startswith("/api/")
-        for method in route.methods
-        if method != "HEAD"
-    }
 
 
 def _call_api_nodes() -> list[tuple[str, ast.Call]]:
@@ -100,6 +78,13 @@ def test_no_route_is_both_used_and_excluded() -> None:
 def test_every_exclusion_is_a_real_route_with_a_reason() -> None:
     assert NOT_FOR_MCP.keys() <= api_routes(create_app())
     assert all(reason.strip() for reason in NOT_FOR_MCP.values())
+
+
+def test_the_scans_are_not_vacuous() -> None:
+    routes = api_routes(create_app())
+    assert len(routes) > 20
+    assert ("GET", "/api/teams") in routes
+    assert ("GET", "/api/organizations") in mcp_calls()
 
 
 def test_the_gate_reports_an_unexposed_route() -> None:

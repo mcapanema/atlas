@@ -1,19 +1,19 @@
 """Every /api route outside /api/auth needs a signed-in user (ADR-0028)."""
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 from httpx import AsyncClient
 
 from app.api.deps import require_signed_in
+from tests.api._routes import api_route_objects
 
 
 def test_every_api_route_outside_auth_requires_sign_in(test_app: FastAPI) -> None:
+    routes = api_route_objects(test_app)
+    assert len(routes) > 20  # the route walk is not vacuous
     unguarded = [
         r.path
-        for r in test_app.routes
-        if isinstance(r, APIRoute)
-        and r.path.startswith("/api/")
-        and not r.path.startswith("/api/auth/")
+        for r in routes
+        if not r.path.startswith("/api/auth/")
         and not any(d.dependency is require_signed_in for d in r.dependencies)
     ]
     assert unguarded == []
