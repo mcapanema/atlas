@@ -1,4 +1,5 @@
 import { Alert } from "antd";
+import type { ReactNode } from "react";
 
 import type { useAdvisorStatus } from "../api/advisor";
 
@@ -8,7 +9,7 @@ export function AdvisorStatusAlerts({
   notConfigured,
 }: {
   status: ReturnType<typeof useAdvisorStatus>;
-  notConfigured: string;
+  notConfigured: ReactNode;
 }) {
   if (status.isError) {
     return (

@@ -308,20 +308,25 @@ your teams. It gives meeting briefs for daily standups, retrospectives,
 reviews and planning. It also has tools for more detail and a tool that
 gets new data.
 
-### 1. Turn on the endpoint
+### 1. Make a token
 
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(24))"   # generate a token
-echo 'ATLAS_MCP_TOKEN=<paste-it>' >> .env
-make run
-```
+Open **Setup → AI access** and click **Create token**. Give the token a
+name, for example the name of the client. Then choose the access:
+
+- **Read**: the client reads data and runs syncs.
+- **Read and change settings**: the client can also change metric rules,
+  the sync schedule, people and codebase mapping.
+
+Atlas shows the token one time. Copy it before you click **Done**. If you
+lose a token, revoke it and make a new one. Each token belongs to the user
+who made it. To disconnect a client at once, revoke its token on the same
+page.
 
 The MCP endpoint is at `http://localhost:8000/mcp/<token>/`. The slash at
-the end is necessary. To turn off the endpoint, leave `ATLAS_MCP_TOKEN`
-empty.
+the end is necessary.
 
-**Do not share the full URL. Anyone with the URL can read your delivery
-data.**
+**Do not share the full URL. Anyone with the URL can use the access of the
+token.**
 
 ### 2. Make it available to cloud clients (claude.ai, ChatGPT)
 
@@ -347,7 +352,7 @@ The token is the only credential for the endpoint.
 ### 3. Connect a client
 
 - **claude.ai / Claude Desktop**: go to Settings → Connectors → *Add custom
-  connector*, and paste the URL. No OAuth is necessary.
+  connector*, and paste the connector URL. No OAuth is necessary.
 - **Claude Code**: run `claude mcp add --transport http atlas
   http://localhost:8000/mcp/<token>/`. On this machine, you do not need a
   tunnel.

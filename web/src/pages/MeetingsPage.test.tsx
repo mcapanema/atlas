@@ -100,13 +100,9 @@ describe("MeetingsPage", () => {
 
     renderPage();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Meeting prep is not configured. Add an OpenRouter API key on the Connectors page to prepare meetings inside Atlas — or connect an external AI via MCP.",
-        ),
-      ).toBeInTheDocument(),
-    );
+    const link = await screen.findByRole("link", { name: "connect an external AI via MCP" });
+    expect(link).toHaveAttribute("href", "/ai-access");
+    expect(screen.getByText(/Meeting prep is not configured/)).toBeInTheDocument();
   });
 
   it("posts with the meeting params and shows the stored prep", async () => {

@@ -12,6 +12,7 @@ import { MetricRulesPage } from "./pages/MetricRulesPage";
 import { OrganizationsPage } from "./pages/OrganizationsPage";
 import { SignInPage } from "./pages/SignInPage";
 import { UsersPage } from "./pages/UsersPage";
+import { AiAccessPage } from "./pages/AiAccessPage";
 import { WorkItemPage } from "./pages/WorkItemPage";
 import { WorkItemsPage } from "./pages/WorkItemsPage";
 
@@ -56,6 +57,7 @@ function SignedInApp() {
           <Route path="/connectors" element={<ConnectorsPage />} />
           <Route path="/metric-rules" element={<MetricRulesPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/ai-access" element={<AiAccessPage />} />
         </Routes>
       </Suspense>
     </AppLayout>
