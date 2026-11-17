@@ -369,7 +369,7 @@ Read tools (every token):
 
 - `list_scopes`
 - `meeting_brief`: one call that gives a full summary.
-- `aging_wip`
+- `aging_wip`: in-progress items with their age, owner and id. Use the id with `work_item`.
 - `list_work_items`
 - `work_item`: one work item with its timeline.
 - `forecast`: supports what-if values for `remaining` and `target_date`.

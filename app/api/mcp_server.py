@@ -254,9 +254,9 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     ) -> str:
         """One-call delivery brief for a team or project — flow metrics,
         lead-time distribution, Monte Carlo forecast, DORA metrics (team only),
-        delivery health, and aging WIP. Provide exactly one of team_id/project_id (from
-        list_scopes). Use this for daily standups, retros, reviews, and
-        planning before reaching for any drill-down tool. For a retrospective,
+        delivery health, and aging WIP (each item's id and assignee). Provide exactly
+        one of team_id/project_id (from list_scopes). Use this for daily standups,
+        retros, reviews, and planning before reaching for any drill-down tool. For a retrospective,
         pass the team's sprint length (shown by list_scopes) as window_days.
         """
         scope = drop_none(team_id=team_id, project_id=project_id)
@@ -275,7 +275,9 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
                 context["context"],
                 _render_health(health),
                 render_aging(
-                    _aging_from_json(aging), more_hint=" (use aging_wip for the full list)"
+                    _aging_from_json(aging),
+                    more_hint=" (use aging_wip for the full list)",
+                    show_ids=True,
                 ),
             ]
         )
@@ -284,7 +286,8 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     async def aging_wip(team_id: str | None = None, project_id: str | None = None) -> str:
         """Every in-progress item with its age, flagged when older than the
         scope's configured aging percentile of cycle time or blocked right now — the 'what is
-        stuck' view for a daily standup. Provide exactly one of team_id/project_id.
+        stuck' view for a daily standup. Each line starts with the work item id (open it
+        with work_item) and names the assignee. Provide exactly one of team_id/project_id.
         """
         aging = await call_api(
             app,
@@ -292,7 +295,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
             "/api/metrics/aging-wip",
             params=drop_none(team_id=team_id, project_id=project_id),
         )
-        return render_aging(_aging_from_json(aging), limit=50)
+        return render_aging(_aging_from_json(aging), limit=50, show_ids=True)
 
     @mcp.tool(annotations=_READ_ONLY)
     async def list_work_items(
