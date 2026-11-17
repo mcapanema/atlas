@@ -4,7 +4,7 @@ Date: 2026-11-17
 
 ## Status
 
-Proposed. Amends ADR-0010 (per-team metric rules) with one forecast rule;
+Accepted. Amends ADR-0010 (per-team metric rules) with one forecast rule;
 built-in defaults reproduce the previous numbers.
 
 ## Context

@@ -41,6 +41,12 @@ function LastCompletion({ at, origin }: { at: string | null; origin: string }) {
   );
 }
 
+/** Says which iterations the remaining count is limited to (the team's `remaining_iterations` rule). */
+function IterationNote({ iterations }: { iterations: string[] }) {
+  if (iterations.length === 0) return null;
+  return <span className="page-asof">Counts only {iterations.join(", ")}</span>;
+}
+
 function percent(fraction: number | null | undefined): string {
   return fraction != null ? `${Math.round(fraction * 100)}%` : "—";
 }
@@ -220,6 +226,7 @@ export function ForecastCard({
           assumed={assumedRemaining !== undefined}
           completion={completion}
         />
+        <IterationNote iterations={data.iterations} />
         <LastCompletion at={data.last_completed_at} origin={data.window_end} />
         <Space wrap size="large">
           <AssumedRemainingInput

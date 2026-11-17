@@ -19,6 +19,8 @@ export interface Forecast {
   window_start: string;
   window_end: string;
   remaining: number;
+  /** Names of the current iterations the forecast counted; empty when it counts any. */
+  iterations: string[];
   completion: CompletionForecast | null;
   confidence: number | null;
   last_completed_at: string | null;

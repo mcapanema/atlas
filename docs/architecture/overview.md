@@ -138,6 +138,9 @@ exception: it is generated in the background and stored (ADR-0023).
 - **Forecasting** (`app/domain/forecasting/monte_carlo.py`): Monte Carlo
   simulation of the scope's open work by resampling its historical daily
   throughput — seeded `random.Random`, deterministic by construction.
+  Each `WorkItem` carries its `iteration` (a Linear cycle or Jira sprint);
+  the `remaining_iterations` rule can limit the remaining count to each
+  team's current iteration (ADR-0031).
 - **Advisor** (`app/domain/advisor/`): `AdvisorPort` takes a
   `DeliveryContext` — the already-computed metrics, distribution,
   forecast, and (team scopes) DORA metrics — and returns explainable
@@ -193,7 +196,7 @@ Every rule that changes how a metric is computed — lifecycle interpretation
 (incl. reopens, parent issues, lead-time start), the blocked signal, the
 wait states flow efficiency and queue/touch time count as wait (ADR-0018), health
 scales, weights and evidence floor, timezone, working days, holidays, chart
-bucketing, forecast history and remaining, label → type mapping — is a field
+bucketing, forecast history, remaining and the iterations it counts (ADR-0031), label → type mapping — is a field
 of `MetricRules` (`app/domain/metric_rules/entities.py`). Defaults are the
 previous built-in behavior, except the blocked sources (blocked-named
 states and listed labels only, ADR-0026), the health floor (ADR-0015), durations counting Monday-to-Friday working days

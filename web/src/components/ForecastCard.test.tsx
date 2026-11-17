@@ -70,6 +70,27 @@ describe("ForecastCard", () => {
     expect(await screen.findByText(/Last completion/)).toHaveTextContent(/· 1 day ago$/);
   });
 
+  it("shows the counted iterations", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse({ ...forecastFixture, iterations: ["Cycle 38"] })),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("Counts only Cycle 38")).toBeInTheDocument();
+  });
+
+  it("shows no iteration note without iterations", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    expect(screen.queryByText(/Counts only/)).toBeNull();
+  });
+
   it("names the simulation count the API ran", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(
