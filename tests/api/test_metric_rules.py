@@ -305,6 +305,24 @@ async def test_collection_rules_round_trip_normalized(
     assert "remaining_state_types" in rejected.text
 
 
+async def test_team_can_count_only_the_current_iteration(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+    url = f"/api/teams/{team}/metric-rules"
+
+    current = await rules_client.patch(url, json={"remaining_iterations": "current"})
+    await settle(rules_app)
+    inherited = await rules_client.patch(url, json={"remaining_iterations": None})
+    await settle(rules_app)
+    rejected = await rules_client.patch(url, json={"remaining_iterations": "next"})
+
+    assert current.status_code == 200
+    assert current.json()["effective"]["remaining_iterations"] == "current"
+    assert inherited.json()["effective"]["remaining_iterations"] == "any"
+    assert rejected.status_code == 422
+
+
 async def test_sprint_length_is_a_patchable_team_rule(
     rules_app: FastAPI, rules_client: AsyncClient
 ) -> None:

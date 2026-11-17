@@ -41,7 +41,7 @@ from app.domain.sync.source import (
 )
 from app.domain.sync_schedules.entities import SyncRun, SyncSchedule
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import StateType, WorkItem
+from app.domain.work_items.entities import Iteration, StateType, WorkItem
 
 # The default rules measuring on all seven days: for tests that assert
 # durations across a weekend and aren't about the working calendar.
@@ -267,6 +267,16 @@ class InMemoryWorkItemRepository:
             if item.project_id is not None:
                 teams.setdefault(item.project_id, set()).add(item.team_id)
         return {project_id: frozenset(ids) for project_id, ids in teams.items()}
+
+    async def iterations_by_team(self, team_ids: Collection[UUID]) -> dict[UUID, list[Iteration]]:
+        found: dict[UUID, set[Iteration]] = {}
+        for item in self._items.values():
+            if item.iteration is not None and item.team_id in team_ids:
+                found.setdefault(item.team_id, set()).add(item.iteration)
+        return {
+            team_id: sorted(iterations, key=lambda i: (i.starts_at, i.external_id))
+            for team_id, iterations in found.items()
+        }
 
     async def list(
         self,

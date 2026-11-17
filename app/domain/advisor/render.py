@@ -61,7 +61,12 @@ def render_context(context: DeliveryContext) -> str:
         lines.append(f"{histogram_header}: empty")
 
     forecast = context.forecast
-    lines.append(f"Monte Carlo forecast: remaining={forecast.remaining} open items")
+    scope_note = (
+        f" (limited to current iteration(s): {', '.join(forecast.iterations)})"
+        if forecast.iterations
+        else ""
+    )
+    lines.append(f"Monte Carlo forecast: remaining={forecast.remaining} open items{scope_note}")
     if forecast.completion is not None:
         c = forecast.completion
         lines.append(

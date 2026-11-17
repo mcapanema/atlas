@@ -25,6 +25,15 @@ def test_incident_labels_match_listed_names_in_any_case() -> None:
     assert not replace(rules, incident_label_names=()).is_incident_label("incident")
 
 
+def test_remaining_iterations_defaults_to_any() -> None:
+    assert DEFAULT_RULES.remaining_iterations == "any"
+
+
+def test_remaining_iterations_rejects_an_unknown_value() -> None:
+    with pytest.raises(ValueError, match="remaining_iterations"):
+        apply_overrides(DEFAULT_RULES, {"remaining_iterations": "next"})
+
+
 def test_defaults_reproduce_the_built_in_behavior() -> None:
     rules = DEFAULT_RULES
 

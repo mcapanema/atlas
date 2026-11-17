@@ -70,6 +70,47 @@ describe("ForecastCard", () => {
     expect(await screen.findByText(/Last completion/)).toHaveTextContent(/· 1 day ago$/);
   });
 
+  it("shows the counted iterations", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse({ ...forecastFixture, iterations: ["Cycle 38"] })),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    expect(await screen.findByText("Counts Cycle 38 and unplanned work")).toBeInTheDocument();
+  });
+
+  it("hides the iteration note once an assumed remaining count is committed", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const body = { ...forecastFixture, iterations: ["Cycle 38"] };
+      if (requestUrl(input).includes("remaining=40")) {
+        return Promise.resolve(jsonResponse({ ...body, remaining: 40 }));
+      }
+      return Promise.resolve(jsonResponse(body));
+    });
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+    expect(await screen.findByText(/Counts Cycle 38/)).toBeInTheDocument();
+
+    const input = screen.getByLabelText("Assume remaining items");
+    fireEvent.change(input, { target: { value: "40" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(screen.getByText("Remaining items (assumed)")).toBeInTheDocument());
+    expect(screen.queryByText(/Counts /)).toBeNull();
+  });
+
+  it("shows no iteration note without iterations", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(jsonResponse(forecastFixture)),
+    );
+
+    renderWithClient(<ForecastCard scope={{ teamId: "team-1" }} />);
+
+    await waitFor(() => expect(screen.getByText("Remaining items")).toBeInTheDocument());
+    expect(screen.queryByText(/Counts /)).toBeNull();
+  });
+
   it("names the simulation count the API ran", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(

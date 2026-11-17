@@ -104,7 +104,7 @@ def test_render_context_handles_empty_scope() -> None:
     assert "no forecast" in text
 
 
-def _delivery() -> DeliveryContext:
+def _delivery(iterations: tuple[str, ...] = ()) -> DeliveryContext:
     return DeliveryContext(
         flow=FlowMetrics(
             window_start=_START,
@@ -118,7 +118,12 @@ def _delivery() -> DeliveryContext:
         ),
         distribution=LeadTimeDistribution(window_start=_START, window_end=_NOW, bins=()),
         forecast=DeliveryForecast(
-            window_start=_START, window_end=_NOW, remaining=2, completion=None, confidence=None
+            window_start=_START,
+            window_end=_NOW,
+            remaining=2,
+            completion=None,
+            confidence=None,
+            iterations=iterations,
         ),
     )
 
@@ -534,3 +539,11 @@ def test_render_context_includes_dora_when_present() -> None:
 
     assert "DORA (trailing 30 calendar days" in render_context(context)
     assert "DORA" not in render_context(_context())
+
+
+def test_render_names_the_iterations_the_forecast_counted() -> None:
+    assert "(limited" not in render_context(_delivery())
+    assert (
+        "remaining=2 open items (limited to current iteration(s): Cycle 38, Cycle 39)"
+        in render_context(_delivery(("Cycle 38", "Cycle 39")))
+    )

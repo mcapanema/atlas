@@ -1,9 +1,14 @@
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from tests.api.helpers import create_team, days_ago
+from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.work_items.entities import Iteration, StateType, WorkItem
+from app.infrastructure.repositories.metric_rules import SqlAlchemyMetricRuleOverridesRepository
+from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
+from tests.api.helpers import create_org_and_team, create_team, days_ago
 
 
 async def _seed_history(client: AsyncClient, team_id: str) -> None:
@@ -139,3 +144,44 @@ async def test_forecast_rejects_an_absurd_remaining_override(client: AsyncClient
     response = await client.get(f"/api/forecasts?team_id={team_id}&remaining=100001")
 
     assert response.status_code == 422
+
+
+async def test_forecast_lists_the_counted_iterations(
+    client: AsyncClient, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    org_id, team_id = await create_org_and_team(client)
+    started = datetime.now(UTC) - timedelta(days=3)
+    cycle = Iteration(
+        external_id="cycle-38",
+        name="Cycle 38",
+        starts_at=started,
+        ends_at=started + timedelta(days=14),
+    )
+    async with sessionmaker() as session:
+        await SqlAlchemyWorkItemRepository(session).add(
+            WorkItem(
+                team_id=UUID(team_id),
+                title="Planned",
+                state_type=StateType.UNSTARTED,
+                iteration=cycle,
+            )
+        )
+        await session.commit()
+    url = f"/api/forecasts?team_id={team_id}"
+
+    by_default = (await client.get(url)).json()
+    # Through the repository, not the rules endpoint: see `use_calendar_days`.
+    async with sessionmaker() as session:
+        await SqlAlchemyMetricRuleOverridesRepository(session).save(
+            RuleOverrides(
+                organization_id=UUID(org_id),
+                team_id=UUID(team_id),
+                overrides={"remaining_iterations": "current"},
+            )
+        )
+        await session.commit()
+    current = (await client.get(url)).json()
+
+    assert by_default["iterations"] == []
+    assert current["iterations"] == ["Cycle 38"]
+    assert current["remaining"] == 1

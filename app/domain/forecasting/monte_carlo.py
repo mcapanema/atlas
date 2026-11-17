@@ -111,7 +111,8 @@ class DeliveryForecast:
     window_end doubles as the forecast origin ("now"); completion and
     confidence are None when the scope has no throughput history.
     last_completed_at is the scope's latest completion at or before the origin;
-    None if none.
+    None if none. iterations names the current iterations the remaining work
+    was narrowed to; empty when it counts every iteration.
     """
 
     window_start: datetime
@@ -120,3 +121,4 @@ class DeliveryForecast:
     completion: CompletionForecast | None
     confidence: float | None
     last_completed_at: datetime | None = None
+    iterations: tuple[str, ...] = ()
