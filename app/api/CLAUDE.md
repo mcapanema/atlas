@@ -94,7 +94,10 @@ entry point `app/cli.py` is the only other one).
   the domain value, and call the shared renderer (exemplar:
   `_aging_from_json` + `render_aging`). Tools call the API only through
   `call_api` (`mcp_client.py`) with a literal route template and its
-  values in `path={...}` — never an f-string. `create_app()` builds one
+  values in `path={...}` — never an f-string (`tests/api/test_mcp_coverage.py`
+  reads the calls statically and fails on an `/api` route that no tool calls
+  and `NOT_FOR_MCP` does not name); a new tool name also goes into
+  `docs/GUIDE.md`. `create_app()` builds one
   server per `McpAccess` (`app.state.mcp_servers`) and mounts `McpGate`
   (`mcp_gate.py`) at `/mcp/{token}` (before `mount_spa`); the gate checks
   the user's token and forwards to the server for its access level
