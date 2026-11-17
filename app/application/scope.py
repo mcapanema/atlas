@@ -104,7 +104,8 @@ class ScopeData:
                 continue
             stream, sample = folded
             item_count += 1
-            remaining += self._remains(item, sample, as_of) and _in_current_iteration(item, current)
+            if self._remains(item, sample, as_of) and _in_current_iteration(item, current):
+                remaining += 1
             if sample is None:
                 continue  # eventless backlog: counted, nothing to measure
             streams.append(stream)
@@ -248,7 +249,11 @@ class ScopeSampleLoader:
             else ResolvedRules()
         )
         # Before the page filters: a filter must not move a team's current iteration.
-        iterations = await self._work_items.iterations_by_team({item.team_id for item in items})
+        iterations = (
+            await self._work_items.iterations_by_team({item.team_id for item in items})
+            if rules.scope.remaining_iterations == "current"
+            else {}
+        )
         items = _filter_items(items, rules, types, exclude_states)
         events = await self._events.list_for_work_items([item.id for item in items])
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)

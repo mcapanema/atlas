@@ -1,5 +1,6 @@
 from collections.abc import Collection
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import JSON, ForeignKey, String, delete, func, select, text, update
@@ -227,8 +228,9 @@ class SqlAlchemyWorkItemRepository:
             )
             for team_id, external_id, name, starts_at, ends_at in result.all():
                 if name is not None and starts_at is not None and ends_at is not None:
+                    # The WHERE clause above guarantees an external id.
                     found.setdefault(team_id, set()).add(
-                        Iteration(external_id or "", name, starts_at, ends_at)
+                        Iteration(cast(str, external_id), name, starts_at, ends_at)
                     )
         return {
             team_id: sorted(iterations, key=lambda i: (i.starts_at, i.external_id))

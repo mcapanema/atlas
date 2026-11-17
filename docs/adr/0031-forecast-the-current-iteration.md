@@ -42,14 +42,15 @@ GitHub Projects iteration. Kanban has none.
 3. **The current iteration is derived per team** from the iterations seen on
    the team's items: the one whose start is at or before the instant and
    whose end is after it. In a gap between iterations (a cooldown) it is
-   the next one to start. A team with no iteration at all has none, and the
-   rule has no effect for it: a Kanban team keeps its forecast.
+   the next one to start. A team with no current or upcoming iteration has
+   none, and the rule has no effect for it: a Kanban team, or one that
+   stopped using iterations, keeps its forecast.
 4. **Per item, its own team's iteration.** A project with items from several
    teams uses each item's team's current iteration.
 5. **Throughput history is not filtered.** The team's delivery rate does not
    depend on the iteration an item belonged to.
 6. **The forecast says which iterations it counted** (`iterations` on the
-   forecast), so the card can show "Counts only Cycle 38".
+   forecast), so the card can show "Counts Cycle 38 and unplanned work".
 
 ## Consequences
 

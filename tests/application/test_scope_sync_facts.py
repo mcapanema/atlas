@@ -1,5 +1,6 @@
+from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
@@ -270,3 +271,21 @@ async def test_a_team_with_only_past_iterations_keeps_all_its_open_work() -> Non
 
     assert scope.remaining_count == 2
     assert scope.iterations == ()
+
+
+class _CountingWorkItems(InMemoryWorkItemRepository):
+    iteration_queries = 0
+
+    async def iterations_by_team(self, team_ids: Collection[UUID]) -> dict[UUID, list[Iteration]]:
+        self.iteration_queries += 1
+        return await super().iterations_by_team(team_ids)
+
+
+async def test_iterations_are_queried_only_under_the_current_iteration_rule() -> None:
+    items = [_todo("Now", _iteration("Cycle 38", -3))]
+    cases: list[tuple[dict[str, object], int]] = [({}, 0), ({"remaining_iterations": "current"}, 1)]
+    for overrides, queries in cases:
+        _, _, event_repo, resolver = _loader(items, [], overrides)
+        counting = _CountingWorkItems(items)
+        await ScopeSampleLoader(counting, event_repo, resolver).load(team_id=TEAM.id)
+        assert counting.iteration_queries == queries
