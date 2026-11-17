@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 from sqlalchemy.types import Uuid
 
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemPriority, WorkItemType
+from app.domain.work_items.entities import (
+    Iteration,
+    StateType,
+    WorkItem,
+    WorkItemPriority,
+    WorkItemType,
+)
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.types import UTCDateTime
 from app.infrastructure.repositories.batching import chunked
@@ -43,6 +49,11 @@ class WorkItemModel(Base):
     assignee_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("people.id", name="fk_work_items_assignee_id"), nullable=True, index=True
     )
+    # The tool's iteration (Linear cycle, Jira sprint); NULL means none (WorkItem.iteration).
+    iteration_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    iteration_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    iteration_starts_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    iteration_ends_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     # Read-only: the assignee's shown name, resolved by a correlated subquery on load.
     assignee_name: Mapped[str | None] = column_property(
         select(func.coalesce(PersonModel.display_name, PersonModel.name))
@@ -52,6 +63,19 @@ class WorkItemModel(Base):
     )
 
     def to_domain(self) -> WorkItem:
+        iteration = None
+        if (
+            self.iteration_external_id is not None
+            and self.iteration_name is not None
+            and self.iteration_starts_at is not None
+            and self.iteration_ends_at is not None
+        ):
+            iteration = Iteration(
+                external_id=self.iteration_external_id,
+                name=self.iteration_name,
+                starts_at=self.iteration_starts_at,
+                ends_at=self.iteration_ends_at,
+            )
         return WorkItem(
             id=self.id,
             team_id=self.team_id,
@@ -69,10 +93,12 @@ class WorkItemModel(Base):
             assignee=self.assignee_name,
             assignee_id=self.assignee_id,
             priority=WorkItemPriority(self.priority) if self.priority else None,
+            iteration=iteration,
         )
 
     @classmethod
     def from_domain(cls, work_item: WorkItem) -> "WorkItemModel":
+        iteration = work_item.iteration
         return cls(
             id=work_item.id,
             team_id=work_item.team_id,
@@ -89,6 +115,10 @@ class WorkItemModel(Base):
             parent_id=work_item.parent_id,
             assignee_id=work_item.assignee_id,
             priority=work_item.priority.value if work_item.priority else None,
+            iteration_external_id=iteration.external_id if iteration else None,
+            iteration_name=iteration.name if iteration else None,
+            iteration_starts_at=iteration.starts_at if iteration else None,
+            iteration_ends_at=iteration.ends_at if iteration else None,
         )
 
 
@@ -177,6 +207,33 @@ class SqlAlchemyWorkItemRepository:
             if project_id is not None:
                 teams.setdefault(project_id, set()).add(team_id)
         return {project_id: frozenset(ids) for project_id, ids in teams.items()}
+
+    async def iterations_by_team(self, team_ids: Collection[UUID]) -> dict[UUID, list[Iteration]]:
+        found: dict[UUID, set[Iteration]] = {}
+        for chunk in chunked(list(team_ids)):
+            result = await self._session.execute(
+                select(
+                    WorkItemModel.team_id,
+                    WorkItemModel.iteration_external_id,
+                    WorkItemModel.iteration_name,
+                    WorkItemModel.iteration_starts_at,
+                    WorkItemModel.iteration_ends_at,
+                )
+                .distinct()
+                .where(
+                    WorkItemModel.team_id.in_(chunk),
+                    WorkItemModel.iteration_external_id.is_not(None),
+                )
+            )
+            for team_id, external_id, name, starts_at, ends_at in result.all():
+                if name is not None and starts_at is not None and ends_at is not None:
+                    found.setdefault(team_id, set()).add(
+                        Iteration(external_id or "", name, starts_at, ends_at)
+                    )
+        return {
+            team_id: sorted(iterations, key=lambda i: (i.starts_at, i.external_id))
+            for team_id, iterations in found.items()
+        }
 
     async def list(
         self,
