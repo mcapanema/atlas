@@ -259,3 +259,14 @@ async def test_iteration_rule_never_widens_the_state_type_rule() -> None:
     scope = await loader.load(team_id=TEAM.id)
 
     assert scope.remaining_count == 0
+
+
+async def test_a_team_with_only_past_iterations_keeps_all_its_open_work() -> None:
+    past = _iteration("Cycle 12", -40)
+    items = [_todo("Rolled over", past), _todo("Unplanned", None)]
+    loader, *_ = _loader(items, [], {"remaining_iterations": "current"})
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.remaining_count == 2
+    assert scope.iterations == ()

@@ -201,6 +201,9 @@ class ScopeData:
 def _in_current_iteration(item: WorkItem, current: Mapping[UUID, Iteration | None] | None) -> bool:
     """In its own team's current iteration, or in none (unplanned work); True when the rule is off.
 
+    A team with no current iteration (none at all, or all in the past) keeps
+    every item: the rule has no effect for it, rather than dropping open work.
+
     ponytail: replays (`as_of`) read each item's current iteration, not the
     one it had at `as_of`, so a rolled-over item reads as its new iteration.
     Upgrade path: Linear IssueHistory fromCycle/toCycle (ADR-0031).
@@ -208,7 +211,7 @@ def _in_current_iteration(item: WorkItem, current: Mapping[UUID, Iteration | Non
     if current is None or item.iteration is None:
         return True
     team_current = current.get(item.team_id)
-    return team_current is not None and item.iteration.external_id == team_current.external_id
+    return team_current is None or item.iteration.external_id == team_current.external_id
 
 
 class ScopeSampleLoader:
