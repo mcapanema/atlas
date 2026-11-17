@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from app.domain._time import utcnow
+from app.domain._time import require_aware, utcnow
 
 DEFAULT_STATE = "backlog"
 
@@ -45,6 +45,21 @@ OPEN_STATE_TYPES = (StateType.TRIAGE, StateType.BACKLOG, StateType.UNSTARTED, St
 NOT_STARTED_STATE_TYPES = frozenset({StateType.TRIAGE, StateType.BACKLOG, StateType.UNSTARTED})
 
 
+@dataclass(frozen=True)
+class Iteration:
+    """A planned timebox in the source system: a Linear cycle, a Jira sprint."""
+
+    external_id: str
+    name: str
+    starts_at: datetime
+    ends_at: datetime
+
+    def __post_init__(self) -> None:
+        require_aware("Iteration", starts_at=self.starts_at, ends_at=self.ends_at)
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Iteration must end after it starts")
+
+
 @dataclass
 class WorkItem:
     """The atomic unit of delivery. Owned by a Team, optionally within a Project."""
@@ -72,6 +87,9 @@ class WorkItem:
     # None means unknown (not synced yet, an unknown source value, or created
     # through the REST API); NONE means the source says "no priority".
     priority: WorkItemPriority | None = None
+    # The item's current timebox in its source (a Linear cycle, a Jira sprint);
+    # None when unplanned or unknown.
+    iteration: Iteration | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utcnow)
 

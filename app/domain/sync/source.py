@@ -11,7 +11,7 @@ from datetime import datetime
 from app.domain._time import require_aware
 from app.domain.codebases.entities import DeploymentStatus
 from app.domain.events.entities import EventType
-from app.domain.work_items.entities import StateType, WorkItemPriority, WorkItemType
+from app.domain.work_items.entities import Iteration, StateType, WorkItemPriority, WorkItemType
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,8 @@ class SourceWorkItem:
     key: str | None = None
     # None when the source sent none or an unknown value.
     priority: WorkItemPriority | None = None
+    # The item's current timebox in the source; None when unplanned.
+    iteration: Iteration | None = None
 
 
 @dataclass(frozen=True)
