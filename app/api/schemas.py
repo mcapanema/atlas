@@ -498,6 +498,7 @@ class ForecastRead(BaseModel):
     completion: CompletionForecastRead | None
     confidence: float | None
     last_completed_at: datetime | None
+    iterations: list[str]
 
 
 class RecommendationRead(BaseModel):

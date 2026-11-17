@@ -4,10 +4,12 @@ from uuid import uuid4
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
 from app.application.scope import ScopeSampleLoader
+from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemType
+from app.domain.work_items.entities import Iteration, StateType, WorkItem, WorkItemType
 from tests.fakes import (
     InMemoryEventRepository,
     InMemoryMetricRuleOverridesRepository,
@@ -139,3 +141,121 @@ async def test_forecast_remaining_follows_the_rule() -> None:
     )
 
     assert forecast.remaining == 1
+
+
+def _iteration(name: str, starts_in_days: float, length_days: float = 14) -> Iteration:
+    """An iteration starting `starts_in_days` from the wall clock (negative: already started)."""
+    starts_at = utcnow() + timedelta(days=starts_in_days)
+    return Iteration(
+        external_id=name,
+        name=name,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(days=length_days),
+    )
+
+
+def _todo(title: str, iteration: Iteration | None, team: Team = TEAM, **fields: object) -> WorkItem:
+    return WorkItem(
+        team_id=team.id,
+        title=title,
+        state_type=StateType.UNSTARTED,
+        iteration=iteration,
+        **fields,  # type: ignore[arg-type]
+    )
+
+
+async def test_current_iteration_rule_counts_the_current_iteration_and_unplanned_work() -> None:
+    c_now, c_next = _iteration("Cycle 38", -3), _iteration("Cycle 39", 11)
+    items = [_todo("Now", c_now), _todo("Next", c_next), _todo("Unplanned", None)]
+    current, *_ = _loader(items, [], {"remaining_iterations": "current"})
+    any_, *_ = _loader(items, [], {})
+
+    narrowed = await current.load(team_id=TEAM.id)
+    unchanged = await any_.load(team_id=TEAM.id)
+
+    assert (narrowed.remaining_count, narrowed.iterations) == (2, ("Cycle 38",))
+    assert (unchanged.remaining_count, unchanged.iterations) == (3, ())
+
+
+async def test_current_iteration_rule_has_no_effect_without_iterations() -> None:
+    items = [_todo(f"Item {n}", None) for n in range(3)]
+    loader, *_ = _loader(items, [], {"remaining_iterations": "current"})
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.remaining_count == 3
+    assert scope.iterations == ()
+
+
+async def test_page_filters_do_not_move_the_current_iteration() -> None:
+    c_now, c_next = _iteration("Cycle 38", -3), _iteration("Cycle 39", 11)
+    bug = _todo("Crash", c_now, type=WorkItemType.BUG)
+    task = _todo("Later", c_next)
+    loader, *_ = _loader([bug, task], [], {"remaining_iterations": "current"})
+
+    scope = await loader.load(team_id=TEAM.id, types={WorkItemType.TASK})
+
+    assert scope.remaining_count == 0  # Cycle 38 stays current with its only item filtered out
+
+
+async def test_each_item_uses_its_own_teams_current_iteration() -> None:
+    a1 = _iteration("A1", -1)
+    b1, b2 = _iteration("B1", -10, 13), _iteration("B2", 3)
+    project = Project(team_id=TEAM.id, name="Shared")
+    items = [
+        _todo("Team now", a1, project_id=project.id),
+        _todo("Other now", b1, team=OTHER, project_id=project.id),
+        _todo("Other next", b2, team=OTHER, project_id=project.id),
+    ]
+    resolver = MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository(
+            [RuleOverrides(organization_id=ORG, overrides={"remaining_iterations": "current"})]
+        ),
+        InMemoryTeamRepository([TEAM, OTHER]),
+        InMemoryProjectRepository([project]),
+    )
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository(items), InMemoryEventRepository(), resolver
+    )
+
+    scope = await loader.load(project_id=project.id)
+
+    assert scope.remaining_count == 2
+    assert scope.iterations == ("A1", "B1")
+
+
+async def test_an_as_of_load_uses_the_iteration_current_then() -> None:
+    start = NOW - timedelta(days=28)
+    c1 = Iteration(external_id="c1", name="Cycle 1", starts_at=start, ends_at=start + timedelta(14))
+    c2 = Iteration(
+        external_id="c2",
+        name="Cycle 2",
+        starts_at=start + timedelta(14),
+        ends_at=start + timedelta(28),
+    )
+    first, second = _todo("First", c1), _todo("Second", c2)
+    events = [_at(first, EventType.CREATED, 30), _at(second, EventType.CREATED, 30)]
+    loader, *_ = _loader([first, second], events, {"remaining_iterations": "current"})
+
+    data = await loader.load_data(team_id=TEAM.id)
+    in_c1 = data.samples(as_of=start + timedelta(days=1))
+    in_c2 = data.samples(as_of=start + timedelta(days=15))
+
+    assert (in_c1.remaining_count, in_c1.iterations) == (1, ("Cycle 1",))
+    assert (in_c2.remaining_count, in_c2.iterations) == (1, ("Cycle 2",))
+
+
+async def test_iteration_rule_never_widens_the_state_type_rule() -> None:
+    c_now = _iteration("Cycle 38", -3)
+    backlog = WorkItem(
+        team_id=TEAM.id, title="Parked", state_type=StateType.BACKLOG, iteration=c_now
+    )
+    loader, *_ = _loader(
+        [backlog],
+        [],
+        {"remaining_state_types": ["unstarted", "started"], "remaining_iterations": "current"},
+    )
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.remaining_count == 0
