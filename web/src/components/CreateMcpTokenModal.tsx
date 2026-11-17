@@ -70,8 +70,11 @@ export function CreateMcpTokenModal({ onClose }: { onClose: () => void }) {
       open
       footer={null}
       onCancel={onClose}
-      // The secret must not be dismissed by a stray click outside.
-      mask={{ closable: !create.data }}
+      // While the request is out, closing would lose the issued secret; on step 2 a
+      // stray click outside must not dismiss it.
+      closable={!create.isPending}
+      keyboard={!create.isPending}
+      mask={{ closable: !create.data && !create.isPending }}
     >
       {create.data ? (
         <IssuedStep issued={create.data} onDone={onClose} />
@@ -121,7 +124,9 @@ export function CreateMcpTokenModal({ onClose }: { onClose: () => void }) {
               </Radio.Group>
             </Form.Item>
             <Flex justify="flex-end" gap="small">
-              <Button onClick={onClose}>Cancel</Button>
+              <Button disabled={create.isPending} onClick={onClose}>
+                Cancel
+              </Button>
               <Button type="primary" htmlType="submit" loading={create.isPending}>
                 Create token
               </Button>

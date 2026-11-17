@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { authFixture, jsonResponse, requestUrl } from "../test/fixtures";
@@ -77,12 +77,36 @@ describe("AiAccessPage", () => {
     await screen.findByText("Claude Code");
     fireEvent.click(screen.getByRole("button", { name: "Create token" }));
     fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Claude Code" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Create token" })[1]);
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Create token" }),
+    );
     expect(await screen.findByText(/claude mcp add .*atlas_mcp_secretwxyz/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => {
       expect(screen.queryByText(/atlas_mcp_secretwxyz/)).toBeNull();
     });
+  });
+
+  it("drops the secret when step 2 closes with Escape or the Close button", async () => {
+    mockApi();
+    renderWithClient(<AiAccessPage />);
+    await screen.findByText("Claude Code");
+    for (const close of ["escape", "button"]) {
+      fireEvent.click(screen.getByRole("button", { name: "Create token" }));
+      fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Claude Code" } });
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Create token" }),
+      );
+      await screen.findByText(/claude mcp add .*atlas_mcp_secretwxyz/);
+      if (close === "escape") {
+        fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", keyCode: 27 });
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      }
+      await waitFor(() => {
+        expect(screen.queryByText(/atlas_mcp_secretwxyz/)).toBeNull();
+      });
+    }
   });
 
   it("shows a load error", async () => {

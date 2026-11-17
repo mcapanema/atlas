@@ -29,6 +29,8 @@ export function useMcpTokens() {
 export function useCreateMcpToken() {
   const queryClient = useQueryClient();
   return useMutation({
+    // The result holds the secret: drop it from the MutationCache when the modal unmounts.
+    gcTime: 0,
     mutationFn: (values: { name: string; access: McpAccess }) =>
       apiFetch<IssuedMcpToken>("/api/mcp-tokens", {
         method: "POST",

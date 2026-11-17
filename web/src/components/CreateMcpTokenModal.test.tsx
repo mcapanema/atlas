@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { jsonResponse, requestUrl } from "../test/fixtures";
@@ -64,6 +65,41 @@ describe("CreateMcpTokenModal", () => {
     submitDefault();
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("keeps no copy of the secret in the MutationCache after it unmounts", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(issued, 201));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={client}>
+        <CreateMcpTokenModal onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    submitDefault();
+    await screen.findByText(/Copy this token now/);
+    unmount();
+    await waitFor(() => {
+      expect(
+        JSON.stringify(
+          client
+            .getMutationCache()
+            .getAll()
+            .map((m) => m.state.data),
+        ),
+      ).not.toContain("atlas_mcp_");
+    });
+  });
+
+  it("cannot be dismissed while the request is out", async () => {
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => undefined));
+    const onClose = vi.fn();
+    renderWithClient(<CreateMcpTokenModal onClose={onClose} />);
+    submitDefault();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Cancel/ })).toBeDisabled();
+    });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", keyCode: 27 });
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("shows a failure and stays on step 1", async () => {
