@@ -23,7 +23,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from app.api.mcp_analytics_tools import add_analytics_tools
 from app.api.mcp_client import call_api, drop_none
-from app.api.mcp_config_tools import add_config_read_tools
+from app.api.mcp_config_tools import add_config_read_tools, add_config_write_tools
 from app.api.schemas import AgingWipRead, DoraMetricsRead
 from app.domain.advisor.render import quote_title, render_aging, render_dora
 from app.domain.auth.entities import McpAccess
@@ -40,6 +40,10 @@ _INSTRUCTIONS = (
     "Call get_metric_rules before explaining a metric — the rules define how it is counted."
 )
 
+_WRITE_INSTRUCTIONS = (
+    " Before a write, show the user the current value and the change, "
+    "and wait for their confirmation."
+)
 
 # run_sync's wait for the background sync job: long enough for a typical
 # sync, short of a chat client's tool-call timeout.
@@ -180,6 +184,16 @@ def _add_dora_tool(mcp: MCPServer, app: FastAPI) -> None:
         return render_dora(_dora_from_json(data))
 
 
+def _instructions(access: McpAccess) -> str:
+    return _INSTRUCTIONS + (_WRITE_INSTRUCTIONS if access is McpAccess.READ_WRITE else "")
+
+
+def _add_config_tools(mcp: MCPServer, app: FastAPI, access: McpAccess) -> None:
+    add_config_read_tools(mcp, app)
+    if access is McpAccess.READ_WRITE:
+        add_config_write_tools(mcp, app)
+
+
 def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     """The MCP server for one access level, its tools closing over the FastAPI app they front."""
     # mcp 2.x: FastMCP was renamed to MCPServer, and the transport-mode
@@ -199,10 +213,11 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     # deployment-specific value here.
     mcp = MCPServer(
         name="Atlas",
-        instructions=_INSTRUCTIONS,
+        instructions=_INSTRUCTIONS
+        + (_WRITE_INSTRUCTIONS if access is McpAccess.READ_WRITE else ""),
     )
     _add_dora_tool(mcp, app)
-    add_config_read_tools(mcp, app)
+    _add_config_tools(mcp, app, access)
     add_analytics_tools(mcp, app)
 
     @mcp.tool()

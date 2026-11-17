@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.domain.auth.entities import McpAccess
 from app.domain.codebases.entities import Codebase
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.people.entities import Person
@@ -144,3 +145,207 @@ async def test_list_people_and_list_codebases_render_ids(
         "0 PRs, 0 deployments, synced never"
     ) in codebases
     assert nobody == "No people."
+
+
+async def test_an_agent_changes_a_team_rule_and_reads_it_back(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    sessionmaker = file_sessionmaker
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        _, team_id = await create_org_and_team(client)
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ_WRITE)
+        async with mcp_session(app, token) as session:
+            saved = tool_text(
+                await session.call_tool(
+                    "update_metric_rules",
+                    {"team_id": team_id, "changes": {"aging_percentile": 70}},
+                )
+            )
+            await settle(app)
+            reset = tool_text(
+                await session.call_tool(
+                    "update_metric_rules",
+                    {"team_id": team_id, "changes": {"aging_percentile": None}},
+                )
+            )
+            await settle(app)
+        await app.state.recompute_runner.close()
+
+    assert saved.startswith("Saved.")
+    assert "- aging_percentile = 70 (team override)" in saved
+    assert "- aging_percentile = 70" not in reset
+    assert "- aging_percentile = " in reset  # inherited again
+
+
+async def test_update_metric_rules_reports_a_bad_rule_and_saves_nothing(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    sessionmaker = file_sessionmaker
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        _, team_id = await create_org_and_team(client)
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ_WRITE)
+        async with mcp_session(app, token) as session:
+            unknown = await session.call_tool(
+                "update_metric_rules",
+                {"team_id": team_id, "changes": {"aging_percentile": 70, "not_a_rule": 1}},
+            )
+            out_of_range = await session.call_tool(
+                "update_metric_rules",
+                {"team_id": team_id, "changes": {"aging_percentile": 500}},
+            )
+            current = tool_text(await session.call_tool("get_metric_rules", {"team_id": team_id}))
+            neither = await session.call_tool("update_metric_rules", {"changes": {}})
+        await app.state.recompute_runner.close()
+
+    assert unknown.is_error
+    assert "422" in tool_text(unknown)
+    assert "not_a_rule" in tool_text(unknown)
+    assert out_of_range.is_error
+    assert "422" in tool_text(out_of_range)
+    assert "aging_percentile" in tool_text(out_of_range)
+    assert "(team override)" not in current
+    assert neither.is_error
+    assert "Provide exactly one of team_id/organization_id" in tool_text(neither)
+
+
+async def test_a_read_token_cannot_call_write_tools(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    sessionmaker = file_sessionmaker
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        _, team_id = await create_org_and_team(client)
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ)
+        async with mcp_session(app, token) as session:
+            names = {t.name for t in (await session.list_tools()).tools}
+            result = await session.call_tool(
+                "update_metric_rules", {"team_id": team_id, "changes": {"aging_percentile": 70}}
+            )
+        rules = (await client.get(f"/api/teams/{team_id}/metric-rules")).json()
+
+    assert "update_metric_rules" not in names
+    assert "get_metric_rules" in names
+    assert "run_sync" in names
+    assert result.is_error
+    assert "aging_percentile" not in rules["overrides"]
+
+
+async def test_write_tools_carry_write_annotations(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with running_app(sessionmaker) as app:
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ_WRITE)
+        async with mcp_session(app, token) as session:
+            tools = {t.name: t for t in (await session.list_tools()).tools}
+
+    writes = {
+        "update_metric_rules",
+        "recompute_metric_history",
+        "set_sync_schedule",
+        "set_person_display_name",
+        "map_codebase",
+    }
+    for name in writes:
+        hints = tools[name].annotations
+        assert hints is not None
+        assert hints.read_only_hint is False
+        assert hints.destructive_hint is False
+        assert hints.idempotent_hint is True
+    reads = tools["get_metric_rules"].annotations
+    assert reads is not None
+    assert reads.read_only_hint is True
+
+
+async def test_set_sync_schedule_saves_and_renders(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        org_id, _ = await create_org_and_team(client)
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ_WRITE)
+        async with mcp_session(app, token) as session:
+            text = tool_text(
+                await session.call_tool(
+                    "set_sync_schedule",
+                    {
+                        "organization_id": org_id,
+                        "enabled": True,
+                        "days": [1, 2, 3, 4, 5],
+                        "window_start": "09:00",
+                        "window_end": "18:00",
+                        "interval_minutes": 60,
+                        "timezone": "America/Sao_Paulo",
+                    },
+                )
+            )
+
+    assert text.startswith("Saved.")
+    assert "Auto sync: on" in text
+    assert "every 60 min" in text
+    assert "Mon,Tue,Wed,Thu,Fri, 09:00\u201318:00 America/Sao_Paulo" in text
+
+
+async def test_set_person_display_name_and_map_codebase(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        org_id, team_id = await create_org_and_team(client)
+        person = Person(organization_id=UUID(org_id), name="Joao")
+        codebase = Codebase(organization_id=UUID(org_id), name="atlas", external_id="r1")
+        async with sessionmaker() as db:
+            await SqlAlchemyPersonRepository(db).add(person)
+            await SqlAlchemyCodebaseRepository(db).add(codebase)
+            await db.commit()
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ_WRITE)
+        async with mcp_session(app, token) as session:
+            named = tool_text(
+                await session.call_tool(
+                    "set_person_display_name",
+                    {"person_id": str(person.id), "display_name": "João"},
+                )
+            )
+            cleared = tool_text(
+                await session.call_tool(
+                    "set_person_display_name", {"person_id": str(person.id), "display_name": ""}
+                )
+            )
+            mapped = tool_text(
+                await session.call_tool(
+                    "map_codebase",
+                    {
+                        "codebase_id": str(codebase.id),
+                        "team_id": team_id,
+                        "production_environment": "prod",
+                    },
+                )
+            )
+            unmapped = tool_text(
+                await session.call_tool(
+                    "map_codebase",
+                    {
+                        "codebase_id": str(codebase.id),
+                        "team_id": None,
+                        "production_environment": "production",
+                    },
+                )
+            )
+
+    assert named == "Saved: João"
+    assert cleared == "Saved: Joao"
+    assert f'- {codebase.id}  atlas \u2192 team {team_id}, prod env "prod"' in mapped
+    assert f"- {codebase.id}  atlas \u2192 team unmapped" in unmapped
+
+
+async def test_recompute_metric_history_reports_its_state(
+    file_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    sessionmaker = file_sessionmaker
+    async with running_app(sessionmaker) as app, seed_client(app) as client:
+        org_id, _ = await create_org_and_team(client)
+        token = await create_mcp_token(sessionmaker, access=McpAccess.READ_WRITE)
+        async with mcp_session(app, token) as session:
+            text = tool_text(
+                await session.call_tool("recompute_metric_history", {"organization_id": org_id})
+            )
+        await settle(app)
+        await app.state.recompute_runner.close()
+
+    assert text.startswith("History recompute: ")

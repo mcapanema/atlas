@@ -357,16 +357,34 @@ The token is the only credential for the endpoint.
 
 ### 4. Use it
 
-Tools:
+Read tools (every token):
 
 - `list_scopes`
 - `meeting_brief`: one call that gives a full summary.
 - `aging_wip`
 - `list_work_items`
+- `work_item`: one work item with its timeline.
 - `forecast`: supports what-if values for `remaining` and `target_date`.
+- `forecast_accuracy`
+- `flow_trend`
+- `bug_metrics`
 - `dora`: the four DORA metrics of a team and their bands, if a repository
   is mapped to the team.
+- `get_metric_rules`
+- `get_sync_schedule`
+- `list_people`
+- `list_codebases`
+- `connector_status`: shows if a connector is configured. It never shows a key.
 - `run_sync`
+
+Change settings (read-write tokens only). Before a change, the agent shows
+the current value and the change, and waits for your confirmation.
+
+- `update_metric_rules`
+- `recompute_metric_history`
+- `set_sync_schedule`
+- `set_person_display_name`
+- `map_codebase`
 
 Prompts: `daily_standup`, `retrospective`, `planning`. Select a prompt in
 the prompt menu of the client, and it uses the tools for you.
