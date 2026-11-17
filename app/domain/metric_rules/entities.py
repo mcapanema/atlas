@@ -23,6 +23,7 @@ from app.domain.work_items.entities import OPEN_STATE_TYPES, StateType, WorkItem
 ReopenCompletion = Literal["last", "first"]
 DoneThenCanceled = Literal["delivered", "canceled"]
 LeadTimeStart = Literal["created", "triage_exit"]
+RemainingIterations = Literal["any", "current"]
 DoneThenReopened = Literal["delivered", "reopened"]
 CanceledThenReopened = Literal["canceled", "reopened"]
 IncidentSource = Literal["auto", "linear", "datadog"]
@@ -43,6 +44,7 @@ _CHOICES: dict[str, tuple[str, ...]] = {
     "reopen_completion": ("last", "first"),
     "done_then_canceled": ("delivered", "canceled"),
     "lead_time_start": ("created", "triage_exit"),
+    "remaining_iterations": ("any", "current"),
     "done_then_reopened": ("delivered", "reopened"),
     "canceled_then_reopened": ("canceled", "reopened"),
     "incident_source": ("auto", "linear", "datadog"),
@@ -191,6 +193,9 @@ class MetricRules:
     tracked_since: date | None = None
     # Open state types whose items count as forecast remaining.
     remaining_state_types: tuple[StateType, ...] = OPEN_STATE_TYPES
+    # Open items count as forecast remaining in any iteration, or only in
+    # their team's current one (plus items in none). ADR-0031.
+    remaining_iterations: RemainingIterations = "any"
     # Label -> work-item type, first match wins (Linear has no type field).
     # The built-in list maps "bug", so the Bugs section works out of the box
     # (ADR-0030); a workspace or team list replaces it whole.

@@ -885,6 +885,7 @@ class MetricRulesRead(BaseModel):
     incident_label_names: list[str]
     incident_source: Literal["auto", "linear", "datadog"]
     remaining_state_types: list[OpenStateType]
+    remaining_iterations: Literal["any", "current"]
     type_labels: list[TypeLabelRead]
     sprint_length_days: int
 
@@ -943,6 +944,7 @@ class MetricRulesOverridesWrite(BaseModel):
     incident_label_names: list[str] | None = None
     incident_source: Literal["auto", "linear", "datadog"] | None = None
     remaining_state_types: list[OpenStateType] | None = None
+    remaining_iterations: Literal["any", "current"] | None = None
     type_labels: list[TypeLabelRead] | None = None
     sprint_length_days: int | None = None
 
