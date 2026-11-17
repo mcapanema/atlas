@@ -4,12 +4,14 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.mcp_server import build_mcp_server
 from app.domain.auth.entities import McpAccess
 from app.domain.codebases.entities import Codebase
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.people.entities import Person
 from app.infrastructure.repositories.codebases import SqlAlchemyCodebaseRepository
 from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
+from app.main import create_app
 from tests.api.helpers import create_mcp_token, create_org_and_team, settle, store_credential
 from tests.api.test_mcp import mcp_session, running_app, seed_client, tool_text
 
@@ -147,6 +149,22 @@ async def test_list_people_and_list_codebases_render_ids(
     assert nobody == "No people."
 
 
+WRITE_TOOLS = {
+    "update_metric_rules",
+    "recompute_metric_history",
+    "set_sync_schedule",
+    "set_person_display_name",
+    "map_codebase",
+}
+
+
+def test_only_the_read_write_server_tells_the_agent_to_confirm_writes() -> None:
+    confirm = "Before a write, show the user the current value"
+    app = create_app()
+    assert confirm in (build_mcp_server(app, McpAccess.READ_WRITE).instructions or "")
+    assert confirm not in (build_mcp_server(app, McpAccess.READ).instructions or "")
+
+
 async def test_an_agent_changes_a_team_rule_and_reads_it_back(
     file_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -222,7 +240,7 @@ async def test_a_read_token_cannot_call_write_tools(
             )
         rules = (await client.get(f"/api/teams/{team_id}/metric-rules")).json()
 
-    assert "update_metric_rules" not in names
+    assert not names & WRITE_TOOLS
     assert "get_metric_rules" in names
     assert "run_sync" in names
     assert result.is_error
@@ -237,14 +255,7 @@ async def test_write_tools_carry_write_annotations(
         async with mcp_session(app, token) as session:
             tools = {t.name: t for t in (await session.list_tools()).tools}
 
-    writes = {
-        "update_metric_rules",
-        "recompute_metric_history",
-        "set_sync_schedule",
-        "set_person_display_name",
-        "map_codebase",
-    }
-    for name in writes:
+    for name in WRITE_TOOLS:
         hints = tools[name].annotations
         assert hints is not None
         assert hints.read_only_hint is False

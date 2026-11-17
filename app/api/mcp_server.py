@@ -213,8 +213,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
     # deployment-specific value here.
     mcp = MCPServer(
         name="Atlas",
-        instructions=_INSTRUCTIONS
-        + (_WRITE_INSTRUCTIONS if access is McpAccess.READ_WRITE else ""),
+        instructions=_instructions(access),
     )
     _add_dora_tool(mcp, app)
     _add_config_tools(mcp, app, access)
