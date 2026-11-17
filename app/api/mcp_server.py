@@ -22,6 +22,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from app.api.mcp_client import call_api, drop_none
+from app.api.mcp_config_tools import add_config_read_tools
 from app.api.schemas import AgingWipRead, DoraMetricsRead
 from app.domain.advisor.render import quote_title, render_aging, render_dora
 from app.domain.auth.entities import McpAccess
@@ -34,7 +35,8 @@ _INSTRUCTIONS = (
     "flow metrics, delivery health, aging WIP, and Monte Carlo forecasts "
     "computed from synced issue-tracker data. Typical flow: call list_scopes "
     "to resolve a team or project by name, then meeting_brief for the "
-    "one-call digest; drill down with the other tools only when asked."
+    "one-call digest; drill down with the other tools only when asked. "
+    "Call get_metric_rules before explaining a metric — the rules define how it is counted."
 )
 
 
@@ -199,6 +201,7 @@ def build_mcp_server(app: FastAPI, access: McpAccess) -> MCPServer:
         instructions=_INSTRUCTIONS,
     )
     _add_dora_tool(mcp, app)
+    add_config_read_tools(mcp, app)
 
     @mcp.tool()
     async def list_scopes() -> str:
