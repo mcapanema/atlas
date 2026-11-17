@@ -7,7 +7,7 @@ Date: 2026-10-05
 Accepted. Narrows the open user-auth question in ADR-0005. Amended by
 ADR-0028 (users now sign in; the context below records the state at the
 time). Amended by ADR-0032 (per-user MCP tokens replace
-`ATLAS_MCP_TOKEN`; the public path is the `/mcp` prefix).
+`ATLAS_MCP_TOKEN`; the public paths are `/mcp/<token>/…`).
 
 ## Context
 

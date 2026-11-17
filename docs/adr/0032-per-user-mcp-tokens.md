@@ -4,7 +4,7 @@ Date: 2026-11-17
 
 ## Status
 
-Accepted. Amends ADR-0012 (the public path is now the `/mcp` prefix) and
+Accepted. Amends ADR-0012 (the public paths are now `/mcp/<token>/…`) and
 replaces the `ATLAS_MCP_TOKEN` setting.
 
 ## Context
@@ -48,7 +48,10 @@ internet, while ADR-0012 keeps the UI and REST API local-only.
   page.
 - `last_used_at` is written at most once per 5 minutes per token
   (`LAST_USED_RESOLUTION`), so chat traffic does not take SQLite's write
-  lock on every call. The page shows "last used" to that resolution.
+  lock on every call. The page shows "last used" to that resolution. The
+  write is best effort: if it fails (for example, `database is locked`),
+  Atlas logs a warning and still serves the token. A failed lookup still
+  refuses the request.
 - `ATLAS_MCP_TOKEN` stops working: its validator and `.env.example` entry
   go. If it is still set (environment or `.env`), Atlas logs one warning at
   startup that names the AI access page, and does not serve it.
@@ -62,6 +65,9 @@ internet, while ADR-0012 keeps the UI and REST API local-only.
   is a 404.
 - An install upgraded with `ATLAS_MCP_TOKEN` set loses chat access until a
   user creates a token; the startup warning says where.
-- `LocalOnlyMiddleware` makes the whole `/mcp` prefix public. The gate,
-  not the middleware, decides which token is valid.
+- `LocalOnlyMiddleware` makes every `/mcp/<segment>/…` path public, the
+  shape of the mount. `/mcp`, `/mcp/` and `/mcp/<token>` without the
+  trailing slash stay local-only, so a tunnel never reaches the SPA
+  catch-all there. The gate, not the middleware, decides which token is
+  valid.
 - Each MCP request costs one indexed lookup by token hash.

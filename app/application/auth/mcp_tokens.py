@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,6 +8,8 @@ from app.domain._time import utcnow
 from app.domain.auth.entities import McpAccess, McpToken, User
 from app.domain.auth.repository import McpTokenRepository
 from app.domain.auth.tokens import hash_token, new_mcp_token
+
+logger = logging.getLogger(__name__)
 
 _HINT_LENGTH = 4
 
@@ -54,5 +57,9 @@ class McpTokenService:
             return None
         now = self._now()
         if token.needs_touch(now):
-            await self._tokens.touch(token.id, now)
+            try:
+                await self._tokens.touch(token.id, now)
+            except Exception:  # noqa: BLE001 — last_used_at is best effort; never deny a valid token
+                # Names the token's id only: never its secret or hash.
+                logger.warning("Could not record when MCP token %s was last used", token.id)
         return token.access

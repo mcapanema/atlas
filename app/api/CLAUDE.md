@@ -112,8 +112,8 @@ entry point `app/cli.py` is the only other one).
   that must outlive a request never lives in a service.
 - **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
   UI and every `/api/*` route to loopback, unproxied requests only; the
-  `/mcp` prefix is the one public path, and `McpGate` answers 404 to an
-  unknown token there. A new route needs nothing — it is
+  MCP mount's shape, `/mcp/<segment>/…`, is the one public path, and
+  `McpGate` answers 404 to an unknown token there. A new route needs nothing — it is
   local-only by default. A test client or in-process caller uses
   `base_url="http://localhost"`.
 

@@ -24,6 +24,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api import mcp_server
@@ -31,11 +32,13 @@ from app.api.deps import get_delivery_data_source
 from app.api.mcp_client import call_api
 from app.api.mcp_server import _aging_from_json, _dora_from_json
 from app.api.schemas import AgingItemRead, AgingWipRead, DoraMetricsRead
+from app.domain.auth.tokens import hash_token
 from app.domain.metrics.aging import AgingItem, AgingWip
 from app.domain.metrics.dora import DoraMetrics
 from app.domain.sync.port import DataSourceError
 from app.domain.sync.source import SourceTeam
 from app.domain.work_items.entities import WorkItemType
+from app.infrastructure.repositories.auth import SqlAlchemyMcpTokenRepository
 from app.main import _RedactSecret, create_app
 from tests.api.helpers import (
     create_mcp_token,
@@ -162,6 +165,37 @@ async def test_removing_a_user_ends_their_mcp_tokens(
     assert served.status_code != 404
     assert removed.status_code == 204
     assert response.status_code == 404
+
+
+async def _fail(*_: object, **__: object) -> None:
+    raise OperationalError("UPDATE mcp_tokens", {}, Exception("database is locked"))
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        (SqlAlchemyMcpTokenRepository, "touch"),  # the last_used_at write
+        (AsyncSession, "commit"),  # the gate's commit of that write
+    ],
+)
+async def test_a_failed_last_used_write_still_serves_the_token(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    target: tuple[type, str],
+) -> None:
+    async with running_app(sessionmaker) as app:
+        token = await create_mcp_token(sessionmaker)
+        monkeypatch.setattr(*target, _fail)
+        async with mcp_session(app, token) as session:
+            tools = await session.list_tools()
+
+    assert "list_scopes" in [t.name for t in tools.tools]
+    # Only the warnings: the client-side httpx2 logger echoes the URL.
+    warnings = "\n".join(r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+    assert "last used" in warnings
+    assert token not in warnings
+    assert hash_token(token) not in warnings
 
 
 async def test_uvicorn_access_log_masks_every_mcp_token(
