@@ -523,17 +523,18 @@ async def test_retrospective_prompt_defaults_to_the_teams_sprint(
 
 async def _seed_item(
     client: httpx.AsyncClient, team_id: str, title: str, *events: tuple[str, int]
-) -> None:
-    """A work item with (event type, days ago) events, through the REST API."""
+) -> str:
+    """A work item with (event type, days ago) events, through the REST API; its id."""
     item = await client.post("/api/work-items", json={"team_id": team_id, "title": title})
     assert item.status_code == 201
-    item_id = item.json()["id"]
+    item_id: str = item.json()["id"]
     for type_, days in events:
         response = await client.post(
             "/api/events",
             json={"work_item_id": item_id, "type": type_, "occurred_at": days_ago(days)},
         )
         assert response.status_code == 201
+    return item_id
 
 
 async def test_meeting_brief_names_the_aging_history(
@@ -547,7 +548,7 @@ async def test_meeting_brief_names_the_aging_history(
             await _seed_item(
                 client, team_id, "Shipped", ("created", 10), ("started", 6), ("completed", 2)
             )
-            await _seed_item(client, team_id, "Stuck", ("created", 10), ("started", 6))
+            stuck_id = await _seed_item(client, team_id, "Stuck", ("created", 10), ("started", 6))
 
         async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
             result = await session.call_tool("meeting_brief", {"team_id": team_id})
@@ -557,8 +558,30 @@ async def test_meeting_brief_names_the_aging_history(
                 "Aging WIP (cycle-time p85 over the last 90 calendar days = 4.0 working days):"
                 in text
             )
-            (stuck,) = [line for line in text.splitlines() if line.startswith('- "Stuck"')]
+            (stuck,) = [line for line in text.splitlines() if '"Stuck"' in line]
             assert stuck.endswith("[over p85]")
+            assert stuck.removeprefix("- ").split("  ", 1)[0] == stuck_id
+
+
+async def test_aging_wip_ids_open_the_work_item(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # Review focus 4: the id an agent reads in aging_wip is one work_item accepts.
+    async with running_app(sessionmaker) as app:
+        async with seed_client(app) as client:
+            team_id = await create_team(client)
+            item_id = await _seed_item(client, team_id, "Stuck", ("created", 10), ("started", 6))
+
+        async with mcp_session(app, await create_mcp_token(sessionmaker)) as session:
+            aging = tool_text(await session.call_tool("aging_wip", {"team_id": team_id}))
+            (row,) = [line for line in aging.splitlines() if line.startswith("- ")]
+            shown_id = row.removeprefix("- ").split("  ", 1)[0]
+            assert shown_id == item_id
+            assert ", unassigned" in row
+
+            detail = await session.call_tool("work_item", {"work_item_id": shown_id})
+            assert not detail.is_error
+            assert '"Stuck"' in tool_text(detail)
 
 
 async def test_aging_wip_tool_caps_at_fifty_without_pointing_at_itself(

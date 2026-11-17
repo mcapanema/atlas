@@ -133,7 +133,9 @@ def add_analytics_tools(mcp: MCPServer, app: FastAPI) -> None:
 
     @mcp.tool(annotations=_READ_ONLY)
     async def work_item(work_item_id: str) -> str:
-        """One work item (id from list_work_items) with its state timeline and blocked time."""
+        """One work item (id from list_work_items or aging_wip) with its state timeline
+        and blocked time.
+        """
         path = {"work_item_id": work_item_id}
         item = await call_api(app, "GET", "/api/work-items/{work_item_id}", path=path)
         timeline = await call_api(app, "GET", "/api/work-items/{work_item_id}/timeline", path=path)
