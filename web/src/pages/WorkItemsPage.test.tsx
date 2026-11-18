@@ -151,7 +151,7 @@ describe("WorkItemsPage", () => {
     renderWithClient(<WorkItemsPage />, ["/work-items"]);
     await waitFor(() => expect(screen.getByText("Fix login flow")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByTitle("2"));
+    fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
 
     await waitFor(() => {
       const calls = vi.mocked(globalThis.fetch).mock.calls.map((c) => requestUrl(c[0]));
