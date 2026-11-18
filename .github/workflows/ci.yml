@@ -114,7 +114,7 @@ jobs:
         run: npm run knip
       - name: Security audit
         if: matrix.phase == 'security'
-        run: npm audit --audit-level=high
+        run: npm run audit
 
   docker:
     name: docker / build
