@@ -57,7 +57,7 @@ typecheck: ## Type-check backend and frontend
 
 security: ## Audit backend and frontend dependencies for known vulnerabilities
 	uv run --with pip-audit pip-audit
-	cd web && npm audit --audit-level=high
+	cd web && npm run audit
 
 check: deps fetch-base lint typecheck test build security docker-build ## Run the full CI gate locally: every ci.yml job (Docker must be running)
 

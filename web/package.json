@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "knip": "knip"
+    "knip": "knip",
+    "audit": "node scripts/audit.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",
