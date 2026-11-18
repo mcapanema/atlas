@@ -34,6 +34,7 @@ package = false
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 # Typo'd markers/config keys fail instead of silently no-op'ing; any warning
 # (a dependency deprecation included) fails the suite so it's fixed on the
