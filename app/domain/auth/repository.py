@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.auth.entities import AuthSession, User
+from app.domain.auth.entities import AuthSession, McpToken, User
 
 
 class SetupAlreadyClaimedError(Exception):
@@ -49,3 +49,21 @@ class AuthSessionRepository(Protocol):
     async def delete_expired(self, now: datetime) -> None:
         """Delete every session, of any user, whose expires_at is at or before now."""
         ...
+
+
+class McpTokenRepository(Protocol):
+    """Port for persisting MCP tokens, looked up by secret hash. Implemented in Infrastructure."""
+
+    async def add(self, token: McpToken) -> None: ...
+
+    async def get_by_hash(self, token_hash: str) -> McpToken | None: ...
+
+    async def list_for_user(self, user_id: UUID) -> list[McpToken]:
+        """The user's tokens, newest first."""
+        ...
+
+    async def delete(self, token_id: UUID, user_id: UUID) -> bool:
+        """Delete the user's token; return False when that user has no such token."""
+        ...
+
+    async def touch(self, token_id: UUID, when: datetime) -> None: ...

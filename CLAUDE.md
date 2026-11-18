@@ -75,6 +75,7 @@ and Dependabot are summarized in `CONTRIBUTING.md`.
 - A `ponytail:` comment marks a deliberate simplification and names its
   ceiling and upgrade path — treat it as intent, and read it before
   "fixing" the simplicity.
+- A new `/api` route is also an MCP decision: `tests/api/test_mcp_coverage.py` fails until a tool in `app/api/mcp_*.py` calls it or `NOT_FOR_MCP` (`app/api/mcp_coverage.py`) names it with a reason. A write tool also needs the read-write access level. Plan that decision with the feature.
 
 ## Where things live
 

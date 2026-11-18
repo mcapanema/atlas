@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 
 from app.domain.sync.port import DataSourceError
+from app.infrastructure.http_errors import describe_http_error
 
 _MAX_ATTEMPTS = 3
 
@@ -53,7 +54,7 @@ def _retry_delay(retry_after: str | None, attempt: int) -> float:
 def _retry_reason(outcome: httpx.Response | httpx.TransportError) -> str | None:
     """Why this attempt is worth repeating, or None if it isn't."""
     if isinstance(outcome, httpx.TransportError):
-        return f"request failed ({outcome})"
+        return f"request failed ({describe_http_error(outcome)})"
     status = outcome.status_code
     # 403 + Retry-After is GitHub's secondary rate limit; a bare 403 is auth.
     if status == 429 or status >= 500 or (status == 403 and "Retry-After" in outcome.headers):
@@ -77,7 +78,7 @@ async def _attempt(
     except _RETRYABLE_TRANSPORT_ERRORS as exc:
         return exc
     except httpx.HTTPError as exc:
-        raise error(f"{vendor} API request failed: {exc}") from exc
+        raise error(f"{vendor} API request failed: {describe_http_error(exc)}") from exc
 
 
 async def send_with_retries(
@@ -116,5 +117,5 @@ async def send_with_retries(
             attempt += 1
             continue
         if isinstance(outcome, httpx.TransportError):
-            raise error(f"{vendor} API request failed: {outcome}") from outcome
+            raise error(f"{vendor} API request failed: {describe_http_error(outcome)}") from outcome
         return outcome

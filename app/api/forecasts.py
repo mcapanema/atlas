@@ -58,6 +58,7 @@ async def get_forecast(
         completion=_completion_read(forecast.completion, forecast.window_end),
         confidence=forecast.confidence,
         last_completed_at=forecast.last_completed_at,
+        iterations=list(forecast.iterations),
     )
 
 

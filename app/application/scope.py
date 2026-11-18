@@ -16,12 +16,14 @@ from typing import Self
 from uuid import UUID
 
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
+from app.domain._time import utcnow
 from app.domain.events.entities import Event
 from app.domain.events.repository import EventRepository
 from app.domain.events.timeline import creation_state
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
 from app.domain.metrics.samples import FlowSample, derive_flow_sample, state_type_at
-from app.domain.work_items.entities import OPEN_STATE_TYPES, WorkItem, WorkItemType
+from app.domain.work_items.entities import OPEN_STATE_TYPES, Iteration, WorkItem, WorkItemType
+from app.domain.work_items.iterations import current_iteration
 from app.domain.work_items.repository import WorkItemRepository
 
 
@@ -38,6 +40,8 @@ class ScopeSamples:
     scope's own (its team's; a project's per ADR-0020). `remaining_count` is
     the forecast's remaining work: open items whose state type the scope's
     remaining_state_types counts; None only for a hand-built scope.
+    `iterations` names the current iterations the count was narrowed to (the
+    remaining_iterations rule at "current"); empty when it counts any.
     """
 
     streams: list[list[Event]]
@@ -47,6 +51,7 @@ class ScopeSamples:
     stream_rules: list[MetricRules] = field(default_factory=list)
     rules: MetricRules = DEFAULT_RULES
     remaining_count: int | None = None
+    iterations: tuple[str, ...] = ()
 
 
 def _filter_items(
@@ -77,12 +82,14 @@ class ScopeData:
 
     `samples()` derives the analytics view now, or as of a past instant —
     snapshot capture and the history recompute replay a scope that way.
+    `iterations` holds each team's iterations, seen on its unfiltered items.
     """
 
     items: list[WorkItem]
     events: Mapping[UUID, list[Event]]
     rules: ResolvedRules = field(default_factory=ResolvedRules)
     parent_ids: AbstractSet[UUID] = field(default_factory=frozenset)
+    iterations: Mapping[UUID, tuple[Iteration, ...]] = field(default_factory=dict)
 
     def samples(self, *, as_of: datetime | None = None) -> ScopeSamples:
         """The scope's samples; with `as_of`, as it stood at that instant."""
@@ -90,13 +97,15 @@ class ScopeData:
         stream_rules: list[MetricRules] = []
         pairs: list[tuple[WorkItem, FlowSample]] = []
         item_count = remaining = 0
+        current = self._current_iterations(as_of or utcnow())
         for item in self.items:
             folded = self._fold(item, as_of)
             if folded is None:
                 continue
             stream, sample = folded
             item_count += 1
-            remaining += self._remains(item, sample, as_of)
+            if self._remains(item, sample, as_of) and _in_current_iteration(item, current):
+                remaining += 1
             if sample is None:
                 continue  # eventless backlog: counted, nothing to measure
             streams.append(stream)
@@ -110,6 +119,7 @@ class ScopeData:
             stream_rules=stream_rules,
             rules=self.rules.scope,
             remaining_count=remaining,
+            iterations=tuple(sorted({i.name for i in (current or {}).values() if i is not None})),
         )
 
     def filtered(
@@ -173,6 +183,12 @@ class ScopeData:
             or state_type in self.rules.scope.remaining_state_types
         )
 
+    def _current_iterations(self, at: datetime) -> dict[UUID, Iteration | None] | None:
+        """Each team's current iteration at `at`; None when the scope counts any iteration."""
+        if self.rules.scope.remaining_iterations != "current":
+            return None
+        return {team: current_iteration(found, at) for team, found in self.iterations.items()}
+
     def _stream(self, item: WorkItem, as_of: datetime | None) -> list[Event] | None:
         """The item's events up to `as_of`; None when the item didn't exist then."""
         stream = self.events.get(item.id, [])
@@ -181,6 +197,22 @@ class ScopeData:
         if not stream:
             return [] if item.created_at <= as_of else None
         return [event for event in stream if event.occurred_at <= as_of] or None
+
+
+def _in_current_iteration(item: WorkItem, current: Mapping[UUID, Iteration | None] | None) -> bool:
+    """In its own team's current iteration, or in none (unplanned work); True when the rule is off.
+
+    A team with no current iteration (none at all, or all in the past) keeps
+    every item: the rule has no effect for it, rather than dropping open work.
+
+    ponytail: replays (`as_of`) read each item's current iteration, not the
+    one it had at `as_of`, so a rolled-over item reads as its new iteration.
+    Upgrade path: Linear IssueHistory fromCycle/toCycle (ADR-0031).
+    """
+    if current is None or item.iteration is None:
+        return True
+    team_current = current.get(item.team_id)
+    return team_current is None or item.iteration.external_id == team_current.external_id
 
 
 class ScopeSampleLoader:
@@ -216,6 +248,12 @@ class ScopeSampleLoader:
             if self._rules is not None
             else ResolvedRules()
         )
+        # Before the page filters: a filter must not move a team's current iteration.
+        iterations = (
+            await self._work_items.iterations_by_team({item.team_id for item in items})
+            if rules.scope.remaining_iterations == "current"
+            else {}
+        )
         items = _filter_items(items, rules, types, exclude_states)
         events = await self._events.list_for_work_items([item.id for item in items])
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
@@ -226,6 +264,7 @@ class ScopeSampleLoader:
             events=dict(by_item),
             rules=rules,
             parent_ids=frozenset(await self._work_items.parent_ids()),
+            iterations={team: tuple(found) for team, found in iterations.items()},
         )
 
     async def load(

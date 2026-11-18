@@ -7,11 +7,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.people.entities import Person
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemPriority, WorkItemType
+from app.domain.work_items.entities import (
+    Iteration,
+    StateType,
+    WorkItem,
+    WorkItemPriority,
+    WorkItemType,
+)
 from app.infrastructure.repositories.people import SqlAlchemyPersonRepository
 from app.infrastructure.repositories.projects import SqlAlchemyProjectRepository
 from app.infrastructure.repositories.teams import SqlAlchemyTeamRepository
 from app.infrastructure.repositories.work_items import SqlAlchemyWorkItemRepository
+
+C38 = Iteration(
+    external_id="c38",
+    name="Cycle 38",
+    starts_at=datetime(2026, 11, 4, 3, tzinfo=UTC),
+    ends_at=datetime(2026, 11, 18, 3, tzinfo=UTC),
+)
+C39 = Iteration(
+    external_id="c39",
+    name="Cycle 39",
+    starts_at=datetime(2026, 11, 18, 3, tzinfo=UTC),
+    ends_at=datetime(2026, 12, 2, 3, tzinfo=UTC),
+)
 
 
 async def _team_id(session: AsyncSession) -> UUID:
@@ -351,3 +370,50 @@ async def test_priority_roundtrips_including_unknown_and_none(session: AsyncSess
         WorkItemPriority.NONE,
         None,
     ]
+
+
+async def test_work_item_iteration_round_trips(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=await _team_id(session), title="A", iteration=C38)
+    await repo.add(item)
+
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.iteration == C38
+
+
+async def test_work_item_without_iteration_reads_none(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=await _team_id(session), title="A")
+    await repo.add(item)
+
+    fetched = await repo.get(item.id)
+
+    assert fetched is not None
+    assert fetched.iteration is None
+
+
+async def test_update_clears_the_iteration(session: AsyncSession) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    item = WorkItem(team_id=await _team_id(session), title="A", iteration=C38)
+    await repo.add(item)
+
+    await repo.update(replace(item, iteration=None))
+
+    fetched = await repo.get(item.id)
+    assert fetched is not None
+    assert fetched.iteration is None
+
+
+async def test_iterations_by_team_lists_distinct_iterations_per_team(
+    session: AsyncSession,
+) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_a, team_b = await _team_id(session), await _team_id(session)
+    await repo.add(WorkItem(team_id=team_a, title="1", iteration=C39))
+    await repo.add(WorkItem(team_id=team_a, title="2", iteration=C38))
+    await repo.add(WorkItem(team_id=team_a, title="3", iteration=C38))
+    await repo.add(WorkItem(team_id=team_b, title="4"))
+
+    assert await repo.iterations_by_team([team_a, team_b]) == {team_a: [C38, C39]}

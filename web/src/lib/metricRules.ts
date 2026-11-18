@@ -325,6 +325,18 @@ export const RULE_GROUPS: RuleGroup[] = [
         help: "Open items count toward the completion forecast only in these states. Items created outside Linear always count.",
         control: { kind: "states" },
       },
+      {
+        name: "remaining_iterations",
+        label: "Forecast counts iterations",
+        help: "All open work, or only the current iteration (a Linear cycle, a Jira sprint) plus open work in no iteration. Teams that don't use iterations see no change.",
+        control: {
+          kind: "select",
+          options: [
+            { value: "any", label: "Any iteration" },
+            { value: "current", label: "Current iteration only" },
+          ],
+        },
+      },
     ],
   },
   {

@@ -52,6 +52,9 @@ connector SDKs. It never imports `app.application` or `app.api`
   system prompt is grounded in. OpenRouter must never be called outside this
   package, and Pydantic models here (`AdviceOut`, `GuidanceOut`) are wire format only —
   always convert to Domain entities before returning.
+- `http_errors.py` — `describe_http_error(exc)`, the text every adapter puts
+  in its error for an httpx failure (`ClassName: message`; httpx timeouts
+  carry no message, so `{exc}` alone prints nothing).
 - `static.py` — `mount_spa(app)`, serves the compiled React build in
   production; a no-op when `web/dist` doesn't exist (dev mode). Must be the
   *last* thing registered in `create_app()` — it's a catch-all route and

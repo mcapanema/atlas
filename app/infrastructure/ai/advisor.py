@@ -31,8 +31,12 @@ from app.domain.advisor.entities import (
 from app.domain.advisor.port import AdvisorError, DeliveryContext, MeetingContext
 from app.domain.advisor.render import render_context, render_meeting_context
 from app.domain.metrics.windows import CHART_WINDOW_DAYS
+from app.infrastructure.http_errors import describe_http_error
 
 _API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# Longest OpenRouter error reason put in an AdvisorError (shown in the UI).
+_MAX_REASON_CHARS = 200
 
 # Hard bounds on the LLM loop (review 2026-10-04, F4): a reply's billable
 # length, list sizes the prompts promise, learned-guidance size, and how
@@ -313,6 +317,26 @@ def _render_feedback(feedback: Sequence[AdviceFeedback]) -> str:
     return "\n".join(lines)
 
 
+def _http_error_text(response: httpx.Response) -> str:
+    """`OpenRouter returned HTTP 402: <reason>`, the reason from the `error.message` body.
+
+    The reason is shown in the UI and the log, so it is folded to one line
+    and cut at _MAX_REASON_CHARS.
+    """
+    text = f"OpenRouter returned HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except ValueError:
+        return text
+    error = payload.get("error") if isinstance(payload, dict) else None
+    reason = error.get("message") if isinstance(error, dict) else None
+    if not isinstance(reason, str) or not (reason := " ".join(reason.split())):
+        return text
+    if len(reason) > _MAX_REASON_CHARS:
+        reason = reason[: _MAX_REASON_CHARS - 1] + "…"
+    return f"{text}: {reason}"
+
+
 def _message_content(response: httpx.Response) -> str:
     """Validate the chat-completions envelope before indexing into it."""
     try:
@@ -377,10 +401,14 @@ class OpenRouterAdvisor:
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 json=body,
             )
-            response.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.error("OpenRouter request failed: %s", exc)
-            raise AdvisorError(f"OpenRouter request failed: {exc}") from exc
+            detail = describe_http_error(exc)
+            logger.error("OpenRouter request failed: %s", detail)
+            raise AdvisorError(f"OpenRouter request failed: {detail}") from exc
+        if not response.is_success:
+            text = _http_error_text(response)
+            logger.error("%s", text)
+            raise AdvisorError(text)
         return _message_content(response)
 
     async def advise(

@@ -44,6 +44,7 @@ const BUILT_IN: MetricRules = {
   incident_label_names: ["incident", "incidente"],
   incident_source: "auto",
   remaining_state_types: ["triage", "backlog", "unstarted", "started"],
+  remaining_iterations: "any",
   type_labels: [],
   working_days: [1, 2, 3, 4, 5],
   holidays: [],

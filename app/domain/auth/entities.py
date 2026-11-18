@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import StrEnum
 from uuid import UUID, uuid4
 
 from app.domain._time import require_aware, utcnow
@@ -9,9 +10,12 @@ MIN_PASSWORD_LENGTH = 12
 # The max bounds the scrypt work a single request can cause.
 MAX_PASSWORD_LENGTH = 128
 SESSION_LIFETIME = timedelta(days=14)
+# `last_used_at` is written at most this often per token (SQLite has one writer).
+LAST_USED_RESOLUTION = timedelta(minutes=5)
 
 _MAX_EMAIL_LENGTH = 254
 _MAX_NAME_LENGTH = 255
+_MAX_MCP_TOKEN_NAME_LENGTH = 100
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -65,3 +69,34 @@ class AuthSession:
 
     def is_expired(self, now: datetime) -> bool:
         return now >= self.expires_at
+
+
+class McpAccess(StrEnum):
+    READ = "read"
+    READ_WRITE = "read_write"
+
+
+@dataclass
+class McpToken:
+    """A per-user credential for the MCP endpoint. Only the hash of its secret is stored."""
+
+    user_id: UUID
+    name: str
+    access: McpAccess
+    token_hash: str
+    hint: str
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=utcnow)
+    last_used_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        stripped = self.name.strip()
+        if not stripped or len(stripped) > _MAX_MCP_TOKEN_NAME_LENGTH:
+            raise ValueError(f"MCP token name must be 1 to {_MAX_MCP_TOKEN_NAME_LENGTH} characters")
+        self.name = stripped
+        require_aware("McpToken", created_at=self.created_at)
+        if self.last_used_at is not None:
+            require_aware("McpToken", last_used_at=self.last_used_at)
+
+    def needs_touch(self, now: datetime) -> bool:
+        return self.last_used_at is None or now - self.last_used_at >= LAST_USED_RESOLUTION

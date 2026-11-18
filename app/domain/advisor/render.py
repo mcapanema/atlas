@@ -61,7 +61,12 @@ def render_context(context: DeliveryContext) -> str:
         lines.append(f"{histogram_header}: empty")
 
     forecast = context.forecast
-    lines.append(f"Monte Carlo forecast: remaining={forecast.remaining} open items")
+    scope_note = (
+        f" (limited to current iteration(s): {', '.join(forecast.iterations)})"
+        if forecast.iterations
+        else ""
+    )
+    lines.append(f"Monte Carlo forecast: remaining={forecast.remaining} open items{scope_note}")
     if forecast.completion is not None:
         c = forecast.completion
         lines.append(
@@ -211,11 +216,15 @@ def quote_title(title: str) -> str:
     return json.dumps(one_line, ensure_ascii=False)
 
 
-def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str = "") -> str:
+def render_aging(
+    aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str = "", show_ids: bool = False
+) -> str:
     """Aging WIP as text: the reference line, the `limit` oldest items, then every
     blocked item past them (a standup asks for anything blocked, however young).
 
     `more_hint` follows the "... and N more" line, e.g. which tool lists the rest.
+    `show_ids` starts each line with the work item id, so an MCP agent can open
+    it with `work_item`; the in-app prompt leaves it off.
     """
     if not aging.items:
         return "Aging WIP: nothing in progress."
@@ -233,7 +242,15 @@ def render_aging(aging: AgingWip, *, limit: int = _AGING_LIMIT, more_hint: str =
     for item in listed:
         flag = f" [over p{aging.percentile}]" if item.over_percentile else ""
         flag += " [blocked]" if item.blocked else ""
-        lines.append(f"- {quote_title(item.title)} — {item.state}, {_days(item.age)}{flag}")
+        owner = (
+            f", assigned to {quote_title(item.assignee)}"
+            if item.assignee is not None
+            else ", unassigned"
+        )
+        item_id = f"{item.work_item_id}  " if show_ids else ""
+        lines.append(
+            f"- {item_id}{quote_title(item.title)} — {item.state}, {_days(item.age)}{owner}{flag}"
+        )
     hidden = len(aging.items) - len(listed)
     if hidden > 0:
         lines.append(f"... and {hidden} more{more_hint}")

@@ -22,7 +22,13 @@ from app.domain.sync.source import (
     SourceWorkItem,
 )
 from app.domain.teams.entities import Team
-from app.domain.work_items.entities import StateType, WorkItem, WorkItemPriority, WorkItemType
+from app.domain.work_items.entities import (
+    Iteration,
+    StateType,
+    WorkItem,
+    WorkItemPriority,
+    WorkItemType,
+)
 from tests.fakes import (
     FakeDataSource,
     InMemoryEventRepository,
@@ -31,6 +37,13 @@ from tests.fakes import (
     InMemoryProjectRepository,
     InMemoryTeamRepository,
     InMemoryWorkItemRepository,
+)
+
+C38 = Iteration(
+    "c38",
+    "Cycle 38",
+    datetime(2026, 11, 4, 3, tzinfo=UTC),
+    datetime(2026, 11, 18, 3, tzinfo=UTC),
 )
 
 
@@ -205,6 +218,33 @@ async def test_resync_backfills_priority_on_item_synced_without_one() -> None:
     item = await harness.work_items.get_by_external_id("li1")
     assert item is not None
     assert item.priority is WorkItemPriority.NONE
+
+
+async def test_first_sync_stores_the_iteration() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], iteration=C38)]
+    harness = Harness(source)
+
+    await harness.service.sync(await seed_org(harness))
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.iteration == C38
+
+
+async def test_resync_clears_an_iteration_the_source_dropped() -> None:
+    source = full_source()
+    source.work_items = [dataclasses.replace(source.work_items[0], iteration=C38)]
+    harness = Harness(source)
+    org_id = await seed_org(harness)
+    await harness.service.sync(org_id)
+    source.work_items = [dataclasses.replace(source.work_items[0], iteration=None)]
+
+    await harness.service.sync(org_id)
+
+    item = await harness.work_items.get_by_external_id("li1")
+    assert item is not None
+    assert item.iteration is None
 
 
 async def test_changed_priority_is_updated() -> None:

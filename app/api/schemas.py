@@ -498,6 +498,7 @@ class ForecastRead(BaseModel):
     completion: CompletionForecastRead | None
     confidence: float | None
     last_completed_at: datetime | None
+    iterations: list[str]
 
 
 class RecommendationRead(BaseModel):
@@ -885,6 +886,7 @@ class MetricRulesRead(BaseModel):
     incident_label_names: list[str]
     incident_source: Literal["auto", "linear", "datadog"]
     remaining_state_types: list[OpenStateType]
+    remaining_iterations: Literal["any", "current"]
     type_labels: list[TypeLabelRead]
     sprint_length_days: int
 
@@ -943,6 +945,7 @@ class MetricRulesOverridesWrite(BaseModel):
     incident_label_names: list[str] | None = None
     incident_source: Literal["auto", "linear", "datadog"] | None = None
     remaining_state_types: list[OpenStateType] | None = None
+    remaining_iterations: Literal["any", "current"] | None = None
     type_labels: list[TypeLabelRead] | None = None
     sprint_length_days: int | None = None
 
@@ -1108,3 +1111,27 @@ class UserCreate(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     new_password: _Password
+
+
+class McpTokenRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    access: Literal["read", "read_write"]
+    hint: str
+    created_at: datetime
+    last_used_at: datetime | None
+
+
+class McpTokenCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    access: Literal["read", "read_write"] = "read"
+
+
+class McpTokenIssuedRead(McpTokenRead):
+    """The only response that carries the secret."""
+
+    token: str
