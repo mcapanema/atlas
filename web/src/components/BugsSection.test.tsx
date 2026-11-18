@@ -85,10 +85,34 @@ describe("BugsSection", () => {
     expect(await screen.findByText("Too few completed items (2 of 5)")).toBeInTheDocument();
   });
 
-  it("flags a lead-time row below the evidence floor", async () => {
+  it("flags a lead-time row below the evidence floor with an icon, not text", async () => {
     renderSection();
 
-    expect(await screen.findByText("Too few fixed bugs (2 of 5)")).toBeInTheDocument();
+    const icon = await screen.findByRole("img", { name: "Too few fixed bugs (2 of 5)" });
+    expect(screen.queryByText("Too few fixed bugs (2 of 5)")).not.toBeInTheDocument();
+    fireEvent.focus(icon);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Too few fixed bugs (2 of 5)");
+  });
+
+  it("keeps the floor icon on the same line as the median", async () => {
+    renderSection();
+
+    const icon = await screen.findByRole("img", { name: "Too few fixed bugs (2 of 5)" });
+    // jsdom has no layout: the class pins the hook; .median-cell's nowrap in index.css does the work.
+    expect(icon.closest("td")).toHaveClass("median-cell");
+  });
+
+  it("shows no floor icon at zero fixed bugs or at the floor", async () => {
+    renderSection({
+      all_bugs: fixRow(5, 1),
+      priorities: [
+        { priority: "urgent", ...fixRow(0, 1) },
+        { priority: "high", ...fixRow(5, 0) },
+      ],
+    });
+
+    await screen.findByText("Bug lead time by priority");
+    expect(screen.queryByRole("img", { name: /Too few fixed bugs/ })).not.toBeInTheDocument();
   });
 
   it("shows a dash for a null ratio and keeps its counts", async () => {

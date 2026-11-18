@@ -7,8 +7,9 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.deps import mcp_token_service_for
 from app.config import get_settings
-from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, User
+from app.domain.auth.entities import SESSION_LIFETIME, AuthSession, McpAccess, User
 from app.domain.auth.tokens import new_session_token
 from app.domain.credentials.entities import Credential, Integration
 from app.domain.metric_rules.entities import RuleOverrides
@@ -44,6 +45,20 @@ async def sign_in(
         )
         await session.commit()
     return user, token
+
+
+async def create_mcp_token(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    access: McpAccess = McpAccess.READ_WRITE,
+    email: str = "agent@atlas.test",
+) -> str:
+    """Write a user (via ``sign_in``) and issue them an MCP token; return its secret."""
+    user, _ = await sign_in(sessionmaker, email=email)
+    async with sessionmaker() as session:
+        issued = await mcp_token_service_for(session).issue(user, "Claude", access)
+        await session.commit()
+    return issued.secret
 
 
 async def create_org_and_team(

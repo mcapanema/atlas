@@ -3,6 +3,7 @@ import {
   ApiOutlined,
   BulbOutlined,
   ControlOutlined,
+  RobotOutlined,
   FundOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -75,6 +76,11 @@ const BASE_NAV: NonNullable<MenuProps["items"]> = [
         icon: <ControlOutlined />,
         label: <Link to="/metric-rules">Metric rules</Link>,
       },
+      {
+        key: "/ai-access",
+        icon: <RobotOutlined />,
+        label: <Link to="/ai-access">AI access</Link>,
+      },
     ],
   },
 ];
@@ -91,6 +97,7 @@ const TITLES: Record<string, string> = {
   connectors: "Connectors",
   "metric-rules": "Metric rules",
   users: "Users",
+  "ai-access": "AI access",
 };
 
 const USERS_ITEM = { key: "/users", icon: <UserOutlined />, label: <Link to="/users">Users</Link> };

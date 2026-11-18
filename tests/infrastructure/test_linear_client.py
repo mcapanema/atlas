@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable
 
 import httpx
@@ -158,7 +159,7 @@ async def test_execute_does_not_retry_4xx_other_than_429() -> None:
         httpx.WriteTimeout("write timed out"),
         httpx.PoolTimeout("pool timed out"),
         httpx.UnsupportedProtocol("unsupported protocol 'ftp://'"),
-        httpx.ProxyError("proxy refused"),
+        httpx.ProxyError("proxy (403) refused [x]"),  # regex metacharacters match literally
         httpx.LocalProtocolError("illegal header"),
     ],
     ids=lambda error: type(error).__name__,
@@ -173,7 +174,9 @@ async def test_execute_does_not_retry_non_transient_transport_errors(
         calls += 1
         raise error
 
-    with pytest.raises(LinearAPIError, match=f"request failed: {error}"):
+    with pytest.raises(
+        LinearAPIError, match=re.escape(f"request failed: {type(error).__name__}: {error}")
+    ):
         await _client(handler).execute("{ viewer { id } }")
 
     assert calls == 1
@@ -216,10 +219,34 @@ async def test_execute_gives_up_on_persistent_transport_errors(
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("[Errno -2] Name or service not known")
 
-    with pytest.raises(LinearAPIError, match=r"request failed: .*Name or service not known"):
+    with pytest.raises(
+        LinearAPIError, match=r"request failed: ConnectError: .*Name or service not known"
+    ):
         await _client(handler).execute("{ viewer { id } }")
 
     assert recorded_sleeps == [1.0, 2.0]
+
+
+async def test_empty_transport_error_message_names_the_error_class(
+    recorded_sleeps: list[float],
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("")  # what httpx raises on a real timeout
+
+    with pytest.raises(LinearAPIError, match=r"^Linear API request failed: ReadTimeout$"):
+        await _client(handler).execute("{ viewer { id } }")
+
+
+async def test_persistent_empty_transport_error_names_the_error_class(
+    recorded_sleeps: list[float], caplog: pytest.LogCaptureFixture
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("")
+
+    with pytest.raises(LinearAPIError, match=r"^Linear API request failed: ConnectTimeout$"):
+        await _client(handler).execute("{ viewer { id } }")
+
+    assert "request failed (ConnectTimeout)" in caplog.text
 
 
 async def test_transport_errors_and_5xx_share_the_retry_budget(

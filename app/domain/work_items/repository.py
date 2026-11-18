@@ -2,7 +2,7 @@ from collections.abc import Collection
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.work_items.entities import WorkItem
+from app.domain.work_items.entities import Iteration, WorkItem
 
 
 class WorkItemRepository(Protocol):
@@ -43,6 +43,13 @@ class WorkItemRepository(Protocol):
 
     async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
         """Each project that has items, mapped to the distinct teams of those items."""
+        ...
+
+    async def iterations_by_team(self, team_ids: Collection[UUID]) -> dict[UUID, list[Iteration]]:
+        """Distinct iterations on the teams' items (any state, archived too), by start.
+
+        A team with no iterated item is absent.
+        """
         ...
 
     async def list(

@@ -400,6 +400,7 @@ class SyncService:
                 labels=source.labels,
                 assignee_id=assignee_id,
                 priority=source.priority,
+                iteration=source.iteration,
                 created_at=source.created_at,
             )
             await self._work_items.add(item)
@@ -417,6 +418,7 @@ class SyncService:
             labels=source.labels,
             assignee_id=assignee_id,
             priority=source.priority,
+            iteration=source.iteration,
         )
         if item == existing:
             return existing, False

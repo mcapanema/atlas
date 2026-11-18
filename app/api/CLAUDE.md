@@ -92,10 +92,19 @@ entry point `app/cli.py` is the only other one).
   budget). Text that `app/domain/advisor/render.py` already renders is not
   re-rendered here: parse the endpoint JSON with its `*Read` DTO, rebuild
   the domain value, and call the shared renderer (exemplar:
-  `_aging_from_json` + `render_aging`). The endpoint mounts at
-  `/mcp/<ATLAS_MCP_TOKEN>` in `create_app()` (before `mount_spa`) only when
-  the token is set, and `lifespan` must run
-  `app.state.mcp.session_manager.run()` for it to serve.
+  `_aging_from_json` + `render_aging`). Tools call the API only through
+  `call_api` (`mcp_client.py`) with a literal route template and its
+  values in `path={...}` — never an f-string (`tests/api/test_mcp_coverage.py`
+  reads the calls statically and fails on an `/api` route that no tool calls
+  and `NOT_FOR_MCP` does not name); a new tool name also goes into
+  `docs/GUIDE.md`. `create_app()` builds one
+  server per `McpAccess` (`app.state.mcp_servers`) and mounts `McpGate`
+  (`mcp_gate.py`) at `/mcp/{token}` (before `mount_spa`); the gate checks
+  the user's token and forwards to the server for its access level
+  (ADR-0032). `lifespan` must run each server's
+  `session_manager.run()` for it to serve. A tool registered outside
+  `add_config_write_tools` is visible to read tokens; the annotation test in
+  `tests/api/test_mcp_coverage.py` enforces the split.
 - **Auth** (ADR-0028): every router except `health` and `auth` is
   included in `create_app()` with `require_signed_in` (a valid
   `atlas_session` cookie, else 401); `tests/api/test_auth_guard.py` fails on
@@ -107,8 +116,9 @@ entry point `app/cli.py` is the only other one).
   `get_auth_service` hands it to each per-request `AuthService` — state
   that must outlive a request never lives in a service.
 - **Exposure** (`exposure.py`, ADR-0012): `LocalOnlyMiddleware` serves the
-  UI and every `/api/*` route to loopback, unproxied requests only; the MCP
-  mount is the one public path. A new route needs nothing — it is
+  UI and every `/api/*` route to loopback, unproxied requests only; the
+  MCP mount's shape, `/mcp/<segment>/…`, is the one public path, and
+  `McpGate` answers 404 to an unknown token there. A new route needs nothing — it is
   local-only by default. A test client or in-process caller uses
   `base_url="http://localhost"`.
 

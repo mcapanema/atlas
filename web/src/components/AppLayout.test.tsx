@@ -20,6 +20,14 @@ describe("AppLayout", () => {
     expect(await screen.findByRole("link", { name: "Users" })).toHaveAttribute("href", "/users");
   });
 
+  it("offers AI access to a member", async () => {
+    renderLayout(authFixture({ is_admin: false }));
+    expect(await screen.findByRole("link", { name: "AI access" })).toHaveAttribute(
+      "href",
+      "/ai-access",
+    );
+  });
+
   it("hides Users from a member", async () => {
     renderLayout(authFixture({ is_admin: false }));
     await screen.findByRole("button", { name: /Account/ });

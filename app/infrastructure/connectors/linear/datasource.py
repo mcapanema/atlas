@@ -71,6 +71,7 @@ query Issues($after: String, $filter: IssueFilter) {{
       url
       assignee {{ id name email }}
       priority
+      cycle {{ id name number startsAt endsAt }}
       createdAt
       completedAt
       canceledAt

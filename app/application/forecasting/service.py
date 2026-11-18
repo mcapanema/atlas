@@ -105,6 +105,7 @@ class ForecastService:
             completion=completion,
             confidence=confidence,
             last_completed_at=last_completed_at,
+            iterations=scope.iterations,
         )
 
 

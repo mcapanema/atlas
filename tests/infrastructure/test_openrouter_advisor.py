@@ -136,8 +136,73 @@ async def test_advise_raises_advisor_error_on_api_error() -> None:
         ),
     )
 
-    with pytest.raises(AdvisorError, match="request failed"):
+    with pytest.raises(AdvisorError, match=r"^OpenRouter returned HTTP 402: insufficient credits$"):
         await advisor.advise(_context())
+
+
+async def test_advise_names_the_error_class_when_a_timeout_has_no_message() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("")
+
+    advisor = OpenRouterAdvisor(
+        api_key="test-key",
+        model="anthropic/claude-sonnet-5",
+        client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(AdvisorError, match=r"^OpenRouter request failed: ReadTimeout$"):
+        await advisor.advise(_context())
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(402, text="not json"),
+        httpx.Response(402, json=["not", "an", "object"]),
+        httpx.Response(402, json={"error": "flat string"}),
+        httpx.Response(402, json={"error": {"message": ""}}),
+        httpx.Response(402, json={"error": {"message": 7}}),
+    ],
+    ids=["not-json", "list", "flat-error", "empty-message", "non-string-message"],
+)
+async def test_advise_http_error_without_a_reason_gives_the_status_only(
+    response: httpx.Response,
+) -> None:
+    with pytest.raises(AdvisorError, match=r"^OpenRouter returned HTTP 402$"):
+        await _advisor_returning(response).advise(_context())
+
+
+async def test_advise_rejects_a_redirect_answer() -> None:
+    advisor = _advisor_returning(httpx.Response(302, headers={"Location": "https://x"}))
+
+    with pytest.raises(AdvisorError, match=r"^OpenRouter returned HTTP 302$"):
+        await advisor.advise(_context())
+
+
+async def test_advise_logs_the_http_status(caplog: pytest.LogCaptureFixture) -> None:
+    body = {"error": {"message": "provider down"}}
+    advisor = _advisor_returning(httpx.Response(503, json=body))
+
+    with pytest.raises(AdvisorError):
+        await advisor.advise(_context())
+
+    assert "OpenRouter returned HTTP 503: provider down" in caplog.text
+
+
+async def test_advise_http_error_reason_is_one_bounded_line() -> None:
+    reason = "This model's maximum context length is exceeded.\n\n  Details:  " + "x" * 300
+    advisor = _advisor_returning(httpx.Response(400, json={"error": {"message": reason}}))
+
+    with pytest.raises(AdvisorError) as caught:
+        await advisor.advise(_context())
+
+    text = str(caught.value)
+    assert text.startswith(
+        "OpenRouter returned HTTP 400: This model's maximum context length is exceeded. Details: x"
+    )
+    assert "\n" not in text
+    assert text.endswith("…")
+    assert len(text) <= len("OpenRouter returned HTTP 400: ") + 200
 
 
 def _advisor_returning(response: httpx.Response) -> OpenRouterAdvisor:
@@ -324,7 +389,7 @@ async def test_reflect_raises_on_blank_guidance() -> None:
 async def test_reflect_raises_advisor_error_on_api_error() -> None:
     advisor = _advisor_returning(httpx.Response(500, json={}))
 
-    with pytest.raises(AdvisorError, match="request failed"):
+    with pytest.raises(AdvisorError, match=r"^OpenRouter returned HTTP 500$"):
         await advisor.reflect(
             persona=Persona.AGILE_COACH, feedback=_feedback_entries(), current_guidance=None
         )
@@ -484,7 +549,7 @@ async def test_prepare_meeting_raises_advisor_error_on_bad_shape() -> None:
 async def test_prepare_meeting_raises_advisor_error_on_api_error() -> None:
     advisor = _advisor_returning(httpx.Response(500, json={}))
 
-    with pytest.raises(AdvisorError, match="request failed"):
+    with pytest.raises(AdvisorError, match=r"^OpenRouter returned HTTP 500$"):
         await advisor.prepare_meeting(_meeting_context(), meeting=MeetingType.RETROSPECTIVE)
 
 

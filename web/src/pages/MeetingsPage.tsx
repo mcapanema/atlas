@@ -11,7 +11,7 @@ import {
   Typography,
 } from "antd";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAdvisorStatus } from "../api/advisor";
 import {
@@ -214,7 +214,13 @@ export function MeetingsPage() {
       <Space direction="vertical" style={{ width: "100%" }} size="large">
         <AdvisorStatusAlerts
           status={status}
-          notConfigured="Meeting prep is not configured. Add an OpenRouter API key on the Connectors page to prepare meetings inside Atlas — or connect an external AI via MCP."
+          notConfigured={
+            <>
+              Meeting prep is not configured. Add an OpenRouter API key on the Connectors page to
+              prepare meetings inside Atlas — or{" "}
+              <Link to="/ai-access">connect an external AI via MCP</Link>.
+            </>
+          }
         />
         <Space wrap>
           <Select

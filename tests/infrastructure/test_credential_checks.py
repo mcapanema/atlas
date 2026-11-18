@@ -81,6 +81,16 @@ async def test_openrouter_network_failure_is_an_advisor_error() -> None:
         )
 
 
+async def test_openrouter_timeout_without_message_names_the_error_class() -> None:
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("")
+
+    with pytest.raises(AdvisorError, match=r"^OpenRouter request failed: ConnectTimeout$"):
+        await ProviderCredentialVerifier(httpx.MockTransport(fail)).verify(
+            Credential(Integration.OPENROUTER, "sk", model="m/x")
+        )
+
+
 async def test_github_unknown_owner_rejected() -> None:
     transport = httpx.MockTransport(
         lambda r: httpx.Response(200, json={"data": {"repositoryOwner": None}})

@@ -101,6 +101,7 @@ async def test_fetch_work_items_maps_issues_and_history() -> None:
         assert "completedAt" in body["query"]
         assert "\n      priority\n" in body["query"]
         assert "canceledAt" in body["query"]
+        assert "cycle { id name number startsAt endsAt }" in body["query"]
         assert f"history(first: {HISTORY_PAGE_SIZE})" in body["query"]
         assert "inverseRelations(first: 50)" in body["query"]
         assert "issue { identifier previousIdentifiers }" in body["query"]
