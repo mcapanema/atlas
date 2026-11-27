@@ -4,6 +4,7 @@ Pure domain logic — Phase 3's flow metrics (blocked time, flow efficiency,
 waiting time) build on these periods rather than re-reading raw events.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
@@ -217,3 +218,24 @@ def derive_timeline(
         state_periods=state_periods(events),
         blocked_periods=blocked_periods(events, rules, born_in=born_in),
     )
+
+
+def tracks_parent(events: Sequence[Event]) -> bool:
+    """Whether the events record the item's parent links (PARENT_CHANGED)."""
+    return any(event.type is EventType.PARENT_CHANGED for event in events)
+
+
+def parent_at(events: Sequence[Event], at: datetime | None) -> str | None:
+    """The parent's source id per the last PARENT_CHANGED up to `at` (None: the last of all).
+
+    None when the item had no parent then, or no change is recorded by then.
+    """
+    changes = sorted(
+        (
+            e
+            for e in events
+            if e.type is EventType.PARENT_CHANGED and (at is None or e.occurred_at <= at)
+        ),
+        key=event_order,
+    )
+    return changes[-1].detail if changes else None

@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.events.entities import Event, EventType
@@ -388,3 +389,57 @@ async def test_delete_sourced_for_work_items_keeps_events_recorded_through_the_a
 
     remaining = await repo.list_for_work_items([item_id, other_id])
     assert {event.id for event in remaining} == {recorded.id, elsewhere.id}
+
+
+def _parent_event(work_item_id: UUID, detail: str | None) -> Event:
+    return Event(
+        work_item_id=work_item_id,
+        type=EventType.PARENT_CHANGED,
+        occurred_at=datetime(2026, 1, 2, tzinfo=UTC),
+        detail=detail,
+    )
+
+
+async def test_list_for_work_items_filters_by_type(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    work_item_id = await _work_item_id(session)
+    created = Event(
+        work_item_id=work_item_id,
+        type=EventType.CREATED,
+        occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    moved = _parent_event(work_item_id, "P")
+    await repo.add(created)
+    await repo.add(moved)
+
+    only_parents = await repo.list_for_work_items([work_item_id], types={EventType.PARENT_CHANGED})
+    everything = await repo.list_for_work_items([work_item_id])
+
+    assert [e.id for e in only_parents] == [moved.id]
+    assert {e.id for e in everything} == {created.id, moved.id}
+
+
+async def test_parent_events_naming_finds_links_to_the_parents(session: AsyncSession) -> None:
+    repo = SqlAlchemyEventRepository(session)
+    work_item_id = await _work_item_id(session)
+    to_p = _parent_event(work_item_id, "P")
+    to_q = _parent_event(work_item_id, "Q")
+    removed = _parent_event(work_item_id, None)
+    label = Event(
+        work_item_id=work_item_id,
+        type=EventType.LABEL_ADDED,
+        occurred_at=datetime(2026, 1, 3, tzinfo=UTC),
+        detail="P",
+    )
+    for event in (to_p, to_q, removed, label):
+        await repo.add(event)
+
+    found = await repo.parent_events_naming(["P"])
+
+    assert [e.id for e in found] == [to_p.id]
+
+
+async def test_events_are_indexed_by_type_and_detail(session: AsyncSession) -> None:
+    indexes = await session.run_sync(lambda s: inspect(s.connection()).get_indexes("events"))
+
+    assert any(index["column_names"] == ["type", "detail"] for index in indexes)

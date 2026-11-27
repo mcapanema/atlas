@@ -285,8 +285,13 @@ class InMemoryWorkItemRepository:
         items = await self.list(team_id=team_id, project_id=project_id)
         return sorted({label for item in items for label in item.labels})
 
-    async def parent_ids(self) -> set[UUID]:
-        return {item.parent_id for item in self._items.values() if item.parent_id is not None}
+    async def list_children(
+        self, parent_ids: Collection[UUID], also_ids: Collection[UUID]
+    ) -> list[WorkItem]:
+        parents, also = set(parent_ids), set(also_ids)
+        return [
+            item for item in self._items.values() if item.parent_id in parents or item.id in also
+        ]
 
     async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
         teams: dict[UUID, set[UUID]] = {}
@@ -373,10 +378,27 @@ class InMemoryEventRepository:
             key=lambda e: e.occurred_at,
         )
 
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+    async def list_for_work_items(
+        self, work_item_ids: list[UUID], types: Collection[EventType] | None = None
+    ) -> list[Event]:
         wanted = set(work_item_ids)
         return sorted(
-            (e for e in self._events.values() if e.work_item_id in wanted),
+            (
+                e
+                for e in self._events.values()
+                if e.work_item_id in wanted and (types is None or e.type in types)
+            ),
+            key=lambda e: e.occurred_at,
+        )
+
+    async def parent_events_naming(self, parent_external_ids: list[str]) -> list[Event]:
+        named = set(parent_external_ids)
+        return sorted(
+            (
+                e
+                for e in self._events.values()
+                if e.type is EventType.PARENT_CHANGED and e.detail in named
+            ),
             key=lambda e: e.occurred_at,
         )
 

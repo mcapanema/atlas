@@ -16,6 +16,7 @@ def _item(*labels: str) -> WorkItem:
 
 def test_new_rule_defaults_reproduce_todays_behavior() -> None:
     assert DEFAULT_RULES.count_parent_issues is True
+    assert DEFAULT_RULES.count_sub_issues is True
     assert DEFAULT_RULES.lead_time_start == "created"
     assert DEFAULT_RULES.incident_source == "auto"
     assert DEFAULT_RULES.done_then_reopened == "delivered"

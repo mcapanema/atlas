@@ -177,6 +177,23 @@ describe("WorkItemPage", () => {
     expect(screen.getByText(/Label added: Blocked/)).toBeInTheDocument();
   });
 
+  it("labels parent changes, with or without a new parent", async () => {
+    const parentEvents = [
+      { ...events[0], id: "p1", type: "parent_changed", detail: "lin-uuid-1" },
+      { ...events[0], id: "p2", type: "parent_changed", detail: null },
+    ].map((event) => ({ ...event, from_state: null, to_state: null }));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/timeline")) return Promise.resolve(jsonResponse(timeline));
+      if (url.startsWith("/api/events")) return Promise.resolve(jsonResponse(parentEvents));
+      return Promise.resolve(jsonResponse(workItem));
+    });
+
+    renderPage();
+
+    expect(await screen.findAllByText(/— Parent changed$/)).toHaveLength(2);
+  });
+
   it("labels pull request events on the timeline", async () => {
     const prEvents = [
       { ...events[0], id: "f1", type: "review", detail: "acme/api#12" },

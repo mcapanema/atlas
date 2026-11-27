@@ -96,6 +96,11 @@ def test_unknown_keys_are_ignored_and_reported() -> None:
     [
         ({"healthy_min": 0}, "healthy_min"),
         ({"warning_min": 70}, "warning_min must be below healthy_min"),
+        ({"count_sub_issues": "no"}, "count_sub_issues must be true or false"),
+        (
+            {"count_parent_issues": False, "count_sub_issues": False},
+            "count_parent_issues and count_sub_issues cannot both be off",
+        ),
         ({"stability_worst_weeks": 1.0}, "stability_worst_weeks"),
         ({"predictability_floor": 99}, "predictability_floor"),
         ({"predictability_floor": 85}, "predictability_floor must be below aging_percentile"),
@@ -238,3 +243,7 @@ def test_work_calendar_is_built_once_per_rules_and_keeps_equality() -> None:
     assert rules.work_calendar is rules.work_calendar
     assert rules == replace(rules, timezone=rules.timezone)
     assert rules.work_calendar == MetricRules().work_calendar
+
+
+def test_top_level_only_is_valid() -> None:
+    assert MetricRules(count_sub_issues=False).count_parent_issues is True

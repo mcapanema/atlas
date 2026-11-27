@@ -191,11 +191,15 @@ class SqlAlchemyWorkItemRepository:
         # SQLite and PostgreSQL. Push down if a scope outgrows one column scan.
         return sorted({label for labels in result.scalars() for label in labels})
 
-    async def parent_ids(self) -> set[UUID]:
-        result = await self._session.execute(
-            select(WorkItemModel.parent_id).where(WorkItemModel.parent_id.is_not(None)).distinct()
-        )
-        return {parent_id for parent_id in result.scalars() if parent_id is not None}
+    async def list_children(
+        self, parent_ids: Collection[UUID], also_ids: Collection[UUID]
+    ) -> list[WorkItem]:
+        found: dict[UUID, WorkItem] = {}
+        for column, ids in ((WorkItemModel.parent_id, parent_ids), (WorkItemModel.id, also_ids)):
+            for chunk in chunked(list(ids)):
+                result = await self._session.execute(select(WorkItemModel).where(column.in_(chunk)))
+                found.update((model.id, model.to_domain()) for model in result.scalars())
+        return list(found.values())
 
     async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:
         result = await self._session.execute(

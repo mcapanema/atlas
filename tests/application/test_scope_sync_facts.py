@@ -1,13 +1,15 @@
 from collections.abc import Collection
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
-from app.application.scope import ScopeSampleLoader
+from app.application.scope import ScopeSampleLoader, ScopeSamples
 from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.metrics.cfd import daily_flow_counts
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import Iteration, StateType, WorkItem, WorkItemType
@@ -289,3 +291,484 @@ async def test_iterations_are_queried_only_under_the_current_iteration_rule() ->
         counting = _CountingWorkItems(items)
         await ScopeSampleLoader(counting, event_repo, resolver).load(team_id=TEAM.id)
         assert counting.iteration_queries == queries
+
+
+TOP_LEVEL_ONLY: dict[str, object] = {"count_sub_issues": False}
+
+
+def _story_tree() -> tuple[WorkItem, WorkItem, WorkItem]:
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    sub_task = WorkItem(team_id=TEAM.id, title="Sub-task", parent_id=task.id)
+    return story, task, sub_task
+
+
+async def test_top_level_only_drops_sub_issues_from_every_count() -> None:
+    items = list(_story_tree())
+    events = [_at(i, EventType.CREATED, 9) for i in items]
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.item_count == 1
+    assert scope.remaining_count == 1
+    assert [i.title for i, _ in scope.items_with_samples] == ["Story"]
+
+
+async def test_defaults_still_count_every_level() -> None:
+    items = list(_story_tree())
+    events = [_at(i, EventType.CREATED, 9) for i in items]
+    loader, *_ = _loader(items, events, {})
+
+    assert (await loader.load(team_id=TEAM.id)).item_count == 3
+
+
+async def test_sub_issue_with_parent_outside_the_scope_still_counts() -> None:
+    story = WorkItem(team_id=OTHER.id, title="Story")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, task)]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    assert (await loader.load(team_id=TEAM.id)).item_count == 1
+
+
+def _story_with_started_task() -> tuple[list[WorkItem], list[Event]]:
+    story, task, sub_task = _story_tree()
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, task, sub_task)),
+        _at(sub_task, EventType.STARTED, 4),
+        _at(task, EventType.STARTED, 3),
+    ]
+    return [story, task, sub_task], events
+
+
+async def test_parent_starts_with_its_earliest_descendant() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    ((_, sample),) = scope.items_with_samples
+    assert sample.started_at == NOW - timedelta(days=4)
+
+
+async def test_parent_keeps_its_own_start_by_default() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, {})
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    story_sample = next(s for i, s in scope.items_with_samples if i.title == "Story")
+    assert story_sample.started_at is None
+
+
+async def test_roll_up_ignores_descendant_starts_after_as_of() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    before = data.samples(as_of=NOW - timedelta(days=6)).samples[0]
+    after = data.samples(as_of=NOW - timedelta(days=4)).samples[0]
+    assert before.started_at is None
+    assert after.started_at == NOW - timedelta(days=4)
+
+
+async def test_open_sub_issues_of_a_done_story_are_not_remaining() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", state_type=StateType.COMPLETED)
+    tasks = [
+        WorkItem(
+            team_id=TEAM.id, title=f"Task {n}", parent_id=story.id, state_type=StateType.UNSTARTED
+        )
+        for n in (1, 2)
+    ]
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, *tasks)),
+        _at(story, EventType.COMPLETED, 2),
+    ]
+    loader, *_ = _loader([story, *tasks], events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.remaining_count == 0
+    assert scope.samples[0].completed_at == NOW - timedelta(days=2)
+
+
+async def test_type_filter_keeps_dropping_sub_issues() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    bug = WorkItem(team_id=TEAM.id, title="Crash", labels=("Bug",), parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, bug)]
+    rules = {**TOP_LEVEL_ONLY, "type_labels": [{"label": "bug", "type": "bug"}]}
+    loader, *_ = _loader([story, bug], events, rules)
+
+    scope = await loader.load(team_id=TEAM.id, types={WorkItemType.BUG})
+
+    assert scope.item_count == 0
+
+
+async def _story_start(sub_task_events: list[tuple[EventType, int]]) -> datetime | None:
+    """The story's started_at under top-level only, given its one sub-task's events."""
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [_at(story, EventType.CREATED, 30), _at(task, EventType.CREATED, 30)]
+    events += [_at(task, type_, days_ago) for type_, days_ago in sub_task_events]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+    ((_, sample),) = (await loader.load(team_id=TEAM.id)).items_with_samples
+    return sample.started_at
+
+
+async def test_a_canceled_sub_issue_does_not_start_its_story() -> None:
+    assert await _story_start([(EventType.STARTED, 29), (EventType.CANCELED, 28)]) is None
+
+
+async def test_a_moved_back_sub_issue_does_not_start_its_story() -> None:
+    assert await _story_start([(EventType.STARTED, 29), (EventType.STOPPED, 28)]) is None
+
+
+async def test_a_restarted_sub_issue_still_starts_its_story() -> None:
+    events = [(EventType.STARTED, 29), (EventType.STOPPED, 28), (EventType.STARTED, 3)]
+    assert await _story_start(events) == NOW - timedelta(days=29)
+
+
+async def test_type_filter_keeps_the_roll_up() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", labels=("Story",))
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, task)),
+        _at(task, EventType.STARTED, 4),
+    ]
+    rules = {**TOP_LEVEL_ONLY, "type_labels": [{"label": "story", "type": "story"}]}
+    loader, *_ = _loader([story, task], events, rules)
+
+    scope = await loader.load(team_id=TEAM.id, types={WorkItemType.STORY})
+    data = (await loader.load_data(team_id=TEAM.id)).filtered(types={WorkItemType.STORY})
+
+    assert scope.samples[0].started_at == NOW - timedelta(days=4)
+    assert data.samples().samples[0].started_at == NOW - timedelta(days=4)
+
+
+async def test_cfd_shows_a_rolled_up_story_in_progress() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+    counts = daily_flow_counts(
+        scope.streams, start=NOW - timedelta(days=1), end=NOW, stream_rules=scope.stream_rules
+    )
+
+    assert counts[-1].in_progress == 1
+    assert counts[-1].todo == 0
+
+
+def _moved(item: WorkItem, days_ago: int, parent: str | None) -> Event:
+    return _at(item, EventType.PARENT_CHANGED, days_ago, detail=parent)
+
+
+def _titles(scope: ScopeSamples) -> list[str]:
+    return sorted(item.title for item, _ in scope.items_with_samples)
+
+
+async def test_replay_before_the_move_counts_the_sub_issue() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [
+        _at(task, EventType.CREATED, 20),
+        _at(task, EventType.STARTED, 18),
+        _at(task, EventType.COMPLETED, 15),
+        _at(story, EventType.CREATED, 10),
+        _moved(task, 10, "S"),
+    ]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert _titles(data.samples(as_of=NOW - timedelta(days=12))) == ["Task"]
+    assert _titles(data.samples()) == ["Story"]
+
+
+async def test_moved_sub_issue_rolls_up_into_its_parent_of_the_day() -> None:
+    a = WorkItem(team_id=TEAM.id, title="A", external_id="A")
+    b = WorkItem(team_id=TEAM.id, title="B", external_id="B")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=b.id)
+    events = [
+        _at(a, EventType.CREATED, 20),
+        _at(b, EventType.CREATED, 20),
+        _at(task, EventType.CREATED, 20),
+        _moved(task, 20, "A"),
+        _at(task, EventType.STARTED, 15),
+        _moved(task, 5, "B"),
+    ]
+    loader, *_ = _loader([a, b, task], events, TOP_LEVEL_ONLY)
+    data = await loader.load_data(team_id=TEAM.id)
+
+    def starts(scope: ScopeSamples) -> dict[str, datetime | None]:
+        return {item.title: sample.started_at for item, sample in scope.items_with_samples}
+
+    then = starts(data.samples(as_of=NOW - timedelta(days=10)))
+    now = starts(data.samples())
+    assert then == {"A": NOW - timedelta(days=15), "B": None}
+    assert now == {"A": None, "B": NOW - timedelta(days=15)}
+
+
+async def test_a_parent_that_did_not_exist_yet_links_nothing() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [
+        _at(task, EventType.CREATED, 20),
+        _at(task, EventType.COMPLETED, 15),
+        _at(story, EventType.CREATED, 10),
+    ]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=12)).item_count == 1
+    assert _titles(data.samples()) == ["Story"]
+
+
+async def test_removed_parent_counts_the_issue_again() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task")
+    events = [
+        _at(story, EventType.CREATED, 20),
+        _at(task, EventType.CREATED, 20),
+        _moved(task, 10, "S"),
+        _moved(task, 5, None),
+    ]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert _titles(data.samples(as_of=NOW - timedelta(days=12))) == ["Story", "Task"]
+    assert _titles(data.samples(as_of=NOW - timedelta(days=7))) == ["Story"]
+    assert _titles(data.samples()) == ["Story", "Task"]
+
+
+class _RecordingEvents(InMemoryEventRepository):
+    def __init__(self, events: list[Event]) -> None:
+        super().__init__(events)
+        self.requested: list[set[UUID]] = []
+        self.naming_calls = 0
+
+    async def list_for_work_items(
+        self, work_item_ids: list[UUID], types: Collection[EventType] | None = None
+    ) -> list[Event]:
+        self.requested.append(set(work_item_ids))
+        return await super().list_for_work_items(work_item_ids, types)
+
+    async def parent_events_naming(self, parent_external_ids: list[str]) -> list[Event]:
+        self.naming_calls += 1
+        return await super().parent_events_naming(parent_external_ids)
+
+
+class _RecordingWorkItems(InMemoryWorkItemRepository):
+    children_calls = 0
+
+    async def list_children(
+        self, parent_ids: Collection[UUID], also_ids: Collection[UUID]
+    ) -> list[WorkItem]:
+        self.children_calls += 1
+        return await super().list_children(parent_ids, also_ids)
+
+
+async def test_default_rules_load_only_the_filtered_items_events() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    bug = WorkItem(team_id=TEAM.id, title="Crash", labels=("Bug",), parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, bug)]
+    rules: dict[str, object] = {"type_labels": [{"label": "bug", "type": "bug"}]}
+    _, work_items, _, resolver = _loader([story, bug], events, rules)
+    recording = _RecordingEvents(events)
+
+    await ScopeSampleLoader(work_items, recording, resolver).load(
+        team_id=TEAM.id, types={WorkItemType.TASK}
+    )
+
+    assert recording.requested == [{story.id}]
+
+
+PARENTS_LEAVE: dict[str, object] = {"count_parent_issues": False}
+
+
+def _story_and_late_child(
+    child_events: list[tuple[int, str | None]],
+) -> tuple[list[WorkItem], list[Event]]:
+    """Story S (TEAM, 20 days old) and a child in OTHER created 8 days ago."""
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    child = WorkItem(
+        team_id=OTHER.id,
+        title="Task",
+        parent_id=story.id,
+        created_at=NOW - timedelta(days=8),
+    )
+    events = [_at(story, EventType.CREATED, 20), _at(child, EventType.CREATED, 8)]
+    events += [_moved(child, days_ago, parent) for days_ago, parent in child_events]
+    return [story, child], events
+
+
+async def test_parent_counts_until_its_first_child_arrives() -> None:
+    items, events = _story_and_late_child([(8, "S")])
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
+    assert data.samples().item_count == 0
+
+
+async def test_parent_counts_again_after_its_last_child_leaves() -> None:
+    items, events = _story_and_late_child([(8, "S"), (3, None)])
+    items[1] = replace(items[1], parent_id=None)
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=5)).item_count == 0
+    assert data.samples().item_count == 1
+
+
+async def test_parent_rule_falls_back_to_current_links_for_old_syncs() -> None:
+    items, events = _story_and_late_child([])
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
+    assert data.samples().item_count == 0
+
+
+async def _split_team_starts(
+    task_team_rules: dict[str, object], story_team_rules: dict[str, object]
+) -> dict[str, datetime | None]:
+    """A project with a story in OTHER and its task in TEAM (started 4 days ago)."""
+    project = Project(team_id=TEAM.id, name="Shared")
+    story = WorkItem(team_id=OTHER.id, title="Story", project_id=project.id)
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id, project_id=project.id)
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, task)),
+        _at(task, EventType.STARTED, 4),
+    ]
+    resolver = MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository(
+            [
+                RuleOverrides(organization_id=ORG, team_id=TEAM.id, overrides=task_team_rules),
+                RuleOverrides(organization_id=ORG, team_id=OTHER.id, overrides=story_team_rules),
+            ]
+        ),
+        InMemoryTeamRepository([TEAM, OTHER]),
+        InMemoryProjectRepository([project]),
+    )
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([story, task]), InMemoryEventRepository(events), resolver
+    )
+    scope = await loader.load(project_id=project.id)
+    return {item.title: sample.started_at for item, sample in scope.items_with_samples}
+
+
+async def test_sub_issue_team_off_parent_team_on() -> None:
+    # The task's team drops it; the story's team doesn't roll up, so it keeps its own start.
+    assert await _split_team_starts(TOP_LEVEL_ONLY, {}) == {"Story": None}
+
+
+async def test_sub_issue_team_on_parent_team_off() -> None:
+    # The task's team keeps it; the story's team rolls the task's start up into the story.
+    started = NOW - timedelta(days=4)
+    assert await _split_team_starts({}, TOP_LEVEL_ONLY) == {"Story": started, "Task": started}
+
+
+def _history_disagrees() -> tuple[list[WorkItem], list[Event]]:
+    """History says the task moved under S 5 days ago; the stored link says T."""
+    s = WorkItem(team_id=TEAM.id, title="S", external_id="S")
+    t = WorkItem(team_id=TEAM.id, title="T", external_id="T")
+    task = WorkItem(
+        team_id=TEAM.id, title="Task", parent_id=t.id, created_at=NOW - timedelta(days=20)
+    )
+    events = [
+        *(_at(i, EventType.CREATED, 20) for i in (s, t, task)),
+        _moved(task, 5, "S"),
+        _at(task, EventType.STARTED, 3),
+    ]
+    return [s, t, task], events
+
+
+async def test_the_live_view_trusts_the_stored_parent_over_history() -> None:
+    items, events = _history_disagrees()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+    data = await loader.load_data(team_id=TEAM.id)
+
+    def starts(scope: ScopeSamples) -> dict[str, datetime | None]:
+        return {item.title: sample.started_at for item, sample in scope.items_with_samples}
+
+    started = NOW - timedelta(days=3)
+    assert starts(data.samples()) == {"S": None, "T": started}
+    assert starts(data.samples(as_of=NOW - timedelta(days=1))) == {"S": started, "T": None}
+
+
+async def test_the_live_parent_rule_trusts_the_stored_parent_over_history() -> None:
+    items, events = _history_disagrees()
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert _titles(data.samples()) == ["S", "Task"]
+    assert _titles(data.samples(as_of=NOW - timedelta(days=1))) == ["T", "Task"]
+
+
+async def test_an_item_naming_itself_as_parent_is_not_a_parent() -> None:
+    loop = WorkItem(
+        team_id=TEAM.id, title="Loop", external_id="L", created_at=NOW - timedelta(days=10)
+    )
+    events = [_at(loop, EventType.CREATED, 10), _moved(loop, 5, "L")]
+    loader, *_ = _loader([loop], events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=1)).item_count == 1
+
+
+async def test_existed_agrees_with_the_as_of_stream() -> None:
+    eventless = WorkItem(team_id=TEAM.id, title="Manual", created_at=NOW - timedelta(days=10))
+    late = WorkItem(team_id=TEAM.id, title="Late")
+    early = WorkItem(team_id=TEAM.id, title="Early")
+    events = [_at(late, EventType.CREATED, 3), _at(early, EventType.CREATED, 9)]
+    loader, *_ = _loader([eventless, late, early], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    for item in (eventless, late, early):
+        for as_of in (None, NOW - timedelta(days=5), NOW - timedelta(days=12)):
+            assert data._existed(item, as_of) == (data._stream(item, as_of) is not None)
+
+
+async def test_default_rules_skip_the_parent_history_queries() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, task)]
+    _, _, _, resolver = _loader([story, task], events, {})
+    recording_events = _RecordingEvents(events)
+    recording_items = _RecordingWorkItems([story, task])
+
+    await ScopeSampleLoader(recording_items, recording_events, resolver).load(team_id=TEAM.id)
+
+    assert recording_events.naming_calls == 0
+    assert recording_items.children_calls == 0
+
+
+async def test_parent_rule_follows_an_existing_child_moved_in_later() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(
+        team_id=OTHER.id,
+        title="Task",
+        parent_id=story.id,
+        created_at=NOW - timedelta(days=15),
+    )
+    events = [
+        _at(story, EventType.CREATED, 20),
+        _at(task, EventType.CREATED, 15),
+        _moved(task, 6, "S"),
+    ]
+    loader, *_ = _loader([story, task], events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
+    assert data.samples().item_count == 0

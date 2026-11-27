@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.domain.events.entities import Event, EventType
+from app.domain.metrics.cfd import daily_flow_counts
 from app.domain.metrics.samples import derive_flow_sample
 
 WORK_ITEM_ID = uuid4()
@@ -401,3 +402,97 @@ def test_start_and_completion_at_creation_is_not_born_done() -> None:
 
     assert sample is not None
     assert not sample.born_done
+
+
+def _day(day: int) -> datetime:
+    return datetime(2026, 6, day, tzinfo=UTC)
+
+
+def test_earliest_start_moves_the_start_back() -> None:
+    events = [
+        _event(EventType.CREATED, 1),
+        _event(EventType.STARTED, 5),
+        _event(EventType.COMPLETED, 8),
+    ]
+
+    sample = derive_flow_sample(events, earliest_start=_day(2))
+
+    assert sample is not None
+    assert sample.started_at == _day(2)
+    assert sample.completed_at == _day(8)
+
+
+def test_earliest_start_starts_a_never_started_item() -> None:
+    sample = derive_flow_sample([_event(EventType.CREATED, 1)], earliest_start=_day(3))
+
+    assert sample is not None
+    assert sample.started_at == _day(3)
+
+
+def test_later_earliest_start_changes_nothing() -> None:
+    events = [_event(EventType.CREATED, 1), _event(EventType.STARTED, 5)]
+
+    sample = derive_flow_sample(events, earliest_start=_day(6))
+
+    assert sample is not None
+    assert sample.started_at == _day(5)
+
+
+def test_earliest_start_after_completion_is_ignored() -> None:
+    events = [_event(EventType.CREATED, 1), _event(EventType.COMPLETED, 4)]
+
+    sample = derive_flow_sample(events, earliest_start=_day(6))
+
+    assert sample is not None
+    assert sample.started_at is None
+
+
+def test_blocked_time_clips_to_the_rolled_up_cycle() -> None:
+    # Mon 1 .. Wed 10 June 2026: blocked Tue 2 -> Thu 4, own start Fri 5.
+    events = [
+        _event(EventType.CREATED, 1),
+        _event(EventType.BLOCKED, 2),
+        _event(EventType.UNBLOCKED, 4),
+        _event(EventType.STARTED, 5),
+        _event(EventType.COMPLETED, 10),
+    ]
+
+    own = derive_flow_sample(events)
+    rolled = derive_flow_sample(events, earliest_start=_day(3))
+
+    assert own is not None
+    assert rolled is not None
+    assert own.blocked_time == timedelta(0)
+    assert rolled.blocked_time == timedelta(days=1)
+
+
+def test_earliest_start_never_precedes_the_items_arrival() -> None:
+    # A story created on the 5th over work that started on the 2nd.
+    events = [_event(EventType.CREATED, 5), _event(EventType.COMPLETED, 9)]
+
+    sample = derive_flow_sample(events, earliest_start=_day(2))
+
+    assert sample is not None
+    assert sample.started_at == _day(5)
+
+
+def _parent(day: int, detail: str | None) -> Event:
+    return Event(
+        work_item_id=WORK_ITEM_ID,
+        type=EventType.PARENT_CHANGED,
+        occurred_at=_day(day),
+        detail=detail,
+    )
+
+
+def test_parent_changed_is_not_flow() -> None:
+    events = [_parent(1, "p1"), _event(EventType.CREATED, 1), _event(EventType.COMPLETED, 1)]
+
+    sample = derive_flow_sample(events)
+    counts = daily_flow_counts([events], start=_day(1), end=_day(2))
+
+    assert sample is not None
+    assert sample.born_done is True
+    assert sample.created_at == _day(1)
+    assert counts[-1].done == 1
+    assert counts[-1].todo == 0

@@ -16,8 +16,9 @@ from typing import Self
 from uuid import UUID
 
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
+from app.application.parent_links import ParentLinks, parents_at, sub_issue_links
 from app.domain._time import utcnow
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.events.timeline import creation_state
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
@@ -83,13 +84,22 @@ class ScopeData:
     `samples()` derives the analytics view now, or as of a past instant —
     snapshot capture and the history recompute replay a scope that way.
     `iterations` holds each team's iterations, seen on its unfiltered items.
+    `family` holds the unfiltered items, and `events` covers them all, when
+    some team in the scope has count_sub_issues off (ADR-0033): the rule
+    drops sub-issues and rolls their starts up into their parents by the
+    parent links of each instant (parent_links.py), whatever the filter.
+    Empty otherwise. `children_anywhere` (any team) and their
+    `child_parent_events` are loaded when some team has count_parent_issues
+    off: whether an item was a parent on a day reads its children's history.
     """
 
     items: list[WorkItem]
     events: Mapping[UUID, list[Event]]
     rules: ResolvedRules = field(default_factory=ResolvedRules)
-    parent_ids: AbstractSet[UUID] = field(default_factory=frozenset)
     iterations: Mapping[UUID, tuple[Iteration, ...]] = field(default_factory=dict)
+    family: tuple[WorkItem, ...] = ()
+    children_anywhere: tuple[WorkItem, ...] = ()
+    child_parent_events: Mapping[UUID, list[Event]] = field(default_factory=dict)
 
     def samples(self, *, as_of: datetime | None = None) -> ScopeSamples:
         """The scope's samples; with `as_of`, as it stood at that instant."""
@@ -98,8 +108,9 @@ class ScopeData:
         pairs: list[tuple[WorkItem, FlowSample]] = []
         item_count = remaining = 0
         current = self._current_iterations(as_of or utcnow())
+        links = self._links(as_of)
         for item in self.items:
-            folded = self._fold(item, as_of)
+            folded = self._fold(item, as_of, links)
             if folded is None:
                 continue
             stream, sample = folded
@@ -137,34 +148,92 @@ class ScopeData:
         if types is None and exclude_states is None:
             return self
         items = _filter_items(self.items, self.rules, types, exclude_states)
-        kept = {item.id for item in items}
+        kept = {item.id for item in items} | {item.id for item in self.family}
         events = {item_id: stream for item_id, stream in self.events.items() if item_id in kept}
         return replace(self, items=items, events=events)
 
+    def _links(self, as_of: datetime | None) -> ParentLinks:
+        """The parent links among the scope's items at `as_of` (empty when no rule needs them)."""
+        links = ParentLinks()
+        if self.family:
+            links = sub_issue_links(
+                self.family,
+                self.events,
+                as_of,
+                lambda parent: self._existed(parent, as_of),
+            )
+        if self.children_anywhere:
+            ids, source_ids = parents_at(self.children_anywhere, self.child_parent_events, as_of)
+            links = replace(links, parent_ids=ids, parent_source_ids=source_ids)
+        return links
+
     def _fold(
-        self, item: WorkItem, as_of: datetime | None
+        self, item: WorkItem, as_of: datetime | None, links: ParentLinks
     ) -> tuple[list[Event], FlowSample | None] | None:
         """The item's stream and sample; None when it is outside the scope's picture.
 
         Outside: it didn't exist yet at `as_of`, or its team's rules leave it
-        out of every metric — a born-done record (logged already done), or a
-        parent issue (its sub-issues carry the work).
+        out of every metric — a born-done record (logged already done), a
+        parent issue (its sub-issues carry the work), or a sub-issue of an
+        in-scope parent (the parent carries it). Under count_sub_issues off,
+        the parent starts with its earliest in-scope descendant.
         """
         stream = self._stream(item, as_of)
         if stream is None:
             return None
         rules = self.rules.for_team(item.team_id)
-        # ponytail: parent links are a current fact applied to as-of replays.
-        # Upgrade path: IssueHistory fromParent/toParent for historical parents.
-        if item.id in self.parent_ids and not rules.count_parent_issues:
+        if self._left_out(item, rules, links):
             return None
         # The full history, not the as-of slice: a cut before the item's first
         # transition must still know which state it was created in.
         born_in = creation_state(self.events.get(item.id, []), item.state)
-        sample = derive_flow_sample(stream, rules, born_in=born_in)
+        earliest = None if rules.count_sub_issues else self._descendant_start(item, as_of, links)
+        sample = derive_flow_sample(stream, rules, born_in=born_in, earliest_start=earliest)
         if sample is not None and sample.born_done and rules.exclude_born_done:
             return None
+        if earliest is not None and sample is not None:
+            stream = _with_rolled_start(item, stream, sample)
         return stream, sample
+
+    def _left_out(self, item: WorkItem, rules: MetricRules, links: ParentLinks) -> bool:
+        """Whether the item's team's rules leave it out as a parent or as a sub-issue."""
+        if links.is_parent(item) and not rules.count_parent_issues:
+            return True
+        return item.id in links.sub_issue_ids and not rules.count_sub_issues
+
+    def _descendant_start(
+        self, item: WorkItem, as_of: datetime | None, links: ParentLinks
+    ) -> datetime | None:
+        """The earliest start among the item's in-scope descendants, as of `as_of`.
+
+        Descendants follow the parent links of that instant. Each is folded
+        with its own team's rules; only one that is not canceled and not
+        moved back counts (its work is real or done).
+        """
+        starts: list[datetime] = []
+        seen: set[UUID] = {item.id}
+        pending = list(links.children.get(item.id, ()))
+        while pending:
+            child = pending.pop()
+            if child.id in seen:
+                continue
+            seen.add(child.id)
+            pending.extend(links.children.get(child.id, ()))
+            start = self._live_start(child, as_of)
+            if start is not None:
+                starts.append(start)
+        return min(starts, default=None)
+
+    def _live_start(self, item: WorkItem, as_of: datetime | None) -> datetime | None:
+        """The item's start when it is started and neither canceled nor moved back."""
+        stream = self._stream(item, as_of)
+        if not stream:
+            return None
+        born_in = creation_state(self.events.get(item.id, []), item.state)
+        sample = derive_flow_sample(stream, self.rules.for_team(item.team_id), born_in=born_in)
+        if sample is None or sample.canceled or sample.stopped_at is not None:
+            return None
+        return sample.started_at
 
     def _remains(self, item: WorkItem, sample: FlowSample | None, as_of: datetime | None) -> bool:
         """Open (not completed, not canceled) and in a state type the scope counts as remaining.
@@ -189,6 +258,15 @@ class ScopeData:
             return None
         return {team: current_iteration(found, at) for team, found in self.iterations.items()}
 
+    def _existed(self, item: WorkItem, as_of: datetime | None) -> bool:
+        """Whether the item existed at `as_of`: `_stream` is not None, without building it."""
+        if as_of is None:
+            return True
+        events = self.events.get(item.id, [])
+        if not events:
+            return item.created_at <= as_of
+        return any(event.occurred_at <= as_of for event in events)
+
     def _stream(self, item: WorkItem, as_of: datetime | None) -> list[Event] | None:
         """The item's events up to `as_of`; None when the item didn't exist then."""
         stream = self.events.get(item.id, [])
@@ -197,6 +275,29 @@ class ScopeData:
         if not stream:
             return [] if item.created_at <= as_of else None
         return [event for event in stream if event.occurred_at <= as_of] or None
+
+
+def _drops_sub_issues(items: list[WorkItem], rules: ResolvedRules) -> bool:
+    """Whether some item's team has count_sub_issues off."""
+    teams = {item.team_id for item in items}
+    return any(not rules.for_team(team).count_sub_issues for team in teams)
+
+
+def _with_rolled_start(item: WorkItem, stream: list[Event], sample: FlowSample) -> list[Event]:
+    """The stream plus a STARTED at a rolled-up start earlier than the item's own.
+
+    Stream readers (the CFD, state time) then see the parent in progress from
+    the same instant its sample does. recorded_at is the start itself, so
+    the freshness reads (max recorded_at) never move forward.
+    """
+    own = next((e.occurred_at for e in stream if e.type is EventType.STARTED), None)
+    started = sample.started_at
+    if started is None or (own is not None and own <= started):
+        return stream
+    synthetic = Event(
+        work_item_id=item.id, type=EventType.STARTED, occurred_at=started, recorded_at=started
+    )
+    return [*stream, synthetic]
 
 
 def _in_current_iteration(item: WorkItem, current: Mapping[UUID, Iteration | None] | None) -> bool:
@@ -254,8 +355,14 @@ class ScopeSampleLoader:
             if rules.scope.remaining_iterations == "current"
             else {}
         )
+        # Every item's events when a team drops sub-issues: the links of each
+        # instant read them, and a filter must keep the parents' roll-up.
+        family = tuple(items) if _drops_sub_issues(items, rules) else ()
+        children, child_events = await self._children_anywhere(items, rules)
         items = _filter_items(items, rules, types, exclude_states)
-        events = await self._events.list_for_work_items([item.id for item in items])
+        events = await self._events.list_for_work_items(
+            list({item.id for item in items} | {item.id for item in family})
+        )
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
         for event in events:
             by_item[event.work_item_id].append(event)
@@ -263,9 +370,34 @@ class ScopeSampleLoader:
             items=items,
             events=dict(by_item),
             rules=rules,
-            parent_ids=frozenset(await self._work_items.parent_ids()),
             iterations={team: tuple(found) for team, found in iterations.items()},
+            family=family,
+            children_anywhere=children,
+            child_parent_events=child_events,
         )
+
+    async def _children_anywhere(
+        self, items: list[WorkItem], rules: ResolvedRules
+    ) -> tuple[tuple[WorkItem, ...], dict[UUID, list[Event]]]:
+        """The current and former children (any team) of `items`, with their parent history.
+
+        Loaded only when some item's team has count_parent_issues off.
+        """
+        teams = {item.team_id for item in items}
+        if all(rules.for_team(team).count_parent_issues for team in teams):
+            return (), {}
+        source_ids = [item.external_id for item in items if item.external_id]
+        named = await self._events.parent_events_naming(source_ids)
+        children = await self._work_items.list_children(
+            [item.id for item in items], list({event.work_item_id for event in named})
+        )
+        history = await self._events.list_for_work_items(
+            [child.id for child in children], types={EventType.PARENT_CHANGED}
+        )
+        by_child: defaultdict[UUID, list[Event]] = defaultdict(list)
+        for event in history:
+            by_child[event.work_item_id].append(event)
+        return tuple(children), dict(by_child)
 
     async def load(
         self,

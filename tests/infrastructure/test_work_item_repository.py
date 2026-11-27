@@ -210,7 +210,6 @@ async def test_new_facts_round_trip_and_labels_parents_are_listed(session: Async
         parent.id,
     )
     assert await repo.list_labels(team_id=team_id) == ["Bug", "Feature"]
-    assert await repo.parent_ids() == {parent.id}
 
 
 async def test_delete_detaches_children_instead_of_failing(session: AsyncSession) -> None:
@@ -417,3 +416,20 @@ async def test_iterations_by_team_lists_distinct_iterations_per_team(
     await repo.add(WorkItem(team_id=team_b, title="4"))
 
     assert await repo.iterations_by_team([team_a, team_b]) == {team_a: [C38, C39]}
+
+
+async def test_list_children_finds_current_children_and_named_items(
+    session: AsyncSession,
+) -> None:
+    repo = SqlAlchemyWorkItemRepository(session)
+    team_a, team_b = await _team_id(session), await _team_id(session)
+    parent = WorkItem(team_id=team_a, title="Story")
+    current = WorkItem(team_id=team_b, title="Child now", parent_id=parent.id)
+    former = WorkItem(team_id=team_a, title="Child before")
+    unrelated = WorkItem(team_id=team_a, title="Other")
+    for item in (parent, current, former, unrelated):
+        await repo.add(item)
+
+    found = await repo.list_children([parent.id], [former.id])
+
+    assert {item.id for item in found} == {current.id, former.id}

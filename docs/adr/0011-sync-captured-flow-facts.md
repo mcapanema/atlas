@@ -43,8 +43,9 @@ for work-item types (everything was TASK).
 
 - Built-in defaults reproduce the previous numbers; a workspace opts in on
   the Metric rules page, and the change recomputes snapshot history.
-- Backtests use the state type as it was at each instant; parent links
-  and labels-for-type are current facts applied to the past.
+- Backtests use the state type as it was at each instant; labels-for-type
+  are current facts applied to the past. Parent links follow their history
+  since ADR-0033.
 - Relation codes are undocumented: an unknown blocking code is logged and
   ignored, so a Linear change degrades blocked time rather than breaking
   sync.

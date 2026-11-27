@@ -37,8 +37,10 @@ class WorkItemRepository(Protocol):
         """Distinct label names in scope, sorted."""
         ...
 
-    async def parent_ids(self) -> set[UUID]:
-        """Every work item that is some item's parent."""
+    async def list_children(
+        self, parent_ids: Collection[UUID], also_ids: Collection[UUID]
+    ) -> list[WorkItem]:
+        """Items, in any team, whose parent is in `parent_ids`, plus the items `also_ids`."""
         ...
 
     async def team_ids_by_project(self) -> dict[UUID, frozenset[UUID]]:

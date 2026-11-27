@@ -35,12 +35,18 @@ the rebuilt items.
 - A rebuild rewrites every returned item's events: as slow as a first
   sync, and it holds the recompute runner paused (rule saves wait) until
   it commits.
-- A rebuild re-inserts only what the connector fetches now: Linear
-  history is capped at HISTORY_PAGE_SIZE (250) entries per issue, so on
-  an issue with a longer history the events older than that window —
-  kept by insert-only syncs — are deleted by a rebuild (map_issue
-  already warns when the cap is hit). Paginate history per issue if
-  that ever matters.
+- A rebuild re-inserts only what the connector fetches now. Linear
+  history comes HISTORY_PAGE_SIZE (250) entries at a time and is paged
+  per issue until complete, so a rebuild re-inserts an issue's full
+  history. A sync that can't finish paging an issue fails as a whole,
+  rather than storing a partial history. The one exception is an issue
+  deleted between the issues page and its history pages (Linear answers
+  with an "Entity not found" error, or a null issue; any other error still
+  fails the sync): the sync keeps the
+  history it already fetched for that issue, logs a warning, and goes on.
+  A rebuild in that run stores only that partial history for the issue;
+  ADR-0009's pruning removes it on the next sync. A page that says it has
+  a next page but gives no new cursor fails the sync at once.
 - An event recorded through the events API *with* an `external_id` on a
   synced item is treated as source-derived and is deleted by a rebuild —
   the same caveat ADR-0009 records for pruning; ADR-0004's planned

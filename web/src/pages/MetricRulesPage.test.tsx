@@ -32,6 +32,7 @@ const BUILT_IN: MetricRules = {
   forecast_history_days: 90,
   tracked_since: null,
   count_parent_issues: true,
+  count_sub_issues: true,
   lead_time_start: "created",
   done_then_reopened: "delivered",
   canceled_then_reopened: "canceled",

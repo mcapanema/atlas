@@ -237,9 +237,9 @@ async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch)
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        # hasNextPage forever with a repeating cursor — without a ceiling
+        # hasNextPage forever, a new cursor each time — without a ceiling
         # this loops until the heat death of the workspace.
-        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor="same")
+        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor=f"c{calls}")
 
     with pytest.raises(LinearAPIError, match="pagination exceeded"):
         await _datasource(handler).fetch_teams()
@@ -351,3 +351,261 @@ async def test_fetch_work_items_without_a_team_sends_no_filter() -> None:
     await _datasource(handler).fetch_work_items()
 
     assert variables == [{"after": None}]
+
+
+def _transition(entry_id: str, day: int, from_type: str, to_type: str) -> dict[str, Any]:
+    return {
+        "id": entry_id,
+        "createdAt": f"2026-07-0{day}T09:00:00.000Z",
+        "fromState": {"name": from_type.title(), "type": from_type},
+        "toState": {"name": to_type.title(), "type": to_type},
+    }
+
+
+def _history_page(nodes: list[dict[str, Any]], end_cursor: str | None) -> httpx.Response:
+    page_info = {"hasNextPage": end_cursor is not None, "endCursor": end_cursor}
+    history = {"nodes": nodes, "pageInfo": page_info}
+    return httpx.Response(200, json={"data": {"issue": {"history": history}}})
+
+
+def _history_entry(entry_id: str, day: int, **change: object) -> dict[str, Any]:
+    return {"id": entry_id, "createdAt": f"2026-07-0{day}T09:00:00.000Z", **change}
+
+
+async def test_fetch_work_items_pages_long_histories() -> None:
+    # Linear returns history newest first: page 2 holds the older entries.
+    first = _transition("h1", 6, "started", "completed")
+    node = {
+        **_issue_node("i1"),
+        "parent": {"id": "p2"},
+        "history": {"nodes": [first], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
+    }
+    older = [
+        _history_entry("h2", 5, addedLabelIds=["l1"]),
+        _history_entry("h3", 4, fromParentId="p1", toParentId="p2"),
+        _history_entry("h4", 3, fromParentId="p0", toParentId="p1"),
+    ]
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [{"id": "l1", "name": "Bug"}])
+        if "issue(id:" in body["query"]:
+            seen.append((body["variables"]["id"], body["variables"]["after"]))
+            return _history_page(older, None)
+        return _page("issues", [node])
+
+    items = await _datasource(handler).fetch_work_items()
+
+    assert seen == [("i1", "c1")]
+    events = {e.external_id: e for e in items[0].events}
+    assert events["h1"].type is EventType.COMPLETED
+    assert events["h2:label-added:l1"].detail == "Bug"
+    assert events["h3:parent"].detail == "p2"
+    assert events["h4:parent"].detail == "p1"
+    # The creation parent comes from the oldest change, found on page 2.
+    assert events["i1:parent-born"].detail == "p0"
+
+
+async def test_history_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(datasource_module, "_MAX_PAGES", 2)
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c0"}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            nonlocal history_calls
+            history_calls += 1
+            return _history_page([], f"c{history_calls}")
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="history pagination exceeded"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 2
+
+
+def _vanishing_handler(
+    history_answer: httpx.Response,
+) -> Callable[[httpx.Request], httpx.Response]:
+    """Issues i1 (history goes on after cursor "c1") and i2; history answers as given."""
+    partial = {
+        **_issue_node("i1"),
+        "parent": {"id": "p1"},
+        "history": {
+            "nodes": [_transition("h1", 2, "unstarted", "started")],
+            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            return history_answer
+        return _page("issues", [partial, _issue_node("i2")])
+
+    return handler
+
+
+async def test_a_vanished_issue_keeps_its_partial_history_and_the_sync_goes_on(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Deleted between the issues page and its history page: Linear answers
+    # the unknown id with GraphQL errors on HTTP 200.
+    gone = httpx.Response(
+        200, json={"errors": [{"message": "Entity not found: Issue"}], "data": None}
+    )
+
+    with caplog.at_level(logging.WARNING):
+        items = await _datasource(_vanishing_handler(gone)).fetch_work_items()
+
+    assert [item.external_id for item in items] == ["i1", "i2"]
+    assert [e.external_id for e in items[0].events] == ["i1:created", "h1"]
+    assert "i1 vanished" in caplog.text
+    # The oldest parent change may be on the missing pages: no creation parent.
+    assert "i1:parent-born" not in {e.external_id for e in items[0].events}
+
+
+async def test_a_null_issue_on_a_history_page_keeps_the_partial_history() -> None:
+    gone = httpx.Response(200, json={"data": {"issue": None}})
+
+    items = await _datasource(_vanishing_handler(gone)).fetch_work_items()
+
+    assert [item.external_id for item in items] == ["i1", "i2"]
+
+
+async def test_an_http_error_on_a_history_page_still_fails_the_sync() -> None:
+    unauthorized = httpx.Response(401, json={"errors": [{"message": "Authentication required"}]})
+
+    with pytest.raises(LinearAPIError):
+        await _datasource(_vanishing_handler(unauthorized)).fetch_work_items()
+
+
+async def test_issues_paging_fails_fast_on_a_repeated_cursor() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor="same")
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_teams()
+
+    assert calls == 2
+
+
+async def test_issues_paging_fails_fast_without_a_cursor() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        page_info = {"hasNextPage": True, "endCursor": None}
+        return httpx.Response(200, json={"data": {"teams": {"nodes": [], "pageInfo": page_info}}})
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_teams()
+
+
+async def test_history_paging_fails_fast_without_a_cursor() -> None:
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_calls
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            history_calls += 1
+            page_info = {"hasNextPage": True, "endCursor": None}
+            history = {"nodes": [], "pageInfo": page_info}
+            return httpx.Response(200, json={"data": {"issue": {"history": history}}})
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 1
+
+
+async def test_a_vanished_issue_answered_with_http_400_keeps_its_partial_history() -> None:
+    # Linear may answer an unknown id as a user-input error on HTTP 400.
+    gone = httpx.Response(
+        400,
+        json={
+            "errors": [
+                {"message": "Entity not found: Issue", "extensions": {"code": "INVALID_INPUT"}}
+            ]
+        },
+    )
+
+    items = await _datasource(_vanishing_handler(gone)).fetch_work_items()
+
+    assert [item.external_id for item in items] == ["i1", "i2"]
+
+
+async def test_another_graphql_error_on_a_history_page_still_fails_the_sync() -> None:
+    # Only "not found" means the issue vanished: any other error on HTTP 200
+    # would otherwise cut a live issue's history (and a rebuild would store it).
+    failed = httpx.Response(200, json={"errors": [{"message": "Internal error"}], "data": None})
+
+    with pytest.raises(LinearAPIError):
+        await _datasource(_vanishing_handler(failed)).fetch_work_items()
+
+
+async def test_history_paging_fails_fast_when_the_first_page_has_no_cursor() -> None:
+    # The first history page comes inside the issues query: without this
+    # check the next request would send after=None and fetch it again.
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": None}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_calls
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            history_calls += 1
+            return _history_page([], None)
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 0
+
+
+async def test_history_paging_fails_fast_on_a_repeated_cursor() -> None:
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_calls
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            history_calls += 1
+            return _history_page([], "c1")  # the cursor it was just sent
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 1

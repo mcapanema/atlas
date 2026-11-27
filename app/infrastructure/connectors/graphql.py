@@ -39,6 +39,18 @@ def _summarize_errors(errors: list[Any]) -> str:
     return summary
 
 
+def _error_detail(response: httpx.Response) -> str:
+    """The GraphQL errors of a non-200 answer, when its body carries them."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return ""
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    if not isinstance(errors, list) or not errors:
+        return ""
+    return f": {_summarize_errors(errors)}"
+
+
 class GraphQLClient:
     def __init__(
         self,
@@ -72,7 +84,8 @@ class GraphQLClient:
         vendor = self._vendor
         if response.status_code != 200:
             raise self._error(
-                f"{vendor} API returned HTTP {response.status_code}", status=response.status_code
+                f"{vendor} API returned HTTP {response.status_code}{_error_detail(response)}",
+                status=response.status_code,
             )
         try:
             payload = response.json()

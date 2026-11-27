@@ -43,6 +43,12 @@ def map_project(node: dict[str, Any]) -> SourceProject:
     )
 
 
+def history_incomplete(node: dict[str, Any]) -> bool:
+    """Whether the issue's history still has a page the data source didn't fetch."""
+    page_info = node["history"].get("pageInfo") or {}
+    return bool(page_info.get("hasNextPage"))
+
+
 def _initial_state_type(node: dict[str, Any]) -> str | None:
     """The Linear state type the issue was created in.
 
@@ -132,13 +138,17 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
     names = label_names or {}
     created_at = datetime.fromisoformat(node["createdAt"])
     history_nodes = node["history"]["nodes"]
-    if len(history_nodes) >= HISTORY_PAGE_SIZE:
+    if history_incomplete(node):
         logger.warning(
-            "Linear issue %s history hit the %d-entry page cap; older events may be missing",
+            "Linear issue %s history is incomplete after %d entries; older events may be missing",
             node["id"],
-            HISTORY_PAGE_SIZE,
+            len(history_nodes),
         )
-    events = [*_initial_events(node, created_at), *_born_label_events(node, created_at, names)]
+    events = [
+        *_initial_events(node, created_at),
+        *_born_label_events(node, created_at, names),
+        *_born_parent_events(node, created_at),
+    ]
     aliases = _blocker_aliases(node)
     for entry in history_nodes:
         events.extend(map_history_entry(entry, names, aliases))
@@ -463,6 +473,50 @@ def map_history_entry(
         *_transition_events(entry, occurred_at),
         *_label_events(entry, occurred_at, label_names or {}),
         *_relation_events(entry, occurred_at, blocker_aliases or {}),
+        *_parent_events(entry, occurred_at),
+    ]
+
+
+def _changes_parent(entry: dict[str, Any]) -> bool:
+    return entry.get("fromParentId") is not None or entry.get("toParentId") is not None
+
+
+def _parent_events(entry: dict[str, Any], occurred_at: datetime) -> list[SourceEvent]:
+    """A PARENT_CHANGED for an entry that moved the issue to another parent (or none)."""
+    if not _changes_parent(entry):
+        return []
+    return [
+        SourceEvent(
+            external_id=f"{entry['id']}:parent",
+            type=EventType.PARENT_CHANGED,
+            occurred_at=occurred_at,
+            detail=entry.get("toParentId"),
+        )
+    ]
+
+
+def _born_parent_events(node: dict[str, Any], created_at: datetime) -> list[SourceEvent]:
+    """The parent the issue was created with, as a PARENT_CHANGED at creation.
+
+    The earliest parent change's from-parent, or the current parent when the
+    parent never changed; nothing when the issue was created without one.
+    """
+    if history_incomplete(node):
+        return []  # the earliest change, and so the creation parent, is unknown
+    changes = sorted(
+        (e for e in node["history"]["nodes"] if _changes_parent(e)),
+        key=lambda e: datetime.fromisoformat(e["createdAt"]),
+    )
+    born = changes[0].get("fromParentId") if changes else (node.get("parent") or {}).get("id")
+    if born is None:
+        return []
+    return [
+        SourceEvent(
+            external_id=f"{node['id']}:parent-born",
+            type=EventType.PARENT_CHANGED,
+            occurred_at=created_at,
+            detail=born,
+        )
     ]
 
 

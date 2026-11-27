@@ -59,7 +59,7 @@ def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
     Connectors stamp an item logged straight into a done state that way (the
     Linear mapping's `:created-done`). It's a record of work, not flow Atlas
     observed. The first flow event must be a CREATED (code events never
-    anchor, see CODE_EVENT_TYPES): a completion with no recorded
+    anchor, see NON_FLOW_EVENT_TYPES): a completion with no recorded
     creation means "creation unknown", not "created done". Later completions
     don't matter: a re-sync backfills the creation-instant one beside sync's
     completedAt-stamped one.
@@ -275,7 +275,11 @@ def _state_wait_time(
 
 
 def derive_flow_sample(
-    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
+    events: list[Event],
+    rules: MetricRules = DEFAULT_RULES,
+    *,
+    born_in: str | None = None,
+    earliest_start: datetime | None = None,
 ) -> FlowSample | None:
     """Fold one work item's events into a FlowSample; None if it has no events.
 
@@ -307,19 +311,28 @@ def derive_flow_sample(
     arrived_at is the Triage exit under lead_time_start="triage_exit".
     Durations (cycle, lead, queue, touch, blocked, age) are measured on the rules'
     working days, so a non-working day adds no time.
+    `earliest_start` (a parent's first sub-issue start, ADR-0033), clamped to
+    the item's arrival, replaces a later or missing started_at when it falls
+    before completion; blocked and wait time then clip to that longer cycle.
     """
     if not events:
         return None
     ordered = sorted(events, key=event_order)
     state = _replay(ordered, rules)
-    started_at, completed_at = state.started_at, state.completed_at
+    completed_at = state.completed_at
+    created_at = first_flow_event(ordered).occurred_at
+    triage_exit_at = _triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None
+    if earliest_start is not None:
+        # Never before the item arrived: queue time can't go negative.
+        earliest_start = max(earliest_start, triage_exit_at or created_at)
+    started_at = _rolled_start(state.started_at, completed_at, earliest_start)
 
     calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
     blocked_time = _in_cycle(periods, started_at, completed_at, calendar)
 
     return FlowSample(
-        created_at=first_flow_event(ordered).occurred_at,
+        created_at=created_at,
         started_at=started_at,
         completed_at=completed_at,
         blocked_time=blocked_time,
@@ -327,7 +340,7 @@ def derive_flow_sample(
         canceled=state.canceled,
         born_done=_born_done(ordered, started_at),
         blocked_now=any(p.ended_at is None for p in periods),
-        triage_exit_at=_triage_exit(ordered) if rules.lead_time_start == "triage_exit" else None,
+        triage_exit_at=triage_exit_at,
         calendar=calendar,
         state_wait_time=_state_wait_time(
             ordered,
@@ -338,6 +351,17 @@ def derive_flow_sample(
             blocked_time=blocked_time,
         ),
     )
+
+
+def _rolled_start(
+    started_at: datetime | None, completed_at: datetime | None, earliest: datetime | None
+) -> datetime | None:
+    """`earliest` when it is before both the own start and the completion, else the own start."""
+    if earliest is None or (completed_at is not None and earliest >= completed_at):
+        return started_at
+    if started_at is not None and started_at <= earliest:
+        return started_at
+    return earliest
 
 
 def in_progress(sample: FlowSample, at: datetime) -> bool:
