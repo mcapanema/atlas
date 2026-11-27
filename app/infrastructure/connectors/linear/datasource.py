@@ -1,5 +1,6 @@
 """DeliveryDataSource adapter backed by Linear's GraphQL API."""
 
+import logging
 from typing import Any
 
 from app.domain.sync.source import SourceProject, SourceTeam, SourceWorkItem
@@ -11,6 +12,8 @@ from app.infrastructure.connectors.linear.mapping import (
     map_project,
     map_team,
 )
+
+logger = logging.getLogger(__name__)
 
 # ponytail: 1000 pages ≈ 50k issues (archived included) per sync — 5x the
 # largest workspace seen. Raise it (or paginate per-team) if one exceeds it.
@@ -167,10 +170,11 @@ class LinearDataSource:
     async def _complete_history(self, issue_id: str, history: dict[str, Any]) -> None:
         for _ in range(_MAX_PAGES):
             cursor = history["pageInfo"]["endCursor"]
-            data = await self._client.execute(
-                _ISSUE_HISTORY_QUERY, {"id": issue_id, "after": cursor}
-            )
-            page = data["issue"]["history"]
+            page = await self._history_page(issue_id, cursor)
+            if page is None:
+                # Left with hasNextPage true: the mapping reads the history
+                # as incomplete and stores no creation parent from it.
+                return
             history["nodes"].extend(page["nodes"])
             history["pageInfo"] = page["pageInfo"]
             if not _has_next_page(history):
@@ -178,6 +182,29 @@ class LinearDataSource:
         raise LinearAPIError(
             f"Linear issue {issue_id} history pagination exceeded {_MAX_PAGES} pages; aborting"
         )
+
+    async def _history_page(self, issue_id: str, cursor: str | None) -> dict[str, Any] | None:
+        """One page of an issue's history; None when the issue vanished mid-sync.
+
+        Linear answers an unknown (deleted) id with GraphQL errors on HTTP
+        200, or with a null issue. Any other failure still fails the sync.
+        """
+        try:
+            data = await self._client.execute(
+                _ISSUE_HISTORY_QUERY, {"id": issue_id, "after": cursor}
+            )
+        except LinearAPIError as exc:
+            if exc.status != 200:
+                raise
+            logger.warning("Linear issue %s vanished during history paging: %s", issue_id, exc)
+            return None
+        if data.get("issue") is None:
+            logger.warning(
+                "Linear issue %s vanished during history paging: issue is null", issue_id
+            )
+            return None
+        page: dict[str, Any] = data["issue"]["history"]
+        return page
 
     async def _nodes(
         self, query: str, root: str, variables: dict[str, Any] | None = None

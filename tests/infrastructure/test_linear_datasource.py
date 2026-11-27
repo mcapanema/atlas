@@ -408,3 +408,58 @@ async def test_history_pagination_stops_at_page_ceiling(monkeypatch: pytest.Monk
 
     with pytest.raises(LinearAPIError, match="history pagination"):
         await _datasource(handler).fetch_work_items()
+
+
+def _vanishing_handler(
+    history_answer: httpx.Response,
+) -> Callable[[httpx.Request], httpx.Response]:
+    """Issues i1 (history goes on after cursor "c1") and i2; history answers as given."""
+    partial = {
+        **_issue_node("i1"),
+        "history": {
+            "nodes": [_transition("h1", 2, "unstarted", "started")],
+            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            return history_answer
+        return _page("issues", [partial, _issue_node("i2")])
+
+    return handler
+
+
+async def test_a_vanished_issue_keeps_its_partial_history_and_the_sync_goes_on(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Deleted between the issues page and its history page: Linear answers
+    # the unknown id with GraphQL errors on HTTP 200.
+    gone = httpx.Response(
+        200, json={"errors": [{"message": "Entity not found: Issue"}], "data": None}
+    )
+
+    with caplog.at_level(logging.WARNING):
+        items = await _datasource(_vanishing_handler(gone)).fetch_work_items()
+
+    assert [item.external_id for item in items] == ["i1", "i2"]
+    assert [e.external_id for e in items[0].events] == ["i1:created", "h1"]
+    assert "i1 vanished" in caplog.text
+
+
+async def test_a_null_issue_on_a_history_page_keeps_the_partial_history() -> None:
+    gone = httpx.Response(200, json={"data": {"issue": None}})
+
+    items = await _datasource(_vanishing_handler(gone)).fetch_work_items()
+
+    assert [item.external_id for item in items] == ["i1", "i2"]
+
+
+async def test_an_http_error_on_a_history_page_still_fails_the_sync() -> None:
+    unauthorized = httpx.Response(401, json={"errors": [{"message": "Authentication required"}]})
+
+    with pytest.raises(LinearAPIError):
+        await _datasource(_vanishing_handler(unauthorized)).fetch_work_items()
