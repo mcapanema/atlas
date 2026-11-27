@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.events.entities import Event, EventType
@@ -436,3 +437,9 @@ async def test_parent_events_naming_finds_links_to_the_parents(session: AsyncSes
     found = await repo.parent_events_naming(["P"])
 
     assert [e.id for e in found] == [to_p.id]
+
+
+async def test_events_are_indexed_by_type_and_detail(session: AsyncSession) -> None:
+    indexes = await session.run_sync(lambda s: inspect(s.connection()).get_indexes("events"))
+
+    assert any(index["column_names"] == ["type", "detail"] for index in indexes)

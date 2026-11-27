@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import (
     CursorResult,
     ForeignKey,
+    Index,
     String,
     and_,
     delete,
@@ -31,6 +32,8 @@ def _state_type(value: str | None) -> StateType | None:
 
 class EventModel(Base):
     __tablename__ = "events"
+    # parent_events_naming filters on both (ADR-0033).
+    __table_args__ = (Index("ix_events_type_detail", "type", "detail"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     work_item_id: Mapped[UUID] = mapped_column(
