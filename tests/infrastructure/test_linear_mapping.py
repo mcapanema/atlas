@@ -228,12 +228,15 @@ def test_map_issue_at_history_cap_logs_truncation_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     entries = [{**_entry("backlog", "started"), "id": f"h{i}"} for i in range(HISTORY_PAGE_SIZE)]
-    node = {**ISSUE_NODE, "history": {"nodes": entries}}
+    more = {"hasNextPage": True, "endCursor": "c"}  # the data source couldn't page the rest
+    node = {**ISSUE_NODE, "history": {"nodes": entries, "pageInfo": more}}
 
     with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
         map_issue(node)
 
-    assert any("history hit" in r.getMessage() and "i1" in r.getMessage() for r in caplog.records)
+    assert any(
+        "history is incomplete" in r.getMessage() and "i1" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_map_issue_below_history_cap_does_not_warn(
@@ -825,3 +828,33 @@ def test_born_parent_without_history_is_the_current_parent() -> None:
 
 def test_issue_never_parented_has_no_parent_events() -> None:
     assert _parent_events(ISSUE_NODE) == {}
+
+
+def test_incomplete_history_emits_no_born_parent(caplog: pytest.LogCaptureFixture) -> None:
+    node = {
+        **ISSUE_NODE,
+        "parent": {"id": "p2"},
+        "history": {
+            "nodes": [_parent_entry("h1", "2026-07-03T09:00:00.000Z", "p1", "p2")],
+            "pageInfo": {"hasNextPage": True, "endCursor": "c"},
+        },
+    }
+
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
+        events = _parent_events(node)
+
+    assert events == {"h1:parent": "p2"}
+    assert any("history" in r.getMessage() for r in caplog.records)
+
+
+def test_complete_long_history_does_not_warn(caplog: pytest.LogCaptureFixture) -> None:
+    entries = [
+        {**_entry("backlog", "started"), "id": f"h{i}"} for i in range(HISTORY_PAGE_SIZE + 1)
+    ]
+    done = {"hasNextPage": False, "endCursor": None}
+    node = {**ISSUE_NODE, "history": {"nodes": entries, "pageInfo": done}}
+
+    with caplog.at_level(logging.WARNING, logger="app.infrastructure.connectors.linear.mapping"):
+        map_issue(node)
+
+    assert not caplog.records

@@ -54,13 +54,19 @@ query Labels($after: String) {
 }
 """
 
-# ponytail: nested history capped at HISTORY_PAGE_SIZE entries per issue —
-# enough for any sane issue; map_issue logs a warning when the cap is hit.
-# Paginate history per-issue if one ever exceeds it.
+# History comes HISTORY_PAGE_SIZE entries at a time: an issue with more is
+# paged per issue (_complete_histories) before mapping.
 # Archived issues are included: Linear auto-archives closed issues, and
 # they are still delivered (or canceled) history; one archived while still
 # open reads as canceled (mapping._archive_events). Trashed ones were
 # deleted and are skipped in fetch_work_items.
+# One list of history fields for both queries, so a page fetched later
+# carries what the first page does.
+_HISTORY_FIELDS = (
+    "id createdAt fromState { name type } toState { name type } "
+    "addedLabelIds removedLabelIds relationChanges { identifier type } "
+    "fromParentId toParentId"
+)
 _ISSUES_QUERY = f"""
 query Issues($after: String, $filter: IssueFilter) {{
   issues(first: 50, after: $after, filter: $filter, includeArchived: true) {{
@@ -86,20 +92,22 @@ query Issues($after: String, $filter: IssueFilter) {{
         nodes {{ type issue {{ identifier previousIdentifiers }} }}
       }}
       history(first: {HISTORY_PAGE_SIZE}) {{
-        nodes {{
-          id
-          createdAt
-          fromState {{ name type }}
-          toState {{ name type }}
-          addedLabelIds
-          removedLabelIds
-          relationChanges {{ identifier type }}
-          fromParentId
-          toParentId
-        }}
+        nodes {{ {_HISTORY_FIELDS} }}
+        pageInfo {{ hasNextPage endCursor }}
       }}
     }}
     pageInfo {{ hasNextPage endCursor }}
+  }}
+}}
+"""
+
+_ISSUE_HISTORY_QUERY = f"""
+query IssueHistory($id: String!, $after: String) {{
+  issue(id: $id) {{
+    history(first: {HISTORY_PAGE_SIZE}, after: $after) {{
+      nodes {{ {_HISTORY_FIELDS} }}
+      pageInfo {{ hasNextPage endCursor }}
+    }}
   }}
 }}
 """
@@ -144,8 +152,31 @@ class LinearDataSource:
             for node in await self._nodes(_ISSUES_QUERY, "issues", variables)
             if not node.get("trashed")
         ]
+        await self._complete_histories(issues)
         return map_tolerantly(
             issues, lambda node: map_issue(node, label_names), "issue", vendor="Linear"
+        )
+
+    async def _complete_histories(self, issues: list[dict[str, Any]]) -> None:
+        """Fetch the rest of every history that has another page, in place."""
+        for node in issues:
+            history = node.get("history")
+            if isinstance(history, dict) and _has_next_page(history):
+                await self._complete_history(str(node.get("id")), history)
+
+    async def _complete_history(self, issue_id: str, history: dict[str, Any]) -> None:
+        for _ in range(_MAX_PAGES):
+            cursor = history["pageInfo"]["endCursor"]
+            data = await self._client.execute(
+                _ISSUE_HISTORY_QUERY, {"id": issue_id, "after": cursor}
+            )
+            page = data["issue"]["history"]
+            history["nodes"].extend(page["nodes"])
+            history["pageInfo"] = page["pageInfo"]
+            if not _has_next_page(history):
+                return
+        raise LinearAPIError(
+            f"Linear issue {issue_id} history pagination exceeded {_MAX_PAGES} pages; aborting"
         )
 
     async def _nodes(
@@ -164,3 +195,8 @@ class LinearDataSource:
         raise LinearAPIError(
             f"Linear {root} pagination exceeded {_MAX_PAGES} pages; aborting (possible cursor loop)"
         )
+
+
+def _has_next_page(history: dict[str, Any]) -> bool:
+    page_info = history.get("pageInfo")
+    return isinstance(page_info, dict) and bool(page_info.get("hasNextPage"))

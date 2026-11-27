@@ -351,3 +351,60 @@ async def test_fetch_work_items_without_a_team_sends_no_filter() -> None:
     await _datasource(handler).fetch_work_items()
 
     assert variables == [{"after": None}]
+
+
+def _transition(entry_id: str, day: int, from_type: str, to_type: str) -> dict[str, Any]:
+    return {
+        "id": entry_id,
+        "createdAt": f"2026-07-0{day}T09:00:00.000Z",
+        "fromState": {"name": from_type.title(), "type": from_type},
+        "toState": {"name": to_type.title(), "type": to_type},
+    }
+
+
+def _history_page(nodes: list[dict[str, Any]], end_cursor: str | None) -> httpx.Response:
+    page_info = {"hasNextPage": end_cursor is not None, "endCursor": end_cursor}
+    history = {"nodes": nodes, "pageInfo": page_info}
+    return httpx.Response(200, json={"data": {"issue": {"history": history}}})
+
+
+async def test_fetch_work_items_pages_long_histories() -> None:
+    first = _transition("h1", 2, "unstarted", "started")
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [first], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
+    }
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            seen.append((body["variables"]["id"], body["variables"]["after"]))
+            return _history_page([_transition("h2", 5, "started", "completed")], None)
+        return _page("issues", [node])
+
+    items = await _datasource(handler).fetch_work_items()
+
+    assert seen == [("i1", "c1")]
+    assert [e.type for e in items[0].events][-1] is EventType.COMPLETED
+
+
+async def test_history_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(datasource_module, "_MAX_PAGES", 2)
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "same"}},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            return _history_page([], "same")
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="history pagination"):
+        await _datasource(handler).fetch_work_items()

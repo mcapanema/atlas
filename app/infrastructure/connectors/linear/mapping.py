@@ -43,6 +43,12 @@ def map_project(node: dict[str, Any]) -> SourceProject:
     )
 
 
+def history_incomplete(node: dict[str, Any]) -> bool:
+    """Whether the issue's history still has a page the data source didn't fetch."""
+    page_info = node["history"].get("pageInfo") or {}
+    return bool(page_info.get("hasNextPage"))
+
+
 def _initial_state_type(node: dict[str, Any]) -> str | None:
     """The Linear state type the issue was created in.
 
@@ -132,11 +138,11 @@ def map_issue(node: dict[str, Any], label_names: Mapping[str, str] | None = None
     names = label_names or {}
     created_at = datetime.fromisoformat(node["createdAt"])
     history_nodes = node["history"]["nodes"]
-    if len(history_nodes) >= HISTORY_PAGE_SIZE:
+    if history_incomplete(node):
         logger.warning(
-            "Linear issue %s history hit the %d-entry page cap; older events may be missing",
+            "Linear issue %s history is incomplete after %d entries; older events may be missing",
             node["id"],
-            HISTORY_PAGE_SIZE,
+            len(history_nodes),
         )
     events = [
         *_initial_events(node, created_at),
@@ -495,6 +501,8 @@ def _born_parent_events(node: dict[str, Any], created_at: datetime) -> list[Sour
     The earliest parent change's from-parent, or the current parent when the
     parent never changed; nothing when the issue was created without one.
     """
+    if history_incomplete(node):
+        return []  # the earliest change, and so the creation parent, is unknown
     changes = sorted(
         (e for e in node["history"]["nodes"] if _changes_parent(e)),
         key=lambda e: datetime.fromisoformat(e["createdAt"]),
