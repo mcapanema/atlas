@@ -531,3 +531,28 @@ async def test_history_paging_fails_fast_without_a_cursor() -> None:
         await _datasource(handler).fetch_work_items()
 
     assert history_calls == 1
+
+
+async def test_a_vanished_issue_answered_with_http_400_keeps_its_partial_history() -> None:
+    # Linear may answer an unknown id as a user-input error on HTTP 400.
+    gone = httpx.Response(
+        400,
+        json={
+            "errors": [
+                {"message": "Entity not found: Issue", "extensions": {"code": "INVALID_INPUT"}}
+            ]
+        },
+    )
+
+    items = await _datasource(_vanishing_handler(gone)).fetch_work_items()
+
+    assert [item.external_id for item in items] == ["i1", "i2"]
+
+
+async def test_another_graphql_error_on_a_history_page_still_fails_the_sync() -> None:
+    # Only "not found" means the issue vanished: any other error on HTTP 200
+    # would otherwise cut a live issue's history (and a rebuild would store it).
+    failed = httpx.Response(200, json={"errors": [{"message": "Internal error"}], "data": None})
+
+    with pytest.raises(LinearAPIError):
+        await _datasource(_vanishing_handler(failed)).fetch_work_items()

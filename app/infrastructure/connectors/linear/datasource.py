@@ -15,6 +15,9 @@ from app.infrastructure.connectors.linear.mapping import (
 
 logger = logging.getLogger(__name__)
 
+# Linear's message for an id it does not know (a deleted issue).
+_NOT_FOUND = "Entity not found"
+
 # ponytail: 1000 pages ≈ 50k issues (archived included) per sync — 5x the
 # largest workspace seen. Raise it (or paginate per-team) if one exceeds it.
 _MAX_PAGES = 1000
@@ -187,15 +190,16 @@ class LinearDataSource:
     async def _history_page(self, issue_id: str, cursor: str | None) -> dict[str, Any] | None:
         """One page of an issue's history; None when the issue vanished mid-sync.
 
-        Linear answers an unknown (deleted) id with GraphQL errors on HTTP
-        200, or with a null issue. Any other failure still fails the sync.
+        Linear answers an unknown (deleted) id with an "Entity not found"
+        GraphQL error, or with a null issue. Any other failure still fails
+        the sync: a swallowed error would cut a live issue's history.
         """
         try:
             data = await self._client.execute(
                 _ISSUE_HISTORY_QUERY, {"id": issue_id, "after": cursor}
             )
         except LinearAPIError as exc:
-            if exc.status != 200:
+            if _NOT_FOUND not in str(exc):
                 raise
             logger.warning("Linear issue %s vanished during history paging: %s", issue_id, exc)
             return None

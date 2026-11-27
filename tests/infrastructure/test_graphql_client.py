@@ -136,3 +136,16 @@ async def test_graphql_errors_list_at_most_five_kinds() -> None:
     message = await _graphql_error_message([{"message": f"m{i}"} for i in range(7)])
 
     assert message == "Acme GraphQL errors: m0; m1; m2; m3; m4; …and 2 more"
+
+
+async def test_http_error_names_the_graphql_errors_in_its_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"errors": [{"message": "Entity not found: Issue"}]})
+
+    with pytest.raises(AcmeError, match=r"^Acme API returned HTTP 400: Entity not found: Issue$"):
+        await _client(handler).execute("{ a }")
+
+
+async def test_http_error_with_a_non_object_body_has_no_detail() -> None:
+    with pytest.raises(AcmeError, match=r"^Acme API returned HTTP 500$"):
+        await _client(lambda r: httpx.Response(500, json=["oops"])).execute("{ a }")
