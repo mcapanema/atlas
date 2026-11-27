@@ -171,8 +171,11 @@ class LinearDataSource:
                 await self._complete_history(str(node.get("id")), history)
 
     async def _complete_history(self, issue_id: str, history: dict[str, Any]) -> None:
+        cursor: str | None = None
         for _ in range(_MAX_PAGES):
-            cursor = history["pageInfo"]["endCursor"]
+            # Checked before each request, so the first page (embedded in
+            # the issues query) is checked too.
+            cursor = _next_cursor(history["pageInfo"], cursor, f"issue {issue_id} history")
             page = await self._history_page(issue_id, cursor)
             if page is None:
                 # Left with hasNextPage true: the mapping reads the history
@@ -182,7 +185,6 @@ class LinearDataSource:
             history["pageInfo"] = page["pageInfo"]
             if not _has_next_page(history):
                 return
-            _next_cursor(page["pageInfo"], cursor, f"issue {issue_id} history")
         raise LinearAPIError(
             f"Linear issue {issue_id} history pagination exceeded {_MAX_PAGES} pages; aborting"
         )

@@ -561,3 +561,28 @@ async def test_another_graphql_error_on_a_history_page_still_fails_the_sync() ->
 
     with pytest.raises(LinearAPIError):
         await _datasource(_vanishing_handler(failed)).fetch_work_items()
+
+
+async def test_history_paging_fails_fast_when_the_first_page_has_no_cursor() -> None:
+    # The first history page comes inside the issues query: without this
+    # check the next request would send after=None and fetch it again.
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": None}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_calls
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            history_calls += 1
+            return _history_page([], None)
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 0
