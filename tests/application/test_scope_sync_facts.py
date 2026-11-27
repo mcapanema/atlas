@@ -548,12 +548,27 @@ class _RecordingEvents(InMemoryEventRepository):
     def __init__(self, events: list[Event]) -> None:
         super().__init__(events)
         self.requested: list[set[UUID]] = []
+        self.naming_calls = 0
 
     async def list_for_work_items(
         self, work_item_ids: list[UUID], types: Collection[EventType] | None = None
     ) -> list[Event]:
         self.requested.append(set(work_item_ids))
         return await super().list_for_work_items(work_item_ids, types)
+
+    async def parent_events_naming(self, parent_external_ids: list[str]) -> list[Event]:
+        self.naming_calls += 1
+        return await super().parent_events_naming(parent_external_ids)
+
+
+class _RecordingWorkItems(InMemoryWorkItemRepository):
+    children_calls = 0
+
+    async def list_children(
+        self, parent_ids: Collection[UUID], also_ids: Collection[UUID]
+    ) -> list[WorkItem]:
+        self.children_calls += 1
+        return await super().list_children(parent_ids, also_ids)
 
 
 async def test_default_rules_load_only_the_filtered_items_events() -> None:
@@ -722,3 +737,38 @@ async def test_existed_agrees_with_the_as_of_stream() -> None:
     for item in (eventless, late, early):
         for as_of in (None, NOW - timedelta(days=5), NOW - timedelta(days=12)):
             assert data._existed(item, as_of) == (data._stream(item, as_of) is not None)
+
+
+async def test_default_rules_skip_the_parent_history_queries() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, task)]
+    _, _, _, resolver = _loader([story, task], events, {})
+    recording_events = _RecordingEvents(events)
+    recording_items = _RecordingWorkItems([story, task])
+
+    await ScopeSampleLoader(recording_items, recording_events, resolver).load(team_id=TEAM.id)
+
+    assert recording_events.naming_calls == 0
+    assert recording_items.children_calls == 0
+
+
+async def test_parent_rule_follows_an_existing_child_moved_in_later() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(
+        team_id=OTHER.id,
+        title="Task",
+        parent_id=story.id,
+        created_at=NOW - timedelta(days=15),
+    )
+    events = [
+        _at(story, EventType.CREATED, 20),
+        _at(task, EventType.CREATED, 15),
+        _moved(task, 6, "S"),
+    ]
+    loader, *_ = _loader([story, task], events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
+    assert data.samples().item_count == 0
