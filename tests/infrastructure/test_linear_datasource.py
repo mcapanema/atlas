@@ -368,27 +368,44 @@ def _history_page(nodes: list[dict[str, Any]], end_cursor: str | None) -> httpx.
     return httpx.Response(200, json={"data": {"issue": {"history": history}}})
 
 
+def _history_entry(entry_id: str, day: int, **change: object) -> dict[str, Any]:
+    return {"id": entry_id, "createdAt": f"2026-07-0{day}T09:00:00.000Z", **change}
+
+
 async def test_fetch_work_items_pages_long_histories() -> None:
-    first = _transition("h1", 2, "unstarted", "started")
+    # Linear returns history newest first: page 2 holds the older entries.
+    first = _transition("h1", 6, "started", "completed")
     node = {
         **_issue_node("i1"),
+        "parent": {"id": "p2"},
         "history": {"nodes": [first], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
     }
+    older = [
+        _history_entry("h2", 5, addedLabelIds=["l1"]),
+        _history_entry("h3", 4, fromParentId="p1", toParentId="p2"),
+        _history_entry("h4", 3, fromParentId="p0", toParentId="p1"),
+    ]
     seen: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if "issueLabels(" in body["query"]:
-            return _page("issueLabels", [])
+            return _page("issueLabels", [{"id": "l1", "name": "Bug"}])
         if "issue(id:" in body["query"]:
             seen.append((body["variables"]["id"], body["variables"]["after"]))
-            return _history_page([_transition("h2", 5, "started", "completed")], None)
+            return _history_page(older, None)
         return _page("issues", [node])
 
     items = await _datasource(handler).fetch_work_items()
 
     assert seen == [("i1", "c1")]
-    assert [e.type for e in items[0].events][-1] is EventType.COMPLETED
+    events = {e.external_id: e for e in items[0].events}
+    assert events["h1"].type is EventType.COMPLETED
+    assert events["h2:label-added:l1"].detail == "Bug"
+    assert events["h3:parent"].detail == "p2"
+    assert events["h4:parent"].detail == "p1"
+    # The creation parent comes from the oldest change, found on page 2.
+    assert events["i1:parent-born"].detail == "p0"
 
 
 async def test_history_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch) -> None:
