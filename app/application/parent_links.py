@@ -1,0 +1,70 @@
+"""Which in-scope item was whose parent at an instant (ADR-0033).
+
+Parent links follow history: an item's PARENT_CHANGED events say which
+parent it had when. Items synced before those events existed (and items
+created through the REST API) fall back to their current parent. Either
+way, an item links only to a parent that is in the scope and already
+existed at that instant.
+"""
+
+from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
+from datetime import datetime
+from uuid import UUID
+
+from app.domain.events.entities import Event
+from app.domain.events.timeline import parent_at, tracks_parent
+from app.domain.work_items.entities import WorkItem
+
+
+@dataclass(frozen=True)
+class ParentLinks:
+    """The scope's parent links at one instant."""
+
+    # Items whose parent (at the instant) is in the scope.
+    sub_issue_ids: frozenset[UUID] = frozenset()
+    # Each in-scope parent's in-scope children (at the instant).
+    children: Mapping[UUID, tuple[WorkItem, ...]] = field(default_factory=dict)
+
+
+def parent_id_at(
+    item: WorkItem,
+    events: list[Event],
+    at: datetime | None,
+    by_external_id: Mapping[str, UUID],
+) -> UUID | None:
+    """The item's parent at `at`: from its PARENT_CHANGED events, else its current parent.
+
+    A recorded parent maps through `by_external_id` (source id -> item id);
+    one that isn't there (out of the scope, or never synced) is None.
+    """
+    if not tracks_parent(events):
+        return item.parent_id
+    source_id = parent_at(events, at)
+    return by_external_id.get(source_id) if source_id is not None else None
+
+
+def sub_issue_links(
+    family: Iterable[WorkItem],
+    events: Mapping[UUID, list[Event]],
+    at: datetime | None,
+    existed: Callable[[WorkItem], bool],
+) -> ParentLinks:
+    """The links among `family` (the scope's unfiltered items) at `at`.
+
+    `existed(parent)` says whether the parent existed at `at`: a link to a
+    parent created later never counts, whatever the record says.
+    """
+    members = {item.id: item for item in family}
+    by_external_id = {item.external_id: item.id for item in members.values() if item.external_id}
+    children: defaultdict[UUID, list[WorkItem]] = defaultdict(list)
+    for item in members.values():
+        parent_id = parent_id_at(item, events.get(item.id, []), at, by_external_id)
+        parent = members.get(parent_id) if parent_id is not None else None
+        if parent is not None and parent.id != item.id and existed(parent):
+            children[parent.id].append(item)
+    return ParentLinks(
+        sub_issue_ids=frozenset(child.id for found in children.values() for child in found),
+        children={parent_id: tuple(found) for parent_id, found in children.items()},
+    )

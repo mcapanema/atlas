@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from app.application.forecasting.service import ForecastService
 from app.application.metric_rules.resolver import MetricRulesResolver
-from app.application.scope import ScopeSampleLoader
+from app.application.scope import ScopeSampleLoader, ScopeSamples
 from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import RuleOverrides
@@ -457,3 +457,112 @@ async def test_cfd_shows_a_rolled_up_story_in_progress() -> None:
 
     assert counts[-1].in_progress == 1
     assert counts[-1].todo == 0
+
+
+def _moved(item: WorkItem, days_ago: int, parent: str | None) -> Event:
+    return _at(item, EventType.PARENT_CHANGED, days_ago, detail=parent)
+
+
+def _titles(scope: ScopeSamples) -> list[str]:
+    return sorted(item.title for item, _ in scope.items_with_samples)
+
+
+async def test_replay_before_the_move_counts_the_sub_issue() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [
+        _at(task, EventType.CREATED, 20),
+        _at(task, EventType.STARTED, 18),
+        _at(task, EventType.COMPLETED, 15),
+        _at(story, EventType.CREATED, 10),
+        _moved(task, 10, "S"),
+    ]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert _titles(data.samples(as_of=NOW - timedelta(days=12))) == ["Task"]
+    assert _titles(data.samples()) == ["Story"]
+
+
+async def test_moved_sub_issue_rolls_up_into_its_parent_of_the_day() -> None:
+    a = WorkItem(team_id=TEAM.id, title="A", external_id="A")
+    b = WorkItem(team_id=TEAM.id, title="B", external_id="B")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=b.id)
+    events = [
+        _at(a, EventType.CREATED, 20),
+        _at(b, EventType.CREATED, 20),
+        _at(task, EventType.CREATED, 20),
+        _moved(task, 20, "A"),
+        _at(task, EventType.STARTED, 15),
+        _moved(task, 5, "B"),
+    ]
+    loader, *_ = _loader([a, b, task], events, TOP_LEVEL_ONLY)
+    data = await loader.load_data(team_id=TEAM.id)
+
+    def starts(scope: ScopeSamples) -> dict[str, datetime | None]:
+        return {item.title: sample.started_at for item, sample in scope.items_with_samples}
+
+    then = starts(data.samples(as_of=NOW - timedelta(days=10)))
+    now = starts(data.samples())
+    assert then == {"A": NOW - timedelta(days=15), "B": None}
+    assert now == {"A": None, "B": NOW - timedelta(days=15)}
+
+
+async def test_a_parent_that_did_not_exist_yet_links_nothing() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [
+        _at(task, EventType.CREATED, 20),
+        _at(task, EventType.COMPLETED, 15),
+        _at(story, EventType.CREATED, 10),
+    ]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=12)).item_count == 1
+    assert _titles(data.samples()) == ["Story"]
+
+
+async def test_removed_parent_counts_the_issue_again() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    task = WorkItem(team_id=TEAM.id, title="Task")
+    events = [
+        _at(story, EventType.CREATED, 20),
+        _at(task, EventType.CREATED, 20),
+        _moved(task, 10, "S"),
+        _moved(task, 5, None),
+    ]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert _titles(data.samples(as_of=NOW - timedelta(days=12))) == ["Story", "Task"]
+    assert _titles(data.samples(as_of=NOW - timedelta(days=7))) == ["Story"]
+    assert _titles(data.samples()) == ["Story", "Task"]
+
+
+class _RecordingEvents(InMemoryEventRepository):
+    def __init__(self, events: list[Event]) -> None:
+        super().__init__(events)
+        self.requested: list[set[UUID]] = []
+
+    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+        self.requested.append(set(work_item_ids))
+        return await super().list_for_work_items(work_item_ids)
+
+
+async def test_default_rules_load_only_the_filtered_items_events() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    bug = WorkItem(team_id=TEAM.id, title="Crash", labels=("Bug",), parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, bug)]
+    rules: dict[str, object] = {"type_labels": [{"label": "bug", "type": "bug"}]}
+    _, work_items, _, resolver = _loader([story, bug], events, rules)
+    recording = _RecordingEvents(events)
+
+    await ScopeSampleLoader(work_items, recording, resolver).load(
+        team_id=TEAM.id, types={WorkItemType.TASK}
+    )
+
+    assert recording.requested == [{story.id}]

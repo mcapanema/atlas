@@ -12,11 +12,11 @@ from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from functools import cached_property
 from typing import Self
 from uuid import UUID
 
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
+from app.application.parent_links import ParentLinks, sub_issue_links
 from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
@@ -84,10 +84,11 @@ class ScopeData:
     `samples()` derives the analytics view now, or as of a past instant —
     snapshot capture and the history recompute replay a scope that way.
     `iterations` holds each team's iterations, seen on its unfiltered items.
-    `children` maps each in-scope parent to its in-scope children, also seen
-    on the unfiltered items, and `events` covers those children even when a
-    filter dropped them: the count_sub_issues rule (ADR-0033) drops them and
-    rolls their starts up into the parent, whatever the filter.
+    `family` holds the unfiltered items, and `events` covers them all, when
+    some team in the scope has count_sub_issues off (ADR-0033): the rule
+    drops sub-issues and rolls their starts up into their parents by the
+    parent links of each instant (parent_links.py), whatever the filter.
+    Empty otherwise.
     """
 
     items: list[WorkItem]
@@ -95,12 +96,7 @@ class ScopeData:
     rules: ResolvedRules = field(default_factory=ResolvedRules)
     parent_ids: AbstractSet[UUID] = field(default_factory=frozenset)
     iterations: Mapping[UUID, tuple[Iteration, ...]] = field(default_factory=dict)
-    children: Mapping[UUID, tuple[WorkItem, ...]] = field(default_factory=dict)
-
-    @cached_property
-    def sub_issue_ids(self) -> frozenset[UUID]:
-        """Items whose parent is in the scope."""
-        return frozenset(child.id for found in self.children.values() for child in found)
+    family: tuple[WorkItem, ...] = ()
 
     def samples(self, *, as_of: datetime | None = None) -> ScopeSamples:
         """The scope's samples; with `as_of`, as it stood at that instant."""
@@ -109,8 +105,9 @@ class ScopeData:
         pairs: list[tuple[WorkItem, FlowSample]] = []
         item_count = remaining = 0
         current = self._current_iterations(as_of or utcnow())
+        links = self._links(as_of)
         for item in self.items:
-            folded = self._fold(item, as_of)
+            folded = self._fold(item, as_of, links)
             if folded is None:
                 continue
             stream, sample = folded
@@ -148,12 +145,20 @@ class ScopeData:
         if types is None and exclude_states is None:
             return self
         items = _filter_items(self.items, self.rules, types, exclude_states)
-        kept = {item.id for item in items} | self.sub_issue_ids
+        kept = {item.id for item in items} | {item.id for item in self.family}
         events = {item_id: stream for item_id, stream in self.events.items() if item_id in kept}
         return replace(self, items=items, events=events)
 
+    def _links(self, as_of: datetime | None) -> ParentLinks:
+        """The parent links among the scope's items at `as_of`; none without a family."""
+        if not self.family:
+            return ParentLinks()
+        return sub_issue_links(
+            self.family, self.events, as_of, lambda parent: self._stream(parent, as_of) is not None
+        )
+
     def _fold(
-        self, item: WorkItem, as_of: datetime | None
+        self, item: WorkItem, as_of: datetime | None, links: ParentLinks
     ) -> tuple[list[Event], FlowSample | None] | None:
         """The item's stream and sample; None when it is outside the scope's picture.
 
@@ -167,12 +172,12 @@ class ScopeData:
         if stream is None:
             return None
         rules = self.rules.for_team(item.team_id)
-        if self._left_out(item, rules):
+        if self._left_out(item, rules, links):
             return None
         # The full history, not the as-of slice: a cut before the item's first
         # transition must still know which state it was created in.
         born_in = creation_state(self.events.get(item.id, []), item.state)
-        earliest = None if rules.count_sub_issues else self._descendant_start(item, as_of)
+        earliest = None if rules.count_sub_issues else self._descendant_start(item, as_of, links)
         sample = derive_flow_sample(stream, rules, born_in=born_in, earliest_start=earliest)
         if sample is not None and sample.born_done and rules.exclude_born_done:
             return None
@@ -180,32 +185,32 @@ class ScopeData:
             stream = _with_rolled_start(item, stream, sample)
         return stream, sample
 
-    def _left_out(self, item: WorkItem, rules: MetricRules) -> bool:
+    def _left_out(self, item: WorkItem, rules: MetricRules, links: ParentLinks) -> bool:
         """Whether the item's team's rules leave it out as a parent or as a sub-issue."""
-        # ponytail: parent links are a current fact applied to as-of replays.
-        # Upgrade path: IssueHistory fromParent/toParent for historical parents.
+        # ponytail: the parent rule reads current parent links, also in as-of
+        # replays. Upgrade path: the children's PARENT_CHANGED history.
         if item.id in self.parent_ids and not rules.count_parent_issues:
             return True
-        return item.id in self.sub_issue_ids and not rules.count_sub_issues
+        return item.id in links.sub_issue_ids and not rules.count_sub_issues
 
-    def _descendant_start(self, item: WorkItem, as_of: datetime | None) -> datetime | None:
+    def _descendant_start(
+        self, item: WorkItem, as_of: datetime | None, links: ParentLinks
+    ) -> datetime | None:
         """The earliest start among the item's in-scope descendants, as of `as_of`.
 
-        Each descendant is folded with its own team's rules; only one that is
-        not canceled and not moved back counts (its work is real or done).
-
-        ponytail: current parent links applied to replays. Upgrade path:
-        IssueHistory fromParent/toParent, like the parent rule.
+        Descendants follow the parent links of that instant. Each is folded
+        with its own team's rules; only one that is not canceled and not
+        moved back counts (its work is real or done).
         """
         starts: list[datetime] = []
         seen: set[UUID] = {item.id}
-        pending = list(self.children.get(item.id, ()))
+        pending = list(links.children.get(item.id, ()))
         while pending:
             child = pending.pop()
             if child.id in seen:
                 continue
             seen.add(child.id)
-            pending.extend(self.children.get(child.id, ()))
+            pending.extend(links.children.get(child.id, ()))
             start = self._live_start(child, as_of)
             if start is not None:
                 starts.append(start)
@@ -253,6 +258,12 @@ class ScopeData:
         if not stream:
             return [] if item.created_at <= as_of else None
         return [event for event in stream if event.occurred_at <= as_of] or None
+
+
+def _drops_sub_issues(items: list[WorkItem], rules: ResolvedRules) -> bool:
+    """Whether some item's team has count_sub_issues off."""
+    teams = {item.team_id for item in items}
+    return any(not rules.for_team(team).count_sub_issues for team in teams)
 
 
 def _with_rolled_start(item: WorkItem, stream: list[Event], sample: FlowSample) -> list[Event]:
@@ -327,16 +338,12 @@ class ScopeSampleLoader:
             if rules.scope.remaining_iterations == "current"
             else {}
         )
-        in_scope = {item.id for item in items}
-        children: defaultdict[UUID, list[WorkItem]] = defaultdict(list)
-        for item in items:
-            if item.parent_id in in_scope:
-                children[item.parent_id].append(item)
+        # Every item's events when a team drops sub-issues: the links of each
+        # instant read them, and a filter must keep the parents' roll-up.
+        family = tuple(items) if _drops_sub_issues(items, rules) else ()
         items = _filter_items(items, rules, types, exclude_states)
-        # Sub-issues' events too, so a filter keeps the parents' roll-up.
-        sub_issues = {child.id for found in children.values() for child in found}
         events = await self._events.list_for_work_items(
-            list({item.id for item in items} | sub_issues)
+            list({item.id for item in items} | {item.id for item in family})
         )
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
         for event in events:
@@ -347,7 +354,7 @@ class ScopeSampleLoader:
             rules=rules,
             parent_ids=frozenset(await self._work_items.parent_ids()),
             iterations={team: tuple(found) for team, found in iterations.items()},
-            children={parent: tuple(found) for parent, found in children.items()},
+            family=family,
         )
 
     async def load(
