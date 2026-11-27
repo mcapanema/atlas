@@ -753,3 +753,75 @@ def test_map_issue_keeps_a_named_cycle_name() -> None:
 def test_map_issue_without_a_cycle_has_no_iteration() -> None:
     assert map_issue({**ISSUE_NODE, "cycle": None}).iteration is None
     assert map_issue(ISSUE_NODE).iteration is None  # field absent
+
+
+def _parent_entry(
+    entry_id: str, created_at: str, from_parent: str | None, to_parent: str | None
+) -> dict[str, Any]:
+    return {
+        "id": entry_id,
+        "createdAt": created_at,
+        "fromState": None,
+        "toState": None,
+        "fromParentId": from_parent,
+        "toParentId": to_parent,
+    }
+
+
+def _parent_events(node: dict[str, Any]) -> dict[str, str | None]:
+    return {
+        e.external_id: e.detail
+        for e in map_issue(node).events
+        if e.type is EventType.PARENT_CHANGED
+    }
+
+
+def test_history_entry_parent_change_is_an_event() -> None:
+    events = map_history_entry(_parent_entry("h1", "2026-07-03T09:00:00.000Z", None, "p2"))
+
+    (parent,) = [e for e in events if e.type is EventType.PARENT_CHANGED]
+    assert parent.external_id == "h1:parent"
+    assert parent.detail == "p2"
+    assert parent.occurred_at == datetime(2026, 7, 3, 9, 0, tzinfo=UTC)
+
+
+def test_parent_removed_is_an_event_without_detail() -> None:
+    events = map_history_entry(_parent_entry("h1", "2026-07-03T09:00:00.000Z", "p1", None))
+
+    assert [(e.type, e.detail) for e in events] == [(EventType.PARENT_CHANGED, None)]
+
+
+def test_born_without_parent_when_the_first_change_adds_one() -> None:
+    node = {
+        **ISSUE_NODE,
+        "parent": {"id": "p2"},
+        "history": {
+            "nodes": [  # newest first, as Linear may return them
+                _parent_entry("h2", "2026-07-05T09:00:00.000Z", "p1", "p2"),
+                _parent_entry("h1", "2026-07-03T09:00:00.000Z", None, "p1"),
+            ]
+        },
+    }
+
+    assert _parent_events(node) == {"h2:parent": "p2", "h1:parent": "p1"}
+
+
+def test_born_parent_is_the_first_changes_from_parent() -> None:
+    node = {
+        **ISSUE_NODE,
+        "parent": {"id": "p2"},
+        "history": {"nodes": [_parent_entry("h1", "2026-07-03T09:00:00.000Z", "p1", "p2")]},
+    }
+
+    born = next(e for e in map_issue(node).events if e.external_id == "i1:parent-born")
+
+    assert _parent_events(node) == {"i1:parent-born": "p1", "h1:parent": "p2"}
+    assert born.occurred_at == datetime(2026, 7, 1, 10, 0, tzinfo=UTC)
+
+
+def test_born_parent_without_history_is_the_current_parent() -> None:
+    assert _parent_events({**ISSUE_NODE, "parent": {"id": "p9"}}) == {"i1:parent-born": "p9"}
+
+
+def test_issue_never_parented_has_no_parent_events() -> None:
+    assert _parent_events(ISSUE_NODE) == {}

@@ -45,7 +45,8 @@ class SourceEvent:
     # unknown (REST-created events, or not filled yet — ADR-0011).
     from_state_type: StateType | None = None
     to_state_type: StateType | None = None
-    # Label name (label events) or blocker identifier (blocker events).
+    # Label name (label events), blocker identifier (blocker events), or the
+    # new parent's source id (PARENT_CHANGED; None = removed).
     detail: str | None = None
 
     def __post_init__(self) -> None:

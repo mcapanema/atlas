@@ -94,6 +94,8 @@ query Issues($after: String, $filter: IssueFilter) {{
           addedLabelIds
           removedLabelIds
           relationChanges {{ identifier type }}
+          fromParentId
+          toParentId
         }}
       }}
     }}
