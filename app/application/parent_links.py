@@ -89,7 +89,8 @@ def parents_at(
 
     A child counts from its creation on; one with PARENT_CHANGED events
     names its parent of the day by source id, one without (or now, `at`
-    None, as in parent_id_at) names its current parent.
+    None, as in parent_id_at) names its current parent. A child naming
+    itself is never its own parent.
     """
     ids: set[UUID] = set()
     source_ids: set[str] = set()
@@ -99,8 +100,8 @@ def parents_at(
         own = events.get(child.id, [])
         if at is not None and tracks_parent(own):
             source_id = parent_at(own, at)
-            if source_id is not None:
+            if source_id is not None and source_id != child.external_id:
                 source_ids.add(source_id)
-        elif child.parent_id is not None:
+        elif child.parent_id is not None and child.parent_id != child.id:
             ids.add(child.parent_id)
     return frozenset(ids), frozenset(source_ids)

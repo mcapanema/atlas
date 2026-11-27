@@ -160,7 +160,7 @@ class ScopeData:
                 self.family,
                 self.events,
                 as_of,
-                lambda parent: self._stream(parent, as_of) is not None,
+                lambda parent: self._existed(parent, as_of),
             )
         if self.children_anywhere:
             ids, source_ids = parents_at(self.children_anywhere, self.child_parent_events, as_of)
@@ -257,6 +257,15 @@ class ScopeData:
         if self.rules.scope.remaining_iterations != "current":
             return None
         return {team: current_iteration(found, at) for team, found in self.iterations.items()}
+
+    def _existed(self, item: WorkItem, as_of: datetime | None) -> bool:
+        """Whether the item existed at `as_of`: `_stream` is not None, without building it."""
+        if as_of is None:
+            return True
+        events = self.events.get(item.id, [])
+        if not events:
+            return item.created_at <= as_of
+        return any(event.occurred_at <= as_of for event in events)
 
     def _stream(self, item: WorkItem, as_of: datetime | None) -> list[Event] | None:
         """The item's events up to `as_of`; None when the item didn't exist then."""

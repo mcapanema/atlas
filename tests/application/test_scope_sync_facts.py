@@ -696,3 +696,29 @@ async def test_the_live_parent_rule_trusts_the_stored_parent_over_history() -> N
 
     assert _titles(data.samples()) == ["S", "Task"]
     assert _titles(data.samples(as_of=NOW - timedelta(days=1))) == ["T", "Task"]
+
+
+async def test_an_item_naming_itself_as_parent_is_not_a_parent() -> None:
+    loop = WorkItem(
+        team_id=TEAM.id, title="Loop", external_id="L", created_at=NOW - timedelta(days=10)
+    )
+    events = [_at(loop, EventType.CREATED, 10), _moved(loop, 5, "L")]
+    loader, *_ = _loader([loop], events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=1)).item_count == 1
+
+
+async def test_existed_agrees_with_the_as_of_stream() -> None:
+    eventless = WorkItem(team_id=TEAM.id, title="Manual", created_at=NOW - timedelta(days=10))
+    late = WorkItem(team_id=TEAM.id, title="Late")
+    early = WorkItem(team_id=TEAM.id, title="Early")
+    events = [_at(late, EventType.CREATED, 3), _at(early, EventType.CREATED, 9)]
+    loader, *_ = _loader([eventless, late, early], events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    for item in (eventless, late, early):
+        for as_of in (None, NOW - timedelta(days=5), NOW - timedelta(days=12)):
+            assert data._existed(item, as_of) == (data._stream(item, as_of) is not None)
