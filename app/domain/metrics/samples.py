@@ -275,7 +275,11 @@ def _state_wait_time(
 
 
 def derive_flow_sample(
-    events: list[Event], rules: MetricRules = DEFAULT_RULES, *, born_in: str | None = None
+    events: list[Event],
+    rules: MetricRules = DEFAULT_RULES,
+    *,
+    born_in: str | None = None,
+    earliest_start: datetime | None = None,
 ) -> FlowSample | None:
     """Fold one work item's events into a FlowSample; None if it has no events.
 
@@ -307,12 +311,16 @@ def derive_flow_sample(
     arrived_at is the Triage exit under lead_time_start="triage_exit".
     Durations (cycle, lead, queue, touch, blocked, age) are measured on the rules'
     working days, so a non-working day adds no time.
+    `earliest_start` (a parent's first sub-issue start, ADR-0033) replaces an
+    earlier-or-missing started_at when it falls before completion; blocked
+    and wait time then clip to that longer cycle.
     """
     if not events:
         return None
     ordered = sorted(events, key=event_order)
     state = _replay(ordered, rules)
-    started_at, completed_at = state.started_at, state.completed_at
+    completed_at = state.completed_at
+    started_at = _rolled_start(state.started_at, completed_at, earliest_start)
 
     calendar = rules.work_calendar
     periods = blocked_periods(ordered, rules, born_in=born_in)
@@ -338,6 +346,17 @@ def derive_flow_sample(
             blocked_time=blocked_time,
         ),
     )
+
+
+def _rolled_start(
+    started_at: datetime | None, completed_at: datetime | None, earliest: datetime | None
+) -> datetime | None:
+    """`earliest` when it is before both the own start and the completion, else the own start."""
+    if earliest is None or (completed_at is not None and earliest >= completed_at):
+        return started_at
+    if started_at is not None and started_at <= earliest:
+        return started_at
+    return earliest
 
 
 def in_progress(sample: FlowSample, at: datetime) -> bool:

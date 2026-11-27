@@ -401,3 +401,65 @@ def test_start_and_completion_at_creation_is_not_born_done() -> None:
 
     assert sample is not None
     assert not sample.born_done
+
+
+def _day(day: int) -> datetime:
+    return datetime(2026, 6, day, tzinfo=UTC)
+
+
+def test_earliest_start_moves_the_start_back() -> None:
+    events = [
+        _event(EventType.CREATED, 1),
+        _event(EventType.STARTED, 5),
+        _event(EventType.COMPLETED, 8),
+    ]
+
+    sample = derive_flow_sample(events, earliest_start=_day(2))
+
+    assert sample is not None
+    assert sample.started_at == _day(2)
+    assert sample.completed_at == _day(8)
+
+
+def test_earliest_start_starts_a_never_started_item() -> None:
+    sample = derive_flow_sample([_event(EventType.CREATED, 1)], earliest_start=_day(3))
+
+    assert sample is not None
+    assert sample.started_at == _day(3)
+
+
+def test_later_earliest_start_changes_nothing() -> None:
+    events = [_event(EventType.CREATED, 1), _event(EventType.STARTED, 5)]
+
+    sample = derive_flow_sample(events, earliest_start=_day(6))
+
+    assert sample is not None
+    assert sample.started_at == _day(5)
+
+
+def test_earliest_start_after_completion_is_ignored() -> None:
+    events = [_event(EventType.CREATED, 1), _event(EventType.COMPLETED, 4)]
+
+    sample = derive_flow_sample(events, earliest_start=_day(6))
+
+    assert sample is not None
+    assert sample.started_at is None
+
+
+def test_blocked_time_clips_to_the_rolled_up_cycle() -> None:
+    # Mon 1 .. Wed 10 June 2026: blocked Tue 2 -> Thu 4, own start Fri 5.
+    events = [
+        _event(EventType.CREATED, 1),
+        _event(EventType.BLOCKED, 2),
+        _event(EventType.UNBLOCKED, 4),
+        _event(EventType.STARTED, 5),
+        _event(EventType.COMPLETED, 10),
+    ]
+
+    own = derive_flow_sample(events)
+    rolled = derive_flow_sample(events, earliest_start=_day(3))
+
+    assert own is not None
+    assert rolled is not None
+    assert own.blocked_time == timedelta(0)
+    assert rolled.blocked_time == timedelta(days=1)
