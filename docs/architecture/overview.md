@@ -195,7 +195,7 @@ and Executive Dashboard).
 ### Metric rules (ADR-0010)
 
 Every rule that changes how a metric is computed — lifecycle interpretation
-(incl. reopens, parent issues, lead-time start), the blocked signal, the
+(incl. reopens, parent issues, sub-issues (ADR-0033), lead-time start), the blocked signal, the
 wait states flow efficiency and queue/touch time count as wait (ADR-0018), health
 scales, weights and evidence floor, timezone, working days, holidays, chart
 bucketing, forecast history, remaining, and the iterations it counts (ADR-0031),
