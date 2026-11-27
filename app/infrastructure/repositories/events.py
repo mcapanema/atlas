@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
@@ -119,14 +119,30 @@ class SqlAlchemyEventRepository:
         )
         return [model.to_domain() for model in result.scalars()]
 
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+    async def list_for_work_items(
+        self, work_item_ids: list[UUID], types: Collection[EventType] | None = None
+    ) -> list[Event]:
         events: list[Event] = []
         for chunk in chunked(work_item_ids):
-            result = await self._session.execute(
-                select(EventModel).where(EventModel.work_item_id.in_(chunk))
-            )
+            query = select(EventModel).where(EventModel.work_item_id.in_(chunk))
+            if types is not None:
+                query = query.where(EventModel.type.in_([str(t) for t in types]))
+            result = await self._session.execute(query)
             events.extend(model.to_domain() for model in result.scalars())
         # per-chunk ORDER BY can't order across chunks — sort the merged list
+        events.sort(key=lambda event: event.occurred_at)
+        return events
+
+    async def parent_events_naming(self, parent_external_ids: list[str]) -> list[Event]:
+        events: list[Event] = []
+        for chunk in chunked(parent_external_ids):
+            result = await self._session.execute(
+                select(EventModel).where(
+                    EventModel.type == str(EventType.PARENT_CHANGED),
+                    EventModel.detail.in_(chunk),
+                )
+            )
+            events.extend(model.to_domain() for model in result.scalars())
         events.sort(key=lambda event: event.occurred_at)
         return events
 

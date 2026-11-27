@@ -1,4 +1,5 @@
 from collections.abc import Collection
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -548,9 +549,11 @@ class _RecordingEvents(InMemoryEventRepository):
         super().__init__(events)
         self.requested: list[set[UUID]] = []
 
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]:
+    async def list_for_work_items(
+        self, work_item_ids: list[UUID], types: Collection[EventType] | None = None
+    ) -> list[Event]:
         self.requested.append(set(work_item_ids))
-        return await super().list_for_work_items(work_item_ids)
+        return await super().list_for_work_items(work_item_ids, types)
 
 
 async def test_default_rules_load_only_the_filtered_items_events() -> None:
@@ -566,3 +569,53 @@ async def test_default_rules_load_only_the_filtered_items_events() -> None:
     )
 
     assert recording.requested == [{story.id}]
+
+
+PARENTS_LEAVE: dict[str, object] = {"count_parent_issues": False}
+
+
+def _story_and_late_child(
+    child_events: list[tuple[int, str | None]],
+) -> tuple[list[WorkItem], list[Event]]:
+    """Story S (TEAM, 20 days old) and a child in OTHER created 8 days ago."""
+    story = WorkItem(team_id=TEAM.id, title="Story", external_id="S")
+    child = WorkItem(
+        team_id=OTHER.id,
+        title="Task",
+        parent_id=story.id,
+        created_at=NOW - timedelta(days=8),
+    )
+    events = [_at(story, EventType.CREATED, 20), _at(child, EventType.CREATED, 8)]
+    events += [_moved(child, days_ago, parent) for days_ago, parent in child_events]
+    return [story, child], events
+
+
+async def test_parent_counts_until_its_first_child_arrives() -> None:
+    items, events = _story_and_late_child([(8, "S")])
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
+    assert data.samples().item_count == 0
+
+
+async def test_parent_counts_again_after_its_last_child_leaves() -> None:
+    items, events = _story_and_late_child([(8, "S"), (3, None)])
+    items[1] = replace(items[1], parent_id=None)
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=5)).item_count == 0
+    assert data.samples().item_count == 1
+
+
+async def test_parent_rule_falls_back_to_current_links_for_old_syncs() -> None:
+    items, events = _story_and_late_child([])
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
+    assert data.samples().item_count == 0

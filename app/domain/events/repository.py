@@ -1,8 +1,8 @@
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, EventType
 from app.domain.work_items.entities import StateType
 
 
@@ -22,7 +22,15 @@ class EventRepository(Protocol):
 
     async def list_for_work_item(self, work_item_id: UUID) -> list[Event]: ...
 
-    async def list_for_work_items(self, work_item_ids: list[UUID]) -> list[Event]: ...
+    async def list_for_work_items(
+        self, work_item_ids: list[UUID], types: Collection[EventType] | None = None
+    ) -> list[Event]:
+        """The items' events by occurred_at; only `types` when given."""
+        ...
+
+    async def parent_events_naming(self, parent_external_ids: list[str]) -> list[Event]:
+        """PARENT_CHANGED events whose new parent is one of `parent_external_ids`."""
+        ...
 
     async def get_by_external_id(self, external_id: str) -> Event | None: ...
 

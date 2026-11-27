@@ -26,6 +26,16 @@ class ParentLinks:
     sub_issue_ids: frozenset[UUID] = frozenset()
     # Each in-scope parent's in-scope children (at the instant).
     children: Mapping[UUID, tuple[WorkItem, ...]] = field(default_factory=dict)
+    # The items that had a child (in any team) at the instant, by item id
+    # (current links) or by source id (PARENT_CHANGED history).
+    parent_ids: frozenset[UUID] = frozenset()
+    parent_source_ids: frozenset[str] = frozenset()
+
+    def is_parent(self, item: WorkItem) -> bool:
+        """Whether the item had a child at the instant."""
+        return item.id in self.parent_ids or (
+            item.external_id is not None and item.external_id in self.parent_source_ids
+        )
 
 
 def parent_id_at(
@@ -68,3 +78,27 @@ def sub_issue_links(
         sub_issue_ids=frozenset(child.id for found in children.values() for child in found),
         children={parent_id: tuple(found) for parent_id, found in children.items()},
     )
+
+
+def parents_at(
+    children: Iterable[WorkItem], events: Mapping[UUID, list[Event]], at: datetime | None
+) -> tuple[frozenset[UUID], frozenset[str]]:
+    """The parents of `children` (any team) at `at`: item ids, and source ids from history.
+
+    A child counts from its creation on; one with PARENT_CHANGED events
+    names its parent of the day by source id, one without names its
+    current parent.
+    """
+    ids: set[UUID] = set()
+    source_ids: set[str] = set()
+    for child in children:
+        if at is not None and child.created_at > at:
+            continue
+        own = events.get(child.id, [])
+        if tracks_parent(own):
+            source_id = parent_at(own, at)
+            if source_id is not None:
+                source_ids.add(source_id)
+        elif child.parent_id is not None:
+            ids.add(child.parent_id)
+    return frozenset(ids), frozenset(source_ids)

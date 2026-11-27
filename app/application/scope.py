@@ -16,7 +16,7 @@ from typing import Self
 from uuid import UUID
 
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
-from app.application.parent_links import ParentLinks, sub_issue_links
+from app.application.parent_links import ParentLinks, parents_at, sub_issue_links
 from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
@@ -88,15 +88,18 @@ class ScopeData:
     some team in the scope has count_sub_issues off (ADR-0033): the rule
     drops sub-issues and rolls their starts up into their parents by the
     parent links of each instant (parent_links.py), whatever the filter.
-    Empty otherwise.
+    Empty otherwise. `children_anywhere` (any team) and their
+    `child_parent_events` are loaded when some team has count_parent_issues
+    off: whether an item was a parent on a day reads its children's history.
     """
 
     items: list[WorkItem]
     events: Mapping[UUID, list[Event]]
     rules: ResolvedRules = field(default_factory=ResolvedRules)
-    parent_ids: AbstractSet[UUID] = field(default_factory=frozenset)
     iterations: Mapping[UUID, tuple[Iteration, ...]] = field(default_factory=dict)
     family: tuple[WorkItem, ...] = ()
+    children_anywhere: tuple[WorkItem, ...] = ()
+    child_parent_events: Mapping[UUID, list[Event]] = field(default_factory=dict)
 
     def samples(self, *, as_of: datetime | None = None) -> ScopeSamples:
         """The scope's samples; with `as_of`, as it stood at that instant."""
@@ -150,12 +153,19 @@ class ScopeData:
         return replace(self, items=items, events=events)
 
     def _links(self, as_of: datetime | None) -> ParentLinks:
-        """The parent links among the scope's items at `as_of`; none without a family."""
-        if not self.family:
-            return ParentLinks()
-        return sub_issue_links(
-            self.family, self.events, as_of, lambda parent: self._stream(parent, as_of) is not None
-        )
+        """The parent links among the scope's items at `as_of` (empty when no rule needs them)."""
+        links = ParentLinks()
+        if self.family:
+            links = sub_issue_links(
+                self.family,
+                self.events,
+                as_of,
+                lambda parent: self._stream(parent, as_of) is not None,
+            )
+        if self.children_anywhere:
+            ids, source_ids = parents_at(self.children_anywhere, self.child_parent_events, as_of)
+            links = replace(links, parent_ids=ids, parent_source_ids=source_ids)
+        return links
 
     def _fold(
         self, item: WorkItem, as_of: datetime | None, links: ParentLinks
@@ -187,9 +197,7 @@ class ScopeData:
 
     def _left_out(self, item: WorkItem, rules: MetricRules, links: ParentLinks) -> bool:
         """Whether the item's team's rules leave it out as a parent or as a sub-issue."""
-        # ponytail: the parent rule reads current parent links, also in as-of
-        # replays. Upgrade path: the children's PARENT_CHANGED history.
-        if item.id in self.parent_ids and not rules.count_parent_issues:
+        if links.is_parent(item) and not rules.count_parent_issues:
             return True
         return item.id in links.sub_issue_ids and not rules.count_sub_issues
 
@@ -341,6 +349,7 @@ class ScopeSampleLoader:
         # Every item's events when a team drops sub-issues: the links of each
         # instant read them, and a filter must keep the parents' roll-up.
         family = tuple(items) if _drops_sub_issues(items, rules) else ()
+        children, child_events = await self._children_anywhere(items, rules)
         items = _filter_items(items, rules, types, exclude_states)
         events = await self._events.list_for_work_items(
             list({item.id for item in items} | {item.id for item in family})
@@ -352,10 +361,34 @@ class ScopeSampleLoader:
             items=items,
             events=dict(by_item),
             rules=rules,
-            parent_ids=frozenset(await self._work_items.parent_ids()),
             iterations={team: tuple(found) for team, found in iterations.items()},
             family=family,
+            children_anywhere=children,
+            child_parent_events=child_events,
         )
+
+    async def _children_anywhere(
+        self, items: list[WorkItem], rules: ResolvedRules
+    ) -> tuple[tuple[WorkItem, ...], dict[UUID, list[Event]]]:
+        """The current and former children (any team) of `items`, with their parent history.
+
+        Loaded only when some item's team has count_parent_issues off.
+        """
+        teams = {item.team_id for item in items}
+        if all(rules.for_team(team).count_parent_issues for team in teams):
+            return (), {}
+        source_ids = [item.external_id for item in items if item.external_id]
+        named = await self._events.parent_events_naming(source_ids)
+        children = await self._work_items.list_children(
+            [item.id for item in items], list({event.work_item_id for event in named})
+        )
+        history = await self._events.list_for_work_items(
+            [child.id for child in children], types={EventType.PARENT_CHANGED}
+        )
+        by_child: defaultdict[UUID, list[Event]] = defaultdict(list)
+        for event in history:
+            by_child[event.work_item_id].append(event)
+        return tuple(children), dict(by_child)
 
     async def load(
         self,
