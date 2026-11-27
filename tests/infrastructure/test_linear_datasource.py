@@ -586,3 +586,26 @@ async def test_history_paging_fails_fast_when_the_first_page_has_no_cursor() -> 
         await _datasource(handler).fetch_work_items()
 
     assert history_calls == 0
+
+
+async def test_history_paging_fails_fast_on_a_repeated_cursor() -> None:
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_calls
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            history_calls += 1
+            return _history_page([], "c1")  # the cursor it was just sent
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 1
