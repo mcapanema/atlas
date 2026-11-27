@@ -36,6 +36,7 @@ _FLAGS = (
     "move_back_ends_wip",
     "restart_clock_after_move_back",
     "count_parent_issues",
+    "count_sub_issues",
     "blocked_label_pattern",
     "blocked_by_relations",
     "blocked_state_pattern",
@@ -116,6 +117,10 @@ class MetricRules:
     reopen_completion: ReopenCompletion = "last"
     done_then_canceled: DoneThenCanceled = "delivered"
     count_parent_issues: bool = True
+    # Off: a sub-issue whose parent is in the scope leaves every metric, so
+    # only top-level issues count; the parent's cycle starts with its
+    # earliest in-scope descendant (ADR-0033).
+    count_sub_issues: bool = True
     lead_time_start: LeadTimeStart = "created"
     done_then_reopened: DoneThenReopened = "delivered"
     canceled_then_reopened: CanceledThenReopened = "canceled"
@@ -418,6 +423,8 @@ def _check_order(rules: MetricRules) -> None:
         raise ValueError("stability_worst_weeks must be above stability_best_weeks")
     if not any(rules.weight(name) > 0 for name in HEALTH_COMPONENTS):
         raise ValueError("at least one health weight must be above 0")
+    if not (rules.count_parent_issues or rules.count_sub_issues):
+        raise ValueError("count_parent_issues and count_sub_issues cannot both be off")
 
 
 def _check_timezone(name: object) -> None:
