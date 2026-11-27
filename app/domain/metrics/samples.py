@@ -59,7 +59,7 @@ def _born_done(ordered: list[Event], started_at: datetime | None) -> bool:
     Connectors stamp an item logged straight into a done state that way (the
     Linear mapping's `:created-done`). It's a record of work, not flow Atlas
     observed. The first flow event must be a CREATED (code events never
-    anchor, see CODE_EVENT_TYPES): a completion with no recorded
+    anchor, see NON_FLOW_EVENT_TYPES): a completion with no recorded
     creation means "creation unknown", not "created done". Later completions
     don't matter: a re-sync backfills the creation-instant one beside sync's
     completedAt-stamped one.

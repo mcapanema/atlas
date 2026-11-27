@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.domain.events.entities import Event, EventType
+from app.domain.metrics.cfd import daily_flow_counts
 from app.domain.metrics.samples import derive_flow_sample
 
 WORK_ITEM_ID = uuid4()
@@ -473,3 +474,25 @@ def test_earliest_start_never_precedes_the_items_arrival() -> None:
 
     assert sample is not None
     assert sample.started_at == _day(5)
+
+
+def _parent(day: int, detail: str | None) -> Event:
+    return Event(
+        work_item_id=WORK_ITEM_ID,
+        type=EventType.PARENT_CHANGED,
+        occurred_at=_day(day),
+        detail=detail,
+    )
+
+
+def test_parent_changed_is_not_flow() -> None:
+    events = [_parent(1, "p1"), _event(EventType.CREATED, 1), _event(EventType.COMPLETED, 1)]
+
+    sample = derive_flow_sample(events)
+    counts = daily_flow_counts([events], start=_day(1), end=_day(2))
+
+    assert sample is not None
+    assert sample.born_done is True
+    assert sample.created_at == _day(1)
+    assert counts[-1].done == 1
+    assert counts[-1].todo == 0

@@ -2,7 +2,13 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.domain.events.entities import Event, EventType
-from app.domain.events.timeline import BlockedPeriod, StatePeriod, derive_timeline
+from app.domain.events.timeline import (
+    BlockedPeriod,
+    StatePeriod,
+    derive_timeline,
+    parent_at,
+    tracks_parent,
+)
 
 WORK_ITEM_ID = uuid4()
 
@@ -100,3 +106,26 @@ def test_duplicate_blocked_and_stray_unblocked_are_ignored() -> None:
     timeline = derive_timeline(events)
 
     assert timeline.blocked_periods == (BlockedPeriod(started_at=_at(2), ended_at=_at(4)),)
+
+
+def _parent(day: int, detail: str | None) -> Event:
+    return Event(
+        work_item_id=WORK_ITEM_ID,
+        type=EventType.PARENT_CHANGED,
+        occurred_at=_at(day),
+        detail=detail,
+    )
+
+
+def test_parent_at_reads_the_last_change_up_to_the_instant() -> None:
+    events = [_parent(1, "a"), _parent(5, "b"), _parent(9, None)]
+
+    assert parent_at(events, datetime(2025, 12, 31, tzinfo=UTC)) is None
+    assert parent_at(events, _at(3)) == "a"
+    assert parent_at(events, _at(5)) == "b"
+    assert parent_at(events, None) is None
+
+
+def test_tracks_parent_needs_a_parent_change() -> None:
+    assert tracks_parent([_parent(1, None)])
+    assert not tracks_parent([_event(EventType.CREATED, 1)])

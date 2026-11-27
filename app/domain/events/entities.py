@@ -37,12 +37,18 @@ class EventType(StrEnum):
     # identifier, e.g. "OPS-1309".
     BLOCKER_ADDED = "blocker_added"
     BLOCKER_CLEARED = "blocker_cleared"
+    # The item's parent changed; detail = the new parent's source id (None:
+    # removed). Not flow: it only says which parent the item had when.
+    PARENT_CHANGED = "parent_changed"
 
 
 # Code-host events: they annotate an item's history but are not flow. They
 # never anchor it (creation, born-done, the first state or blocked period,
 # the CFD), so a pull request opened before its ticket changes no metric.
 CODE_EVENT_TYPES = frozenset({EventType.REVIEW, EventType.MERGED})
+# Events that are not flow: they never anchor an item (code events, and
+# parent-link changes, ADR-0033).
+NON_FLOW_EVENT_TYPES = CODE_EVENT_TYPES | {EventType.PARENT_CHANGED}
 
 
 @dataclass(frozen=True)
@@ -84,8 +90,8 @@ def event_order(event: Event) -> tuple[datetime, int]:
 
 
 def first_flow_event(ordered: Sequence[Event]) -> Event:
-    """The first event of a sorted, non-empty stream that is not a code event.
+    """The first event of a sorted, non-empty stream that is flow (NON_FLOW_EVENT_TYPES).
 
-    The stream's first event when every event is a code event.
+    The stream's first event when no event is flow.
     """
-    return next((e for e in ordered if e.type not in CODE_EVENT_TYPES), ordered[0])
+    return next((e for e in ordered if e.type not in NON_FLOW_EVENT_TYPES), ordered[0])
