@@ -52,6 +52,21 @@ A per-team flag, `count_sub_issues` (built-in on). Off:
 - `count_parent_issues` and `count_sub_issues` cannot both be off: almost
   nothing would count.
 
+Parent links follow history, for both parent rules. The Linear sync stores
+each parent change (`IssueHistory.fromParentId/toParentId`) as a non-flow
+`PARENT_CHANGED` event (detail: the new parent's Linear id), plus the parent
+an issue was created with. Each replay instant reads the links of that
+instant (`app/application/parent_links.py`):
+
+- An issue with `PARENT_CHANGED` events has the parent its last change up
+  to that instant names; an issue without them (synced before these events
+  existed, or created through the REST API) has its current parent.
+- A link counts only when the parent already existed at that instant.
+- `count_parent_issues` asks whether an item had a child, in any team, at
+  that instant: the scope loads its items' current and former children and
+  their parent history (two filtered queries, only when a team in the scope
+  has that rule off).
+
 The rule is enforced in one place, `ScopeData._fold`, which every metric,
 forecast and snapshot reads through. Changing it queues the snapshot
 recompute like any metric rule.
@@ -64,6 +79,10 @@ recompute like any metric rule.
   forecast range is wider. Stories must be right-sized for the forecast to
   hold.
 - Bugs filed as sub-issues leave the Bugs section under this rule.
-- Parent links are current facts applied to history replays; a re-parented
-  issue moves in the recomputed history too (same limit as ADR-0010's parent
-  rule; upgrade path: IssueHistory parent changes).
+- A re-parented issue counts under its parent of each day in the recomputed
+  history, and an issue that gets its first sub-issue later counts as its
+  own item until then.
+- Parent history reaches older issues only after a Linear sync, so after
+  deploying, run a sync and then "Recompute history". Until then, older
+  issues read their current parent, never one created after the replayed
+  day.

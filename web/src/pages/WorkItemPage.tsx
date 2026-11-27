@@ -64,6 +64,8 @@ const DETAIL_LABELS: Record<string, (detail: string) => string> = {
 };
 
 function eventLabel(event: WorkItemEvent): string {
+  // The detail is the new parent's Linear id (or none): not worth showing.
+  if (event.type === "parent_changed") return "Parent changed";
   const withDetail = DETAIL_LABELS[event.type];
   if (withDetail && event.detail) return withDetail(event.detail);
   if (event.from_state && event.to_state) {
