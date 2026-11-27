@@ -323,6 +323,27 @@ async def test_team_can_count_only_the_current_iteration(
     assert rejected.status_code == 422
 
 
+async def test_team_can_count_only_top_level_issues(
+    rules_app: FastAPI, rules_client: AsyncClient
+) -> None:
+    _, team = await create_org_and_team(rules_client)
+    url = f"/api/teams/{team}/metric-rules"
+
+    off = await rules_client.patch(url, json={"count_sub_issues": False})
+    await settle(rules_app)
+    inherited = await rules_client.patch(url, json={"count_sub_issues": None})
+    await settle(rules_app)
+    both_off = await rules_client.patch(
+        url, json={"count_sub_issues": False, "count_parent_issues": False}
+    )
+
+    assert off.status_code == 200
+    assert off.json()["effective"]["count_sub_issues"] is False
+    assert inherited.json()["effective"]["count_sub_issues"] is True
+    assert both_off.status_code == 422
+    assert "cannot both be off" in both_off.text
+
+
 async def test_sprint_length_is_a_patchable_team_rule(
     rules_app: FastAPI, rules_client: AsyncClient
 ) -> None:

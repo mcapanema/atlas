@@ -39,6 +39,7 @@ export interface MetricRules {
   /** ISO calendar date, or null when the start is estimated. */
   tracked_since: string | null;
   count_parent_issues: boolean;
+  count_sub_issues: boolean;
   lead_time_start: "created" | "triage_exit";
   done_then_reopened: "delivered" | "reopened";
   canceled_then_reopened: "canceled" | "reopened";

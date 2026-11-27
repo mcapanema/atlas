@@ -37,6 +37,7 @@ describe("pendingChanges", () => {
 describe("formatRuleValue", () => {
   it("reads switches, choices and units", () => {
     expect(formatRuleValue(ruleSpec("move_back_ends_wip"), true)).toBe("On");
+    expect(formatRuleValue(ruleSpec("count_sub_issues"), false)).toBe("Off");
     expect(formatRuleValue(ruleSpec("reopen_completion"), "first")).toBe("First completion");
     expect(formatRuleValue(ruleSpec("forecast_history_days"), 90)).toBe("90 days");
     expect(formatRuleValue(ruleSpec("remaining_iterations"), "current")).toBe(

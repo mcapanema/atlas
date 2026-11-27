@@ -874,6 +874,7 @@ class MetricRulesRead(BaseModel):
     forecast_history_days: int
     tracked_since: date | None
     count_parent_issues: bool
+    count_sub_issues: bool
     lead_time_start: Literal["created", "triage_exit"]
     done_then_reopened: Literal["delivered", "reopened"]
     canceled_then_reopened: Literal["canceled", "reopened"]
@@ -933,6 +934,7 @@ class MetricRulesOverridesWrite(BaseModel):
     forecast_history_days: int | None = None
     tracked_since: date | None = None
     count_parent_issues: bool | None = None
+    count_sub_issues: bool | None = None
     lead_time_start: Literal["created", "triage_exit"] | None = None
     done_then_reopened: Literal["delivered", "reopened"] | None = None
     canceled_then_reopened: Literal["canceled", "reopened"] | None = None
