@@ -289,3 +289,116 @@ async def test_iterations_are_queried_only_under_the_current_iteration_rule() ->
         counting = _CountingWorkItems(items)
         await ScopeSampleLoader(counting, event_repo, resolver).load(team_id=TEAM.id)
         assert counting.iteration_queries == queries
+
+
+TOP_LEVEL_ONLY: dict[str, object] = {"count_sub_issues": False}
+
+
+def _story_tree() -> tuple[WorkItem, WorkItem, WorkItem]:
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    sub_task = WorkItem(team_id=TEAM.id, title="Sub-task", parent_id=task.id)
+    return story, task, sub_task
+
+
+async def test_top_level_only_drops_sub_issues_from_every_count() -> None:
+    items = list(_story_tree())
+    events = [_at(i, EventType.CREATED, 9) for i in items]
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.item_count == 1
+    assert scope.remaining_count == 1
+    assert [i.title for i, _ in scope.items_with_samples] == ["Story"]
+
+
+async def test_defaults_still_count_every_level() -> None:
+    items = list(_story_tree())
+    events = [_at(i, EventType.CREATED, 9) for i in items]
+    loader, *_ = _loader(items, events, {})
+
+    assert (await loader.load(team_id=TEAM.id)).item_count == 3
+
+
+async def test_sub_issue_with_parent_outside_the_scope_still_counts() -> None:
+    story = WorkItem(team_id=OTHER.id, title="Story")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, task)]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+
+    assert (await loader.load(team_id=TEAM.id)).item_count == 1
+
+
+def _story_with_started_task() -> tuple[list[WorkItem], list[Event]]:
+    story, task, sub_task = _story_tree()
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, task, sub_task)),
+        _at(sub_task, EventType.STARTED, 4),
+        _at(task, EventType.STARTED, 3),
+    ]
+    return [story, task, sub_task], events
+
+
+async def test_parent_starts_with_its_earliest_descendant() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    ((_, sample),) = scope.items_with_samples
+    assert sample.started_at == NOW - timedelta(days=4)
+
+
+async def test_parent_keeps_its_own_start_by_default() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, {})
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    story_sample = next(s for i, s in scope.items_with_samples if i.title == "Story")
+    assert story_sample.started_at is None
+
+
+async def test_roll_up_ignores_descendant_starts_after_as_of() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    before = data.samples(as_of=NOW - timedelta(days=6)).samples[0]
+    after = data.samples(as_of=NOW - timedelta(days=4)).samples[0]
+    assert before.started_at is None
+    assert after.started_at == NOW - timedelta(days=4)
+
+
+async def test_open_sub_issues_of_a_done_story_are_not_remaining() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", state_type=StateType.COMPLETED)
+    tasks = [
+        WorkItem(
+            team_id=TEAM.id, title=f"Task {n}", parent_id=story.id, state_type=StateType.UNSTARTED
+        )
+        for n in (1, 2)
+    ]
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, *tasks)),
+        _at(story, EventType.COMPLETED, 2),
+    ]
+    loader, *_ = _loader([story, *tasks], events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+
+    assert scope.remaining_count == 0
+    assert scope.samples[0].completed_at == NOW - timedelta(days=2)
+
+
+async def test_type_filter_keeps_dropping_sub_issues() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    bug = WorkItem(team_id=TEAM.id, title="Crash", labels=("Bug",), parent_id=story.id)
+    events = [_at(i, EventType.CREATED, 9) for i in (story, bug)]
+    rules = {**TOP_LEVEL_ONLY, "type_labels": [{"label": "bug", "type": "bug"}]}
+    loader, *_ = _loader([story, bug], events, rules)
+
+    scope = await loader.load(team_id=TEAM.id, types={WorkItemType.BUG})
+
+    assert scope.item_count == 0

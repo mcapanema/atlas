@@ -12,12 +12,13 @@ from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import cached_property
 from typing import Self
 from uuid import UUID
 
 from app.application.metric_rules.resolver import MetricRulesResolver, ResolvedRules
 from app.domain._time import utcnow
-from app.domain.events.entities import Event
+from app.domain.events.entities import Event, EventType
 from app.domain.events.repository import EventRepository
 from app.domain.events.timeline import creation_state
 from app.domain.metric_rules.entities import DEFAULT_RULES, MetricRules
@@ -83,6 +84,8 @@ class ScopeData:
     `samples()` derives the analytics view now, or as of a past instant —
     snapshot capture and the history recompute replay a scope that way.
     `iterations` holds each team's iterations, seen on its unfiltered items.
+    `sub_issue_ids` holds the items whose parent is also in the scope, also
+    seen on the unfiltered items (the count_sub_issues rule, ADR-0033).
     """
 
     items: list[WorkItem]
@@ -90,6 +93,7 @@ class ScopeData:
     rules: ResolvedRules = field(default_factory=ResolvedRules)
     parent_ids: AbstractSet[UUID] = field(default_factory=frozenset)
     iterations: Mapping[UUID, tuple[Iteration, ...]] = field(default_factory=dict)
+    sub_issue_ids: AbstractSet[UUID] = field(default_factory=frozenset)
 
     def samples(self, *, as_of: datetime | None = None) -> ScopeSamples:
         """The scope's samples; with `as_of`, as it stood at that instant."""
@@ -147,24 +151,62 @@ class ScopeData:
         """The item's stream and sample; None when it is outside the scope's picture.
 
         Outside: it didn't exist yet at `as_of`, or its team's rules leave it
-        out of every metric — a born-done record (logged already done), or a
-        parent issue (its sub-issues carry the work).
+        out of every metric — a born-done record (logged already done), a
+        parent issue (its sub-issues carry the work), or a sub-issue of an
+        in-scope parent (the parent carries it). Under count_sub_issues off,
+        the parent starts with its earliest in-scope descendant.
         """
         stream = self._stream(item, as_of)
         if stream is None:
             return None
         rules = self.rules.for_team(item.team_id)
-        # ponytail: parent links are a current fact applied to as-of replays.
-        # Upgrade path: IssueHistory fromParent/toParent for historical parents.
-        if item.id in self.parent_ids and not rules.count_parent_issues:
+        if self._left_out(item, rules):
             return None
         # The full history, not the as-of slice: a cut before the item's first
         # transition must still know which state it was created in.
         born_in = creation_state(self.events.get(item.id, []), item.state)
-        sample = derive_flow_sample(stream, rules, born_in=born_in)
+        earliest = None if rules.count_sub_issues else self._descendant_start(item, as_of)
+        sample = derive_flow_sample(stream, rules, born_in=born_in, earliest_start=earliest)
         if sample is not None and sample.born_done and rules.exclude_born_done:
             return None
         return stream, sample
+
+    def _left_out(self, item: WorkItem, rules: MetricRules) -> bool:
+        """Whether the item's team's rules leave it out as a parent or as a sub-issue."""
+        # ponytail: parent links are a current fact applied to as-of replays.
+        # Upgrade path: IssueHistory fromParent/toParent for historical parents.
+        if item.id in self.parent_ids and not rules.count_parent_issues:
+            return True
+        return item.id in self.sub_issue_ids and not rules.count_sub_issues
+
+    @cached_property
+    def _children(self) -> Mapping[UUID, list[WorkItem]]:
+        """Each in-scope parent's in-scope children."""
+        children: defaultdict[UUID, list[WorkItem]] = defaultdict(list)
+        for item in self.items:
+            if item.parent_id is not None:
+                children[item.parent_id].append(item)
+        return children
+
+    def _descendant_start(self, item: WorkItem, as_of: datetime | None) -> datetime | None:
+        """The first STARTED among the item's in-scope descendants, up to `as_of`.
+
+        ponytail: descendants are the scope's (possibly type-filtered) items,
+        with current parent links applied to replays. Upgrade path: IssueHistory
+        fromParent/toParent, like the parent rule.
+        """
+        starts: list[datetime] = []
+        seen: set[UUID] = {item.id}
+        pending = list(self._children.get(item.id, ()))
+        while pending:
+            child = pending.pop()
+            if child.id in seen:
+                continue
+            seen.add(child.id)
+            pending.extend(self._children.get(child.id, ()))
+            stream = self._stream(child, as_of) or []
+            starts.extend(e.occurred_at for e in stream if e.type is EventType.STARTED)
+        return min(starts, default=None)
 
     def _remains(self, item: WorkItem, sample: FlowSample | None, as_of: datetime | None) -> bool:
         """Open (not completed, not canceled) and in a state type the scope counts as remaining.
@@ -254,6 +296,8 @@ class ScopeSampleLoader:
             if rules.scope.remaining_iterations == "current"
             else {}
         )
+        in_scope = {item.id for item in items}
+        sub_issue_ids = frozenset(item.id for item in items if item.parent_id in in_scope)
         items = _filter_items(items, rules, types, exclude_states)
         events = await self._events.list_for_work_items([item.id for item in items])
         by_item: defaultdict[UUID, list[Event]] = defaultdict(list)
@@ -265,6 +309,7 @@ class ScopeSampleLoader:
             rules=rules,
             parent_ids=frozenset(await self._work_items.parent_ids()),
             iterations={team: tuple(found) for team, found in iterations.items()},
+            sub_issue_ids=sub_issue_ids,
         )
 
     async def load(
