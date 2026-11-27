@@ -429,6 +429,8 @@ async def test_history_pagination_stops_at_page_ceiling(monkeypatch: pytest.Monk
     with pytest.raises(LinearAPIError, match="history pagination exceeded"):
         await _datasource(handler).fetch_work_items()
 
+    assert history_calls == 2
+
 
 def _vanishing_handler(
     history_answer: httpx.Response,
@@ -436,6 +438,7 @@ def _vanishing_handler(
     """Issues i1 (history goes on after cursor "c1") and i2; history answers as given."""
     partial = {
         **_issue_node("i1"),
+        "parent": {"id": "p1"},
         "history": {
             "nodes": [_transition("h1", 2, "unstarted", "started")],
             "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
@@ -468,6 +471,8 @@ async def test_a_vanished_issue_keeps_its_partial_history_and_the_sync_goes_on(
     assert [item.external_id for item in items] == ["i1", "i2"]
     assert [e.external_id for e in items[0].events] == ["i1:created", "h1"]
     assert "i1 vanished" in caplog.text
+    # The oldest parent change may be on the missing pages: no creation parent.
+    assert "i1:parent-born" not in {e.external_id for e in items[0].events}
 
 
 async def test_a_null_issue_on_a_history_page_keeps_the_partial_history() -> None:
