@@ -619,3 +619,42 @@ async def test_parent_rule_falls_back_to_current_links_for_old_syncs() -> None:
 
     assert data.samples(as_of=NOW - timedelta(days=10)).item_count == 1
     assert data.samples().item_count == 0
+
+
+async def _split_team_starts(
+    task_team_rules: dict[str, object], story_team_rules: dict[str, object]
+) -> dict[str, datetime | None]:
+    """A project with a story in OTHER and its task in TEAM (started 4 days ago)."""
+    project = Project(team_id=TEAM.id, name="Shared")
+    story = WorkItem(team_id=OTHER.id, title="Story", project_id=project.id)
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id, project_id=project.id)
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, task)),
+        _at(task, EventType.STARTED, 4),
+    ]
+    resolver = MetricRulesResolver(
+        InMemoryMetricRuleOverridesRepository(
+            [
+                RuleOverrides(organization_id=ORG, team_id=TEAM.id, overrides=task_team_rules),
+                RuleOverrides(organization_id=ORG, team_id=OTHER.id, overrides=story_team_rules),
+            ]
+        ),
+        InMemoryTeamRepository([TEAM, OTHER]),
+        InMemoryProjectRepository([project]),
+    )
+    loader = ScopeSampleLoader(
+        InMemoryWorkItemRepository([story, task]), InMemoryEventRepository(events), resolver
+    )
+    scope = await loader.load(project_id=project.id)
+    return {item.title: sample.started_at for item, sample in scope.items_with_samples}
+
+
+async def test_sub_issue_team_off_parent_team_on() -> None:
+    # The task's team drops it; the story's team doesn't roll up, so it keeps its own start.
+    assert await _split_team_starts(TOP_LEVEL_ONLY, {}) == {"Story": None}
+
+
+async def test_sub_issue_team_on_parent_team_off() -> None:
+    # The task's team keeps it; the story's team rolls the task's start up into the story.
+    started = NOW - timedelta(days=4)
+    assert await _split_team_starts({}, TOP_LEVEL_ONLY) == {"Story": started, "Task": started}
