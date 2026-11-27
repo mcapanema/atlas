@@ -46,10 +46,12 @@ def parent_id_at(
 ) -> UUID | None:
     """The item's parent at `at`: from its PARENT_CHANGED events, else its current parent.
 
-    A recorded parent maps through `by_external_id` (source id -> item id);
+    Now (`at` None) is always the stored parent: insert-only history can go
+    stale or be capped, and the live view must match the tracker. A
+    recorded parent maps through `by_external_id` (source id -> item id);
     one that isn't there (out of the scope, or never synced) is None.
     """
-    if not tracks_parent(events):
+    if at is None or not tracks_parent(events):
         return item.parent_id
     source_id = parent_at(events, at)
     return by_external_id.get(source_id) if source_id is not None else None
@@ -86,8 +88,8 @@ def parents_at(
     """The parents of `children` (any team) at `at`: item ids, and source ids from history.
 
     A child counts from its creation on; one with PARENT_CHANGED events
-    names its parent of the day by source id, one without names its
-    current parent.
+    names its parent of the day by source id, one without (or now, `at`
+    None, as in parent_id_at) names its current parent.
     """
     ids: set[UUID] = set()
     source_ids: set[str] = set()
@@ -95,7 +97,7 @@ def parents_at(
         if at is not None and child.created_at > at:
             continue
         own = events.get(child.id, [])
-        if tracks_parent(own):
+        if at is not None and tracks_parent(own):
             source_id = parent_at(own, at)
             if source_id is not None:
                 source_ids.add(source_id)

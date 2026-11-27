@@ -658,3 +658,41 @@ async def test_sub_issue_team_on_parent_team_off() -> None:
     # The task's team keeps it; the story's team rolls the task's start up into the story.
     started = NOW - timedelta(days=4)
     assert await _split_team_starts({}, TOP_LEVEL_ONLY) == {"Story": started, "Task": started}
+
+
+def _history_disagrees() -> tuple[list[WorkItem], list[Event]]:
+    """History says the task moved under S 5 days ago; the stored link says T."""
+    s = WorkItem(team_id=TEAM.id, title="S", external_id="S")
+    t = WorkItem(team_id=TEAM.id, title="T", external_id="T")
+    task = WorkItem(
+        team_id=TEAM.id, title="Task", parent_id=t.id, created_at=NOW - timedelta(days=20)
+    )
+    events = [
+        *(_at(i, EventType.CREATED, 20) for i in (s, t, task)),
+        _moved(task, 5, "S"),
+        _at(task, EventType.STARTED, 3),
+    ]
+    return [s, t, task], events
+
+
+async def test_the_live_view_trusts_the_stored_parent_over_history() -> None:
+    items, events = _history_disagrees()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+    data = await loader.load_data(team_id=TEAM.id)
+
+    def starts(scope: ScopeSamples) -> dict[str, datetime | None]:
+        return {item.title: sample.started_at for item, sample in scope.items_with_samples}
+
+    started = NOW - timedelta(days=3)
+    assert starts(data.samples()) == {"S": None, "T": started}
+    assert starts(data.samples(as_of=NOW - timedelta(days=1))) == {"S": started, "T": None}
+
+
+async def test_the_live_parent_rule_trusts_the_stored_parent_over_history() -> None:
+    items, events = _history_disagrees()
+    loader, *_ = _loader(items, events, PARENTS_LEAVE)
+
+    data = await loader.load_data(team_id=TEAM.id)
+
+    assert _titles(data.samples()) == ["S", "Task"]
+    assert _titles(data.samples(as_of=NOW - timedelta(days=1))) == ["T", "Task"]

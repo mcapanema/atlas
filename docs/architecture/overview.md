@@ -310,7 +310,8 @@ of its Linear teams that Atlas has synced (ADR-0020). The mapper stores raw
 facts — label add/remove events (named), blocked-side relation-history
 events (named by the blocker's current identifier, and each sync renames
 stored ones, so a blocker moved to another team still pairs its add with
-its resolve), state types on transitions, and each issue's labels, priority (Linear's
+its resolve), state types on transitions, parent changes (`PARENT_CHANGED`,
+plus the parent an issue was created with; ADR-0033), and each issue's labels, priority (Linear's
 0–4 mapped to `WorkItemPriority`; an unknown value is stored as NULL with a
 warning), parent and current assignee as a `SourcePerson` (Linear user id, name, email; a blank
 name reads as unassigned) — an email or handle Linear uses as the name is
