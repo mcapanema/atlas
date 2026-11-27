@@ -179,6 +179,7 @@ class LinearDataSource:
             history["pageInfo"] = page["pageInfo"]
             if not _has_next_page(history):
                 return
+            _next_cursor(page["pageInfo"], cursor, f"issue {issue_id} history")
         raise LinearAPIError(
             f"Linear issue {issue_id} history pagination exceeded {_MAX_PAGES} pages; aborting"
         )
@@ -218,7 +219,7 @@ class LinearDataSource:
             page_info = connection["pageInfo"]
             if not page_info["hasNextPage"]:
                 return nodes
-            cursor = page_info["endCursor"]
+            cursor = _next_cursor(page_info, cursor, root)
         raise LinearAPIError(
             f"Linear {root} pagination exceeded {_MAX_PAGES} pages; aborting (possible cursor loop)"
         )
@@ -227,3 +228,15 @@ class LinearDataSource:
 def _has_next_page(history: dict[str, Any]) -> bool:
     page_info = history.get("pageInfo")
     return isinstance(page_info, dict) and bool(page_info.get("hasNextPage"))
+
+
+def _next_cursor(page_info: dict[str, Any], sent: str | None, what: str) -> str:
+    """The cursor for the page after this one; raise when there is none.
+
+    A page that says it has a next page but gives no new cursor would make
+    the loop fetch the same page again until the page ceiling.
+    """
+    cursor = page_info.get("endCursor")
+    if not cursor or cursor == sent:
+        raise LinearAPIError(f"Linear {what} pagination returned no new cursor; aborting")
+    return str(cursor)

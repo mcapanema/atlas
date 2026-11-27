@@ -237,9 +237,9 @@ async def test_pagination_stops_at_page_ceiling(monkeypatch: pytest.MonkeyPatch)
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        # hasNextPage forever with a repeating cursor — without a ceiling
+        # hasNextPage forever, a new cursor each time — without a ceiling
         # this loops until the heat death of the workspace.
-        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor="same")
+        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor=f"c{calls}")
 
     with pytest.raises(LinearAPIError, match="pagination exceeded"):
         await _datasource(handler).fetch_teams()
@@ -395,18 +395,21 @@ async def test_history_pagination_stops_at_page_ceiling(monkeypatch: pytest.Monk
     monkeypatch.setattr(datasource_module, "_MAX_PAGES", 2)
     node = {
         **_issue_node("i1"),
-        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "same"}},
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c0"}},
     }
+    history_calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if "issueLabels(" in body["query"]:
             return _page("issueLabels", [])
         if "issue(id:" in body["query"]:
-            return _history_page([], "same")
+            nonlocal history_calls
+            history_calls += 1
+            return _history_page([], f"c{history_calls}")
         return _page("issues", [node])
 
-    with pytest.raises(LinearAPIError, match="history pagination"):
+    with pytest.raises(LinearAPIError, match="history pagination exceeded"):
         await _datasource(handler).fetch_work_items()
 
 
@@ -463,3 +466,51 @@ async def test_an_http_error_on_a_history_page_still_fails_the_sync() -> None:
 
     with pytest.raises(LinearAPIError):
         await _datasource(_vanishing_handler(unauthorized)).fetch_work_items()
+
+
+async def test_issues_paging_fails_fast_on_a_repeated_cursor() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _page("teams", [{"id": "t1", "name": "Loop"}], end_cursor="same")
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_teams()
+
+    assert calls == 2
+
+
+async def test_issues_paging_fails_fast_without_a_cursor() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        page_info = {"hasNextPage": True, "endCursor": None}
+        return httpx.Response(200, json={"data": {"teams": {"nodes": [], "pageInfo": page_info}}})
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_teams()
+
+
+async def test_history_paging_fails_fast_without_a_cursor() -> None:
+    node = {
+        **_issue_node("i1"),
+        "history": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": "c1"}},
+    }
+    history_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal history_calls
+        body = json.loads(request.content)
+        if "issueLabels(" in body["query"]:
+            return _page("issueLabels", [])
+        if "issue(id:" in body["query"]:
+            history_calls += 1
+            page_info = {"hasNextPage": True, "endCursor": None}
+            history = {"nodes": [], "pageInfo": page_info}
+            return httpx.Response(200, json={"data": {"issue": {"history": history}}})
+        return _page("issues", [node])
+
+    with pytest.raises(LinearAPIError, match="returned no new cursor"):
+        await _datasource(handler).fetch_work_items()
+
+    assert history_calls == 1
