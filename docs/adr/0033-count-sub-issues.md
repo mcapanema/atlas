@@ -34,11 +34,19 @@ A per-team flag, `count_sub_issues` (built-in on). Off:
   the same scope (the scope's unfiltered items). Grandchildren leave too.
 - A sub-issue whose parent is outside the scope (another team or project,
   or never synced) still counts: it is the scope's only record of that work.
-- A parent's cycle starts at the earliest of its own start and the first
-  start of any in-scope descendant, as of the replay instant, when that is
-  before the parent's completion (`derive_flow_sample(earliest_start=...)`).
-  Completion, cancel, the blocked signal and state times still come from
-  the parent's own events; blocked and wait time clip to the longer cycle.
+- A parent's cycle starts at the earliest of its own start and the start of
+  any in-scope descendant, as of the replay instant, when that is before the
+  parent's completion (`derive_flow_sample(earliest_start=...)`). Each
+  descendant is folded with its own team's rules, and only one that is not
+  canceled and not moved back counts, so abandoned work can't hold a story
+  in WIP. The rolled start is never before the parent's arrival (creation,
+  or Triage exit), so queue time can't go negative. Descendants come from
+  the unfiltered scope, so a type filter keeps the roll-up.
+- Completion, cancel and the blocked signal still come from the parent's own
+  events; blocked and wait time clip to the longer cycle. The parent's
+  stream gets a synthetic `STARTED` at the rolled start, so the CFD and
+  state time see it in progress from the same instant (its time in Todo
+  then counts as in-progress state time).
 - The drop reads the sub-issue's team's rules; the roll-up reads the
   parent's team's rules, like `count_parent_issues`.
 - `count_parent_issues` and `count_sub_issues` cannot both be off: almost

@@ -8,6 +8,7 @@ from app.application.scope import ScopeSampleLoader
 from app.domain._time import utcnow
 from app.domain.events.entities import Event, EventType
 from app.domain.metric_rules.entities import RuleOverrides
+from app.domain.metrics.cfd import daily_flow_counts
 from app.domain.projects.entities import Project
 from app.domain.teams.entities import Team
 from app.domain.work_items.entities import Iteration, StateType, WorkItem, WorkItemType
@@ -402,3 +403,57 @@ async def test_type_filter_keeps_dropping_sub_issues() -> None:
     scope = await loader.load(team_id=TEAM.id, types={WorkItemType.BUG})
 
     assert scope.item_count == 0
+
+
+async def _story_start(sub_task_events: list[tuple[EventType, int]]) -> datetime | None:
+    """The story's started_at under top-level only, given its one sub-task's events."""
+    story = WorkItem(team_id=TEAM.id, title="Story")
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [_at(story, EventType.CREATED, 30), _at(task, EventType.CREATED, 30)]
+    events += [_at(task, type_, days_ago) for type_, days_ago in sub_task_events]
+    loader, *_ = _loader([story, task], events, TOP_LEVEL_ONLY)
+    ((_, sample),) = (await loader.load(team_id=TEAM.id)).items_with_samples
+    return sample.started_at
+
+
+async def test_a_canceled_sub_issue_does_not_start_its_story() -> None:
+    assert await _story_start([(EventType.STARTED, 29), (EventType.CANCELED, 28)]) is None
+
+
+async def test_a_moved_back_sub_issue_does_not_start_its_story() -> None:
+    assert await _story_start([(EventType.STARTED, 29), (EventType.STOPPED, 28)]) is None
+
+
+async def test_a_restarted_sub_issue_still_starts_its_story() -> None:
+    events = [(EventType.STARTED, 29), (EventType.STOPPED, 28), (EventType.STARTED, 3)]
+    assert await _story_start(events) == NOW - timedelta(days=29)
+
+
+async def test_type_filter_keeps_the_roll_up() -> None:
+    story = WorkItem(team_id=TEAM.id, title="Story", labels=("Story",))
+    task = WorkItem(team_id=TEAM.id, title="Task", parent_id=story.id)
+    events = [
+        *(_at(i, EventType.CREATED, 9) for i in (story, task)),
+        _at(task, EventType.STARTED, 4),
+    ]
+    rules = {**TOP_LEVEL_ONLY, "type_labels": [{"label": "story", "type": "story"}]}
+    loader, *_ = _loader([story, task], events, rules)
+
+    scope = await loader.load(team_id=TEAM.id, types={WorkItemType.STORY})
+    data = (await loader.load_data(team_id=TEAM.id)).filtered(types={WorkItemType.STORY})
+
+    assert scope.samples[0].started_at == NOW - timedelta(days=4)
+    assert data.samples().samples[0].started_at == NOW - timedelta(days=4)
+
+
+async def test_cfd_shows_a_rolled_up_story_in_progress() -> None:
+    items, events = _story_with_started_task()
+    loader, *_ = _loader(items, events, TOP_LEVEL_ONLY)
+
+    scope = await loader.load(team_id=TEAM.id)
+    counts = daily_flow_counts(
+        scope.streams, start=NOW - timedelta(days=1), end=NOW, stream_rules=scope.stream_rules
+    )
+
+    assert counts[-1].in_progress == 1
+    assert counts[-1].todo == 0

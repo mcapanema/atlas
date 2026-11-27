@@ -463,3 +463,13 @@ def test_blocked_time_clips_to_the_rolled_up_cycle() -> None:
     assert rolled is not None
     assert own.blocked_time == timedelta(0)
     assert rolled.blocked_time == timedelta(days=1)
+
+
+def test_earliest_start_never_precedes_the_items_arrival() -> None:
+    # A story created on the 5th over work that started on the 2nd.
+    events = [_event(EventType.CREATED, 5), _event(EventType.COMPLETED, 9)]
+
+    sample = derive_flow_sample(events, earliest_start=_day(2))
+
+    assert sample is not None
+    assert sample.started_at == _day(5)
